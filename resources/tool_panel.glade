@@ -1,0 +1,247 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <requires lib="gtk+" version="3.0"/>
+  
+  <!-- Main Tool Panel -->
+  <object class="GtkBox" id="tool_panel">
+    <property name="visible">True</property>
+    <property name="can_focus">False</property>
+    <property name="orientation">vertical</property>
+    <property name="spacing">5</property>
+    <property name="margin_top">0</property>
+    <property name="margin_bottom">10</property>
+    <property name="margin_start">5</property>
+    <property name="margin_end">5</property>
+    <property name="hexpand">False</property>
+    <property name="vexpand">True</property>
+    <property name="width_request">48</property>
+    
+    <!-- Move Tool Button -->
+    <child>
+      <object class="GtkToggleButton" id="tool_button_move">
+        <property name="visible">True</property>
+        <property name="can_focus">False</property>
+        <property name="receives_default">False</property>
+        <property name="width_request">32</property>
+        <property name="height_request">32</property>
+        <property name="relief">none</property>
+        <child>
+          <object class="GtkImage" id="move_icon">
+            <property name="visible">True</property>
+            <property name="can_focus">False</property>
+            <property name="resource">/icons/imageeditor/move.png</property>
+            <property name="pixel_size">24</property>
+          </object>
+        </child>
+      </object>
+      <packing>
+        <property name="expand">False</property>
+        <property name="fill">True</property>
+        <property name="position">0</property>
+      </packing>
+    </child>
+    
+    <!-- Brush Tool Button -->
+    <child>
+      <object class="GtkToggleButton" id="tool_button_brush">
+        <property name="visible">True</property>
+        <property name="can_focus">False</property>
+        <property name="receives_default">False</property>
+        <property name="width_request">32</property>
+        <property name="height_request">32</property>
+        <property name="relief">none</property>
+        <child>
+          <object class="GtkImage" id="brush_icon">
+            <property name="visible">True</property>
+            <property name="can_focus">False</property>
+            <property name="resource">/icons/imageeditor/paintbrush.png</property>
+            <property name="pixel_size">24</property>
+          </object>
+        </child>
+      </object>
+      <packing>
+        <property name="expand">False</property>
+        <property name="fill">True</property>
+        <property name="position">1</property>
+      </packing>
+    </child>
+    
+    <!-- Eraser Tool Button -->
+    <child>
+      <object class="GtkToggleButton" id="tool_button_eraser">
+        <property name="visible">True</property>
+        <property name="can_focus">False</property>
+        <property name="receives_default">False</property>
+        <property name="width_request">32</property>
+        <property name="height_request">32</property>
+        <property name="relief">none</property>
+        <child>
+          <object class="GtkImage" id="eraser_icon">
+            <property name="visible">True</property>
+            <property name="can_focus">False</property>
+            <property name="resource">/icons/imageeditor/eraser.png</property>
+            <property name="pixel_size">24</property>
+          </object>
+        </child>
+      </object>
+      <packing>
+        <property name="expand">False</property>
+        <property name="fill">True</property>
+        <property name="position">2</property>
+      </packing>
+    </child>
+    
+    <!-- Fill Tool Button -->
+    <child>
+      <object class="GtkToggleButton" id="tool_button_fill">
+        <property name="visible">True</property>
+        <property name="can_focus">False</property>
+        <property name="receives_default">False</property>
+        <property name="width_request">32</property>
+        <property name="height_request">32</property>
+        <property name="relief">none</property>
+        <child>
+          <object class="GtkImage" id="fill_icon">
+            <property name="visible">True</property>
+            <property name="can_focus">False</property>
+            <property name="resource">/icons/imageeditor/flood-fill.png</property>
+            <property name="pixel_size">24</property>
+          </object>
+        </child>
+      </object>
+      <packing>
+        <property name="expand">False</property>
+        <property name="fill">True</property>
+        <property name="position">3</property>
+      </packing>
+    </child>
+    
+    <!-- Separator -->
+    <child>
+      <object class="GtkSeparator" id="separator">
+        <property name="visible">True</property>
+        <property name="can_focus">False</property>
+        <property name="orientation">horizontal</property>
+      </object>
+      <packing>
+        <property name="expand">False</property>
+        <property name="fill">True</property>
+        <property name="position">4</property>
+      </packing>
+    </child>
+    
+    <!-- Color Pickers Section -->
+    <child>
+      <object class="GtkBox" id="color_box">
+        <property name="visible">True</property>
+        <property name="can_focus">False</property>
+        <property name="orientation">vertical</property>
+        <property name="spacing">8</property>
+        <property name="hexpand">False</property>
+        
+        <!-- Foreground Label -->
+        <child>
+          <object class="GtkLabel" id="fg_label">
+            <property name="visible">True</property>
+            <property name="can_focus">False</property>
+            <property name="label">Foreground</property>
+            <property name="xalign">0</property>
+            <property name="wrap">True</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">0</property>
+          </packing>
+        </child>
+        
+        <!-- Foreground Color Picker -->
+        <child>
+          <object class="GtkColorButton" id="fg_color_button">
+            <property name="visible">True</property>
+            <property name="can_focus">True</property>
+            <property name="receives_default">True</property>
+            <property name="width_request">32</property>
+            <property name="height_request">32</property>
+            <property name="hexpand">False</property>
+            <property name="title">Select Foreground Color</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">1</property>
+          </packing>
+        </child>
+        
+        <!-- Background Label -->
+        <child>
+          <object class="GtkLabel" id="bg_label">
+            <property name="visible">True</property>
+            <property name="can_focus">False</property>
+            <property name="label">Background</property>
+            <property name="xalign">0</property>
+            <property name="wrap">True</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">2</property>
+          </packing>
+        </child>
+        
+        <!-- Background Color Picker -->
+        <child>
+          <object class="GtkColorButton" id="bg_color_button">
+            <property name="visible">True</property>
+            <property name="can_focus">True</property>
+            <property name="receives_default">True</property>
+            <property name="width_request">32</property>
+            <property name="height_request">32</property>
+            <property name="hexpand">False</property>
+            <property name="title">Select Background Color</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">3</property>
+          </packing>
+        </child>
+        
+        <!-- Swap Colors Button -->
+        <child>
+          <object class="GtkButton" id="swap_button">
+            <property name="label">⇄</property>
+            <property name="visible">True</property>
+            <property name="can_focus">True</property>
+            <property name="receives_default">True</property>
+            <property name="height_request">30</property>
+            <property name="hexpand">False</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">4</property>
+          </packing>
+        </child>
+      </object>
+      <packing>
+        <property name="expand">False</property>
+        <property name="fill">True</property>
+        <property name="position">5</property>
+      </packing>
+    </child>
+    
+    <!-- Expansion Space -->
+    <child>
+      <object class="GtkLabel" id="expansion_space">
+        <property name="visible">True</property>
+        <property name="can_focus">False</property>
+      </object>
+      <packing>
+        <property name="expand">True</property>
+        <property name="fill">True</property>
+        <property name="position">6</property>
+      </packing>
+    </child>
+  </object>
+</interface>

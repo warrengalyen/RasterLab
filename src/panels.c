@@ -101,15 +101,45 @@ void panel_header_free(PanelHeader *header)
  */
 static ToolOptionsPanel *g_tool_options_panel = NULL;
 
-static void on_tool_button_clicked(GtkButton *button, gpointer user_data)
+/**
+ * Global references to tool buttons for toggle state management
+ */
+static GtkWidget *g_tool_buttons[TOOL_COUNT] = {NULL};
+
+/**
+ * Flag to prevent recursive signal handling
+ */
+static gboolean g_updating_tools = FALSE;
+
+static void on_tool_button_clicked(GtkToggleButton *button, gpointer user_data)
 {
     ToolType tool_type = GPOINTER_TO_INT(user_data);
     ToolRegistry *registry = (ToolRegistry *)g_object_get_data(G_OBJECT(button), 
                                                                "tool_registry");
 
+    /* Prevent recursion */
+    if (g_updating_tools) {
+        return;
+    }
+
     if (registry) {
         if (tool_manager_activate(registry, tool_type)) {
             printf("Tool %d activated\n", tool_type);
+            
+            /* Set flag to prevent recursive calls */
+            g_updating_tools = TRUE;
+            
+            /* Update toggle button states - only active tool is pressed */
+            for (int i = 0; i < TOOL_COUNT; i++) {
+                if (g_tool_buttons[i]) {
+                    /* Set button active only if it's the selected tool */
+                    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g_tool_buttons[i]), 
+                                                (i == tool_type));
+                }
+            }
+            
+            /* Clear recursion flag */
+            g_updating_tools = FALSE;
             
             /* Update tool options panel title and visibility */
             Tool *active_tool = tool_manager_get_active(registry);
@@ -130,68 +160,95 @@ void tools_panel_set_options_panel(ToolOptionsPanel *panel)
 }
 
 /**
- * Create the tools panel (vertical icon list)
+ * Create the tools panel (loads from Glade file)
  */
 GtkWidget* create_tools_panel(ToolRegistry *tool_registry)
 {
-    GtkWidget *panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
-    gtk_widget_set_margin_top(panel, 5);
-    gtk_widget_set_margin_start(panel, 5);
-    gtk_widget_set_margin_end(panel, 5);
-    gtk_widget_set_margin_bottom(panel, 5);
-
-    /* Tool buttons corresponding to available tools */
-    const gchar *tool_labels[] = {
-        "Move",
-        "Brush",
-        "Eraser",
-        "Fill",
+    GtkBuilder *builder;
+    GError *error = NULL;
+    GtkWidget *panel;
+    
+    /* Load the Glade file from resources */
+    builder = gtk_builder_new();
+    if (!gtk_builder_add_from_resource(builder, "/ui/tool_panel.glade", &error)) {
+        g_warning("Failed to load tool_panel.glade: %s", error->message);
+        g_error_free(error);
+        g_object_unref(builder);
+        
+        /* Fallback: create empty panel */
+        return gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    }
+    
+    /* Get the main panel from the builder */
+    panel = GTK_WIDGET(gtk_builder_get_object(builder, "tool_panel"));
+    if (!panel) {
+        g_warning("Failed to get tool_panel object from builder");
+        g_object_unref(builder);
+        return gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    }
+    
+    /* Keep builder alive by storing it on the panel as object data */
+    g_object_set_data_full(G_OBJECT(panel), "builder", builder, g_object_unref);
+    
+    /* Enforce 48px width constraint */
+    gtk_widget_set_size_request(panel, 48, -1);
+    gtk_widget_set_hexpand(panel, FALSE);
+    gtk_widget_set_vexpand(panel, TRUE);
+    
+    /* Tool button IDs and types */
+    const gchar *button_ids[] = {
+        "tool_button_move",
+        "tool_button_brush",
+        "tool_button_eraser",
+        "tool_button_fill",
     };
-
-    const gchar *tool_icons[] = {
-        "transform-move-symbolic",
-        "gtk-edit",
-        "edit-clear-symbolic",
-        "format-fill-color-symbolic",
-    };
-
+    
     const ToolType tool_types[] = {
         TOOL_MOVE,
         TOOL_BRUSH,
         TOOL_ERASER,
         TOOL_FILL,
     };
-
+    
+    /* Set up tool buttons with callbacks */
     for (int i = 0; i < TOOL_COUNT; i++) {
-        GtkWidget *tool_button = gtk_button_new();
-        GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 3);
-        GtkWidget *icon = gtk_image_new_from_icon_name(tool_icons[i], GTK_ICON_SIZE_BUTTON);
-        GtkWidget *label = gtk_label_new(tool_labels[i]);
-        
-        gtk_box_pack_start(GTK_BOX(vbox), icon, FALSE, FALSE, 0);
-        gtk_box_pack_start(GTK_BOX(vbox), label, FALSE, FALSE, 0);
-        gtk_container_add(GTK_CONTAINER(tool_button), vbox);
-        
-        gtk_widget_set_size_request(tool_button, 70, 70);
-        
-        /* Store tool registry and type in button */
-        g_object_set_data(G_OBJECT(tool_button), "tool_registry", tool_registry);
-        
-        /* Connect button click to tool activation */
-        g_signal_connect(tool_button, "clicked",
-                        G_CALLBACK(on_tool_button_clicked),
-                        GINT_TO_POINTER(tool_types[i]));
-        
-        gtk_box_pack_start(GTK_BOX(panel), tool_button, FALSE, FALSE, 0);
+        GtkWidget *tool_button = GTK_WIDGET(gtk_builder_get_object(builder, button_ids[i]));
+        if (tool_button) {
+            /* Store tool registry and type in button */
+            g_object_set_data(G_OBJECT(tool_button), "tool_registry", tool_registry);
+            
+            /* Store button reference for toggle state management */
+            g_tool_buttons[i] = tool_button;
+            
+            /* Connect button click to tool activation */
+            g_signal_connect(tool_button, "toggled",
+                            G_CALLBACK(on_tool_button_clicked),
+                            GINT_TO_POINTER(tool_types[i]));
+        } else {
+            g_warning("Failed to get tool button %d from builder", i);
+        }
     }
-
-    /* Add expansion space */
-    gtk_box_pack_start(GTK_BOX(panel), 
-                       gtk_label_new(""), 
-                       TRUE, TRUE, 0);
-
+    
+    /* Set up color buttons */
+    GtkWidget *fg_color = GTK_WIDGET(gtk_builder_get_object(builder, "fg_color_button"));
+    GtkWidget *bg_color = GTK_WIDGET(gtk_builder_get_object(builder, "bg_color_button"));
+    
+    if (fg_color) {
+        GdkRGBA fg_rgba = {0.0, 0.0, 0.0, 1.0};  /* Black */
+        gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(fg_color), &fg_rgba);
+    } else {
+        g_warning("Failed to get foreground color button from builder");
+    }
+    
+    if (bg_color) {
+        GdkRGBA bg_rgba = {1.0, 1.0, 1.0, 1.0};  /* White */
+        gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(bg_color), &bg_rgba);
+    } else {
+        g_warning("Failed to get background color button from builder");
+    }
+    
     gtk_widget_show_all(panel);
-
+    
     return panel;
 }
 

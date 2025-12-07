@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gresources>
+  <gresource prefix="/icons/imageeditor">
+    <file preprocess="to-pixdata">move.png</file>
+    <file preprocess="to-pixdata">paintbrush.png</file>
+    <file preprocess="to-pixdata">eraser.png</file>
+    <file preprocess="to-pixdata">flood-fill.png</file>
+  </gresource>
+  <gresource prefix="/ui">
+    <file>tool_panel.glade</file>
+  </gresource>
+</gresources>

@@ -267,8 +267,6 @@ AppContext* ui_create_main_window(void)
     GtkWidget *tool_options_panel;
     GtkWidget *tools_panel;
     GtkWidget *layers_panel_widget;
-    GtkWidget *main_hpaned;
-    PanelHeader *tools_header;
     PanelHeader *layers_header;
     LayersPanel *layers_panel;
 
@@ -317,24 +315,24 @@ AppContext* ui_create_main_window(void)
     ctx->tool_options_panel = create_tool_options_panel();
     gtk_box_pack_start(GTK_BOX(main_vbox), ctx->tool_options_panel->panel, FALSE, FALSE, 0);
 
-    /* ==== MAIN HORIZONTAL LAYOUT: Left | Center+Right ==== */
-    main_hpaned = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
-    gtk_paned_set_position(GTK_PANED(main_hpaned), 150);
-    gtk_box_pack_start(GTK_BOX(main_vbox), main_hpaned, TRUE, TRUE, 0);
+    /* ==== MAIN HORIZONTAL LAYOUT: Tools (fixed) | Center+Right (resizable) ==== */
+    /* Use a regular horizontal box instead of paned to avoid resizing the tools panel */
+    GtkWidget *main_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_box_pack_start(GTK_BOX(main_vbox), main_hbox, TRUE, TRUE, 0);
 
-    /* ==== LEFT PANEL: Tools ==== */
+    /* ==== LEFT PANEL: Tools (fixed width) ==== */
     tools_panel = create_tools_panel(ctx->tool_registry);
     
     /* Connect tools panel to tool options panel for title updates */
     tools_panel_set_options_panel(ctx->tool_options_panel);
     
-    tools_header = panel_header_new("Tools", tools_panel);
-    gtk_paned_pack1(GTK_PANED(main_hpaned), tools_header->container, FALSE, TRUE);
+    /* Add tools panel with fixed width (no expansion, no shrinking) */
+    gtk_box_pack_start(GTK_BOX(main_hbox), tools_panel, FALSE, FALSE, 0);
 
     /* ==== CENTER-RIGHT HORIZONTAL PANED: Center (notebook) | Right (layers) ==== */
     GtkWidget *center_right_hpaned = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
     gtk_paned_set_position(GTK_PANED(center_right_hpaned), 800);
-    gtk_paned_pack2(GTK_PANED(main_hpaned), center_right_hpaned, TRUE, TRUE);
+    gtk_box_pack_start(GTK_BOX(main_hbox), center_right_hpaned, TRUE, TRUE, 0);
 
     /* CENTER: Notebook for document tabs */
     ctx->notebook = gtk_notebook_new();

@@ -1,3 +1,23 @@
+# Find glib-compile-resources for gresources compilation
+find_program(GLIB_COMPILE_RESOURCES glib-compile-resources REQUIRED)
+
+# Compile gresources to C source
+set(GRESOURCE_FILE ${CMAKE_CURRENT_BINARY_DIR}/resources.c)
+add_custom_command(
+    OUTPUT ${GRESOURCE_FILE}
+    COMMAND ${GLIB_COMPILE_RESOURCES}
+    ARGS --sourcedir=${CMAKE_SOURCE_DIR}/resources
+         --target=${GRESOURCE_FILE}
+         --generate-source
+         ${CMAKE_SOURCE_DIR}/resources/gresources.xml
+    DEPENDS ${CMAKE_SOURCE_DIR}/resources/gresources.xml
+            ${CMAKE_SOURCE_DIR}/resources/move.png
+            ${CMAKE_SOURCE_DIR}/resources/paintbrush.png
+            ${CMAKE_SOURCE_DIR}/resources/eraser.png
+            ${CMAKE_SOURCE_DIR}/resources/flood-fill.png
+    COMMENT "Compiling gresources"
+)
+
 # Source files
 set(SOURCES
     main.c
@@ -12,6 +32,7 @@ set(SOURCES
     tool_fill.c
     tool_options.c
     command.c
+    ${GRESOURCE_FILE}
 )
 
 # Create the executable
