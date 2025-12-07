@@ -66,38 +66,66 @@ static cairo_surface_t* pixbuf_to_cairo_surface(GdkPixbuf *pixbuf)
 }
 
 /**
+ * Draw a checkered background pattern for transparency
+ */
+static void draw_checkered_background(cairo_t *cr, gint x, gint y, gint width, gint height)
+{
+    const gint square_size = 8;    /* Size of each check square */
+    const double color1 = 0.85;    /* Light gray */
+    const double color2 = 0.95;    /* Lighter gray */
+    gint end_x = x + width;
+    gint end_y = y + height;
+
+    /* Draw checkerboard pattern */
+    for (gint row = y; row < end_y; row += square_size) {
+        for (gint col = x; col < end_x; col += square_size) {
+            /* Calculate which "cell" we're in */
+            gint cell_x = col / square_size;
+            gint cell_y = row / square_size;
+            
+            /* Alternate colors in a checkerboard pattern */
+            double color = ((cell_x + cell_y) % 2 == 0) ? color1 : color2;
+
+            cairo_set_source_rgb(cr, color, color, color);
+            cairo_rectangle(cr, col, row, square_size, square_size);
+            cairo_fill(cr);
+        }
+    }
+}
+
+/**
  * Drawing area draw callback
  */
 static gboolean on_drawing_area_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
 {
     ImageDocument *doc = (ImageDocument *)user_data;
-    double scale_x = 1.0;
-    double scale_y = 1.0;
     GtkAllocation allocation;
+    double x1, y1, x2, y2;
 
-    /* Set white background */
-    cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
-    cairo_paint(cr);
+    /* Get the clip region to determine what needs to be drawn */
+    cairo_clip_extents(cr, &x1, &y1, &x2, &y2);
+    gint clip_width = (gint)(x2 - x1);
+    gint clip_height = (gint)(y2 - y1);
 
     /* Draw the document surface if available */
     if (doc->surface) {
-        /* Get widget allocation to check for scaling */
-        gtk_widget_get_allocation(widget, &allocation);
-
-        /* Calculate scaling to fit in visible area (optional) */
-        if (doc->width > 0 && doc->height > 0) {
-            if (allocation.width > 0 && allocation.height > 0) {
-                double w_scale = (double)allocation.width / doc->width;
-                double h_scale = (double)allocation.height / doc->height;
-                scale_x = (w_scale < h_scale) ? w_scale : 1.0;
-                scale_y = (h_scale < w_scale) ? h_scale : 1.0;
-            }
+        /* Draw checkered background if image has alpha channel */
+        if (doc->has_alpha) {
+            draw_checkered_background(cr, (gint)x1, (gint)y1, clip_width, clip_height);
+        } else {
+            /* Draw white background for opaque images */
+            cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+            cairo_paint(cr);
         }
 
         /* Draw image at natural size (scrollbars handle panning) */
         cairo_set_source_surface(cr, doc->surface, 0, 0);
         cairo_paint(cr);
     } else {
+        /* Draw white background for empty canvas */
+        cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+        cairo_paint(cr);
+
         /* Draw a placeholder grid */
         cairo_set_source_rgb(cr, 0.9, 0.9, 0.9);
         cairo_set_line_width(cr, 0.5);
