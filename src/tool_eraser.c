@@ -43,13 +43,14 @@ static void eraser_erase_line(cairo_surface_t *surface,
 
     cr = cairo_create(surface);
 
-    /* Use CAIRO_OPERATOR_DEST_OUT (Porter-Duff "out" operator) to remove pixels
-       This is the standard way to implement erasing - it removes the source from the dest */
-    cairo_set_operator(cr, CAIRO_OPERATOR_DEST_OUT);
+    /* Use CAIRO_OPERATOR_CLEAR to directly clear pixels to transparent
+       This ensures proper transparency regardless of background */
+    cairo_set_operator(cr, CAIRO_OPERATOR_CLEAR);
     
     /* Set eraser opacity from tool options */
     eraser_opacity = opts ? opts->opacity : 1.0f;
-    cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, eraser_opacity);
+    /* For clear operator, we need to set source with alpha for partial erasing */
+    cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, eraser_opacity);
     
     /* Set eraser brush size from tool options */
     eraser_size = opts ? opts->size : 5.0f;

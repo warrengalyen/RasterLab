@@ -550,7 +550,7 @@ gboolean document_load_image_from_file(ImageDocument *doc, const gchar *file_pat
     doc->height = gdk_pixbuf_get_height(pixbuf);
     doc->channels = gdk_pixbuf_get_n_channels(pixbuf);
     doc->bit_depth = 8;  /* GdkPixbuf always uses 8 bits per channel */
-    doc->has_alpha = gdk_pixbuf_get_has_alpha(pixbuf);
+    doc->has_alpha = gdk_pixbuf_get_has_alpha(pixbuf);  /* Preserve original format info */
 
     /* Free old layers if exists */
     for (GList *iter = doc->layers; iter; iter = iter->next) {
@@ -559,8 +559,9 @@ gboolean document_load_image_from_file(ImageDocument *doc, const gchar *file_pat
     g_list_free(doc->layers);
     doc->layers = NULL;
 
-    /* Create base layer from loaded image */
-    ImageLayer *base_layer = layer_new("Base", doc->width, doc->height, doc->has_alpha);
+    /* Create base layer from loaded image - always with alpha support
+       This allows tools like the eraser to work on any image type */
+    ImageLayer *base_layer = layer_new("Base", doc->width, doc->height, TRUE);
     
     /* Convert pixbuf to Cairo surface and copy to layer */
     cairo_surface_t *temp_surface = pixbuf_to_cairo_surface(pixbuf);
@@ -738,6 +739,10 @@ gboolean document_render_composite(ImageDocument *doc)
         cairo_save(cr);
         cairo_translate(cr, layer->offset_x, layer->offset_y);
         cairo_set_source_surface(cr, layer->surface, 0, 0);
+        
+        /* Ensure proper operator for alpha blending */
+        cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+        
         if (layer->opacity < 1.0) {
             cairo_paint_with_alpha(cr, layer->opacity);
         } else {
