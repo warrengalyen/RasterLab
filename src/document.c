@@ -99,28 +99,38 @@ static void draw_checkered_background(cairo_t *cr, gint x, gint y, gint width, g
 static gboolean on_drawing_area_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
 {
     ImageDocument *doc = (ImageDocument *)user_data;
-    GtkAllocation allocation;
+    cairo_surface_t *composite;
     double x1, y1, x2, y2;
+    gint clip_width, clip_height;
 
     /* Get the clip region to determine what needs to be drawn */
     cairo_clip_extents(cr, &x1, &y1, &x2, &y2);
-    gint clip_width = (gint)(x2 - x1);
-    gint clip_height = (gint)(y2 - y1);
+    clip_width = (gint)(x2 - x1);
+    clip_height = (gint)(y2 - y1);
 
-    /* Draw the document surface if available */
-    if (doc->surface) {
-        /* Draw checkered background if image has alpha channel */
-        if (doc->has_alpha) {
-            draw_checkered_background(cr, (gint)x1, (gint)y1, clip_width, clip_height);
-        } else {
-            /* Draw white background for opaque images */
-            cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+    /* Draw the document if image is loaded */
+    if (doc->layers && g_list_length(doc->layers) > 0) {
+        /* Get the composite rendered surface */
+        composite = document_get_composite_surface(doc);
+
+        if (composite) {
+            /* Draw checkered background for transparency */
+            if (doc->has_alpha) {
+                draw_checkered_background(cr, (gint)x1, (gint)y1, clip_width, clip_height);
+            } else {
+                /* Draw white background for opaque images */
+                cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+                cairo_paint(cr);
+            }
+
+            /* Apply zoom and draw composite surface */
+            if (doc->zoom_factor != 1.0) {
+                cairo_scale(cr, doc->zoom_factor, doc->zoom_factor);
+            }
+
+            cairo_set_source_surface(cr, composite, 0, 0);
             cairo_paint(cr);
         }
-
-        /* Draw image at natural size (scrollbars handle panning) */
-        cairo_set_source_surface(cr, doc->surface, 0, 0);
-        cairo_paint(cr);
     } else {
         /* Draw white background for empty canvas */
         cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
@@ -147,6 +157,57 @@ static gboolean on_drawing_area_draw(GtkWidget *widget, cairo_t *cr, gpointer us
 }
 
 /**
+ * Create a new image layer
+ */
+static ImageLayer* layer_new(const gchar *name, guint width, guint height, gboolean has_alpha)
+{
+    ImageLayer *layer = (ImageLayer *)g_malloc(sizeof(ImageLayer));
+
+    layer->name = g_strdup(name);
+    
+    /* Create layer surface */
+    cairo_format_t format = has_alpha ? CAIRO_FORMAT_ARGB32 : CAIRO_FORMAT_RGB24;
+    layer->surface = cairo_image_surface_create(format, width, height);
+    
+    /* Clear with transparent black if has alpha, white otherwise */
+    cairo_t *cr = cairo_create(layer->surface);
+    if (has_alpha) {
+        cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.0);
+    } else {
+        cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+    }
+    cairo_paint(cr);
+    cairo_destroy(cr);
+
+    layer->opacity = 1.0;
+    layer->visible = TRUE;
+    layer->width = width;
+    layer->height = height;
+
+    return layer;
+}
+
+/**
+ * Free an image layer
+ */
+static void layer_free(ImageLayer *layer)
+{
+    if (!layer) {
+        return;
+    }
+
+    if (layer->name) {
+        g_free(layer->name);
+    }
+
+    if (layer->surface) {
+        cairo_surface_destroy(layer->surface);
+    }
+
+    g_free(layer);
+}
+
+/**
  * Create a new image document
  */
 ImageDocument* document_new(const gchar *filename)
@@ -155,7 +216,6 @@ ImageDocument* document_new(const gchar *filename)
 
     doc->filename = g_strdup(filename);
     doc->file_path = NULL;
-    doc->surface = NULL;
     doc->modified = FALSE;
     doc->drawing_area = NULL;
     doc->scrolled_window = NULL;
@@ -166,6 +226,12 @@ ImageDocument* document_new(const gchar *filename)
     doc->channels = 0;
     doc->bit_depth = 0;
     doc->has_alpha = FALSE;
+
+    /* Initialize rendering pipeline */
+    doc->layers = NULL;
+    doc->composite_surface = NULL;
+    doc->composite_dirty = TRUE;
+    doc->zoom_factor = 1.0;
 
     return doc;
 }
@@ -187,8 +253,15 @@ void document_free(ImageDocument *doc)
         g_free(doc->file_path);
     }
 
-    if (doc->surface) {
-        cairo_surface_destroy(doc->surface);
+    /* Free all layers */
+    for (GList *iter = doc->layers; iter; iter = iter->next) {
+        layer_free((ImageLayer *)iter->data);
+    }
+    g_list_free(doc->layers);
+
+    /* Free composite surface */
+    if (doc->composite_surface) {
+        cairo_surface_destroy(doc->composite_surface);
     }
 
     g_free(doc);
@@ -276,25 +349,43 @@ gboolean document_load_image_from_file(ImageDocument *doc, const gchar *file_pat
         return FALSE;
     }
 
-    /* Free old surface if exists */
-    if (doc->surface) {
-        cairo_surface_destroy(doc->surface);
-    }
-
-    /* Convert pixbuf to Cairo surface */
-    doc->surface = pixbuf_to_cairo_surface(pixbuf);
-
-    if (!doc->surface) {
-        g_object_unref(pixbuf);
-        return FALSE;
-    }
-
-    /* Store metadata */
+    /* Store metadata first */
     doc->width = gdk_pixbuf_get_width(pixbuf);
     doc->height = gdk_pixbuf_get_height(pixbuf);
     doc->channels = gdk_pixbuf_get_n_channels(pixbuf);
     doc->bit_depth = 8;  /* GdkPixbuf always uses 8 bits per channel */
     doc->has_alpha = gdk_pixbuf_get_has_alpha(pixbuf);
+
+    /* Free old layers if exists */
+    for (GList *iter = doc->layers; iter; iter = iter->next) {
+        layer_free((ImageLayer *)iter->data);
+    }
+    g_list_free(doc->layers);
+    doc->layers = NULL;
+
+    /* Create base layer from loaded image */
+    ImageLayer *base_layer = layer_new("Base", doc->width, doc->height, doc->has_alpha);
+    
+    /* Convert pixbuf to Cairo surface and copy to layer */
+    cairo_surface_t *temp_surface = pixbuf_to_cairo_surface(pixbuf);
+    if (!temp_surface) {
+        g_object_unref(pixbuf);
+        layer_free(base_layer);
+        return FALSE;
+    }
+
+    /* Copy temp surface to layer surface */
+    cairo_t *cr = cairo_create(base_layer->surface);
+    cairo_set_source_surface(cr, temp_surface, 0, 0);
+    cairo_paint(cr);
+    cairo_destroy(cr);
+    cairo_surface_destroy(temp_surface);
+
+    /* Add layer to document */
+    doc->layers = g_list_append(doc->layers, base_layer);
+
+    /* Mark composite as needing re-render */
+    document_invalidate_composite(doc);
 
     /* Update filename to basename */
     basename = g_path_get_basename(file_path);
@@ -355,10 +446,136 @@ gchar* document_get_image_info(ImageDocument *doc)
         return g_strdup("No image loaded");
     }
 
-    return g_strdup_printf("%ux%u, %d-bit %s%s",
+    return g_strdup_printf("%ux%u, %d-bit %s%s (zoom: %.0f%%)",
                           doc->width, doc->height,
                           doc->bit_depth,
                           doc->channels == 3 ? "RGB" : "RGBA",
-                          doc->has_alpha ? " (with alpha)" : "");
+                          doc->has_alpha ? " (with alpha)" : "",
+                          doc->zoom_factor * 100.0);
+}
+
+/**
+ * Set zoom factor for the document
+ */
+void document_set_zoom(ImageDocument *doc, gdouble zoom_factor)
+{
+    if (!doc) {
+        return;
+    }
+
+    /* Clamp zoom to reasonable range (10% - 400%) */
+    if (zoom_factor < 0.1) {
+        zoom_factor = 0.1;
+    } else if (zoom_factor > 4.0) {
+        zoom_factor = 4.0;
+    }
+
+    doc->zoom_factor = zoom_factor;
+
+    /* Update drawing area and trigger redraw */
+    if (doc->drawing_area) {
+        gint scaled_width = (gint)(doc->width * zoom_factor);
+        gint scaled_height = (gint)(doc->height * zoom_factor);
+        gtk_widget_set_size_request(doc->drawing_area, scaled_width, scaled_height);
+        gtk_widget_queue_draw(doc->drawing_area);
+    }
+}
+
+/**
+ * Get current zoom factor
+ */
+gdouble document_get_zoom(ImageDocument *doc)
+{
+    if (!doc) {
+        return 1.0;
+    }
+
+    return doc->zoom_factor;
+}
+
+/**
+ * Render all layers to composite surface
+ */
+gboolean document_render_composite(ImageDocument *doc)
+{
+    cairo_t *cr;
+    GList *iter;
+    ImageLayer *layer;
+
+    if (!doc || doc->width == 0 || doc->height == 0) {
+        return FALSE;
+    }
+
+    /* Create composite surface if needed */
+    if (!doc->composite_surface) {
+        doc->composite_surface = cairo_image_surface_create(
+            CAIRO_FORMAT_ARGB32, doc->width, doc->height);
+    }
+
+    if (cairo_surface_status(doc->composite_surface) != CAIRO_STATUS_SUCCESS) {
+        g_warning("Failed to create composite surface");
+        return FALSE;
+    }
+
+    /* Clear composite surface */
+    cr = cairo_create(doc->composite_surface);
+    cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.0);
+    cairo_paint(cr);
+
+    /* Composite each visible layer */
+    for (iter = doc->layers; iter; iter = iter->next) {
+        layer = (ImageLayer *)iter->data;
+
+        if (!layer->visible || layer->opacity <= 0.0) {
+            continue;
+        }
+
+        /* Draw layer with opacity */
+        cairo_set_source_surface(cr, layer->surface, 0, 0);
+        if (layer->opacity < 1.0) {
+            cairo_paint_with_alpha(cr, layer->opacity);
+        } else {
+            cairo_paint(cr);
+        }
+    }
+
+    cairo_destroy(cr);
+    doc->composite_dirty = FALSE;
+
+    return TRUE;
+}
+
+/**
+ * Get the composite rendered surface
+ */
+cairo_surface_t* document_get_composite_surface(ImageDocument *doc)
+{
+    if (!doc) {
+        return NULL;
+    }
+
+    /* Re-render if composite is dirty */
+    if (doc->composite_dirty) {
+        document_render_composite(doc);
+    }
+
+    return doc->composite_surface;
+}
+
+/**
+ * Mark composite surface as needing re-render
+ */
+void document_invalidate_composite(ImageDocument *doc)
+{
+    if (!doc) {
+        return;
+    }
+
+    doc->composite_dirty = TRUE;
+
+    /* Trigger redraw */
+    if (doc->drawing_area) {
+        gtk_widget_queue_draw(doc->drawing_area);
+    }
 }
 
