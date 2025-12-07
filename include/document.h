@@ -6,6 +6,16 @@
 #include <cairo.h>
 
 /**
+ * Blend modes for layers
+ */
+typedef enum {
+    BLEND_MODE_NORMAL = 0,
+    BLEND_MODE_MULTIPLY = 1,
+    BLEND_MODE_SCREEN = 2,
+    BLEND_MODE_OVERLAY = 3,
+} BlendMode;
+
+/**
  * Structure to represent a single layer in an image
  */
 typedef struct {
@@ -15,6 +25,7 @@ typedef struct {
     gboolean visible;             /* Is layer visible? */
     guint width;                  /* Layer width in pixels */
     guint height;                 /* Layer height in pixels */
+    BlendMode blend_mode;         /* Layer blend mode */
 } ImageLayer;
 
 /**
@@ -139,6 +150,62 @@ cairo_surface_t* document_get_composite_surface(ImageDocument *doc);
  * @param doc The document
  */
 void document_invalidate_composite(ImageDocument *doc);
+
+/**
+ * Add a new empty layer to the document
+ * @param doc The document
+ * @param name The layer name
+ * @return The newly created layer, or NULL on error
+ */
+ImageLayer* document_add_layer(ImageDocument *doc, const gchar *name);
+
+/**
+ * Delete a layer from the document
+ * @param doc The document
+ * @param layer The layer to delete
+ * @return TRUE if successful, FALSE if layer not found or invalid
+ */
+gboolean document_delete_layer(ImageDocument *doc, ImageLayer *layer);
+
+/**
+ * Duplicate an existing layer
+ * @param doc The document
+ * @param layer The layer to duplicate
+ * @param name The name for the new layer
+ * @return The duplicated layer, or NULL on error
+ */
+ImageLayer* document_duplicate_layer(ImageDocument *doc, ImageLayer *layer, const gchar *name);
+
+/**
+ * Move a layer up in the stack (higher z-order)
+ * @param doc The document
+ * @param layer The layer to move
+ * @return TRUE if successful
+ */
+gboolean document_layer_move_up(ImageDocument *doc, ImageLayer *layer);
+
+/**
+ * Move a layer down in the stack (lower z-order)
+ * @param doc The document
+ * @param layer The layer to move
+ * @return TRUE if successful
+ */
+gboolean document_layer_move_down(ImageDocument *doc, ImageLayer *layer);
+
+/**
+ * Get the layer at a specific index
+ * @param doc The document
+ * @param index The layer index (0 = bottom)
+ * @return The layer, or NULL if index is invalid
+ */
+ImageLayer* document_get_layer(ImageDocument *doc, guint index);
+
+/**
+ * Get the number of layers in the document
+ * @param doc The document
+ * @return The number of layers
+ */
+guint document_get_layer_count(ImageDocument *doc);
 
 #endif /* DOCUMENT_H */
 

@@ -9,6 +9,9 @@ static void on_file_open_response(GtkDialog *dialog, gint response_id, gpointer 
 static void on_file_close(GtkWidget *widget, gpointer data);
 static void on_file_exit(GtkWidget *widget, gpointer data);
 static gboolean on_window_delete(GtkWidget *widget, GdkEvent *event, gpointer data);
+static void on_layer_new(GtkWidget *widget, gpointer data);
+static void on_layer_delete(GtkWidget *widget, gpointer data);
+static void on_layer_duplicate(GtkWidget *widget, gpointer data);
 static void on_notebook_switch_page(GtkNotebook *notebook, GtkWidget *page,
                                      guint page_num, gpointer user_data);
 static void on_tab_close_button_clicked(GtkButton *button, gpointer user_data);
@@ -55,6 +58,37 @@ static GtkWidget* create_file_menu(AppContext *ctx)
 }
 
 /**
+ * Create the Layer menu
+ */
+static GtkWidget* create_layer_menu(AppContext *ctx)
+{
+    GtkWidget *menu = gtk_menu_new();
+    GtkWidget *menu_item;
+
+    /* Layer > New Layer */
+    menu_item = gtk_menu_item_new_with_mnemonic("_New Layer");
+    g_signal_connect(menu_item, "activate", G_CALLBACK(on_layer_new), ctx);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item);
+
+    /* Layer > Duplicate Layer */
+    menu_item = gtk_menu_item_new_with_mnemonic("_Duplicate Layer");
+    g_signal_connect(menu_item, "activate", G_CALLBACK(on_layer_duplicate), ctx);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item);
+
+    /* Separator */
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
+
+    /* Layer > Delete Layer */
+    menu_item = gtk_menu_item_new_with_mnemonic("_Delete Layer");
+    g_signal_connect(menu_item, "activate", G_CALLBACK(on_layer_delete), ctx);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item);
+
+    gtk_widget_show_all(menu);
+
+    return menu;
+}
+
+/**
  * Create the menu bar
  */
 static GtkWidget* create_menu_bar(AppContext *ctx)
@@ -62,12 +96,20 @@ static GtkWidget* create_menu_bar(AppContext *ctx)
     GtkWidget *menu_bar = gtk_menu_bar_new();
     GtkWidget *file_menu_item;
     GtkWidget *file_menu;
+    GtkWidget *layer_menu_item;
+    GtkWidget *layer_menu;
 
     /* File menu */
     file_menu_item = gtk_menu_item_new_with_mnemonic("_File");
     file_menu = create_file_menu(ctx);
     gtk_menu_item_set_submenu(GTK_MENU_ITEM(file_menu_item), file_menu);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu_bar), file_menu_item);
+
+    /* Layer menu */
+    layer_menu_item = gtk_menu_item_new_with_mnemonic("_Layer");
+    layer_menu = create_layer_menu(ctx);
+    gtk_menu_item_set_submenu(GTK_MENU_ITEM(layer_menu_item), layer_menu);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu_bar), layer_menu_item);
 
     gtk_widget_show_all(menu_bar);
 
@@ -453,6 +495,85 @@ static void on_tab_close_button_clicked(GtkButton *button, gpointer user_data)
         ui_close_document_tab(ctx, doc);
     } else {
         printf("  ERROR: ctx=%p or doc=%p is NULL\n", ctx, doc);
+    }
+}
+
+/**
+ * Layer > New Layer callback
+ */
+static void on_layer_new(GtkWidget *widget, gpointer data)
+{
+    (void)widget;  /* Unused */
+
+    AppContext *ctx = (AppContext *)data;
+    ImageDocument *doc = ui_get_active_document(ctx);
+    
+    if (!doc) {
+        g_warning("No document open");
+        return;
+    }
+
+    /* Create new layer with auto-generated name */
+    static int layer_count = 1;
+    gchar *layer_name = g_strdup_printf("Layer %d", layer_count++);
+    
+    ImageLayer *new_layer = document_add_layer(doc, layer_name);
+    g_free(layer_name);
+    
+    if (new_layer) {
+        printf("New layer created\n");
+    }
+}
+
+/**
+ * Layer > Delete Layer callback
+ */
+static void on_layer_delete(GtkWidget *widget, gpointer data)
+{
+    (void)widget;  /* Unused */
+
+    AppContext *ctx = (AppContext *)data;
+    ImageDocument *doc = ui_get_active_document(ctx);
+    
+    if (!doc || !doc->layers) {
+        g_warning("No document or layers");
+        return;
+    }
+
+    /* Delete the last (top) layer */
+    ImageLayer *top_layer = (ImageLayer *)g_list_last(doc->layers)->data;
+    
+    if (document_delete_layer(doc, top_layer)) {
+        printf("Layer deleted\n");
+    }
+}
+
+/**
+ * Layer > Duplicate Layer callback
+ */
+static void on_layer_duplicate(GtkWidget *widget, gpointer data)
+{
+    (void)widget;  /* Unused */
+
+    AppContext *ctx = (AppContext *)data;
+    ImageDocument *doc = ui_get_active_document(ctx);
+    
+    if (!doc || !doc->layers) {
+        g_warning("No document or layers");
+        return;
+    }
+
+    /* Duplicate the last (top) layer */
+    ImageLayer *top_layer = (ImageLayer *)g_list_last(doc->layers)->data;
+    
+    static int dup_count = 1;
+    gchar *layer_name = g_strdup_printf("%s copy %d", top_layer->name, dup_count++);
+    
+    ImageLayer *dup_layer = document_duplicate_layer(doc, top_layer, layer_name);
+    g_free(layer_name);
+    
+    if (dup_layer) {
+        printf("Layer duplicated\n");
     }
 }
 
