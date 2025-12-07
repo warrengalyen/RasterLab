@@ -2,6 +2,7 @@
 #include "command.h"
 #include "document.h"
 #include "tool_options.h"
+#include "panels.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
@@ -52,13 +53,14 @@ static void brush_draw_pixel(cairo_surface_t *surface, gint x, gint y)
 
 /**
  * Draw a line from (x1, y1) to (x2, y2) on the layer surface
- * Uses tool options for size and opacity
+ * Uses tool options for size and opacity, and foreground color
  */
 static void brush_draw_line(cairo_surface_t *surface, 
                             gint x1, gint y1, gint x2, gint y2)
 {
     cairo_t *cr;
     ToolOptions *opts;
+    GdkRGBA fg_color;
     gfloat brush_size;
     gfloat brush_opacity;
 
@@ -71,9 +73,18 @@ static void brush_draw_line(cairo_surface_t *surface,
 
     cr = cairo_create(surface);
 
-    /* Set brush color (black) with opacity from tool options */
+    /* Get foreground color, default to black if not available */
+    if (!tools_panel_get_foreground_color(&fg_color)) {
+        fg_color.red = 0.0;
+        fg_color.green = 0.0;
+        fg_color.blue = 0.0;
+        fg_color.alpha = 1.0;
+    }
+
+    /* Set brush color with opacity from tool options */
     brush_opacity = opts ? opts->opacity : 1.0f;
-    cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, brush_opacity);
+    cairo_set_source_rgba(cr, fg_color.red, fg_color.green, fg_color.blue, 
+                         fg_color.alpha * brush_opacity);
 
     /* Set brush size from tool options */
     brush_size = opts ? opts->size : 5.0f;

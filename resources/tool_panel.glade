@@ -130,80 +130,61 @@
       </packing>
     </child>
     
-    <!-- Color Pickers Section -->
+    <!-- Color Pickers Section (Photoshop-style overlapping) -->
     <child>
       <object class="GtkBox" id="color_box">
         <property name="visible">True</property>
         <property name="can_focus">False</property>
         <property name="orientation">vertical</property>
-        <property name="spacing">8</property>
+        <property name="spacing">12</property>
         <property name="hexpand">False</property>
+        <property name="margin_start">4</property>
+        <property name="margin_end">4</property>
         
-        <!-- Foreground Label -->
+        <!-- Color Pickers Container with Overlay -->
         <child>
-          <object class="GtkLabel" id="fg_label">
+          <object class="GtkFixed" id="color_picker_container">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="label">Foreground</property>
-            <property name="xalign">0</property>
-            <property name="wrap">True</property>
+            <property name="width_request">40</property>
+            <property name="height_request">40</property>
+            
+            <!-- Background Color Picker (smaller, back layer) -->
+            <child>
+              <object class="GtkColorButton" id="bg_color_button">
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="receives_default">True</property>
+                <property name="width_request">20</property>
+                <property name="height_request">20</property>
+                <property name="title">Select Background Color</property>
+              </object>
+              <packing>
+                <property name="x">18</property>
+                <property name="y">18</property>
+              </packing>
+            </child>
+            
+            <!-- Foreground Color Picker (larger, front layer) -->
+            <child>
+              <object class="GtkColorButton" id="fg_color_button">
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="receives_default">True</property>
+                <property name="width_request">32</property>
+                <property name="height_request">32</property>
+                <property name="title">Select Foreground Color</property>
+              </object>
+              <packing>
+                <property name="x">0</property>
+                <property name="y">0</property>
+              </packing>
+            </child>
           </object>
           <packing>
             <property name="expand">False</property>
             <property name="fill">True</property>
             <property name="position">0</property>
-          </packing>
-        </child>
-        
-        <!-- Foreground Color Picker -->
-        <child>
-          <object class="GtkColorButton" id="fg_color_button">
-            <property name="visible">True</property>
-            <property name="can_focus">True</property>
-            <property name="receives_default">True</property>
-            <property name="width_request">32</property>
-            <property name="height_request">32</property>
-            <property name="hexpand">False</property>
-            <property name="title">Select Foreground Color</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">1</property>
-          </packing>
-        </child>
-        
-        <!-- Background Label -->
-        <child>
-          <object class="GtkLabel" id="bg_label">
-            <property name="visible">True</property>
-            <property name="can_focus">False</property>
-            <property name="label">Background</property>
-            <property name="xalign">0</property>
-            <property name="wrap">True</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">2</property>
-          </packing>
-        </child>
-        
-        <!-- Background Color Picker -->
-        <child>
-          <object class="GtkColorButton" id="bg_color_button">
-            <property name="visible">True</property>
-            <property name="can_focus">True</property>
-            <property name="receives_default">True</property>
-            <property name="width_request">32</property>
-            <property name="height_request">32</property>
-            <property name="hexpand">False</property>
-            <property name="title">Select Background Color</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">3</property>
           </packing>
         </child>
         
@@ -214,13 +195,13 @@
             <property name="visible">True</property>
             <property name="can_focus">True</property>
             <property name="receives_default">True</property>
-            <property name="height_request">30</property>
+            <property name="height_request">24</property>
             <property name="hexpand">False</property>
           </object>
           <packing>
             <property name="expand">False</property>
             <property name="fill">True</property>
-            <property name="position">4</property>
+            <property name="position">1</property>
           </packing>
         </child>
       </object>

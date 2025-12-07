@@ -75,6 +75,13 @@ GtkWidget* create_tools_panel(ToolRegistry *tool_registry);
 void tools_panel_set_options_panel(ToolOptionsPanel *panel);
 
 /**
+ * Get the current foreground color from the color picker
+ * @param rgba Pointer to GdkRGBA to fill with foreground color
+ * @return TRUE if color was retrieved, FALSE if color button not available
+ */
+gboolean tools_panel_get_foreground_color(GdkRGBA *rgba);
+
+/**
  * Create the tool options panel
  * @return ToolOptionsPanel structure
  */

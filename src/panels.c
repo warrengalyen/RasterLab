@@ -102,6 +102,34 @@ void panel_header_free(PanelHeader *header)
 static ToolOptionsPanel *g_tool_options_panel = NULL;
 
 /**
+ * Global references to color buttons for swap functionality
+ */
+static GtkWidget *g_fg_color_button = NULL;
+static GtkWidget *g_bg_color_button = NULL;
+
+/**
+ * Swap foreground and background colors
+ */
+static void on_swap_colors_clicked(GtkButton *button, gpointer user_data)
+{
+    (void)button;   /* Unused */
+    (void)user_data; /* Unused */
+    
+    if (!g_fg_color_button || !g_bg_color_button) {
+        return;
+    }
+    
+    /* Get current colors */
+    GdkRGBA fg_rgba, bg_rgba;
+    gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(g_fg_color_button), &fg_rgba);
+    gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(g_bg_color_button), &bg_rgba);
+    
+    /* Swap them */
+    gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(g_fg_color_button), &bg_rgba);
+    gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(g_bg_color_button), &fg_rgba);
+}
+
+/**
  * Global references to tool buttons for toggle state management
  */
 static GtkWidget *g_tool_buttons[TOOL_COUNT] = {NULL};
@@ -157,6 +185,18 @@ static void on_tool_button_clicked(GtkToggleButton *button, gpointer user_data)
 void tools_panel_set_options_panel(ToolOptionsPanel *panel)
 {
     g_tool_options_panel = panel;
+}
+
+/**
+ * Get the current foreground color from the color picker
+ */
+gboolean tools_panel_get_foreground_color(GdkRGBA *rgba)
+{
+    if (!g_fg_color_button || !rgba) {
+        return FALSE;
+    }
+    gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(g_fg_color_button), rgba);
+    return TRUE;
 }
 
 /**
@@ -232,10 +272,12 @@ GtkWidget* create_tools_panel(ToolRegistry *tool_registry)
     /* Set up color buttons */
     GtkWidget *fg_color = GTK_WIDGET(gtk_builder_get_object(builder, "fg_color_button"));
     GtkWidget *bg_color = GTK_WIDGET(gtk_builder_get_object(builder, "bg_color_button"));
+    GtkWidget *swap_button = GTK_WIDGET(gtk_builder_get_object(builder, "swap_button"));
     
     if (fg_color) {
         GdkRGBA fg_rgba = {0.0, 0.0, 0.0, 1.0};  /* Black */
         gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(fg_color), &fg_rgba);
+        g_fg_color_button = fg_color;  /* Store global reference */
     } else {
         g_warning("Failed to get foreground color button from builder");
     }
@@ -243,8 +285,17 @@ GtkWidget* create_tools_panel(ToolRegistry *tool_registry)
     if (bg_color) {
         GdkRGBA bg_rgba = {1.0, 1.0, 1.0, 1.0};  /* White */
         gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(bg_color), &bg_rgba);
+        g_bg_color_button = bg_color;  /* Store global reference */
     } else {
         g_warning("Failed to get background color button from builder");
+    }
+    
+    /* Connect swap button */
+    if (swap_button) {
+        g_signal_connect(swap_button, "clicked",
+                        G_CALLBACK(on_swap_colors_clicked), NULL);
+    } else {
+        g_warning("Failed to get swap button from builder");
     }
     
     gtk_widget_show_all(panel);

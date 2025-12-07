@@ -1,6 +1,7 @@
 #include "tool_fill.h"
 #include "command.h"
 #include "document.h"
+#include "panels.h"
 #include <stdlib.h>
 #include <stdio.h>
 
@@ -25,6 +26,7 @@ typedef struct {
 static void fill_flood_fill(cairo_surface_t *surface, gint x, gint y)
 {
     cairo_t *cr;
+    GdkRGBA fg_color;
 
     if (!surface) {
         return;
@@ -32,8 +34,16 @@ static void fill_flood_fill(cairo_surface_t *surface, gint x, gint y)
 
     cr = cairo_create(surface);
 
-    /* Set fill color (black) */
-    cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
+    /* Get foreground color, default to black if not available */
+    if (!tools_panel_get_foreground_color(&fg_color)) {
+        fg_color.red = 0.0;
+        fg_color.green = 0.0;
+        fg_color.blue = 0.0;
+        fg_color.alpha = 1.0;
+    }
+
+    /* Set fill color to foreground color */
+    cairo_set_source_rgba(cr, fg_color.red, fg_color.green, fg_color.blue, fg_color.alpha);
 
     /* Fill a circle at the clicked point as a simple flood fill approximation */
     cairo_arc(cr, x, y, 10.0, 0, 2 * 3.14159);
