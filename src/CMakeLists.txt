@@ -1,6 +1,8 @@
 # Source files
 set(SOURCES
     main.c
+    ui.c
+    document.c
 )
 
 # Create the executable
