@@ -51,6 +51,9 @@ static void on_layer_selection_changed(GtkTreeSelection *selection, gpointer use
         /* Set the selected layer in the document so tools use the right layer */
         ImageLayer *selected_layer = layers_panel_get_selected_layer(ctx->layers_panel);
         document_set_selected_layer(active_doc, selected_layer);
+        
+        /* Update opacity controls to reflect selected layer */
+        layers_panel_update_opacity_controls(ctx->layers_panel);
     }
     
     /* Update menu and button states */
@@ -1360,6 +1363,7 @@ void ui_update_menu_and_button_states(AppContext *ctx)
     /* Update layers panel button states */
     if (layers_panel) {
         layers_panel_update_button_sensitivity(layers_panel, has_document, has_selection, doc, selected_layer);
+        layers_panel_update_opacity_controls(layers_panel);
     }
 
     /* Update Edit menu item states (undo/redo) */

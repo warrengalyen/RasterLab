@@ -519,6 +519,145 @@ static void on_layer_visibility_toggled(GtkCellRendererToggle *cell_renderer,
     printf("Layer visibility toggled\n");
 }
 
+/* Forward declarations for opacity callbacks */
+static void on_opacity_scale_changed(GtkRange *range, gpointer user_data);
+static void on_opacity_spin_changed(GtkSpinButton *spin_button, gpointer user_data);
+static void on_opacity_reset_clicked(GtkButton *button, gpointer user_data);
+
+/**
+ * Opacity scale changed callback
+ */
+static void on_opacity_scale_changed(GtkRange *range, gpointer user_data)
+{
+    LayersPanel *layers_panel = (LayersPanel *)user_data;
+    gdouble value = gtk_range_get_value(range);
+    ImageLayer *selected_layer;
+    
+    if (!layers_panel || !layers_panel->current_doc) {
+        return;
+    }
+    
+    selected_layer = layers_panel_get_selected_layer(layers_panel);
+    if (!selected_layer) {
+        return;
+    }
+    
+    /* Update layer opacity (convert from 0-100 to 0.0-1.0) */
+    selected_layer->opacity = value / 100.0;
+    
+    /* Update spin button to stay in sync */
+    if (layers_panel->spin_opacity) {
+        g_signal_handlers_block_by_func(layers_panel->spin_opacity,
+                                       G_CALLBACK(on_opacity_spin_changed),
+                                       layers_panel);
+        gtk_spin_button_set_value(GTK_SPIN_BUTTON(layers_panel->spin_opacity), value);
+        g_signal_handlers_unblock_by_func(layers_panel->spin_opacity,
+                                         G_CALLBACK(on_opacity_spin_changed),
+                                         layers_panel);
+    }
+    
+    /* Invalidate composite to redraw with new opacity */
+    document_invalidate_composite(layers_panel->current_doc);
+    
+    /* Queue redraw */
+    if (layers_panel->current_doc->drawing_area) {
+        gtk_widget_queue_draw(layers_panel->current_doc->drawing_area);
+    }
+}
+
+/**
+ * Opacity spin button changed callback
+ */
+static void on_opacity_spin_changed(GtkSpinButton *spin_button, gpointer user_data)
+{
+    LayersPanel *layers_panel = (LayersPanel *)user_data;
+    gdouble value = gtk_spin_button_get_value(spin_button);
+    ImageLayer *selected_layer;
+    
+    if (!layers_panel || !layers_panel->current_doc) {
+        return;
+    }
+    
+    selected_layer = layers_panel_get_selected_layer(layers_panel);
+    if (!selected_layer) {
+        return;
+    }
+    
+    /* Update layer opacity (convert from 0-100 to 0.0-1.0) */
+    selected_layer->opacity = value / 100.0;
+    
+    /* Update scale to stay in sync */
+    if (layers_panel->scale_opacity) {
+        g_signal_handlers_block_by_func(layers_panel->scale_opacity,
+                                       G_CALLBACK(on_opacity_scale_changed),
+                                       layers_panel);
+        gtk_range_set_value(GTK_RANGE(layers_panel->scale_opacity), value);
+        g_signal_handlers_unblock_by_func(layers_panel->scale_opacity,
+                                         G_CALLBACK(on_opacity_scale_changed),
+                                         layers_panel);
+    }
+    
+    /* Invalidate composite to redraw with new opacity */
+    document_invalidate_composite(layers_panel->current_doc);
+    
+    /* Queue redraw */
+    if (layers_panel->current_doc->drawing_area) {
+        gtk_widget_queue_draw(layers_panel->current_doc->drawing_area);
+    }
+}
+
+/**
+ * Opacity reset button clicked callback
+ */
+static void on_opacity_reset_clicked(GtkButton *button, gpointer user_data)
+{
+    LayersPanel *layers_panel = (LayersPanel *)user_data;
+    ImageLayer *selected_layer;
+    
+    (void)button;  /* Unused */
+    
+    if (!layers_panel || !layers_panel->current_doc) {
+        return;
+    }
+    
+    selected_layer = layers_panel_get_selected_layer(layers_panel);
+    if (!selected_layer) {
+        return;
+    }
+    
+    /* Reset opacity to 100% (1.0) */
+    selected_layer->opacity = 1.0;
+    
+    /* Update controls */
+    if (layers_panel->scale_opacity) {
+        g_signal_handlers_block_by_func(layers_panel->scale_opacity,
+                                       G_CALLBACK(on_opacity_scale_changed),
+                                       layers_panel);
+        gtk_range_set_value(GTK_RANGE(layers_panel->scale_opacity), 100.0);
+        g_signal_handlers_unblock_by_func(layers_panel->scale_opacity,
+                                         G_CALLBACK(on_opacity_scale_changed),
+                                         layers_panel);
+    }
+    
+    if (layers_panel->spin_opacity) {
+        g_signal_handlers_block_by_func(layers_panel->spin_opacity,
+                                       G_CALLBACK(on_opacity_spin_changed),
+                                       layers_panel);
+        gtk_spin_button_set_value(GTK_SPIN_BUTTON(layers_panel->spin_opacity), 100.0);
+        g_signal_handlers_unblock_by_func(layers_panel->spin_opacity,
+                                         G_CALLBACK(on_opacity_spin_changed),
+                                         layers_panel);
+    }
+    
+    /* Invalidate composite to redraw with new opacity */
+    document_invalidate_composite(layers_panel->current_doc);
+    
+    /* Queue redraw */
+    if (layers_panel->current_doc->drawing_area) {
+        gtk_widget_queue_draw(layers_panel->current_doc->drawing_area);
+    }
+}
+
 /**
  * Layer name edited callback
  */
@@ -609,7 +748,7 @@ static void on_panel_btn_duplicate_clicked(GtkButton *button, gpointer user_data
 /**
  * Helper function to set icon on a button from SVG resource and remove padding
  */
-static void set_button_icon(GtkButton *button, const gchar *resource_path)
+static void set_button_icon(GtkButton *button, const gchar *resource_path, gint width, gint height)
 {
     if (!button) {
         return;
@@ -636,8 +775,8 @@ static void set_button_icon(GtkButton *button, const gchar *resource_path)
     
     GdkPixbuf *pixbuf = gdk_pixbuf_new_from_resource(resource_path, NULL);
     if (pixbuf) {
-        /* Scale to 16x16 */
-        GdkPixbuf *scaled = gdk_pixbuf_scale_simple(pixbuf, 32, 32, GDK_INTERP_BILINEAR);
+        /* Scale to specified size */
+        GdkPixbuf *scaled = gdk_pixbuf_scale_simple(pixbuf, width, height, GDK_INTERP_BILINEAR);
         GtkWidget *image = gtk_image_new_from_pixbuf(scaled);
         gtk_button_set_image(button, image);
         gtk_button_set_image_position(button, GTK_POS_TOP);
@@ -674,6 +813,9 @@ LayersPanel* create_layers_panel(void)
         layers_panel->btn_up = NULL;
         layers_panel->btn_down = NULL;
         layers_panel->btn_duplicate = NULL;
+        layers_panel->scale_opacity = NULL;
+        layers_panel->spin_opacity = NULL;
+        layers_panel->btn_opacity_reset = NULL;
         layers_panel->current_doc = NULL;
         layers_panel->app_context = NULL;
         return layers_panel;
@@ -692,6 +834,9 @@ LayersPanel* create_layers_panel(void)
         layers_panel->btn_up = NULL;
         layers_panel->btn_down = NULL;
         layers_panel->btn_duplicate = NULL;
+        layers_panel->scale_opacity = NULL;
+        layers_panel->spin_opacity = NULL;
+        layers_panel->btn_opacity_reset = NULL;
         layers_panel->current_doc = NULL;
         layers_panel->app_context = NULL;
         return layers_panel;
@@ -706,6 +851,11 @@ LayersPanel* create_layers_panel(void)
     layers_panel->btn_up = GTK_WIDGET(gtk_builder_get_object(builder, "btn_move_layer_up"));
     layers_panel->btn_down = GTK_WIDGET(gtk_builder_get_object(builder, "btn_move_layer_down"));
     layers_panel->btn_duplicate = GTK_WIDGET(gtk_builder_get_object(builder, "btn_duplicate_layer"));
+    
+    /* Get opacity controls from builder */
+    layers_panel->scale_opacity = GTK_WIDGET(gtk_builder_get_object(builder, "scale_opacity"));
+    layers_panel->spin_opacity = GTK_WIDGET(gtk_builder_get_object(builder, "spin_opacity"));
+    layers_panel->btn_opacity_reset = GTK_WIDGET(gtk_builder_get_object(builder, "btn_opacity_reset"));
     
     /* Create accordion widget - this becomes the main panel container */
     layers_panel->accordion = accordion_new();
@@ -761,21 +911,43 @@ LayersPanel* create_layers_panel(void)
     /* Store panel reference in buttons for callback access and set icons */
     if (layers_panel->btn_new) {
         g_object_set_data(G_OBJECT(layers_panel->btn_new), "layers_panel", layers_panel);
-        set_button_icon(GTK_BUTTON(layers_panel->btn_new), "/icons/imageeditor/layer-add.svg");
+        set_button_icon(GTK_BUTTON(layers_panel->btn_new), "/icons/imageeditor/layer-add.svg", 32, 32);
     }
     if (layers_panel->btn_delete) {
         g_object_set_data(G_OBJECT(layers_panel->btn_delete), "layers_panel", layers_panel);
-        set_button_icon(GTK_BUTTON(layers_panel->btn_delete), "/icons/imageeditor/layer-delete.svg");
+        set_button_icon(GTK_BUTTON(layers_panel->btn_delete), "/icons/imageeditor/layer-delete.svg", 32, 32);
     }
     if (layers_panel->btn_duplicate) {
         g_object_set_data(G_OBJECT(layers_panel->btn_duplicate), "layers_panel", layers_panel);
-        set_button_icon(GTK_BUTTON(layers_panel->btn_duplicate), "/icons/imageeditor/layer-duplicate.svg");
+        set_button_icon(GTK_BUTTON(layers_panel->btn_duplicate), "/icons/imageeditor/layer-duplicate.svg", 32, 32);
     }
     if (layers_panel->btn_up) {
-        set_button_icon(GTK_BUTTON(layers_panel->btn_up), "/icons/imageeditor/layer-up.svg");
+        set_button_icon(GTK_BUTTON(layers_panel->btn_up), "/icons/imageeditor/layer-up.svg", 32, 32);
     }
     if (layers_panel->btn_down) {
-        set_button_icon(GTK_BUTTON(layers_panel->btn_down), "/icons/imageeditor/layer-down.svg");
+        set_button_icon(GTK_BUTTON(layers_panel->btn_down), "/icons/imageeditor/layer-down.svg", 32, 32);
+    }
+    
+    /* Set up opacity controls */
+    if (layers_panel->scale_opacity) {
+        gtk_range_set_range(GTK_RANGE(layers_panel->scale_opacity), 0.0, 100.0);
+        gtk_range_set_value(GTK_RANGE(layers_panel->scale_opacity), 100.0);
+        g_signal_connect(layers_panel->scale_opacity, "value-changed",
+                        G_CALLBACK(on_opacity_scale_changed), layers_panel);
+    }
+    
+    if (layers_panel->spin_opacity) {
+        GtkAdjustment *adj = gtk_adjustment_new(100.0, 0.0, 100.0, 1.0, 10.0, 0.0);
+        gtk_spin_button_set_adjustment(GTK_SPIN_BUTTON(layers_panel->spin_opacity), adj);
+        gtk_spin_button_set_digits(GTK_SPIN_BUTTON(layers_panel->spin_opacity), 0);
+        g_signal_connect(layers_panel->spin_opacity, "value-changed",
+                        G_CALLBACK(on_opacity_spin_changed), layers_panel);
+    }
+    
+    if (layers_panel->btn_opacity_reset) {
+        set_button_icon(GTK_BUTTON(layers_panel->btn_opacity_reset), "/icons/imageeditor/reset.svg", 16, 16);
+        g_signal_connect(layers_panel->btn_opacity_reset, "clicked",
+                        G_CALLBACK(on_opacity_reset_clicked), layers_panel);
     }
 
     /* Add Glade panel as single accordion section */
@@ -879,6 +1051,66 @@ ImageLayer* layers_panel_get_selected_layer(LayersPanel *layers_panel)
 
     g_free(layer_name);
     return NULL;
+}
+
+/**
+ * Update opacity controls based on selected layer
+ */
+void layers_panel_update_opacity_controls(LayersPanel *layers_panel)
+{
+    ImageLayer *selected_layer;
+    gdouble opacity_percent;
+    
+    if (!layers_panel) {
+        return;
+    }
+    
+    selected_layer = layers_panel_get_selected_layer(layers_panel);
+    
+    if (selected_layer) {
+        /* Convert opacity from 0.0-1.0 to 0-100 */
+        opacity_percent = selected_layer->opacity * 100.0;
+        
+        /* Update scale */
+        if (layers_panel->scale_opacity) {
+            g_signal_handlers_block_by_func(layers_panel->scale_opacity,
+                                           G_CALLBACK(on_opacity_scale_changed),
+                                           layers_panel);
+            gtk_range_set_value(GTK_RANGE(layers_panel->scale_opacity), opacity_percent);
+            gtk_widget_set_sensitive(layers_panel->scale_opacity, TRUE);
+            g_signal_handlers_unblock_by_func(layers_panel->scale_opacity,
+                                             G_CALLBACK(on_opacity_scale_changed),
+                                             layers_panel);
+        }
+        
+        /* Update spin button */
+        if (layers_panel->spin_opacity) {
+            g_signal_handlers_block_by_func(layers_panel->spin_opacity,
+                                           G_CALLBACK(on_opacity_spin_changed),
+                                           layers_panel);
+            gtk_spin_button_set_value(GTK_SPIN_BUTTON(layers_panel->spin_opacity), opacity_percent);
+            gtk_widget_set_sensitive(layers_panel->spin_opacity, TRUE);
+            g_signal_handlers_unblock_by_func(layers_panel->spin_opacity,
+                                             G_CALLBACK(on_opacity_spin_changed),
+                                             layers_panel);
+        }
+        
+        /* Enable reset button */
+        if (layers_panel->btn_opacity_reset) {
+            gtk_widget_set_sensitive(layers_panel->btn_opacity_reset, TRUE);
+        }
+    } else {
+        /* No layer selected - disable controls */
+        if (layers_panel->scale_opacity) {
+            gtk_widget_set_sensitive(layers_panel->scale_opacity, FALSE);
+        }
+        if (layers_panel->spin_opacity) {
+            gtk_widget_set_sensitive(layers_panel->spin_opacity, FALSE);
+        }
+        if (layers_panel->btn_opacity_reset) {
+            gtk_widget_set_sensitive(layers_panel->btn_opacity_reset, FALSE);
+        }
+    }
 }
 
 /**

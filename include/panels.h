@@ -42,6 +42,9 @@ typedef struct {
     GtkWidget *btn_up;           /* Move layer up button */
     GtkWidget *btn_down;         /* Move layer down button */
     GtkWidget *btn_duplicate;    /* Duplicate layer button */
+    GtkWidget *scale_opacity;    /* Opacity scale slider */
+    GtkWidget *spin_opacity;     /* Opacity spin button */
+    GtkWidget *btn_opacity_reset; /* Opacity reset button */
     gpointer app_context;        /* Reference to AppContext for callbacks */
 } LayersPanel;
 
@@ -130,6 +133,12 @@ void layers_panel_update(LayersPanel *layers_panel, ImageDocument *doc);
  * @return The selected layer, or NULL if none selected
  */
 ImageLayer* layers_panel_get_selected_layer(LayersPanel *layers_panel);
+
+/**
+ * Update opacity controls based on selected layer
+ * @param layers_panel The layers panel
+ */
+void layers_panel_update_opacity_controls(LayersPanel *layers_panel);
 
 /**
  * Update button sensitivity based on state
