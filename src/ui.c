@@ -185,13 +185,20 @@ AppContext* ui_create_main_window(void)
     /* Store layers panel reference for later updates */
     g_object_set_data(G_OBJECT(ctx->window), "layers_panel", layers_panel);
 
+    /* ==== STATUS BAR ==== */
+    ctx->status_bar = gtk_statusbar_new();
+    gtk_box_pack_end(GTK_BOX(main_vbox), ctx->status_bar, FALSE, FALSE, 0);
+
     /* Connect window signals */
     g_signal_connect(ctx->window, "delete-event", 
                      G_CALLBACK(on_window_delete), ctx);
 
     gtk_widget_show_all(ctx->window);
 
-    printf("Main window created with dockable panels\n");
+    /* Update status bar with initial information */
+    ui_update_status_bar(ctx);
+
+    printf("Main window created with dockable panels and status bar\n");
 
     return ctx;
 }
@@ -396,6 +403,9 @@ static void on_file_open_response(GtkDialog *dialog, gint response_id, gpointer 
                 /* Load the image into the document */
                 if (!document_load_image_from_file(doc, file_path)) {
                     g_warning("Failed to load image: %s", file_path);
+                } else {
+                    /* Update status bar after successful load */
+                    ui_update_status_bar(ctx);
                 }
             }
 
@@ -515,6 +525,7 @@ static void on_notebook_switch_page(GtkNotebook *notebook, GtkWidget *page,
 
     AppContext *ctx = (AppContext *)user_data;
     ui_update_window_title(ctx);
+    ui_update_status_bar(ctx);
 }
 
 /**
@@ -615,5 +626,49 @@ static void on_layer_duplicate(GtkWidget *widget, gpointer data)
     if (dup_layer) {
         printf("Layer duplicated\n");
     }
+}
+
+/**
+ * Update the status bar with document information
+ */
+void ui_update_status_bar(AppContext *ctx)
+{
+    ImageDocument *doc;
+    gchar *status_text;
+
+    if (!ctx || !ctx->status_bar) {
+        return;
+    }
+
+    /* Get active document */
+    doc = ui_get_active_document(ctx);
+
+    /* Clear previous context */
+    gtk_statusbar_pop(GTK_STATUSBAR(ctx->status_bar), 0);
+
+    if (!doc || doc->width == 0) {
+        /* No document or empty document */
+        status_text = g_strdup("Ready");
+    } else {
+        /* Format: WIDTHxHEIGHT | BitDepth-bit CHANNELS | ZOOMx% */
+        gchar channels_str[32];
+        
+        if (doc->channels == 3) {
+            snprintf(channels_str, sizeof(channels_str), "RGB");
+        } else if (doc->channels == 4) {
+            snprintf(channels_str, sizeof(channels_str), "RGBA");
+        } else {
+            snprintf(channels_str, sizeof(channels_str), "%u-channel", doc->channels);
+        }
+
+        status_text = g_strdup_printf("%ux%u | %u-bit %s | %.0f%%",
+                                     doc->width, doc->height,
+                                     doc->bit_depth,
+                                     channels_str,
+                                     doc->zoom_factor * 100.0);
+    }
+
+    gtk_statusbar_push(GTK_STATUSBAR(ctx->status_bar), 0, status_text);
+    g_free(status_text);
 }
 

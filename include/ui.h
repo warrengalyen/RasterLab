@@ -11,6 +11,7 @@ typedef struct {
     GtkWidget *window;           /* Main application window */
     GtkWidget *notebook;         /* Notebook widget for tabs */
     GtkWidget *menu_bar;         /* Menu bar */
+    GtkWidget *status_bar;       /* Status bar */
     GList *documents;            /* List of open documents */
 } AppContext;
 
@@ -53,6 +54,12 @@ void ui_update_window_title(AppContext *ctx);
  * @param ctx The application context
  */
 void ui_context_free(AppContext *ctx);
+
+/**
+ * Update the status bar with document information
+ * @param ctx The application context
+ */
+void ui_update_status_bar(AppContext *ctx);
 
 #endif /* UI_H */
 
