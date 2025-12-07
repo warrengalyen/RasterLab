@@ -5,6 +5,7 @@
 
 /* Forward declarations */
 static void on_file_open(GtkWidget *widget, gpointer data);
+static void on_file_open_response(GtkDialog *dialog, gint response_id, gpointer user_data);
 static void on_file_close(GtkWidget *widget, gpointer data);
 static void on_file_exit(GtkWidget *widget, gpointer data);
 static void on_notebook_switch_page(GtkNotebook *notebook, GtkWidget *page,
@@ -140,7 +141,7 @@ ImageDocument* ui_create_document_tab(AppContext *ctx, const gchar *filename)
 
     close_button = gtk_button_new();
     gtk_button_set_relief(GTK_BUTTON(close_button), GTK_RELIEF_NONE);
-    gtk_button_set_focus_on_click(GTK_BUTTON(close_button), FALSE);
+    gtk_widget_set_focus_on_click(close_button, FALSE);
     gtk_widget_set_size_request(close_button, 20, 20);
     GtkWidget *close_image = gtk_image_new_from_icon_name("window-close-symbolic",
                                                           GTK_ICON_SIZE_BUTTON);
@@ -150,6 +151,7 @@ ImageDocument* ui_create_document_tab(AppContext *ctx, const gchar *filename)
     gtk_box_pack_start(GTK_BOX(tab_hbox), close_button, FALSE, FALSE, 0);
 
     gtk_widget_show_all(tab_hbox);
+    gtk_widget_show_all(page_content);
 
     /* Add page to notebook */
     page_num = gtk_notebook_append_page(GTK_NOTEBOOK(ctx->notebook), 
@@ -283,6 +285,36 @@ void ui_context_free(AppContext *ctx)
 }
 
 /**
+ * File Open dialog response callback
+ */
+static void on_file_open_response(GtkDialog *dialog, gint response_id, gpointer user_data)
+{
+    AppContext *ctx = (AppContext *)user_data;
+
+    if (response_id == GTK_RESPONSE_ACCEPT) {
+        gchar *file_path = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));
+
+        if (file_path) {
+            /* Create new document with filename */
+            gchar *basename = g_path_get_basename(file_path);
+            ImageDocument *doc = ui_create_document_tab(ctx, basename);
+
+            if (doc) {
+                /* Load the image into the document */
+                if (!document_load_image_from_file(doc, file_path)) {
+                    g_warning("Failed to load image: %s", file_path);
+                }
+            }
+
+            g_free(basename);
+            g_free(file_path);
+        }
+    }
+
+    gtk_widget_destroy(GTK_WIDGET(dialog));
+}
+
+/**
  * File > Open callback
  */
 static void on_file_open(GtkWidget *widget, gpointer data)
@@ -290,15 +322,43 @@ static void on_file_open(GtkWidget *widget, gpointer data)
     (void)widget;  /* Unused */
 
     AppContext *ctx = (AppContext *)data;
+    GtkWidget *dialog;
+    GtkFileFilter *filter;
 
-    /* Generate a default filename */
-    static int document_count = 1;
-    gchar *filename = g_strdup_printf("Untitled-%d", document_count++);
+    /* Create file chooser dialog */
+    dialog = gtk_file_chooser_dialog_new(
+        "Open Image",
+        GTK_WINDOW(ctx->window),
+        GTK_FILE_CHOOSER_ACTION_OPEN,
+        "_Cancel", GTK_RESPONSE_CANCEL,
+        "_Open", GTK_RESPONSE_ACCEPT,
+        NULL);
 
-    /* Create a new document tab */
-    ui_create_document_tab(ctx, filename);
+    /* Add file filters */
+    filter = gtk_file_filter_new();
+    gtk_file_filter_set_name(filter, "PNG Images");
+    gtk_file_filter_add_pattern(filter, "*.png");
+    gtk_file_filter_add_pattern(filter, "*.PNG");
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
 
-    g_free(filename);
+    filter = gtk_file_filter_new();
+    gtk_file_filter_set_name(filter, "JPEG Images");
+    gtk_file_filter_add_pattern(filter, "*.jpg");
+    gtk_file_filter_add_pattern(filter, "*.jpeg");
+    gtk_file_filter_add_pattern(filter, "*.JPG");
+    gtk_file_filter_add_pattern(filter, "*.JPEG");
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
+
+    filter = gtk_file_filter_new();
+    gtk_file_filter_set_name(filter, "All Files");
+    gtk_file_filter_add_pattern(filter, "*");
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
+
+    /* Connect response signal */
+    g_signal_connect(dialog, "response", G_CALLBACK(on_file_open_response), ctx);
+
+    /* Show dialog */
+    gtk_widget_show(dialog);
 }
 
 /**

@@ -8,9 +8,9 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 # Set output directory for executable
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
-# Find GTK3 using pkg-config
+# Find GTK3 and GdkPixbuf using pkg-config
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(GTK3 REQUIRED gtk+-3.0)
+pkg_check_modules(GTK3 REQUIRED gtk+-3.0 gdk-pixbuf-2.0)
 
 # Include directories
 include_directories(${CMAKE_SOURCE_DIR}/include)
@@ -28,4 +28,5 @@ message(STATUS "GTK3 include dirs: ${GTK3_INCLUDE_DIRS}")
 message(STATUS "GTK3 library dirs: ${GTK3_LIBRARY_DIRS}")
 message(STATUS "GTK3 CFLAGS: ${GTK3_CFLAGS}")
 message(STATUS "GTK3 LDFLAGS: ${GTK3_LDFLAGS}")
+message(STATUS "GdkPixbuf found: Yes")
 
