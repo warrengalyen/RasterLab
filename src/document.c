@@ -1353,3 +1353,80 @@ gboolean document_is_dirty(ImageDocument *doc)
     return doc->modified;
 }
 
+/**
+ * Zoom in
+ */
+void document_zoom_in(ImageDocument *doc)
+{
+    if (!doc) {
+        return;
+    }
+
+    doc->zoom_factor *= 1.25;
+    if (doc->zoom_factor > 8.0) {
+        doc->zoom_factor = 8.0;  /* Max 800% */
+    }
+
+    document_set_zoom(doc, doc->zoom_factor);
+    printf("Zoom: %.0f%%\n", doc->zoom_factor * 100);
+}
+
+/**
+ * Zoom out
+ */
+void document_zoom_out(ImageDocument *doc)
+{
+    if (!doc) {
+        return;
+    }
+
+    doc->zoom_factor /= 1.25;
+    if (doc->zoom_factor < 0.1) {
+        doc->zoom_factor = 0.1;  /* Min 10% */
+    }
+
+    document_set_zoom(doc, doc->zoom_factor);
+    printf("Zoom: %.0f%%\n", doc->zoom_factor * 100);
+}
+
+/**
+ * Zoom fit (fit to window - simplified, just reset)
+ */
+void document_zoom_fit(ImageDocument *doc)
+{
+    if (!doc) {
+        return;
+    }
+
+    /* Simple fit: scale to fit typical window */
+    /* For now, just set a reasonable zoom for the image size */
+    if (doc->width > 0 && doc->height > 0) {
+        gdouble zoom = 1.0;
+        
+        /* Fit to roughly 800x600 visible area */
+        if (doc->width > 800 || doc->height > 600) {
+            gdouble zoom_w = 800.0 / doc->width;
+            gdouble zoom_h = 600.0 / doc->height;
+            zoom = (zoom_w < zoom_h) ? zoom_w : zoom_h;
+        }
+        
+        doc->zoom_factor = zoom;
+        document_set_zoom(doc, zoom);
+        printf("Zoom fit: %.0f%%\n", zoom * 100);
+    }
+}
+
+/**
+ * Reset zoom to 100%
+ */
+void document_zoom_reset(ImageDocument *doc)
+{
+    if (!doc) {
+        return;
+    }
+
+    doc->zoom_factor = 1.0;
+    document_set_zoom(doc, 1.0);
+    printf("Zoom reset: 100%%\n");
+}
+

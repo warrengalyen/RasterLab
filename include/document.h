@@ -281,5 +281,29 @@ void document_mark_saved(ImageDocument *doc);
  */
 gboolean document_is_dirty(ImageDocument *doc);
 
+/**
+ * Zoom in (multiply zoom by 1.25x)
+ * @param doc The document
+ */
+void document_zoom_in(ImageDocument *doc);
+
+/**
+ * Zoom out (divide zoom by 1.25x)
+ * @param doc The document
+ */
+void document_zoom_out(ImageDocument *doc);
+
+/**
+ * Fit image to window
+ * @param doc The document
+ */
+void document_zoom_fit(ImageDocument *doc);
+
+/**
+ * Reset zoom to 100%
+ * @param doc The document
+ */
+void document_zoom_reset(ImageDocument *doc);
+
 #endif /* DOCUMENT_H */
 

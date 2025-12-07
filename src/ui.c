@@ -13,6 +13,10 @@ static void on_file_close(GtkWidget *widget, gpointer data);
 static void on_file_exit(GtkWidget *widget, gpointer data);
 static void on_edit_undo(GtkWidget *widget, gpointer data);
 static void on_edit_redo(GtkWidget *widget, gpointer data);
+static void on_view_zoom_in(GtkWidget *widget, gpointer data);
+static void on_view_zoom_out(GtkWidget *widget, gpointer data);
+static void on_view_zoom_reset(GtkWidget *widget, gpointer data);
+static void on_view_zoom_fit(GtkWidget *widget, gpointer data);
 static gboolean on_window_delete(GtkWidget *widget, GdkEvent *event, gpointer data);
 static void on_layer_new(GtkWidget *widget, gpointer data);
 static void on_layer_delete(GtkWidget *widget, gpointer data);
@@ -123,6 +127,50 @@ static GtkWidget* create_edit_menu(AppContext *ctx)
 }
 
 /**
+ * Create the View menu
+ */
+static GtkWidget* create_view_menu(AppContext *ctx)
+{
+    GtkWidget *menu = gtk_menu_new();
+    GtkWidget *menu_item;
+    GtkAccelGroup *accel_group = gtk_accel_group_new();
+
+    /* View > Zoom In */
+    menu_item = gtk_menu_item_new_with_mnemonic("Zoom _In");
+    g_signal_connect(menu_item, "activate", G_CALLBACK(on_view_zoom_in), ctx);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item);
+    gtk_widget_add_accelerator(menu_item, "activate", accel_group,
+                               GDK_KEY_plus, GDK_CONTROL_MASK, GTK_ACCEL_VISIBLE);
+    gtk_widget_add_accelerator(menu_item, "activate", accel_group,
+                               GDK_KEY_equal, GDK_CONTROL_MASK, GTK_ACCEL_VISIBLE);
+
+    /* View > Zoom Out */
+    menu_item = gtk_menu_item_new_with_mnemonic("Zoom _Out");
+    g_signal_connect(menu_item, "activate", G_CALLBACK(on_view_zoom_out), ctx);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item);
+    gtk_widget_add_accelerator(menu_item, "activate", accel_group,
+                               GDK_KEY_minus, GDK_CONTROL_MASK, GTK_ACCEL_VISIBLE);
+
+    /* View > Zoom Reset */
+    menu_item = gtk_menu_item_new_with_mnemonic("_Reset Zoom");
+    g_signal_connect(menu_item, "activate", G_CALLBACK(on_view_zoom_reset), ctx);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item);
+    gtk_widget_add_accelerator(menu_item, "activate", accel_group,
+                               GDK_KEY_0, GDK_CONTROL_MASK, GTK_ACCEL_VISIBLE);
+
+    /* View > Fit to Window */
+    menu_item = gtk_menu_item_new_with_mnemonic("_Fit to Window");
+    g_signal_connect(menu_item, "activate", G_CALLBACK(on_view_zoom_fit), ctx);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item);
+    gtk_widget_add_accelerator(menu_item, "activate", accel_group,
+                               GDK_KEY_1, GDK_CONTROL_MASK, GTK_ACCEL_VISIBLE);
+
+    gtk_widget_show_all(menu);
+
+    return menu;
+}
+
+/**
  * Create the Layer menu
  */
 static GtkWidget* create_layer_menu(AppContext *ctx)
@@ -166,6 +214,8 @@ static GtkWidget* create_menu_bar(AppContext *ctx)
     GtkWidget *file_menu;
     GtkWidget *edit_menu_item;
     GtkWidget *edit_menu;
+    GtkWidget *view_menu_item;
+    GtkWidget *view_menu;
     GtkWidget *layer_menu_item;
     GtkWidget *layer_menu;
 
@@ -180,6 +230,12 @@ static GtkWidget* create_menu_bar(AppContext *ctx)
     edit_menu = create_edit_menu(ctx);
     gtk_menu_item_set_submenu(GTK_MENU_ITEM(edit_menu_item), edit_menu);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu_bar), edit_menu_item);
+
+    /* View menu */
+    view_menu_item = gtk_menu_item_new_with_mnemonic("_View");
+    view_menu = create_view_menu(ctx);
+    gtk_menu_item_set_submenu(GTK_MENU_ITEM(view_menu_item), view_menu);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu_bar), view_menu_item);
 
     /* Layer menu */
     layer_menu_item = gtk_menu_item_new_with_mnemonic("_Layer");
@@ -235,8 +291,9 @@ AppContext* ui_create_main_window(void)
     /* Create main window */
     ctx->window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_title(GTK_WINDOW(ctx->window), "Image Editor");
-    gtk_window_set_default_size(GTK_WINDOW(ctx->window), 1400, 900);
+    gtk_window_set_default_size(GTK_WINDOW(ctx->window), 1600, 1000);
     gtk_window_set_position(GTK_WINDOW(ctx->window), GTK_WIN_POS_CENTER);
+    gtk_window_set_icon_name(GTK_WINDOW(ctx->window), "image-editor");
 
     /* Main vertical box (menu + toolbar + content) */
     main_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
@@ -893,6 +950,70 @@ static void on_edit_redo(GtkWidget *widget, gpointer data)
     /* Update menu state and window title */
     ui_update_menu_and_button_states(ctx);
     ui_update_window_title(ctx);
+}
+
+/**
+ * View > Zoom In callback
+ */
+static void on_view_zoom_in(GtkWidget *widget, gpointer data)
+{
+    (void)widget;  /* Unused */
+
+    AppContext *ctx = (AppContext *)data;
+    ImageDocument *doc = ui_get_active_document(ctx);
+
+    if (doc) {
+        document_zoom_in(doc);
+        ui_update_status_bar(ctx);
+    }
+}
+
+/**
+ * View > Zoom Out callback
+ */
+static void on_view_zoom_out(GtkWidget *widget, gpointer data)
+{
+    (void)widget;  /* Unused */
+
+    AppContext *ctx = (AppContext *)data;
+    ImageDocument *doc = ui_get_active_document(ctx);
+
+    if (doc) {
+        document_zoom_out(doc);
+        ui_update_status_bar(ctx);
+    }
+}
+
+/**
+ * View > Reset Zoom callback
+ */
+static void on_view_zoom_reset(GtkWidget *widget, gpointer data)
+{
+    (void)widget;  /* Unused */
+
+    AppContext *ctx = (AppContext *)data;
+    ImageDocument *doc = ui_get_active_document(ctx);
+
+    if (doc) {
+        document_zoom_reset(doc);
+        ui_update_status_bar(ctx);
+    }
+}
+
+/**
+ * View > Zoom Fit callback
+ */
+static void on_view_zoom_fit(GtkWidget *widget, gpointer data)
+{
+    (void)widget;  /* Unused */
+
+    AppContext *ctx = (AppContext *)data;
+    ImageDocument *doc = ui_get_active_document(ctx);
+
+    if (doc) {
+        document_zoom_fit(doc);
+        ui_update_status_bar(ctx);
+    }
 }
 
 /**

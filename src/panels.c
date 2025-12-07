@@ -126,6 +126,13 @@ GtkWidget* create_tools_panel(ToolRegistry *tool_registry)
         "Fill",
     };
 
+    const gchar *tool_icons[] = {
+        "transform-move-symbolic",
+        "gtk-edit",
+        "edit-clear-symbolic",
+        "format-fill-color-symbolic",
+    };
+
     const ToolType tool_types[] = {
         TOOL_MOVE,
         TOOL_BRUSH,
@@ -134,8 +141,16 @@ GtkWidget* create_tools_panel(ToolRegistry *tool_registry)
     };
 
     for (int i = 0; i < TOOL_COUNT; i++) {
-        GtkWidget *tool_button = gtk_button_new_with_label(tool_labels[i]);
-        gtk_widget_set_size_request(tool_button, 100, 40);
+        GtkWidget *tool_button = gtk_button_new();
+        GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 3);
+        GtkWidget *icon = gtk_image_new_from_icon_name(tool_icons[i], GTK_ICON_SIZE_BUTTON);
+        GtkWidget *label = gtk_label_new(tool_labels[i]);
+        
+        gtk_box_pack_start(GTK_BOX(vbox), icon, FALSE, FALSE, 0);
+        gtk_box_pack_start(GTK_BOX(vbox), label, FALSE, FALSE, 0);
+        gtk_container_add(GTK_CONTAINER(tool_button), vbox);
+        
+        gtk_widget_set_size_request(tool_button, 70, 70);
         
         /* Store tool registry and type in button */
         g_object_set_data(G_OBJECT(tool_button), "tool_registry", tool_registry);
