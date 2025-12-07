@@ -1,8 +1,14 @@
 #include "tools.h"
 #include "document.h"
+#include "command.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
+
+/* Forward declarations */
+typedef struct AppContext AppContext;
+extern void ui_update_menu_and_button_states(AppContext *ctx);
 
 /**
  * Stub handlers for Move tool
@@ -29,27 +35,158 @@ static void move_tool_mouse_up(Tool *tool, struct ImageDocument *doc, MouseEvent
 }
 
 /**
- * Stub handlers for Brush tool
+ * Brush tool helpers - minimal drawing implementation for undo demo
+ */
+typedef struct {
+    gint last_x;
+    gint last_y;
+    gboolean is_drawing;
+    Command *current_command;
+} BrushToolState;
+
+static void brush_draw_line(cairo_surface_t *surface, int x1, int y1, int x2, int y2)
+{
+    cairo_t *cr = cairo_create(surface);
+    cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 1.0);  /* Black opaque */
+    cairo_set_line_width(cr, 3.0);
+    cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+    cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
+    cairo_move_to(cr, x1, y1);
+    cairo_line_to(cr, x2, y2);
+    cairo_stroke(cr);
+    cairo_destroy(cr);
+}
+
+/**
+ * Brush tool: mouse down - create snapshot for undo
  */
 static void brush_tool_mouse_down(Tool *tool, struct ImageDocument *doc, MouseEvent *event)
 {
-    (void)tool;
-    (void)doc;
-    printf("Brush tool: mouse down at (%d, %d)\n", event->x, event->y);
+    BrushToolState *state;
+    ImageLayer *active_layer;
+    Command *cmd;
+
+    if (!tool || !doc || !doc->layers) {
+        return;
+    }
+
+    /* Get or create tool state */
+    if (!tool->user_data) {
+        tool->user_data = g_malloc0(sizeof(BrushToolState));
+    }
+    state = (BrushToolState *)tool->user_data;
+
+    /* Get the top (active) layer */
+    active_layer = document_get_layer(doc, g_list_length(doc->layers) - 1);
+    if (!active_layer) {
+        printf("Brush tool: no active layer\n");
+        return;
+    }
+
+    /* Create undo snapshot */
+    cmd = command_create_draw(active_layer);
+    if (!cmd) {
+        printf("Brush tool: failed to create draw command\n");
+        return;
+    }
+
+    state->is_drawing = TRUE;
+    state->current_command = cmd;
+    state->last_x = event->x;
+    state->last_y = event->y;
+
+    printf("Brush tool: started drawing at (%d, %d)\n", event->x, event->y);
 }
 
+/**
+ * Brush tool: mouse move - draw line
+ */
 static void brush_tool_mouse_move(Tool *tool, struct ImageDocument *doc, MouseEvent *event)
 {
-    (void)tool;
-    (void)doc;
-    printf("Brush tool: mouse move at (%d, %d)\n", event->x, event->y);
+    BrushToolState *state;
+    ImageLayer *active_layer;
+
+    if (!tool || !doc || !tool->user_data) {
+        return;
+    }
+
+    state = (BrushToolState *)tool->user_data;
+
+    if (!state->is_drawing) {
+        return;
+    }
+
+    /* Get the top (active) layer */
+    active_layer = document_get_layer(doc, g_list_length(doc->layers) - 1);
+    if (!active_layer) {
+        printf("Brush tool: active layer is NULL, aborting draw\n");
+        state->is_drawing = FALSE;
+        return;
+    }
+
+    if (!active_layer->surface) {
+        printf("Brush tool: active layer surface is NULL, aborting draw\n");
+        state->is_drawing = FALSE;
+        return;
+    }
+
+    /* Draw line from last position to current */
+    brush_draw_line(active_layer->surface, state->last_x, state->last_y, event->x, event->y);
+
+    state->last_x = event->x;
+    state->last_y = event->y;
+
+    /* Mark composite for redraw */
+    doc->composite_dirty = TRUE;
+    if (doc->drawing_area) {
+        gtk_widget_queue_draw(doc->drawing_area);
+    }
+
+    printf("Brush tool: drawing line to (%d, %d)\n", event->x, event->y);
 }
 
+/**
+ * Brush tool: mouse up - push command to undo stack
+ */
 static void brush_tool_mouse_up(Tool *tool, struct ImageDocument *doc, MouseEvent *event)
 {
-    (void)tool;
-    (void)doc;
-    printf("Brush tool: mouse up at (%d, %d)\n", event->x, event->y);
+    BrushToolState *state;
+    AppContext *ctx;
+
+    (void)event;  /* Unused */
+
+    if (!tool || !doc || !tool->user_data) {
+        return;
+    }
+
+    state = (BrushToolState *)tool->user_data;
+
+    if (!state->is_drawing || !state->current_command) {
+        return;
+    }
+
+    state->is_drawing = FALSE;
+
+    /* Push command to undo stack */
+    if (doc->undo_stack) {
+        command_stack_push(doc->undo_stack, state->current_command);
+        printf("Brush tool: stroke added to undo stack\n");
+
+        /* Clear redo stack since new action performed */
+        if (doc->redo_stack) {
+            command_stack_clear(doc->redo_stack);
+        }
+
+        /* Update UI menu states if we have access to AppContext */
+        ctx = (AppContext *)tool->app_context;
+        if (ctx) {
+            ui_update_menu_and_button_states(ctx);
+        }
+    }
+
+    state->current_command = NULL;
+
+    printf("Brush tool: finished drawing\n");
 }
 
 /**
@@ -116,6 +253,7 @@ Tool* tool_new(const gchar *name, ToolType type, GdkCursorType cursor_type)
     tool->name = g_strdup(name);
     tool->type = type;
     tool->user_data = NULL;
+    tool->app_context = NULL;
 
     /* Create cursor */
     display = gdk_display_get_default();

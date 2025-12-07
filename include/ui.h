@@ -4,6 +4,7 @@
 #include <gtk/gtk.h>
 #include "document.h"
 #include "tools.h"
+#include "command.h"
 
 /**
  * Application context structure
@@ -17,6 +18,8 @@ typedef struct {
     GtkWidget *layer_menu_new;   /* Layer > New Layer menu item */
     GtkWidget *layer_menu_delete; /* Layer > Delete Layer menu item */
     GtkWidget *layer_menu_duplicate; /* Layer > Duplicate Layer menu item */
+    GtkWidget *edit_menu_undo;   /* Edit > Undo menu item */
+    GtkWidget *edit_menu_redo;   /* Edit > Redo menu item */
     ToolRegistry *tool_registry; /* Tool registry and management */
 } AppContext;
 

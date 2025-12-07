@@ -1,7 +1,12 @@
 #include "document.h"
+#include "command.h"
+#include "tools.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+
+/* Forward declarations */
+typedef struct AppContext AppContext;
 
 /**
  * Convert GdkPixbuf to Cairo image surface
@@ -93,6 +98,13 @@ static void draw_checkered_background(cairo_t *cr, gint image_width, gint image_
 }
 
 /**
+ * Forward declarations for mouse event handlers
+ */
+static gboolean on_drawing_area_button_press(GtkWidget *widget, GdkEventButton *event, gpointer user_data);
+static gboolean on_drawing_area_button_release(GtkWidget *widget, GdkEventButton *event, gpointer user_data);
+static gboolean on_drawing_area_motion_notify(GtkWidget *widget, GdkEventMotion *event, gpointer user_data);
+
+/**
  * Drawing area draw callback
  */
 static gboolean on_drawing_area_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
@@ -155,6 +167,162 @@ static gboolean on_drawing_area_draw(GtkWidget *widget, cairo_t *cr, gpointer us
     }
 
     return FALSE;
+}
+
+/**
+ * Convert widget coordinates to image coordinates
+ */
+static void widget_to_image_coords(ImageDocument *doc, gdouble widget_x, gdouble widget_y,
+                                   gint *image_x, gint *image_y)
+{
+    gdouble scaled_x, scaled_y;
+
+    if (!doc || !image_x || !image_y) {
+        return;
+    }
+
+    /* Unscale by zoom factor */
+    scaled_x = widget_x / doc->zoom_factor;
+    scaled_y = widget_y / doc->zoom_factor;
+
+    *image_x = (gint)scaled_x;
+    *image_y = (gint)scaled_y;
+}
+
+/**
+ * Drawing area button press callback
+ */
+static gboolean on_drawing_area_button_press(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
+{
+    ImageDocument *doc = (ImageDocument *)user_data;
+    gpointer ctx_data;
+    ToolRegistry *tool_registry = NULL;
+    Tool *active_tool = NULL;
+    MouseEvent tool_event;
+
+    (void)widget;  /* Unused */
+
+    if (!doc) {
+        return FALSE;
+    }
+
+    /* Get app context from drawing area data and extract tool registry */
+    ctx_data = g_object_get_data(G_OBJECT(doc->drawing_area), "app_context");
+    if (!ctx_data) {
+        return FALSE;
+    }
+
+    /* Access tool registry through doc if available */
+    /* This is a minimal integration - in real code, pass registry more directly */
+    
+    /* For now, use a safer approach: store tool_registry directly */
+    tool_registry = (ToolRegistry *)g_object_get_data(G_OBJECT(doc->drawing_area), "tool_registry");
+    if (!tool_registry) {
+        return FALSE;
+    }
+
+    /* Get active tool */
+    active_tool = tool_registry_get_active(tool_registry);
+    if (!active_tool || !active_tool->mouse_down) {
+        return FALSE;
+    }
+
+    /* Convert to image coordinates */
+    widget_to_image_coords(doc, event->x, event->y, &tool_event.x, &tool_event.y);
+    tool_event.button = event->button;
+    tool_event.state = event->state;
+
+    /* Call tool handler */
+    active_tool->mouse_down(active_tool, doc, &tool_event);
+
+    /* Request redraw */
+    gtk_widget_queue_draw(doc->drawing_area);
+
+    return TRUE;
+}
+
+/**
+ * Drawing area button release callback
+ */
+static gboolean on_drawing_area_button_release(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
+{
+    ImageDocument *doc = (ImageDocument *)user_data;
+    ToolRegistry *tool_registry = NULL;
+    Tool *active_tool = NULL;
+    MouseEvent tool_event;
+
+    (void)widget;  /* Unused */
+
+    if (!doc) {
+        return FALSE;
+    }
+
+    /* Get tool registry from drawing area data */
+    tool_registry = (ToolRegistry *)g_object_get_data(G_OBJECT(doc->drawing_area), "tool_registry");
+    if (!tool_registry) {
+        return FALSE;
+    }
+
+    /* Get active tool */
+    active_tool = tool_registry_get_active(tool_registry);
+    if (!active_tool || !active_tool->mouse_up) {
+        return FALSE;
+    }
+
+    /* Convert to image coordinates */
+    widget_to_image_coords(doc, event->x, event->y, &tool_event.x, &tool_event.y);
+    tool_event.button = event->button;
+    tool_event.state = event->state;
+
+    /* Call tool handler */
+    active_tool->mouse_up(active_tool, doc, &tool_event);
+
+    /* Request redraw */
+    gtk_widget_queue_draw(doc->drawing_area);
+
+    return TRUE;
+}
+
+/**
+ * Drawing area motion notify callback
+ */
+static gboolean on_drawing_area_motion_notify(GtkWidget *widget, GdkEventMotion *event, gpointer user_data)
+{
+    ImageDocument *doc = (ImageDocument *)user_data;
+    ToolRegistry *tool_registry = NULL;
+    Tool *active_tool = NULL;
+    MouseEvent tool_event;
+
+    (void)widget;  /* Unused */
+
+    if (!doc) {
+        return FALSE;
+    }
+
+    /* Get tool registry from drawing area data */
+    tool_registry = (ToolRegistry *)g_object_get_data(G_OBJECT(doc->drawing_area), "tool_registry");
+    if (!tool_registry) {
+        return FALSE;
+    }
+
+    /* Get active tool */
+    active_tool = tool_registry_get_active(tool_registry);
+    if (!active_tool || !active_tool->mouse_move) {
+        return FALSE;
+    }
+
+    /* Convert to image coordinates */
+    widget_to_image_coords(doc, event->x, event->y, &tool_event.x, &tool_event.y);
+    tool_event.button = 0;  /* No button pressed during motion */
+    tool_event.state = event->state;
+
+    /* Call tool handler */
+    active_tool->mouse_move(active_tool, doc, &tool_event);
+
+    /* Request redraw */
+    gtk_widget_queue_draw(doc->drawing_area);
+
+    return TRUE;
 }
 
 /**
@@ -235,6 +403,10 @@ ImageDocument* document_new(const gchar *filename)
     doc->composite_dirty = TRUE;
     doc->zoom_factor = 1.0;
 
+    /* Initialize undo/redo stacks (max 50 undo steps) */
+    doc->undo_stack = command_stack_new(50);
+    doc->redo_stack = command_stack_new(50);
+
     return doc;
 }
 
@@ -264,6 +436,14 @@ void document_free(ImageDocument *doc)
     /* Free composite surface */
     if (doc->composite_surface) {
         cairo_surface_destroy(doc->composite_surface);
+    }
+
+    /* Free undo/redo stacks */
+    if (doc->undo_stack) {
+        command_stack_free(doc->undo_stack);
+    }
+    if (doc->redo_stack) {
+        command_stack_free(doc->redo_stack);
     }
 
     g_free(doc);
@@ -308,8 +488,23 @@ GtkWidget* document_create_drawing_area(ImageDocument *doc)
     gtk_container_add(GTK_CONTAINER(viewport), drawing_area);
     gtk_widget_show(drawing_area);
 
+    /* Enable mouse events on drawing area */
+    gtk_widget_set_events(drawing_area,
+                         gtk_widget_get_events(drawing_area) |
+                         GDK_BUTTON_PRESS_MASK |
+                         GDK_BUTTON_RELEASE_MASK |
+                         GDK_POINTER_MOTION_MASK);
+
     /* Connect draw signal */
     g_signal_connect(drawing_area, "draw", G_CALLBACK(on_drawing_area_draw), doc);
+
+    /* Connect mouse event signals */
+    g_signal_connect(drawing_area, "button-press-event", 
+                    G_CALLBACK(on_drawing_area_button_press), doc);
+    g_signal_connect(drawing_area, "button-release-event", 
+                    G_CALLBACK(on_drawing_area_button_release), doc);
+    g_signal_connect(drawing_area, "motion-notify-event", 
+                    G_CALLBACK(on_drawing_area_motion_notify), doc);
 
     /* Store references in document */
     doc->drawing_area = drawing_area;
@@ -791,5 +986,89 @@ guint document_get_layer_count(ImageDocument *doc)
     }
 
     return g_list_length(doc->layers);
+}
+
+/**
+ * Execute an undo command
+ */
+gboolean document_undo(ImageDocument *doc)
+{
+    Command *cmd;
+
+    if (!doc || !doc->undo_stack) {
+        return FALSE;
+    }
+
+    cmd = command_stack_pop(doc->undo_stack);
+    if (!cmd) {
+        return FALSE;
+    }
+
+    /* Execute the undo */
+    command_undo(cmd, (struct ImageDocument *)doc);
+
+    /* Push to redo stack */
+    command_stack_push(doc->redo_stack, cmd);
+
+    /* Mark composite for redraw */
+    if (doc->drawing_area) {
+        gtk_widget_queue_draw(doc->drawing_area);
+    }
+
+    return TRUE;
+}
+
+/**
+ * Execute a redo command
+ */
+gboolean document_redo(ImageDocument *doc)
+{
+    Command *cmd;
+
+    if (!doc || !doc->redo_stack) {
+        return FALSE;
+    }
+
+    cmd = command_stack_pop(doc->redo_stack);
+    if (!cmd) {
+        return FALSE;
+    }
+
+    /* Execute the redo (apply again) */
+    command_execute(cmd, (struct ImageDocument *)doc);
+
+    /* Push back to undo stack */
+    command_stack_push(doc->undo_stack, cmd);
+
+    /* Mark composite for redraw */
+    if (doc->drawing_area) {
+        gtk_widget_queue_draw(doc->drawing_area);
+    }
+
+    return TRUE;
+}
+
+/**
+ * Check if undo is available
+ */
+gboolean document_can_undo(ImageDocument *doc)
+{
+    if (!doc || !doc->undo_stack) {
+        return FALSE;
+    }
+
+    return !command_stack_is_empty(doc->undo_stack);
+}
+
+/**
+ * Check if redo is available
+ */
+gboolean document_can_redo(ImageDocument *doc)
+{
+    if (!doc || !doc->redo_stack) {
+        return FALSE;
+    }
+
+    return !command_stack_is_empty(doc->redo_stack);
 }
 

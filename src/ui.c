@@ -9,6 +9,8 @@ static void on_file_open(GtkWidget *widget, gpointer data);
 static void on_file_open_response(GtkDialog *dialog, gint response_id, gpointer user_data);
 static void on_file_close(GtkWidget *widget, gpointer data);
 static void on_file_exit(GtkWidget *widget, gpointer data);
+static void on_edit_undo(GtkWidget *widget, gpointer data);
+static void on_edit_redo(GtkWidget *widget, gpointer data);
 static gboolean on_window_delete(GtkWidget *widget, GdkEvent *event, gpointer data);
 static void on_layer_new(GtkWidget *widget, gpointer data);
 static void on_layer_delete(GtkWidget *widget, gpointer data);
@@ -80,6 +82,38 @@ static GtkWidget* create_file_menu(AppContext *ctx)
 }
 
 /**
+ * Create the Edit menu
+ */
+static GtkWidget* create_edit_menu(AppContext *ctx)
+{
+    GtkWidget *menu = gtk_menu_new();
+    GtkWidget *menu_item;
+    GtkAccelGroup *accel_group = gtk_accel_group_new();
+
+    /* Edit > Undo */
+    menu_item = gtk_menu_item_new_with_mnemonic("_Undo");
+    g_signal_connect(menu_item, "activate", G_CALLBACK(on_edit_undo), ctx);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item);
+    gtk_widget_add_accelerator(menu_item, "activate", accel_group,
+                               GDK_KEY_z, GDK_CONTROL_MASK, GTK_ACCEL_VISIBLE);
+    gtk_widget_set_sensitive(menu_item, FALSE);
+    ctx->edit_menu_undo = menu_item;
+
+    /* Edit > Redo */
+    menu_item = gtk_menu_item_new_with_mnemonic("_Redo");
+    g_signal_connect(menu_item, "activate", G_CALLBACK(on_edit_redo), ctx);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item);
+    gtk_widget_add_accelerator(menu_item, "activate", accel_group,
+                               GDK_KEY_y, GDK_CONTROL_MASK, GTK_ACCEL_VISIBLE);
+    gtk_widget_set_sensitive(menu_item, FALSE);
+    ctx->edit_menu_redo = menu_item;
+
+    gtk_widget_show_all(menu);
+
+    return menu;
+}
+
+/**
  * Create the Layer menu
  */
 static GtkWidget* create_layer_menu(AppContext *ctx)
@@ -121,6 +155,8 @@ static GtkWidget* create_menu_bar(AppContext *ctx)
     GtkWidget *menu_bar = gtk_menu_bar_new();
     GtkWidget *file_menu_item;
     GtkWidget *file_menu;
+    GtkWidget *edit_menu_item;
+    GtkWidget *edit_menu;
     GtkWidget *layer_menu_item;
     GtkWidget *layer_menu;
 
@@ -129,6 +165,12 @@ static GtkWidget* create_menu_bar(AppContext *ctx)
     file_menu = create_file_menu(ctx);
     gtk_menu_item_set_submenu(GTK_MENU_ITEM(file_menu_item), file_menu);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu_bar), file_menu_item);
+
+    /* Edit menu */
+    edit_menu_item = gtk_menu_item_new_with_mnemonic("_Edit");
+    edit_menu = create_edit_menu(ctx);
+    gtk_menu_item_set_submenu(GTK_MENU_ITEM(edit_menu_item), edit_menu);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu_bar), edit_menu_item);
 
     /* Layer menu */
     layer_menu_item = gtk_menu_item_new_with_mnemonic("_Layer");
@@ -160,6 +202,8 @@ AppContext* ui_create_main_window(void)
     ctx->layer_menu_new = NULL;
     ctx->layer_menu_delete = NULL;
     ctx->layer_menu_duplicate = NULL;
+    ctx->edit_menu_undo = NULL;
+    ctx->edit_menu_redo = NULL;
 
     /* Create and initialize tool registry */
     ctx->tool_registry = tool_registry_new();
@@ -167,6 +211,16 @@ AppContext* ui_create_main_window(void)
         g_warning("Failed to initialize tool registry");
         g_free(ctx);
         return NULL;
+    }
+
+    /* Set AppContext reference on all tools */
+    if (ctx->tool_registry) {
+        for (int i = 0; i < TOOL_COUNT; i++) {
+            Tool *tool = tool_registry_get(ctx->tool_registry, i);
+            if (tool) {
+                tool->app_context = (gpointer)ctx;
+            }
+        }
     }
 
     /* Create main window */
@@ -301,6 +355,14 @@ ImageDocument* ui_create_document_tab(AppContext *ctx, const gchar *filename)
     /* Store label in close button's data for later reference */
     g_object_set_data(G_OBJECT(close_button), "tab_label", tab_label);
     g_object_set_data(G_OBJECT(close_button), "app_context", ctx);
+
+    /* Store AppContext and tool registry in drawing area for tool event handlers */
+    if (doc && doc->drawing_area) {
+        g_object_set_data(G_OBJECT(doc->drawing_area), "app_context", ctx);
+        if (ctx->tool_registry) {
+            g_object_set_data(G_OBJECT(doc->drawing_area), "tool_registry", ctx->tool_registry);
+        }
+    }
 
     /* Add document to list */
     ctx->documents = g_list_append(ctx->documents, doc);
@@ -585,6 +647,72 @@ static void on_file_exit(GtkWidget *widget, gpointer data)
 }
 
 /**
+ * Edit > Undo callback
+ */
+static void on_edit_undo(GtkWidget *widget, gpointer data)
+{
+    (void)widget;  /* Unused */
+
+    AppContext *ctx = (AppContext *)data;
+    ImageDocument *doc;
+    gint page_num;
+
+    if (!ctx || !ctx->notebook) {
+        return;
+    }
+
+    /* Get current document */
+    page_num = gtk_notebook_get_current_page(GTK_NOTEBOOK(ctx->notebook));
+    if (page_num < 0) {
+        return;
+    }
+
+    doc = (ImageDocument *)g_list_nth_data(ctx->documents, page_num);
+    if (!doc) {
+        return;
+    }
+
+    /* Perform undo */
+    document_undo(doc);
+
+    /* Update menu state */
+    ui_update_menu_and_button_states(ctx);
+}
+
+/**
+ * Edit > Redo callback
+ */
+static void on_edit_redo(GtkWidget *widget, gpointer data)
+{
+    (void)widget;  /* Unused */
+
+    AppContext *ctx = (AppContext *)data;
+    ImageDocument *doc;
+    gint page_num;
+
+    if (!ctx || !ctx->notebook) {
+        return;
+    }
+
+    /* Get current document */
+    page_num = gtk_notebook_get_current_page(GTK_NOTEBOOK(ctx->notebook));
+    if (page_num < 0) {
+        return;
+    }
+
+    doc = (ImageDocument *)g_list_nth_data(ctx->documents, page_num);
+    if (!doc) {
+        return;
+    }
+
+    /* Perform redo */
+    document_redo(doc);
+
+    /* Update menu state */
+    ui_update_menu_and_button_states(ctx);
+}
+
+/**
  * Notebook page switch callback
  */
 static void on_notebook_switch_page(GtkNotebook *notebook, GtkWidget *page,
@@ -823,6 +951,16 @@ void ui_update_menu_and_button_states(AppContext *ctx)
     /* Update layers panel button states */
     if (layers_panel) {
         layers_panel_update_button_sensitivity(layers_panel, has_document, has_selection);
+    }
+
+    /* Update Edit menu item states (undo/redo) */
+    if (ctx->edit_menu_undo) {
+        gtk_widget_set_sensitive(ctx->edit_menu_undo, 
+                                has_document && document_can_undo(doc));
+    }
+    if (ctx->edit_menu_redo) {
+        gtk_widget_set_sensitive(ctx->edit_menu_redo, 
+                                has_document && document_can_redo(doc));
     }
 
     /* Update Layer menu item states */

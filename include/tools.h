@@ -2,12 +2,12 @@
 #define TOOLS_H
 
 #include <gtk/gtk.h>
-#include "document.h"
 
 /**
  * Forward declarations
  */
 typedef struct _Tool Tool;
+struct ImageDocument;  /* Forward declaration - full definition in document.h */
 
 /**
  * Tool enumeration for quick identification
@@ -51,6 +51,7 @@ typedef struct _Tool {
     ToolMouseMoveHandler mouse_move;    /* Mouse move handler */
     ToolMouseUpHandler mouse_up;        /* Mouse up handler */
     gpointer user_data;                 /* Tool-specific data */
+    gpointer app_context;               /* App context for UI updates */
 } Tool;
 
 /**

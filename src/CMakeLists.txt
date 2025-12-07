@@ -5,6 +5,7 @@ set(SOURCES
     document.c
     panels.c
     tools.c
+    command.c
 )
 
 # Create the executable

@@ -5,6 +5,10 @@
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <cairo.h>
 
+/* Forward declarations */
+typedef struct _CommandStack CommandStack;
+struct ImageDocument;  /* Forward declaration for circular deps */
+
 /**
  * Blend modes for layers
  */
@@ -18,7 +22,7 @@ typedef enum {
 /**
  * Structure to represent a single layer in an image
  */
-typedef struct {
+typedef struct ImageLayer {
     gchar *name;                  /* Layer name */
     cairo_surface_t *surface;     /* Layer content */
     gdouble opacity;              /* Layer opacity (0.0 - 1.0) */
@@ -31,7 +35,7 @@ typedef struct {
 /**
  * Structure to represent an image document
  */
-typedef struct {
+typedef struct ImageDocument {
     gchar *filename;              /* File path/name */
     gchar *file_path;             /* Full file path for loading/saving */
     gboolean modified;            /* Has document been modified? */
@@ -52,6 +56,10 @@ typedef struct {
     
     /* Viewport and zoom */
     gdouble zoom_factor;          /* Current zoom level (1.0 = 100%) */
+    
+    /* Undo/redo system */
+    CommandStack *undo_stack;     /* Stack of undoable commands */
+    CommandStack *redo_stack;     /* Stack of redoable commands */
 } ImageDocument;
 
 /**
@@ -206,6 +214,34 @@ ImageLayer* document_get_layer(ImageDocument *doc, guint index);
  * @return The number of layers
  */
 guint document_get_layer_count(ImageDocument *doc);
+
+/**
+ * Execute an undo command
+ * @param doc The document
+ * @return TRUE if undo was performed, FALSE if undo stack is empty
+ */
+gboolean document_undo(ImageDocument *doc);
+
+/**
+ * Execute a redo command
+ * @param doc The document
+ * @return TRUE if redo was performed, FALSE if redo stack is empty
+ */
+gboolean document_redo(ImageDocument *doc);
+
+/**
+ * Check if undo is available
+ * @param doc The document
+ * @return TRUE if undo stack is not empty
+ */
+gboolean document_can_undo(ImageDocument *doc);
+
+/**
+ * Check if redo is available
+ * @param doc The document
+ * @return TRUE if redo stack is not empty
+ */
+gboolean document_can_redo(ImageDocument *doc);
 
 #endif /* DOCUMENT_H */
 
