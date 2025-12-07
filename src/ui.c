@@ -16,6 +16,27 @@ static void on_layer_duplicate(GtkWidget *widget, gpointer data);
 static void on_notebook_switch_page(GtkNotebook *notebook, GtkWidget *page,
                                      guint page_num, gpointer user_data);
 static void on_tab_close_button_clicked(GtkButton *button, gpointer user_data);
+static void on_layer_selection_changed(GtkTreeSelection *selection, gpointer user_data);
+
+/**
+ * Layer selection changed callback - proper signal handler signature
+ */
+static void on_layer_selection_changed(GtkTreeSelection *selection, gpointer user_data)
+{
+    (void)selection;  /* Unused - we get it from the tree view */
+
+    AppContext *ctx = (AppContext *)user_data;
+
+    if (!ctx) {
+        printf("ERROR: on_layer_selection_changed called with NULL ctx\n");
+        return;
+    }
+
+    printf("Layer selection changed in tree view\n");
+    
+    /* Update menu and button states */
+    ui_update_menu_and_button_states(ctx);
+}
 
 /**
  * Create the File menu
@@ -70,11 +91,13 @@ static GtkWidget* create_layer_menu(AppContext *ctx)
     menu_item = gtk_menu_item_new_with_mnemonic("_New Layer");
     g_signal_connect(menu_item, "activate", G_CALLBACK(on_layer_new), ctx);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item);
+    ctx->layer_menu_new = menu_item;
 
     /* Layer > Duplicate Layer */
     menu_item = gtk_menu_item_new_with_mnemonic("_Duplicate Layer");
     g_signal_connect(menu_item, "activate", G_CALLBACK(on_layer_duplicate), ctx);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item);
+    ctx->layer_menu_duplicate = menu_item;
 
     /* Separator */
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
@@ -83,6 +106,7 @@ static GtkWidget* create_layer_menu(AppContext *ctx)
     menu_item = gtk_menu_item_new_with_mnemonic("_Delete Layer");
     g_signal_connect(menu_item, "activate", G_CALLBACK(on_layer_delete), ctx);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item);
+    ctx->layer_menu_delete = menu_item;
 
     gtk_widget_show_all(menu);
 
@@ -133,6 +157,9 @@ AppContext* ui_create_main_window(void)
     LayersPanel *layers_panel;
 
     ctx->documents = NULL;
+    ctx->layer_menu_new = NULL;
+    ctx->layer_menu_delete = NULL;
+    ctx->layer_menu_duplicate = NULL;
 
     /* Create main window */
     ctx->window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
@@ -192,6 +219,12 @@ AppContext* ui_create_main_window(void)
                                 G_CALLBACK(on_layer_duplicate),
                                 ctx);
 
+    /* Connect layer tree view selection changes to update UI state */
+    GtkTreeSelection *layer_selection = gtk_tree_view_get_selection(
+        GTK_TREE_VIEW(layers_panel->tree_view));
+    g_signal_connect(layer_selection, "changed",
+                     G_CALLBACK(on_layer_selection_changed), ctx);
+
     /* ==== STATUS BAR ==== */
     ctx->status_bar = gtk_statusbar_new();
     gtk_box_pack_end(GTK_BOX(main_vbox), ctx->status_bar, FALSE, FALSE, 0);
@@ -204,6 +237,9 @@ AppContext* ui_create_main_window(void)
 
     /* Update status bar with initial information */
     ui_update_status_bar(ctx);
+
+    /* Initialize menu and button states */
+    ui_update_menu_and_button_states(ctx);
 
     printf("Main window created with dockable panels and status bar\n");
 
@@ -305,12 +341,16 @@ void ui_close_document_tab(AppContext *ctx, ImageDocument *doc)
         gint remaining = gtk_notebook_get_n_pages(GTK_NOTEBOOK(ctx->notebook));
         printf("Remaining pages after close: %d\n", remaining);
 
-        /* Update window title (handles empty notebook) */
-        ui_update_window_title(ctx);
+         /* Update window title (handles empty notebook) */
+         ui_update_window_title(ctx);
 
-        printf("Document closed successfully\n");
-    }
-}
+         /* Update status bar and menu/button states */
+         ui_update_status_bar(ctx);
+         ui_update_menu_and_button_states(ctx);
+
+         printf("Document closed successfully\n");
+     }
+ }
 
 /**
  * Get the current active document
@@ -420,6 +460,9 @@ static void on_file_open_response(GtkDialog *dialog, gint response_id, gpointer 
                     if (layers_panel) {
                         layers_panel_update(layers_panel, doc);
                     }
+
+                    /* Update menu and button states */
+                    ui_update_menu_and_button_states(ctx);
                 }
             }
 
@@ -549,6 +592,9 @@ static void on_notebook_switch_page(GtkNotebook *notebook, GtkWidget *page,
     if (layers_panel && doc) {
         layers_panel_update(layers_panel, doc);
     }
+
+    /* Update menu and button sensitivity */
+    ui_update_menu_and_button_states(ctx);
 }
 
 /**
@@ -730,5 +776,54 @@ void ui_update_status_bar(AppContext *ctx)
 
     gtk_statusbar_push(GTK_STATUSBAR(ctx->status_bar), 0, status_text);
     g_free(status_text);
+}
+
+/**
+ * Update menu and button sensitivity based on document and layer state
+ */
+void ui_update_menu_and_button_states(AppContext *ctx)
+{
+    ImageDocument *doc;
+    LayersPanel *layers_panel;
+    gboolean has_document;
+    gboolean has_selection;
+
+    if (!ctx || !ctx->window) {
+        printf("DEBUG: ui_update_menu_and_button_states called with NULL ctx or ctx->window\n");
+        return;
+    }
+
+    /* Get current document */
+    doc = ui_get_active_document(ctx);
+    has_document = (doc != NULL);
+
+    /* Get layers panel and check for selection */
+    layers_panel = (LayersPanel *)g_object_get_data(G_OBJECT(ctx->window), 
+                                                    "layers_panel");
+    
+    has_selection = FALSE;
+    if (layers_panel && doc && layers_panel->tree_view) {
+        has_selection = (layers_panel_get_selected_layer(layers_panel) != NULL);
+    }
+
+    /* Update layers panel button states */
+    if (layers_panel) {
+        layers_panel_update_button_sensitivity(layers_panel, has_document, has_selection);
+    }
+
+    /* Update Layer menu item states */
+    if (ctx->layer_menu_new) {
+        gtk_widget_set_sensitive(ctx->layer_menu_new, has_document);
+    }
+    if (ctx->layer_menu_delete) {
+        gtk_widget_set_sensitive(ctx->layer_menu_delete, has_document && has_selection);
+    }
+    if (ctx->layer_menu_duplicate) {
+        gtk_widget_set_sensitive(ctx->layer_menu_duplicate, has_document && has_selection);
+    }
+
+    printf("UI State: document=%s, selection=%s\n",
+           has_document ? "yes" : "no",
+           has_selection ? "yes" : "no");
 }
 

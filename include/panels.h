@@ -25,6 +25,7 @@ typedef struct {
     GtkWidget *btn_new;          /* New layer button */
     GtkWidget *btn_delete;       /* Delete layer button */
     GtkWidget *btn_duplicate;    /* Duplicate layer button */
+    gpointer app_context;        /* Reference to AppContext for callbacks */
 } LayersPanel;
 
 /**
@@ -78,6 +79,16 @@ void layers_panel_update(LayersPanel *layers_panel, ImageDocument *doc);
  * @return The selected layer, or NULL if none selected
  */
 ImageLayer* layers_panel_get_selected_layer(LayersPanel *layers_panel);
+
+/**
+ * Update button sensitivity based on state
+ * @param layers_panel The layers panel
+ * @param has_document Whether a document is open
+ * @param has_selection Whether a layer is selected
+ */
+void layers_panel_update_button_sensitivity(LayersPanel *layers_panel,
+                                            gboolean has_document,
+                                            gboolean has_selection);
 
 /**
  * Connect layers panel buttons to UI callbacks

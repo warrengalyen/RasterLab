@@ -13,6 +13,9 @@ typedef struct {
     GtkWidget *menu_bar;         /* Menu bar */
     GtkWidget *status_bar;       /* Status bar */
     GList *documents;            /* List of open documents */
+    GtkWidget *layer_menu_new;   /* Layer > New Layer menu item */
+    GtkWidget *layer_menu_delete; /* Layer > Delete Layer menu item */
+    GtkWidget *layer_menu_duplicate; /* Layer > Duplicate Layer menu item */
 } AppContext;
 
 /**
@@ -60,6 +63,12 @@ void ui_context_free(AppContext *ctx);
  * @param ctx The application context
  */
 void ui_update_status_bar(AppContext *ctx);
+
+/**
+ * Update menu and button sensitivity based on document and layer state
+ * @param ctx The application context
+ */
+void ui_update_menu_and_button_states(AppContext *ctx);
 
 #endif /* UI_H */
 

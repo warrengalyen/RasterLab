@@ -354,6 +354,7 @@ LayersPanel* create_layers_panel(void)
     gtk_box_pack_start(GTK_BOX(layers_panel->panel), controls, FALSE, FALSE, 0);
 
     layers_panel->current_doc = NULL;
+    layers_panel->app_context = NULL;
 
     gtk_widget_show_all(layers_panel->panel);
 
@@ -406,12 +407,20 @@ ImageLayer* layers_panel_get_selected_layer(LayersPanel *layers_panel)
     GtkTreeIter iter;
     gchar *layer_name = NULL;
 
-    if (!layers_panel || !layers_panel->current_doc) {
+    if (!layers_panel || !layers_panel->current_doc || !layers_panel->tree_view) {
+        return NULL;
+    }
+
+    if (!layers_panel->store) {
         return NULL;
     }
 
     /* Get the selection */
     selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(layers_panel->tree_view));
+    
+    if (!selection) {
+        return NULL;
+    }
 
     if (!gtk_tree_selection_get_selected(selection, NULL, &iter)) {
         return NULL;  /* No selection */
@@ -441,6 +450,34 @@ ImageLayer* layers_panel_get_selected_layer(LayersPanel *layers_panel)
 }
 
 /**
+ * Update button sensitivity based on state
+ */
+void layers_panel_update_button_sensitivity(LayersPanel *layers_panel,
+                                            gboolean has_document,
+                                            gboolean has_selection)
+{
+    if (!layers_panel) {
+        return;
+    }
+
+    /* New button: enabled when document exists */
+    if (layers_panel->btn_new) {
+        gtk_widget_set_sensitive(layers_panel->btn_new, has_document);
+    }
+
+    /* Delete and Duplicate: enabled when document exists AND layer is selected */
+    gboolean delete_dup_enabled = has_document && has_selection;
+    
+    if (layers_panel->btn_delete) {
+        gtk_widget_set_sensitive(layers_panel->btn_delete, delete_dup_enabled);
+    }
+    
+    if (layers_panel->btn_duplicate) {
+        gtk_widget_set_sensitive(layers_panel->btn_duplicate, delete_dup_enabled);
+    }
+}
+
+/**
  * Connect layers panel buttons to UI callbacks
  */
 void layers_panel_connect_buttons(LayersPanel *layers_panel,
@@ -449,9 +486,14 @@ void layers_panel_connect_buttons(LayersPanel *layers_panel,
                                   GCallback duplicate_callback,
                                   gpointer user_data)
 {
+    GtkTreeSelection *selection;
+
     if (!layers_panel) {
         return;
     }
+
+    /* Store app context for use in callbacks */
+    layers_panel->app_context = user_data;
 
     g_signal_connect(layers_panel->btn_new, "clicked",
                      new_callback, user_data);
@@ -459,6 +501,12 @@ void layers_panel_connect_buttons(LayersPanel *layers_panel,
                      delete_callback, user_data);
     g_signal_connect(layers_panel->btn_duplicate, "clicked",
                      duplicate_callback, user_data);
+
+    /* Note: Layer selection change callback is connected in ui.c's ui_create_main_window */
+    /* This avoids double-connecting and signature mismatches */
+
+    /* Initialize buttons as disabled (no document open) */
+    layers_panel_update_button_sensitivity(layers_panel, FALSE, FALSE);
 }
 
 /**
