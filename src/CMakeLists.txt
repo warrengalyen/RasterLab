@@ -24,6 +24,7 @@ set(SOURCES
     ui.c
     document.c
     panels.c
+    accordion.c
     tools.c
     tool_manager.c
     tool_move.c
