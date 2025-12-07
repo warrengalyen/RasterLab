@@ -131,14 +131,10 @@ static gboolean on_drawing_area_draw(GtkWidget *widget, cairo_t *cr, gpointer us
                 cairo_scale(cr, doc->zoom_factor, doc->zoom_factor);
             }
 
-            /* Draw checkered background for transparency */
-            if (doc->has_alpha) {
-                draw_checkered_background(cr, doc->width, doc->height);
-            } else {
-                /* Draw white background for opaque images */
-                cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
-                cairo_paint(cr);
-            }
+            /* Always draw checkered background underneath to show canvas boundaries
+               This helps visualize the canvas bounds and transparency areas */
+            draw_checkered_background(cr, clip_width / doc->zoom_factor, 
+                                     clip_height / doc->zoom_factor);
 
             /* Draw composite surface with proper alpha blending */
             cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
@@ -146,25 +142,8 @@ static gboolean on_drawing_area_draw(GtkWidget *widget, cairo_t *cr, gpointer us
             cairo_paint(cr);
         }
     } else {
-        /* Draw white background for empty canvas */
-        cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
-        cairo_paint(cr);
-
-        /* Draw a placeholder grid */
-        cairo_set_source_rgb(cr, 0.9, 0.9, 0.9);
-        cairo_set_line_width(cr, 0.5);
-
-        for (int x = 0; x < 800; x += 50) {
-            cairo_move_to(cr, x, 0);
-            cairo_line_to(cr, x, 600);
-        }
-
-        for (int y = 0; y < 600; y += 50) {
-            cairo_move_to(cr, 0, y);
-            cairo_line_to(cr, 800, y);
-        }
-
-        cairo_stroke(cr);
+        /* Draw checkered background for empty canvas */
+        draw_checkered_background(cr, clip_width, clip_height);
     }
 
     return FALSE;
