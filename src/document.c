@@ -68,26 +68,25 @@ static cairo_surface_t* pixbuf_to_cairo_surface(GdkPixbuf *pixbuf)
 /**
  * Draw a checkered background pattern for transparency
  */
-static void draw_checkered_background(cairo_t *cr, gint x, gint y, gint width, gint height)
+static void draw_checkered_background(cairo_t *cr, gint image_width, gint image_height)
 {
     const gint square_size = 10;    /* Size of each check square */
     const double color1 = 0.85;    /* Light gray */
     const double color2 = 0.95;    /* Lighter gray */
-    gint end_x = x + width;
-    gint end_y = y + height;
 
-    /* Draw checkerboard pattern */
-    for (gint row = y; row < end_y; row += square_size) {
-        for (gint col = x; col < end_x; col += square_size) {
-            /* Calculate which "cell" we're in */
-            gint cell_x = col / square_size;
-            gint cell_y = row / square_size;
+    /* Draw checkerboard pattern aligned to image origin */
+    for (gint y = 0; y < image_height; y += square_size) {
+        for (gint x = 0; x < image_width; x += square_size) {
+            /* Calculate which cell we're in (relative to origin) */
+            gint cell_x = x / square_size;
+            gint cell_y = y / square_size;
             
             /* Alternate colors in a checkerboard pattern */
             double color = ((cell_x + cell_y) % 2 == 0) ? color1 : color2;
 
+            /* Draw this square */
             cairo_set_source_rgb(cr, color, color, color);
-            cairo_rectangle(cr, col, row, square_size, square_size);
+            cairo_rectangle(cr, x, y, square_size, square_size);
             cairo_fill(cr);
         }
     }
@@ -114,20 +113,22 @@ static gboolean on_drawing_area_draw(GtkWidget *widget, cairo_t *cr, gpointer us
         composite = document_get_composite_surface(doc);
 
         if (composite) {
+            /* Apply zoom first if needed */
+            if (doc->zoom_factor != 1.0) {
+                cairo_scale(cr, doc->zoom_factor, doc->zoom_factor);
+            }
+
             /* Draw checkered background for transparency */
             if (doc->has_alpha) {
-                draw_checkered_background(cr, (gint)x1, (gint)y1, clip_width, clip_height);
+                draw_checkered_background(cr, doc->width, doc->height);
             } else {
                 /* Draw white background for opaque images */
                 cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
                 cairo_paint(cr);
             }
 
-            /* Apply zoom and draw composite surface */
-            if (doc->zoom_factor != 1.0) {
-                cairo_scale(cr, doc->zoom_factor, doc->zoom_factor);
-            }
-
+            /* Draw composite surface with proper alpha blending */
+            cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
             cairo_set_source_surface(cr, composite, 0, 0);
             cairo_paint(cr);
         }
@@ -273,20 +274,37 @@ void document_free(ImageDocument *doc)
 GtkWidget* document_create_drawing_area(ImageDocument *doc)
 {
     GtkWidget *scrolled_window;
+    GtkWidget *viewport;
     GtkWidget *drawing_area;
-    GtkAdjustment *h_adjustment;
-    GtkAdjustment *v_adjustment;
 
     /* Create scrolled window */
     scrolled_window = gtk_scrolled_window_new(NULL, NULL);
     gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled_window),
                                    GTK_POLICY_AUTOMATIC,
                                    GTK_POLICY_AUTOMATIC);
+    /* Allow viewport to shrink and center content */
+    gtk_scrolled_window_set_shadow_type(GTK_SCROLLED_WINDOW(scrolled_window),
+                                        GTK_SHADOW_NONE);
+
+    /* Create a viewport to hold the drawing area (allows centering) */
+    viewport = gtk_viewport_new(NULL, NULL);
+    gtk_container_add(GTK_CONTAINER(scrolled_window), viewport);
+    gtk_widget_show(viewport);
 
     /* Create drawing area */
     drawing_area = gtk_drawing_area_new();
+    /* Start with default size - will be updated when image loads */
     gtk_widget_set_size_request(drawing_area, 800, 600);
-    gtk_container_add(GTK_CONTAINER(scrolled_window), drawing_area);
+    
+    /* Prevent drawing area from expanding to fill viewport */
+    gtk_widget_set_hexpand(drawing_area, FALSE);
+    gtk_widget_set_vexpand(drawing_area, FALSE);
+    
+    /* Align to top-left corner */
+    gtk_widget_set_halign(drawing_area, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(drawing_area, GTK_ALIGN_CENTER);
+    
+    gtk_container_add(GTK_CONTAINER(viewport), drawing_area);
     gtk_widget_show(drawing_area);
 
     /* Connect draw signal */
@@ -398,9 +416,14 @@ gboolean document_load_image_from_file(ImageDocument *doc, const gchar *file_pat
     }
     doc->file_path = g_strdup(file_path);
 
-    /* Update drawing area size */
+    /* Update drawing area size to match image dimensions */
     if (doc->drawing_area) {
-        gtk_widget_set_size_request(doc->drawing_area, doc->width, doc->height);
+        /* Set exact size for the drawing area based on image dimensions */
+        gint display_width = (gint)(doc->width * doc->zoom_factor);
+        gint display_height = (gint)(doc->height * doc->zoom_factor);
+        gtk_widget_set_size_request(doc->drawing_area, display_width, display_height);
+        
+        /* Queue redraw to display the image */
         gtk_widget_queue_draw(doc->drawing_area);
     }
 
@@ -517,10 +540,13 @@ gboolean document_render_composite(ImageDocument *doc)
         return FALSE;
     }
 
-    /* Clear composite surface */
+    /* Clear composite surface to transparent */
     cr = cairo_create(doc->composite_surface);
-    cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.0);
+    cairo_set_operator(cr, CAIRO_OPERATOR_CLEAR);
     cairo_paint(cr);
+    
+    /* Set operator for proper alpha blending */
+    cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
 
     /* Composite each visible layer */
     for (iter = doc->layers; iter; iter = iter->next) {
