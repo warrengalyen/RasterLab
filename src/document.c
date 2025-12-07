@@ -353,6 +353,8 @@ static ImageLayer* layer_new(const gchar *name, guint width, guint height, gbool
     layer->width = width;
     layer->height = height;
     layer->blend_mode = BLEND_MODE_NORMAL;
+    layer->offset_x = 0;  /* Initialize layer offset */
+    layer->offset_y = 0;
 
     return layer;
 }
@@ -752,13 +754,16 @@ gboolean document_render_composite(ImageDocument *doc)
             continue;
         }
 
-        /* Draw layer with opacity */
+        /* Draw layer with offset and opacity */
+        cairo_save(cr);
+        cairo_translate(cr, layer->offset_x, layer->offset_y);
         cairo_set_source_surface(cr, layer->surface, 0, 0);
         if (layer->opacity < 1.0) {
             cairo_paint_with_alpha(cr, layer->opacity);
         } else {
             cairo_paint(cr);
         }
+        cairo_restore(cr);
     }
 
     cairo_destroy(cr);
@@ -986,6 +991,19 @@ guint document_get_layer_count(ImageDocument *doc)
     }
 
     return g_list_length(doc->layers);
+}
+
+/**
+ * Get the top (active) layer
+ */
+ImageLayer* document_get_active_layer(ImageDocument *doc)
+{
+    if (!doc || !doc->layers) {
+        return NULL;
+    }
+
+    /* Return the top layer (last in list) */
+    return (ImageLayer *)g_list_nth_data(doc->layers, g_list_length(doc->layers) - 1);
 }
 
 /**

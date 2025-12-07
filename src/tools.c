@@ -8,31 +8,155 @@
 
 /* Forward declarations */
 typedef struct AppContext AppContext;
+typedef struct ImageDocument ImageDocument;
+typedef struct ImageLayer ImageLayer;
 extern void ui_update_menu_and_button_states(AppContext *ctx);
 extern void ui_update_window_title(AppContext *ctx);
 
 /**
- * Stub handlers for Move tool
+ * Move Tool state
+ */
+typedef struct {
+    gboolean is_dragging;
+    gint start_x;
+    gint start_y;
+    gint initial_offset_x;
+    gint initial_offset_y;
+    ImageLayer *active_layer;
+} MoveToolState;
+
+/**
+ * Move tool: mouse down - start dragging
  */
 static void move_tool_mouse_down(Tool *tool, struct ImageDocument *doc, MouseEvent *event)
 {
-    (void)tool;
-    (void)doc;
-    printf("Move tool: mouse down at (%d, %d)\n", event->x, event->y);
+    MoveToolState *state;
+    ImageLayer *active_layer;
+
+    if (!tool || !doc || !doc->layers) {
+        return;
+    }
+
+    /* Get or create tool state */
+    if (!tool->user_data) {
+        tool->user_data = g_malloc0(sizeof(MoveToolState));
+    }
+    state = (MoveToolState *)tool->user_data;
+
+    /* Get the top (active) layer */
+    active_layer = document_get_active_layer(doc);
+    if (!active_layer) {
+        printf("Move tool: no active layer\n");
+        return;
+    }
+
+    /* Start dragging */
+    state->is_dragging = TRUE;
+    state->start_x = event->x;
+    state->start_y = event->y;
+    state->initial_offset_x = active_layer->offset_x;
+    state->initial_offset_y = active_layer->offset_y;
+    state->active_layer = active_layer;
+
+    printf("Move tool: started dragging layer at (%d, %d)\n", event->x, event->y);
 }
 
+/**
+ * Move tool: mouse move - update layer offset
+ */
 static void move_tool_mouse_move(Tool *tool, struct ImageDocument *doc, MouseEvent *event)
 {
-    (void)tool;
-    (void)doc;
-    printf("Move tool: mouse move at (%d, %d)\n", event->x, event->y);
+    MoveToolState *state;
+    gint dx, dy;
+
+    if (!tool || !doc || !tool->user_data) {
+        return;
+    }
+
+    state = (MoveToolState *)tool->user_data;
+
+    if (!state->is_dragging || !state->active_layer) {
+        return;
+    }
+
+    /* Calculate delta from start position */
+    dx = event->x - state->start_x;
+    dy = event->y - state->start_y;
+
+    /* Update layer offset */
+    state->active_layer->offset_x = state->initial_offset_x + dx;
+    state->active_layer->offset_y = state->initial_offset_y + dy;
+
+    /* Mark composite for redraw */
+    doc->composite_dirty = TRUE;
+    if (doc->drawing_area) {
+        gtk_widget_queue_draw(doc->drawing_area);
+    }
+
+    printf("Move tool: moved to offset (%d, %d)\n", 
+           state->active_layer->offset_x, state->active_layer->offset_y);
 }
 
+/**
+ * Move tool: mouse up - end dragging and create undo command
+ */
 static void move_tool_mouse_up(Tool *tool, struct ImageDocument *doc, MouseEvent *event)
 {
-    (void)tool;
-    (void)doc;
-    printf("Move tool: mouse up at (%d, %d)\n", event->x, event->y);
+    MoveToolState *state;
+    Command *cmd;
+    AppContext *ctx;
+
+    (void)event;  /* Unused */
+
+    if (!tool || !doc || !tool->user_data) {
+        return;
+    }
+
+    state = (MoveToolState *)tool->user_data;
+
+    if (!state->is_dragging) {
+        return;
+    }
+
+    /* Check if we actually moved */
+    if (state->active_layer && 
+        (state->active_layer->offset_x != state->initial_offset_x ||
+         state->active_layer->offset_y != state->initial_offset_y)) {
+        
+        /* Create undo command for the move */
+        cmd = command_create_move(
+            state->active_layer,
+            state->initial_offset_x,
+            state->initial_offset_y,
+            state->active_layer->offset_x,
+            state->active_layer->offset_y);
+
+        if (cmd && doc->undo_stack) {
+            command_stack_push(doc->undo_stack, cmd);
+            printf("Move tool: move command pushed to undo stack\n");
+
+            /* Clear redo stack since new action performed */
+            if (doc->redo_stack) {
+                command_stack_clear(doc->redo_stack);
+            }
+
+            /* Update UI */
+            ctx = (AppContext *)tool->app_context;
+            if (ctx) {
+                ui_update_menu_and_button_states(ctx);
+                ui_update_window_title(ctx);
+            }
+        }
+
+        /* Layer was moved - mark document as modified */
+        doc->modified = TRUE;
+        printf("Move tool: layer moved - document marked as modified\n");
+    }
+
+    state->is_dragging = FALSE;
+    state->active_layer = NULL;
+
+    printf("Move tool: finished dragging\n");
 }
 
 /**
@@ -78,7 +202,7 @@ static void brush_tool_mouse_down(Tool *tool, struct ImageDocument *doc, MouseEv
     state = (BrushToolState *)tool->user_data;
 
     /* Get the top (active) layer */
-    active_layer = document_get_layer(doc, g_list_length(doc->layers) - 1);
+    active_layer = document_get_active_layer(doc);
     if (!active_layer) {
         printf("Brush tool: no active layer\n");
         return;
@@ -118,7 +242,7 @@ static void brush_tool_mouse_move(Tool *tool, struct ImageDocument *doc, MouseEv
     }
 
     /* Get the top (active) layer */
-    active_layer = document_get_layer(doc, g_list_length(doc->layers) - 1);
+    active_layer = document_get_active_layer(doc);
     if (!active_layer) {
         printf("Brush tool: active layer is NULL, aborting draw\n");
         state->is_drawing = FALSE;

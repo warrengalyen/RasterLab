@@ -30,6 +30,8 @@ typedef struct ImageLayer {
     guint width;                  /* Layer width in pixels */
     guint height;                 /* Layer height in pixels */
     BlendMode blend_mode;         /* Layer blend mode */
+    gint offset_x;                /* Layer offset X (horizontal translation) */
+    gint offset_y;                /* Layer offset Y (vertical translation) */
 } ImageLayer;
 
 /**
@@ -207,6 +209,13 @@ gboolean document_layer_move_down(ImageDocument *doc, ImageLayer *layer);
  * @return The layer, or NULL if index is invalid
  */
 ImageLayer* document_get_layer(ImageDocument *doc, guint index);
+
+/**
+ * Get the top (active) layer
+ * @param doc The document
+ * @return The top layer, or NULL if no layers exist
+ */
+ImageLayer* document_get_active_layer(ImageDocument *doc);
 
 /**
  * Get the number of layers in the document

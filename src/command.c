@@ -366,3 +366,119 @@ Command* command_create_draw(struct ImageLayer *layer)
     return cmd;
 }
 
+/**
+ * Move command apply callback (restore to new position)
+ */
+static void move_command_apply(Command *cmd, struct ImageDocument *doc)
+{
+    MoveCommandData *data;
+
+    if (!cmd || !cmd->user_data || !doc) {
+        return;
+    }
+
+    data = (MoveCommandData *)cmd->user_data;
+
+    if (!data->layer) {
+        return;
+    }
+
+    /* Apply new position */
+    data->layer->offset_x = data->new_offset_x;
+    data->layer->offset_y = data->new_offset_y;
+
+    /* Mark composite as dirty and queue redraw */
+    doc->composite_dirty = TRUE;
+    if (doc->drawing_area) {
+        gtk_widget_queue_draw(doc->drawing_area);
+    }
+
+    printf("Move command applied: layer moved to (%d, %d)\n", 
+           data->new_offset_x, data->new_offset_y);
+}
+
+/**
+ * Move command revert callback (restore to old position)
+ */
+static void move_command_revert(Command *cmd, struct ImageDocument *doc)
+{
+    MoveCommandData *data;
+
+    if (!cmd || !cmd->user_data || !doc) {
+        return;
+    }
+
+    data = (MoveCommandData *)cmd->user_data;
+
+    if (!data->layer) {
+        return;
+    }
+
+    /* Restore old position */
+    data->layer->offset_x = data->old_offset_x;
+    data->layer->offset_y = data->old_offset_y;
+
+    /* Mark composite as dirty and queue redraw */
+    doc->composite_dirty = TRUE;
+    if (doc->drawing_area) {
+        gtk_widget_queue_draw(doc->drawing_area);
+    }
+
+    printf("Move command reverted: layer restored to (%d, %d)\n",
+           data->old_offset_x, data->old_offset_y);
+}
+
+/**
+ * Move command destroy callback
+ */
+static void move_command_destroy(Command *cmd)
+{
+    MoveCommandData *data;
+
+    if (!cmd || !cmd->user_data) {
+        return;
+    }
+
+    data = (MoveCommandData *)cmd->user_data;
+    g_free(data);
+}
+
+/**
+ * Create a move command
+ */
+Command* command_create_move(struct ImageLayer *layer,
+                             gint old_x, gint old_y,
+                             gint new_x, gint new_y)
+{
+    Command *cmd;
+    MoveCommandData *data;
+
+    if (!layer) {
+        return NULL;
+    }
+
+    /* Create command data */
+    data = (MoveCommandData *)g_malloc(sizeof(MoveCommandData));
+    data->layer = layer;
+    data->old_offset_x = old_x;
+    data->old_offset_y = old_y;
+    data->new_offset_x = new_x;
+    data->new_offset_y = new_y;
+
+    /* Create command */
+    cmd = command_new("Move Layer",
+                      COMMAND_MOVE,
+                      move_command_apply,
+                      move_command_revert,
+                      move_command_destroy);
+
+    if (!cmd) {
+        g_free(data);
+        return NULL;
+    }
+
+    cmd->user_data = data;
+
+    return cmd;
+}
+

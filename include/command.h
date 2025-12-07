@@ -19,6 +19,7 @@ typedef enum {
     COMMAND_FILL = 1,
     COMMAND_ERASE = 2,
     COMMAND_LAYER_EDIT = 3,
+    COMMAND_MOVE = 4,
     COMMAND_CUSTOM = 255
 } CommandType;
 
@@ -157,6 +158,31 @@ typedef struct {
  * @return Newly created Command for drawing, or NULL on failure
  */
 Command* command_create_draw(struct ImageLayer *layer);
+
+/**
+ * Move command data structure
+ * Stores layer offset before move for undo
+ */
+typedef struct {
+    struct ImageLayer *layer;           /* Layer being moved */
+    gint old_offset_x;                  /* X offset before move */
+    gint old_offset_y;                  /* Y offset before move */
+    gint new_offset_x;                  /* X offset after move */
+    gint new_offset_y;                  /* Y offset after move */
+} MoveCommandData;
+
+/**
+ * Create a move command
+ * @param layer The layer being moved
+ * @param old_x Previous X offset
+ * @param old_y Previous Y offset
+ * @param new_x New X offset
+ * @param new_y New Y offset
+ * @return Newly created Command for moving, or NULL on failure
+ */
+Command* command_create_move(struct ImageLayer *layer, 
+                             gint old_x, gint old_y,
+                             gint new_x, gint new_y);
 
 #endif /* COMMAND_H */
 
