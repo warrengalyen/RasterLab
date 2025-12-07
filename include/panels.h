@@ -5,6 +5,7 @@
 #include "document.h"
 #include "tools.h"
 #include "tool_manager.h"
+#include "accordion.h"
 
 /**
  * Panel header structure for collapsible panels
@@ -32,6 +33,7 @@ typedef struct {
  */
 typedef struct {
     GtkWidget *panel;            /* Main panel widget */
+    Accordion *accordion;        /* Accordion widget for sections */
     GtkWidget *tree_view;        /* Layer list tree view */
     GtkListStore *store;         /* List store for layers */
     ImageDocument *current_doc;  /* Current document reference */

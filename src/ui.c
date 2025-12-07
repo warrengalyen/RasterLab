@@ -267,7 +267,6 @@ AppContext* ui_create_main_window(void)
     GtkWidget *tool_options_panel;
     GtkWidget *tools_panel;
     GtkWidget *layers_panel_widget;
-    PanelHeader *layers_header;
     LayersPanel *layers_panel;
 
     ctx->documents = NULL;
@@ -345,8 +344,7 @@ AppContext* ui_create_main_window(void)
     /* ==== RIGHT PANEL: Layers ==== */
     ctx->layers_panel = create_layers_panel();
     layers_panel_widget = ctx->layers_panel->panel;
-    layers_header = panel_header_new("Layers", layers_panel_widget);
-    gtk_paned_pack2(GTK_PANED(center_right_hpaned), layers_header->container, FALSE, TRUE);
+    gtk_paned_pack2(GTK_PANED(center_right_hpaned), layers_panel_widget, FALSE, TRUE);
 
     /* Store layers panel reference for later updates */
     g_object_set_data(G_OBJECT(ctx->window), "layers_panel", ctx->layers_panel);

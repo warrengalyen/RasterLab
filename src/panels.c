@@ -1,5 +1,6 @@
 #include "panels.h"
 #include "tool_options.h"
+#include "accordion.h"
 #include <stdio.h>
 
 /**
@@ -606,24 +607,66 @@ static void on_panel_btn_duplicate_clicked(GtkButton *button, gpointer user_data
 }
 
 /**
- * Create the layers panel with tree view
+ * Create the layers panel with tree view (loads from Glade file)
  */
 LayersPanel* create_layers_panel(void)
 {
     LayersPanel *layers_panel = (LayersPanel *)g_malloc(sizeof(LayersPanel));
+    GtkBuilder *builder;
+    GError *error = NULL;
     GtkWidget *scroll_window;
     GtkCellRenderer *renderer;
     GtkTreeViewColumn *column;
 
-    /* Main panel */
-    layers_panel->panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-
-    /* Scrolled window for tree view */
-    scroll_window = gtk_scrolled_window_new(NULL, NULL);
-    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll_window),
-                                   GTK_POLICY_AUTOMATIC,
-                                   GTK_POLICY_AUTOMATIC);
-    gtk_box_pack_start(GTK_BOX(layers_panel->panel), scroll_window, TRUE, TRUE, 0);
+    /* Load the Glade file from resources */
+    builder = gtk_builder_new();
+    if (!gtk_builder_add_from_resource(builder, "/ui/layers_panel.glade", &error)) {
+        g_warning("Failed to load layers_panel.glade: %s", error->message);
+        g_error_free(error);
+        g_object_unref(builder);
+        
+        /* Fallback: create empty panel */
+        layers_panel->panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+        layers_panel->store = NULL;
+        layers_panel->tree_view = NULL;
+        layers_panel->btn_new = NULL;
+        layers_panel->btn_delete = NULL;
+        layers_panel->btn_duplicate = NULL;
+        layers_panel->current_doc = NULL;
+        layers_panel->app_context = NULL;
+        return layers_panel;
+    }
+    
+    /* Get the main Glade panel container */
+    GtkWidget *glade_panel = GTK_WIDGET(gtk_builder_get_object(builder, "layers_panel"));
+    if (!glade_panel) {
+        g_warning("Failed to get layers_panel from builder");
+        g_object_unref(builder);
+        layers_panel->panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+        layers_panel->store = NULL;
+        layers_panel->tree_view = NULL;
+        layers_panel->btn_new = NULL;
+        layers_panel->btn_delete = NULL;
+        layers_panel->btn_duplicate = NULL;
+        layers_panel->current_doc = NULL;
+        layers_panel->app_context = NULL;
+        return layers_panel;
+    }
+    
+    /* Get scrolled window from builder for tree view population */
+    scroll_window = GTK_WIDGET(gtk_builder_get_object(builder, "layers_scroll"));
+    
+    /* Get buttons from builder */
+    layers_panel->btn_new = GTK_WIDGET(gtk_builder_get_object(builder, "btn_new_layer"));
+    layers_panel->btn_delete = GTK_WIDGET(gtk_builder_get_object(builder, "btn_delete_layer"));
+    layers_panel->btn_duplicate = GTK_WIDGET(gtk_builder_get_object(builder, "btn_duplicate_layer"));
+    
+    /* Create accordion widget - this becomes the main panel container */
+    layers_panel->accordion = accordion_new();
+    layers_panel->panel = accordion_get_widget(layers_panel->accordion);
+    
+    /* Keep builder alive by storing it on the panel as object data */
+    g_object_set_data_full(G_OBJECT(layers_panel->panel), "builder", builder, g_object_unref);
 
     /* Create list store for layers */
     layers_panel->store = gtk_list_store_new(4,
@@ -669,27 +712,23 @@ LayersPanel* create_layers_panel(void)
                                                       NULL);
     gtk_tree_view_append_column(GTK_TREE_VIEW(layers_panel->tree_view), column);
 
-    /* Add layer controls */
-    GtkWidget *controls = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
-    gtk_widget_set_margin_top(controls, 5);
-    gtk_widget_set_margin_start(controls, 5);
-    gtk_widget_set_margin_end(controls, 5);
-    gtk_widget_set_margin_bottom(controls, 5);
-
-    layers_panel->btn_new = gtk_button_new_with_label("New");
-    layers_panel->btn_delete = gtk_button_new_with_label("Delete");
-    layers_panel->btn_duplicate = gtk_button_new_with_label("Duplicate");
-
     /* Store panel reference in buttons for callback access */
-    g_object_set_data(G_OBJECT(layers_panel->btn_new), "layers_panel", layers_panel);
-    g_object_set_data(G_OBJECT(layers_panel->btn_delete), "layers_panel", layers_panel);
-    g_object_set_data(G_OBJECT(layers_panel->btn_duplicate), "layers_panel", layers_panel);
+    if (layers_panel->btn_new) {
+        g_object_set_data(G_OBJECT(layers_panel->btn_new), "layers_panel", layers_panel);
+    }
+    if (layers_panel->btn_delete) {
+        g_object_set_data(G_OBJECT(layers_panel->btn_delete), "layers_panel", layers_panel);
+    }
+    if (layers_panel->btn_duplicate) {
+        g_object_set_data(G_OBJECT(layers_panel->btn_duplicate), "layers_panel", layers_panel);
+    }
 
-    gtk_box_pack_start(GTK_BOX(controls), layers_panel->btn_new, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(controls), layers_panel->btn_delete, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(controls), layers_panel->btn_duplicate, FALSE, FALSE, 0);
+    /* Add Glade panel as single accordion section */
+    accordion_add_section(layers_panel->accordion, "Layers", glade_panel);
 
-    gtk_box_pack_start(GTK_BOX(layers_panel->panel), controls, FALSE, FALSE, 0);
+    /* Make accordion expand to fill available vertical space */
+    gtk_widget_set_vexpand(layers_panel->panel, TRUE);
+    gtk_widget_set_hexpand(layers_panel->panel, TRUE);
 
     layers_panel->current_doc = NULL;
     layers_panel->app_context = NULL;
@@ -856,6 +895,10 @@ void layers_panel_free(LayersPanel *layers_panel)
         return;
     }
 
+    if (layers_panel->accordion) {
+        accordion_free(layers_panel->accordion);
+    }
+    
     g_object_unref(layers_panel->store);
     g_free(layers_panel);
 }

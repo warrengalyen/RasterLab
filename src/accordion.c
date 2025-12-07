@@ -23,18 +23,50 @@ typedef struct _Accordion {
 } AccordionImpl;
 
 /**
- * Header button click callback
+ * Event box realize callback - set pointer cursor
  */
-static void on_accordion_header_clicked(GtkButton *button, gpointer user_data)
+static void on_event_box_realize(GtkWidget *widget, gpointer user_data)
+{
+    (void)user_data;  /* Unused */
+    
+    GdkWindow *window = gtk_widget_get_window(widget);
+    if (window) {
+        GdkCursor *cursor = gdk_cursor_new(GDK_HAND2);
+        gdk_window_set_cursor(window, cursor);
+        g_object_unref(cursor);
+    }
+}
+
+/**
+ * Header event box click callback
+ */
+static gboolean on_accordion_header_clicked(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
 {
     AccordionSectionImpl *section = (AccordionSectionImpl *)user_data;
     
-    if (!section) {
-        return;
+    if (!section || event->type != GDK_BUTTON_PRESS) {
+        return FALSE;
     }
     
     /* Toggle expanded state */
     section->expanded = !section->expanded;
+    
+    /* Update caret icon rotation */
+    GtkWidget *caret_image = GTK_WIDGET(g_object_get_data(G_OBJECT(widget), "caret_image"));
+    GdkPixbuf *chevron_pixbuf = GDK_PIXBUF(g_object_get_data(G_OBJECT(widget), "chevron_pixbuf"));
+    
+    if (caret_image && GTK_IS_IMAGE(caret_image) && chevron_pixbuf) {
+        /* Rotate pixbuf 90 degrees clockwise when collapsed (from down to right) */
+        GdkPixbuf *rotated = section->expanded ? 
+            gdk_pixbuf_copy(chevron_pixbuf) :
+            gdk_pixbuf_rotate_simple(chevron_pixbuf, GDK_PIXBUF_ROTATE_CLOCKWISE);
+        
+        gtk_image_set_from_pixbuf(GTK_IMAGE(caret_image), rotated);
+        
+        if (!section->expanded) {
+            g_object_unref(rotated);
+        }
+    }
     
     /* Show/hide content */
     if (section->expanded) {
@@ -42,6 +74,8 @@ static void on_accordion_header_clicked(GtkButton *button, gpointer user_data)
     } else {
         gtk_widget_hide(section->content_box);
     }
+    
+    return TRUE;
 }
 
 /**
@@ -57,6 +91,10 @@ Accordion* accordion_new(void)
     gtk_widget_set_margin_start(accordion->main_box, 0);
     gtk_widget_set_margin_end(accordion->main_box, 0);
     gtk_widget_set_margin_bottom(accordion->main_box, 0);
+    
+    /* Make accordion expand to fill available space */
+    gtk_widget_set_vexpand(accordion->main_box, TRUE);
+    gtk_widget_set_hexpand(accordion->main_box, TRUE);
     
     accordion->sections = NULL;
     accordion->section_count = 0;
@@ -83,17 +121,69 @@ AccordionSection* accordion_add_section(Accordion *accordion,
     section->expanded = TRUE;  /* Default to expanded */
     section->content = content;
     
-    /* Create header button */
-    section->header_button = gtk_button_new_with_label(title);
-    gtk_widget_set_halign(section->header_button, GTK_ALIGN_START);
-    gtk_button_set_relief(GTK_BUTTON(section->header_button), GTK_RELIEF_NONE);
-    gtk_widget_set_margin_top(section->header_button, 2);
-    gtk_widget_set_margin_bottom(section->header_button, 2);
-    gtk_widget_set_margin_start(section->header_button, 5);
-    gtk_widget_set_margin_end(section->header_button, 5);
+    /* Create header box with full width */
+    GtkWidget *header_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_widget_set_margin_top(header_box, 8);
+    gtk_widget_set_margin_bottom(header_box, 8);
+    gtk_widget_set_margin_start(header_box, 8);
+    gtk_widget_set_margin_end(header_box, 8);
     
-    /* Connect button click */
-    g_signal_connect(section->header_button, "clicked",
+    /* Create title label */
+    GtkWidget *title_label = gtk_label_new(title);
+    gtk_widget_set_halign(title_label, GTK_ALIGN_START);
+    gtk_box_pack_start(GTK_BOX(header_box), title_label, TRUE, TRUE, 0);
+    
+    /* Create caret icon image (chevron.png from resources, scaled to 16x16) */
+    GdkPixbuf *chevron_pixbuf = gdk_pixbuf_new_from_resource("/icons/imageeditor/chevron.png", NULL);
+    if (chevron_pixbuf) {
+        GdkPixbuf *scaled_pixbuf = gdk_pixbuf_scale_simple(chevron_pixbuf, 16, 16, 
+                                                           GDK_INTERP_BILINEAR);
+        GtkWidget *caret_image = gtk_image_new_from_pixbuf(scaled_pixbuf);
+        gtk_widget_set_halign(caret_image, GTK_ALIGN_END);
+        gtk_box_pack_end(GTK_BOX(header_box), caret_image, FALSE, FALSE, 0);
+        
+        /* Store pixbuf and image references for later rotation */
+        g_object_set_data(G_OBJECT(header_box), "caret_image", caret_image);
+        g_object_set_data_full(G_OBJECT(header_box), "chevron_pixbuf", scaled_pixbuf, 
+                              (GDestroyNotify)g_object_unref);
+        g_object_unref(chevron_pixbuf);
+    } else {
+        g_warning("Failed to load chevron.png from resources");
+        GtkWidget *caret_image = gtk_label_new("▼");
+        gtk_widget_set_halign(caret_image, GTK_ALIGN_END);
+        gtk_box_pack_end(GTK_BOX(header_box), caret_image, FALSE, FALSE, 0);
+        g_object_set_data(G_OBJECT(header_box), "caret_image", caret_image);
+    }
+    
+    /* Create event box to make entire header clickable */
+    GtkWidget *event_box = gtk_event_box_new();
+    gtk_container_add(GTK_CONTAINER(event_box), header_box);
+    gtk_widget_set_can_focus(event_box, TRUE);
+    
+    /* Add background styling to header */
+    GtkCssProvider *css = gtk_css_provider_new();
+    gtk_css_provider_load_from_data(css,
+        "eventbox { background-color: #f0f0f0; border-bottom: 1px solid #d0d0d0; }",
+        -1, NULL);
+    GtkStyleContext *context = gtk_widget_get_style_context(event_box);
+    gtk_style_context_add_provider(context, GTK_STYLE_PROVIDER(css), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+    g_object_unref(css);
+    
+    /* Set pointer cursor on event box when realized */
+    g_signal_connect(event_box, "realize", G_CALLBACK(on_event_box_realize), NULL);
+    
+    /* Store data on event_box (which receives the click events) */
+    g_object_set_data(G_OBJECT(event_box), "caret_image", 
+                     g_object_get_data(G_OBJECT(header_box), "caret_image"));
+    g_object_set_data(G_OBJECT(event_box), "chevron_pixbuf", 
+                     g_object_get_data(G_OBJECT(header_box), "chevron_pixbuf"));
+    g_object_set_data(G_OBJECT(event_box), "section", section);
+    
+    /* Store header widgets in section */
+    section->header_button = event_box;
+    
+    /* Connect event box click */
+    g_signal_connect(event_box, "button-press-event",
                     G_CALLBACK(on_accordion_header_clicked), section);
     
     /* Create content box */
@@ -102,11 +192,13 @@ AccordionSection* accordion_add_section(Accordion *accordion,
     gtk_widget_set_margin_start(section->content_box, 10);
     gtk_widget_set_margin_end(section->content_box, 0);
     gtk_widget_set_margin_bottom(section->content_box, 5);
+    gtk_widget_set_vexpand(section->content_box, TRUE);
+    gtk_widget_set_hexpand(section->content_box, TRUE);
     gtk_box_pack_start(GTK_BOX(section->content_box), content, TRUE, TRUE, 0);
     
     /* Pack header and content into main box */
     gtk_box_pack_start(GTK_BOX(acc->main_box), section->header_button, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(acc->main_box), section->content_box, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(acc->main_box), section->content_box, TRUE, TRUE, 0);
     
     /* Add to sections list */
     acc->sections = g_list_append(acc->sections, section);
