@@ -21,6 +21,16 @@ typedef enum {
 } ToolType;
 
 /**
+ * Tool option flags - indicate which options a tool supports
+ */
+typedef enum {
+    TOOL_OPT_NONE = 0,
+    TOOL_OPT_SIZE = (1 << 0),          /* Tool supports size parameter */
+    TOOL_OPT_OPACITY = (1 << 1),       /* Tool supports opacity parameter */
+    TOOL_OPT_HARDNESS = (1 << 2),      /* Tool supports hardness parameter */
+} ToolOptionFlags;
+
+/**
  * Mouse event data structure
  */
 typedef struct {
@@ -52,6 +62,7 @@ typedef struct _Tool {
     ToolMouseUpHandler mouse_up;        /* Mouse up handler */
     gpointer user_data;                 /* Tool-specific data */
     gpointer app_context;               /* App context for UI updates */
+    ToolOptionFlags options;            /* Which options this tool supports */
 } Tool;
 
 /**
@@ -68,9 +79,10 @@ typedef struct {
  * @param name The tool name
  * @param type The tool type
  * @param cursor_type The cursor type for this tool
+ * @param options The tool option flags (which options this tool supports)
  * @return Newly created Tool, or NULL on failure
  */
-Tool* tool_new(const gchar *name, ToolType type, GdkCursorType cursor_type);
+Tool* tool_new(const gchar *name, ToolType type, GdkCursorType cursor_type, ToolOptionFlags options);
 
 /**
  * Free a tool and its resources

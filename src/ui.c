@@ -305,9 +305,8 @@ AppContext* ui_create_main_window(void)
     gtk_box_pack_start(GTK_BOX(main_vbox), ctx->menu_bar, FALSE, FALSE, 0);
 
     /* ==== TOP PANEL: Tool Options ==== */
-    tool_options_panel = create_tool_options_panel();
-    PanelHeader *tool_options_header = panel_header_new("Tool Options", tool_options_panel);
-    gtk_box_pack_start(GTK_BOX(main_vbox), tool_options_header->container, FALSE, FALSE, 0);
+    ctx->tool_options_panel = create_tool_options_panel();
+    gtk_box_pack_start(GTK_BOX(main_vbox), ctx->tool_options_panel->panel, FALSE, FALSE, 0);
 
     /* ==== MAIN HORIZONTAL LAYOUT: Left | Center+Right ==== */
     main_hpaned = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
@@ -316,6 +315,10 @@ AppContext* ui_create_main_window(void)
 
     /* ==== LEFT PANEL: Tools ==== */
     tools_panel = create_tools_panel(ctx->tool_registry);
+    
+    /* Connect tools panel to tool options panel for title updates */
+    tools_panel_set_options_panel(ctx->tool_options_panel);
+    
     tools_header = panel_header_new("Tools", tools_panel);
     gtk_paned_pack1(GTK_PANED(main_hpaned), tools_header->container, FALSE, TRUE);
 

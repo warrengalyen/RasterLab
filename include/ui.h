@@ -5,6 +5,7 @@
 #include "document.h"
 #include "tools.h"
 #include "command.h"
+#include "panels.h"
 
 /**
  * Application context structure
@@ -21,6 +22,7 @@ typedef struct {
     GtkWidget *edit_menu_undo;   /* Edit > Undo menu item */
     GtkWidget *edit_menu_redo;   /* Edit > Redo menu item */
     ToolRegistry *tool_registry; /* Tool registry and management */
+    ToolOptionsPanel *tool_options_panel; /* Tool options panel */
 } AppContext;
 
 /**

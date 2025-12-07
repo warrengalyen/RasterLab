@@ -1,6 +1,7 @@
 #include "tool_brush.h"
 #include "command.h"
 #include "document.h"
+#include "tool_options.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
@@ -51,28 +52,41 @@ static void brush_draw_pixel(cairo_surface_t *surface, gint x, gint y)
 
 /**
  * Draw a line from (x1, y1) to (x2, y2) on the layer surface
+ * Uses tool options for size and opacity
  */
 static void brush_draw_line(cairo_surface_t *surface, 
                             gint x1, gint y1, gint x2, gint y2)
 {
     cairo_t *cr;
-    double dx, dy, distance, steps;
-    double step_x, step_y;
-    double current_x, current_y;
-    int i;
+    ToolOptions *opts;
+    gfloat brush_size;
+    gfloat brush_opacity;
 
     if (!surface) {
         return;
     }
 
+    /* Get tool options */
+    opts = tool_options_get_global();
+
     cr = cairo_create(surface);
 
-    /* Set brush color (black) */
-    cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
+    /* Set brush color (black) with opacity from tool options */
+    brush_opacity = opts ? opts->opacity : 1.0f;
+    cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, brush_opacity);
 
-    /* Set brush size and shape */
-    cairo_set_line_width(cr, 3.0);
-    cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+    /* Set brush size from tool options */
+    brush_size = opts ? opts->size : 5.0f;
+    cairo_set_line_width(cr, brush_size);
+    
+    /* Set brush shape (affected by hardness)
+       Hardness 0 = soft round cap
+       Hardness 1 = hard square cap */
+    if (opts && opts->hardness < 0.5f) {
+        cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+    } else {
+        cairo_set_line_cap(cr, CAIRO_LINE_CAP_SQUARE);
+    }
     cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
 
     /* Draw line with smooth interpolation */
@@ -234,7 +248,9 @@ Tool* tool_brush_create(void)
 {
     Tool *tool;
 
-    tool = tool_new("Brush", TOOL_BRUSH, GDK_CROSSHAIR);
+    /* Brush tool supports size, opacity, and hardness */
+    tool = tool_new("Brush", TOOL_BRUSH, GDK_CROSSHAIR,
+                    TOOL_OPT_SIZE | TOOL_OPT_OPACITY | TOOL_OPT_HARDNESS);
     if (!tool) {
         return NULL;
     }

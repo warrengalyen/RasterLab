@@ -10,6 +10,7 @@ set(SOURCES
     tool_brush.c
     tool_eraser.c
     tool_fill.c
+    tool_options.c
     command.c
 )
 

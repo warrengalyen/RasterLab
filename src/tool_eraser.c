@@ -1,6 +1,7 @@
 #include "tool_eraser.h"
 #include "command.h"
 #include "document.h"
+#include "tool_options.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
@@ -23,23 +24,45 @@ typedef struct {
 
 /**
  * Erase pixels from the layer surface (make transparent)
+ * Uses tool options for size, opacity, and hardness
  */
 static void eraser_erase_line(cairo_surface_t *surface,
                               gint x1, gint y1, gint x2, gint y2)
 {
     cairo_t *cr;
+    ToolOptions *opts;
+    gfloat eraser_size;
+    gfloat eraser_opacity;
 
     if (!surface) {
         return;
     }
 
+    /* Get tool options */
+    opts = tool_options_get_global();
+
     cr = cairo_create(surface);
 
-    /* Set eraser properties */
-    cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.0);  /* Transparent */
-    cairo_set_operator(cr, CAIRO_OPERATOR_CLEAR);   /* Clear operator for transparency */
-    cairo_set_line_width(cr, 5.0);
-    cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+    /* Use CAIRO_OPERATOR_DEST_OUT (Porter-Duff "out" operator) to remove pixels
+       This is the standard way to implement erasing - it removes the source from the dest */
+    cairo_set_operator(cr, CAIRO_OPERATOR_DEST_OUT);
+    
+    /* Set eraser opacity from tool options */
+    eraser_opacity = opts ? opts->opacity : 1.0f;
+    cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, eraser_opacity);
+    
+    /* Set eraser brush size from tool options */
+    eraser_size = opts ? opts->size : 5.0f;
+    cairo_set_line_width(cr, eraser_size);
+    
+    /* Set brush shape (affected by hardness)
+       Hardness 0 = soft round cap
+       Hardness 1 = hard square cap */
+    if (opts && opts->hardness < 0.5f) {
+        cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+    } else {
+        cairo_set_line_cap(cr, CAIRO_LINE_CAP_SQUARE);
+    }
     cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
 
     /* Draw eraser stroke */
@@ -198,7 +221,9 @@ Tool* tool_eraser_create(void)
 {
     Tool *tool;
 
-    tool = tool_new("Eraser", TOOL_ERASER, GDK_CROSSHAIR);
+    /* Eraser tool supports size, opacity, and hardness */
+    tool = tool_new("Eraser", TOOL_ERASER, GDK_CROSSHAIR,
+                    TOOL_OPT_SIZE | TOOL_OPT_OPACITY | TOOL_OPT_HARDNESS);
     if (!tool) {
         return NULL;
     }

@@ -17,6 +17,17 @@ typedef struct {
 } PanelHeader;
 
 /**
+ * Tool options panel structure
+ */
+typedef struct {
+    GtkWidget *panel;            /* Main panel container */
+    GtkWidget *title_label;      /* Title showing tool name */
+    GtkWidget *size_scale;       /* Size slider */
+    GtkWidget *opacity_scale;    /* Opacity slider */
+    GtkWidget *hardness_scale;   /* Hardness slider */
+} ToolOptionsPanel;
+
+/**
  * Layers panel structure
  */
 typedef struct {
@@ -58,10 +69,36 @@ void panel_header_free(PanelHeader *header);
 GtkWidget* create_tools_panel(ToolRegistry *tool_registry);
 
 /**
- * Create the tool options panel (placeholder)
- * @return The tool options panel widget
+ * Set the tool options panel reference for tool selection callbacks
+ * @param panel The tool options panel to update when tools are selected
  */
-GtkWidget* create_tool_options_panel(void);
+void tools_panel_set_options_panel(ToolOptionsPanel *panel);
+
+/**
+ * Create the tool options panel
+ * @return ToolOptionsPanel structure
+ */
+ToolOptionsPanel* create_tool_options_panel(void);
+
+/**
+ * Update tool options panel title and visibility
+ * @param panel The tool options panel
+ * @param tool_name The name of the currently selected tool
+ */
+void tool_options_panel_update_title(ToolOptionsPanel *panel, const gchar *tool_name);
+
+/**
+ * Update tool options panel visibility based on tool capabilities
+ * @param panel The tool options panel
+ * @param options The tool option flags
+ */
+void tool_options_panel_update_visibility(ToolOptionsPanel *panel, ToolOptionFlags options);
+
+/**
+ * Free a tool options panel
+ * @param panel The tool options panel to free
+ */
+void tool_options_panel_free(ToolOptionsPanel *panel);
 
 /**
  * Create the layers panel with tree view

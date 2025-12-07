@@ -6,7 +6,7 @@
 /**
  * Create a new tool
  */
-Tool* tool_new(const gchar *name, ToolType type, GdkCursorType cursor_type)
+Tool* tool_new(const gchar *name, ToolType type, GdkCursorType cursor_type, ToolOptionFlags options)
 {
     Tool *tool;
     GdkDisplay *display;
@@ -20,6 +20,7 @@ Tool* tool_new(const gchar *name, ToolType type, GdkCursorType cursor_type)
     tool->type = type;
     tool->user_data = NULL;
     tool->app_context = NULL;
+    tool->options = options;
 
     /* Create cursor */
     display = gdk_display_get_default();

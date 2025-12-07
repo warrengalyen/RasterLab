@@ -162,7 +162,8 @@ Tool* tool_move_create(void)
 {
     Tool *tool;
 
-    tool = tool_new("Move", TOOL_MOVE, GDK_FLEUR);
+    /* Move tool doesn't have size/opacity/hardness options */
+    tool = tool_new("Move", TOOL_MOVE, GDK_FLEUR, TOOL_OPT_NONE);
     if (!tool) {
         return NULL;
     }

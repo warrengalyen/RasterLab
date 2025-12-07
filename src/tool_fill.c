@@ -139,7 +139,8 @@ Tool* tool_fill_create(void)
 {
     Tool *tool;
 
-    tool = tool_new("Fill", TOOL_FILL, GDK_CROSSHAIR);
+    /* Fill tool doesn't have size/opacity/hardness options yet */
+    tool = tool_new("Fill", TOOL_FILL, GDK_CROSSHAIR, TOOL_OPT_NONE);
     if (!tool) {
         return NULL;
     }
