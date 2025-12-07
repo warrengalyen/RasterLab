@@ -92,9 +92,25 @@ void panel_header_free(PanelHeader *header)
 }
 
 /**
+ * Tool selection callback
+ */
+static void on_tool_button_clicked(GtkButton *button, gpointer user_data)
+{
+    ToolType tool_type = GPOINTER_TO_INT(user_data);
+    ToolRegistry *registry = (ToolRegistry *)g_object_get_data(G_OBJECT(button), 
+                                                               "tool_registry");
+
+    if (registry) {
+        if (tool_registry_activate(registry, tool_type)) {
+            printf("Tool %d activated\n", tool_type);
+        }
+    }
+}
+
+/**
  * Create the tools panel (vertical icon list)
  */
-GtkWidget* create_tools_panel(void)
+GtkWidget* create_tools_panel(ToolRegistry *tool_registry)
 {
     GtkWidget *panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
     gtk_widget_set_margin_top(panel, 5);
@@ -102,20 +118,33 @@ GtkWidget* create_tools_panel(void)
     gtk_widget_set_margin_end(panel, 5);
     gtk_widget_set_margin_bottom(panel, 5);
 
-    /* Tool buttons with icons */
-    const gchar *tools[] = {
-        "Edit Tool",
-        "Selection Tool",
-        "Brush Tool",
-        "Eraser Tool",
-        "Fill Tool",
-        "Text Tool",
-        NULL
+    /* Tool buttons corresponding to available tools */
+    const gchar *tool_labels[] = {
+        "Move",
+        "Brush",
+        "Eraser",
+        "Fill",
     };
 
-    for (int i = 0; tools[i] != NULL; i++) {
-        GtkWidget *tool_button = gtk_button_new_with_label(tools[i]);
+    const ToolType tool_types[] = {
+        TOOL_MOVE,
+        TOOL_BRUSH,
+        TOOL_ERASER,
+        TOOL_FILL,
+    };
+
+    for (int i = 0; i < TOOL_COUNT; i++) {
+        GtkWidget *tool_button = gtk_button_new_with_label(tool_labels[i]);
         gtk_widget_set_size_request(tool_button, 100, 40);
+        
+        /* Store tool registry and type in button */
+        g_object_set_data(G_OBJECT(tool_button), "tool_registry", tool_registry);
+        
+        /* Connect button click to tool activation */
+        g_signal_connect(tool_button, "clicked",
+                        G_CALLBACK(on_tool_button_clicked),
+                        GINT_TO_POINTER(tool_types[i]));
+        
         gtk_box_pack_start(GTK_BOX(panel), tool_button, FALSE, FALSE, 0);
     }
 

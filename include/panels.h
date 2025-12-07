@@ -3,6 +3,7 @@
 
 #include <gtk/gtk.h>
 #include "document.h"
+#include "tools.h"
 
 /**
  * Panel header structure for collapsible panels
@@ -50,9 +51,10 @@ void panel_header_free(PanelHeader *header);
 
 /**
  * Create the tools panel (icon list)
+ * @param tool_registry The tool registry for tool selection callbacks
  * @return The tools panel widget
  */
-GtkWidget* create_tools_panel(void);
+GtkWidget* create_tools_panel(ToolRegistry *tool_registry);
 
 /**
  * Create the tool options panel (placeholder)

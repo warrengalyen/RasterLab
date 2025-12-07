@@ -161,6 +161,14 @@ AppContext* ui_create_main_window(void)
     ctx->layer_menu_delete = NULL;
     ctx->layer_menu_duplicate = NULL;
 
+    /* Create and initialize tool registry */
+    ctx->tool_registry = tool_registry_new();
+    if (!tool_registry_init_defaults(ctx->tool_registry)) {
+        g_warning("Failed to initialize tool registry");
+        g_free(ctx);
+        return NULL;
+    }
+
     /* Create main window */
     ctx->window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_title(GTK_WINDOW(ctx->window), "Image Editor");
@@ -186,7 +194,7 @@ AppContext* ui_create_main_window(void)
     gtk_box_pack_start(GTK_BOX(main_vbox), main_hpaned, TRUE, TRUE, 0);
 
     /* ==== LEFT PANEL: Tools ==== */
-    tools_panel = create_tools_panel();
+    tools_panel = create_tools_panel(ctx->tool_registry);
     tools_header = panel_header_new("Tools", tools_panel);
     gtk_paned_pack1(GTK_PANED(main_hpaned), tools_header->container, FALSE, TRUE);
 
@@ -428,6 +436,12 @@ void ui_context_free(AppContext *ctx)
     }
 
     g_list_free(ctx->documents);
+
+    /* Free tool registry */
+    if (ctx->tool_registry) {
+        tool_registry_free(ctx->tool_registry);
+    }
+
     g_free(ctx);
 }
 
