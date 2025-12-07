@@ -6,6 +6,11 @@
     <file preprocess="to-pixdata">eraser.png</file>
     <file preprocess="to-pixdata">flood-fill.png</file>
     <file preprocess="to-pixdata">chevron.png</file>
+    <file preprocess="xml-stripblanks">layer-add.svg</file>
+    <file preprocess="xml-stripblanks">layer-delete.svg</file>
+    <file preprocess="xml-stripblanks">layer-up.svg</file>
+    <file preprocess="xml-stripblanks">layer-down.svg</file>
+    <file preprocess="xml-stripblanks">layer-duplicate.svg</file>
   </gresource>
   <gresource prefix="/ui">
     <file>tool_panel.glade</file>

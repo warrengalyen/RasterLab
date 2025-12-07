@@ -204,6 +204,22 @@ gboolean document_layer_move_up(ImageDocument *doc, ImageLayer *layer);
 gboolean document_layer_move_down(ImageDocument *doc, ImageLayer *layer);
 
 /**
+ * Check if a layer can be moved up in the stack
+ * @param doc The document
+ * @param layer The layer to check
+ * @return TRUE if layer can move up, FALSE otherwise
+ */
+gboolean document_layer_can_move_up(ImageDocument *doc, ImageLayer *layer);
+
+/**
+ * Check if a layer can be moved down in the stack
+ * @param doc The document
+ * @param layer The layer to check
+ * @return TRUE if layer can move down, FALSE otherwise
+ */
+gboolean document_layer_can_move_down(ImageDocument *doc, ImageLayer *layer);
+
+/**
  * Get the layer at a specific index
  * @param doc The document
  * @param index The layer index (0 = bottom)

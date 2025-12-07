@@ -39,6 +39,8 @@ typedef struct {
     ImageDocument *current_doc;  /* Current document reference */
     GtkWidget *btn_new;          /* New layer button */
     GtkWidget *btn_delete;       /* Delete layer button */
+    GtkWidget *btn_up;           /* Move layer up button */
+    GtkWidget *btn_down;         /* Move layer down button */
     GtkWidget *btn_duplicate;    /* Duplicate layer button */
     gpointer app_context;        /* Reference to AppContext for callbacks */
 } LayersPanel;
@@ -134,10 +136,14 @@ ImageLayer* layers_panel_get_selected_layer(LayersPanel *layers_panel);
  * @param layers_panel The layers panel
  * @param has_document Whether a document is open
  * @param has_selection Whether a layer is selected
+ * @param doc The document (can be NULL)
+ * @param selected_layer The selected layer (can be NULL)
  */
 void layers_panel_update_button_sensitivity(LayersPanel *layers_panel,
                                             gboolean has_document,
-                                            gboolean has_selection);
+                                            gboolean has_selection,
+                                            ImageDocument *doc,
+                                            ImageLayer *selected_layer);
 
 /**
  * Connect layers panel buttons to UI callbacks

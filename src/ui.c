@@ -22,6 +22,8 @@ static gboolean on_window_delete(GtkWidget *widget, GdkEvent *event, gpointer da
 static void on_layer_new(GtkWidget *widget, gpointer data);
 static void on_layer_delete(GtkWidget *widget, gpointer data);
 static void on_layer_duplicate(GtkWidget *widget, gpointer data);
+static void on_layer_move_up(GtkWidget *widget, gpointer data);
+static void on_layer_move_down(GtkWidget *widget, gpointer data);
 static void on_notebook_switch_page(GtkNotebook *notebook, GtkWidget *page,
                                      guint page_num, gpointer user_data);
 static void on_tab_close_button_clicked(GtkButton *button, gpointer user_data);
@@ -355,6 +357,16 @@ AppContext* ui_create_main_window(void)
                                 G_CALLBACK(on_layer_delete),
                                 G_CALLBACK(on_layer_duplicate),
                                 ctx);
+
+    /* Connect move layer buttons */
+    if (ctx->layers_panel->btn_up) {
+        g_signal_connect(ctx->layers_panel->btn_up, "clicked",
+                        G_CALLBACK(on_layer_move_up), ctx);
+    }
+    if (ctx->layers_panel->btn_down) {
+        g_signal_connect(ctx->layers_panel->btn_down, "clicked",
+                        G_CALLBACK(on_layer_move_down), ctx);
+    }
 
     /* Connect layer tree view selection changes to update UI state */
     GtkTreeSelection *layer_selection = gtk_tree_view_get_selection(
@@ -1190,6 +1202,88 @@ static void on_layer_duplicate(GtkWidget *widget, gpointer data)
 }
 
 /**
+ * Layer > Move Up callback
+ */
+static void on_layer_move_up(GtkWidget *widget, gpointer data)
+{
+    (void)widget;  /* Unused */
+
+    AppContext *ctx = (AppContext *)data;
+    ImageDocument *doc = ui_get_active_document(ctx);
+    LayersPanel *layers_panel = (LayersPanel *)g_object_get_data(G_OBJECT(ctx->window), 
+                                                                  "layers_panel");
+    
+    if (!doc || !doc->layers) {
+        g_warning("No document or layers");
+        return;
+    }
+
+    /* Get the currently selected layer */
+    ImageLayer *selected_layer = NULL;
+    if (layers_panel) {
+        selected_layer = layers_panel_get_selected_layer(layers_panel);
+    }
+
+    if (!selected_layer) {
+        g_warning("No layer selected");
+        return;
+    }
+    
+    if (document_layer_move_up(doc, selected_layer)) {
+        printf("Layer moved up\n");
+
+        /* Update layers panel */
+        if (layers_panel) {
+            layers_panel_update(layers_panel, doc);
+        }
+        
+        /* Update UI state */
+        ui_update_menu_and_button_states(ctx);
+    }
+}
+
+/**
+ * Layer > Move Down callback
+ */
+static void on_layer_move_down(GtkWidget *widget, gpointer data)
+{
+    (void)widget;  /* Unused */
+
+    AppContext *ctx = (AppContext *)data;
+    ImageDocument *doc = ui_get_active_document(ctx);
+    LayersPanel *layers_panel = (LayersPanel *)g_object_get_data(G_OBJECT(ctx->window), 
+                                                                  "layers_panel");
+    
+    if (!doc || !doc->layers) {
+        g_warning("No document or layers");
+        return;
+    }
+
+    /* Get the currently selected layer */
+    ImageLayer *selected_layer = NULL;
+    if (layers_panel) {
+        selected_layer = layers_panel_get_selected_layer(layers_panel);
+    }
+
+    if (!selected_layer) {
+        g_warning("No layer selected");
+        return;
+    }
+    
+    if (document_layer_move_down(doc, selected_layer)) {
+        printf("Layer moved down\n");
+
+        /* Update layers panel */
+        if (layers_panel) {
+            layers_panel_update(layers_panel, doc);
+        }
+        
+        /* Update UI state */
+        ui_update_menu_and_button_states(ctx);
+    }
+}
+
+/**
  * Update the status bar with document information
  */
 void ui_update_status_bar(AppContext *ctx)
@@ -1257,13 +1351,15 @@ void ui_update_menu_and_button_states(AppContext *ctx)
                                                     "layers_panel");
     
     has_selection = FALSE;
+    ImageLayer *selected_layer = NULL;
     if (layers_panel && doc && layers_panel->tree_view) {
-        has_selection = (layers_panel_get_selected_layer(layers_panel) != NULL);
+        selected_layer = layers_panel_get_selected_layer(layers_panel);
+        has_selection = (selected_layer != NULL);
     }
 
     /* Update layers panel button states */
     if (layers_panel) {
-        layers_panel_update_button_sensitivity(layers_panel, has_document, has_selection);
+        layers_panel_update_button_sensitivity(layers_panel, has_document, has_selection, doc, selected_layer);
     }
 
     /* Update Edit menu item states (undo/redo) */

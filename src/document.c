@@ -956,6 +956,46 @@ gboolean document_layer_move_down(ImageDocument *doc, ImageLayer *layer)
 }
 
 /**
+ * Check if a layer can be moved up in the stack
+ */
+gboolean document_layer_can_move_up(ImageDocument *doc, ImageLayer *layer)
+{
+    GList *iter;
+
+    if (!doc || !layer || !doc->layers) {
+        return FALSE;
+    }
+
+    iter = g_list_find(doc->layers, layer);
+
+    if (!iter || !iter->next) {
+        return FALSE;  /* Already at top or not found */
+    }
+
+    return TRUE;
+}
+
+/**
+ * Check if a layer can be moved down in the stack
+ */
+gboolean document_layer_can_move_down(ImageDocument *doc, ImageLayer *layer)
+{
+    GList *iter;
+
+    if (!doc || !layer || !doc->layers) {
+        return FALSE;
+    }
+
+    iter = g_list_find(doc->layers, layer);
+
+    if (!iter || !iter->prev) {
+        return FALSE;  /* Already at bottom or not found */
+    }
+
+    return TRUE;
+}
+
+/**
  * Get the layer at a specific index
  */
 ImageLayer* document_get_layer(ImageDocument *doc, guint index)

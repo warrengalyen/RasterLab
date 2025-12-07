@@ -607,6 +607,46 @@ static void on_panel_btn_duplicate_clicked(GtkButton *button, gpointer user_data
 }
 
 /**
+ * Helper function to set icon on a button from SVG resource and remove padding
+ */
+static void set_button_icon(GtkButton *button, const gchar *resource_path)
+{
+    if (!button) {
+        return;
+    }
+    
+    /* Remove button padding and styling */
+    gtk_button_set_relief(button, GTK_RELIEF_NONE);
+    gtk_widget_set_margin_start(GTK_WIDGET(button), 0);
+    gtk_widget_set_margin_end(GTK_WIDGET(button), 0);
+    gtk_widget_set_margin_top(GTK_WIDGET(button), 0);
+    gtk_widget_set_margin_bottom(GTK_WIDGET(button), 0);
+    
+    /* Use CSS to remove inner padding and add hover effect with border */
+    GtkCssProvider *css = gtk_css_provider_new();
+    gtk_css_provider_load_from_data(css,
+        "button { padding: 0px; border: 1px solid transparent; } "
+        "button:hover { background-color: #e0e0e0; border: 1px solid #b0b0b0; } "
+        "button:active { background-color: #d0d0d0; border: 1px solid #909090; }",
+        -1, NULL);
+    GtkStyleContext *context = gtk_widget_get_style_context(GTK_WIDGET(button));
+    gtk_style_context_add_provider(context, GTK_STYLE_PROVIDER(css), 
+                                   GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+    g_object_unref(css);
+    
+    GdkPixbuf *pixbuf = gdk_pixbuf_new_from_resource(resource_path, NULL);
+    if (pixbuf) {
+        /* Scale to 16x16 */
+        GdkPixbuf *scaled = gdk_pixbuf_scale_simple(pixbuf, 32, 32, GDK_INTERP_BILINEAR);
+        GtkWidget *image = gtk_image_new_from_pixbuf(scaled);
+        gtk_button_set_image(button, image);
+        gtk_button_set_image_position(button, GTK_POS_TOP);
+        g_object_unref(scaled);
+        g_object_unref(pixbuf);
+    }
+}
+
+/**
  * Create the layers panel with tree view (loads from Glade file)
  */
 LayersPanel* create_layers_panel(void)
@@ -631,6 +671,8 @@ LayersPanel* create_layers_panel(void)
         layers_panel->tree_view = NULL;
         layers_panel->btn_new = NULL;
         layers_panel->btn_delete = NULL;
+        layers_panel->btn_up = NULL;
+        layers_panel->btn_down = NULL;
         layers_panel->btn_duplicate = NULL;
         layers_panel->current_doc = NULL;
         layers_panel->app_context = NULL;
@@ -647,6 +689,8 @@ LayersPanel* create_layers_panel(void)
         layers_panel->tree_view = NULL;
         layers_panel->btn_new = NULL;
         layers_panel->btn_delete = NULL;
+        layers_panel->btn_up = NULL;
+        layers_panel->btn_down = NULL;
         layers_panel->btn_duplicate = NULL;
         layers_panel->current_doc = NULL;
         layers_panel->app_context = NULL;
@@ -659,6 +703,8 @@ LayersPanel* create_layers_panel(void)
     /* Get buttons from builder */
     layers_panel->btn_new = GTK_WIDGET(gtk_builder_get_object(builder, "btn_new_layer"));
     layers_panel->btn_delete = GTK_WIDGET(gtk_builder_get_object(builder, "btn_delete_layer"));
+    layers_panel->btn_up = GTK_WIDGET(gtk_builder_get_object(builder, "btn_move_layer_up"));
+    layers_panel->btn_down = GTK_WIDGET(gtk_builder_get_object(builder, "btn_move_layer_down"));
     layers_panel->btn_duplicate = GTK_WIDGET(gtk_builder_get_object(builder, "btn_duplicate_layer"));
     
     /* Create accordion widget - this becomes the main panel container */
@@ -712,15 +758,24 @@ LayersPanel* create_layers_panel(void)
                                                       NULL);
     gtk_tree_view_append_column(GTK_TREE_VIEW(layers_panel->tree_view), column);
 
-    /* Store panel reference in buttons for callback access */
+    /* Store panel reference in buttons for callback access and set icons */
     if (layers_panel->btn_new) {
         g_object_set_data(G_OBJECT(layers_panel->btn_new), "layers_panel", layers_panel);
+        set_button_icon(GTK_BUTTON(layers_panel->btn_new), "/icons/imageeditor/layer-add.svg");
     }
     if (layers_panel->btn_delete) {
         g_object_set_data(G_OBJECT(layers_panel->btn_delete), "layers_panel", layers_panel);
+        set_button_icon(GTK_BUTTON(layers_panel->btn_delete), "/icons/imageeditor/layer-delete.svg");
     }
     if (layers_panel->btn_duplicate) {
         g_object_set_data(G_OBJECT(layers_panel->btn_duplicate), "layers_panel", layers_panel);
+        set_button_icon(GTK_BUTTON(layers_panel->btn_duplicate), "/icons/imageeditor/layer-duplicate.svg");
+    }
+    if (layers_panel->btn_up) {
+        set_button_icon(GTK_BUTTON(layers_panel->btn_up), "/icons/imageeditor/layer-up.svg");
+    }
+    if (layers_panel->btn_down) {
+        set_button_icon(GTK_BUTTON(layers_panel->btn_down), "/icons/imageeditor/layer-down.svg");
     }
 
     /* Add Glade panel as single accordion section */
@@ -831,7 +886,9 @@ ImageLayer* layers_panel_get_selected_layer(LayersPanel *layers_panel)
  */
 void layers_panel_update_button_sensitivity(LayersPanel *layers_panel,
                                             gboolean has_document,
-                                            gboolean has_selection)
+                                            gboolean has_selection,
+                                            ImageDocument *doc,
+                                            ImageLayer *selected_layer)
 {
     if (!layers_panel) {
         return;
@@ -851,6 +908,23 @@ void layers_panel_update_button_sensitivity(LayersPanel *layers_panel,
     
     if (layers_panel->btn_duplicate) {
         gtk_widget_set_sensitive(layers_panel->btn_duplicate, delete_dup_enabled);
+    }
+    
+    /* Move Up/Down: enabled when document exists, layer is selected, AND move is possible */
+    gboolean can_move_up = FALSE;
+    gboolean can_move_down = FALSE;
+    
+    if (has_document && has_selection && doc && selected_layer) {
+        can_move_up = document_layer_can_move_up(doc, selected_layer);
+        can_move_down = document_layer_can_move_down(doc, selected_layer);
+    }
+    
+    if (layers_panel->btn_up) {
+        gtk_widget_set_sensitive(layers_panel->btn_up, can_move_up);
+    }
+    
+    if (layers_panel->btn_down) {
+        gtk_widget_set_sensitive(layers_panel->btn_down, can_move_down);
     }
 }
 
@@ -883,7 +957,7 @@ void layers_panel_connect_buttons(LayersPanel *layers_panel,
     /* This avoids double-connecting and signature mismatches */
 
     /* Initialize buttons as disabled (no document open) */
-    layers_panel_update_button_sensitivity(layers_panel, FALSE, FALSE);
+    layers_panel_update_button_sensitivity(layers_panel, FALSE, FALSE, NULL, NULL);
 }
 
 /**
