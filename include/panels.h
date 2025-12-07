@@ -4,6 +4,7 @@
 #include <gtk/gtk.h>
 #include "document.h"
 #include "tools.h"
+#include "tool_manager.h"
 
 /**
  * Panel header structure for collapsible panels

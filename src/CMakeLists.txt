@@ -5,6 +5,11 @@ set(SOURCES
     document.c
     panels.c
     tools.c
+    tool_manager.c
+    tool_move.c
+    tool_brush.c
+    tool_eraser.c
+    tool_fill.c
     command.c
 )
 

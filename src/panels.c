@@ -101,7 +101,7 @@ static void on_tool_button_clicked(GtkButton *button, gpointer user_data)
                                                                "tool_registry");
 
     if (registry) {
-        if (tool_registry_activate(registry, tool_type)) {
+        if (tool_manager_activate(registry, tool_type)) {
             printf("Tool %d activated\n", tool_type);
         }
     }

@@ -1,6 +1,7 @@
 #include "ui.h"
 #include "document.h"
 #include "panels.h"
+#include "tool_manager.h"
 #include <stdlib.h>
 #include <stdio.h>
 
@@ -270,10 +271,10 @@ AppContext* ui_create_main_window(void)
     ctx->edit_menu_undo = NULL;
     ctx->edit_menu_redo = NULL;
 
-    /* Create and initialize tool registry */
-    ctx->tool_registry = tool_registry_new();
-    if (!tool_registry_init_defaults(ctx->tool_registry)) {
-        g_warning("Failed to initialize tool registry");
+    /* Create and initialize tool manager */
+    ctx->tool_registry = tool_manager_new();
+    if (!tool_manager_init_defaults(ctx->tool_registry)) {
+        g_warning("Failed to initialize tool manager");
         g_free(ctx);
         return NULL;
     }
@@ -281,7 +282,7 @@ AppContext* ui_create_main_window(void)
     /* Set AppContext reference on all tools */
     if (ctx->tool_registry) {
         for (int i = 0; i < TOOL_COUNT; i++) {
-            Tool *tool = tool_registry_get(ctx->tool_registry, i);
+            Tool *tool = tool_manager_get(ctx->tool_registry, i);
             if (tool) {
                 tool->app_context = (gpointer)ctx;
             }
@@ -640,9 +641,9 @@ void ui_context_free(AppContext *ctx)
 
     g_list_free(ctx->documents);
 
-    /* Free tool registry */
+    /* Free tool manager */
     if (ctx->tool_registry) {
-        tool_registry_free(ctx->tool_registry);
+        tool_manager_free(ctx->tool_registry);
     }
 
     g_free(ctx);

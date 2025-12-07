@@ -1,6 +1,7 @@
 #include "document.h"
 #include "command.h"
 #include "tools.h"
+#include "tool_manager.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -222,7 +223,7 @@ static gboolean on_drawing_area_button_press(GtkWidget *widget, GdkEventButton *
     }
 
     /* Get active tool */
-    active_tool = tool_registry_get_active(tool_registry);
+    active_tool = tool_manager_get_active(tool_registry);
     if (!active_tool || !active_tool->mouse_down) {
         return FALSE;
     }
@@ -264,7 +265,7 @@ static gboolean on_drawing_area_button_release(GtkWidget *widget, GdkEventButton
     }
 
     /* Get active tool */
-    active_tool = tool_registry_get_active(tool_registry);
+    active_tool = tool_manager_get_active(tool_registry);
     if (!active_tool || !active_tool->mouse_up) {
         return FALSE;
     }
@@ -306,7 +307,7 @@ static gboolean on_drawing_area_motion_notify(GtkWidget *widget, GdkEventMotion 
     }
 
     /* Get active tool */
-    active_tool = tool_registry_get_active(tool_registry);
+    active_tool = tool_manager_get_active(tool_registry);
     if (!active_tool || !active_tool->mouse_move) {
         return FALSE;
     }
