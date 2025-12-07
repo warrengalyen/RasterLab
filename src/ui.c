@@ -8,10 +8,10 @@ static void on_file_open(GtkWidget *widget, gpointer data);
 static void on_file_open_response(GtkDialog *dialog, gint response_id, gpointer user_data);
 static void on_file_close(GtkWidget *widget, gpointer data);
 static void on_file_exit(GtkWidget *widget, gpointer data);
+static gboolean on_window_delete(GtkWidget *widget, GdkEvent *event, gpointer data);
 static void on_notebook_switch_page(GtkNotebook *notebook, GtkWidget *page,
                                      guint page_num, gpointer user_data);
-static gboolean on_tab_close_button_clicked(GtkWidget *button, GdkEvent *event,
-                                            gpointer user_data);
+static void on_tab_close_button_clicked(GtkButton *button, gpointer user_data);
 
 /**
  * Create the File menu
@@ -107,7 +107,7 @@ AppContext* ui_create_main_window(void)
 
     /* Connect window signals */
     g_signal_connect(ctx->window, "delete-event", 
-                     G_CALLBACK(on_file_exit), ctx);
+                     G_CALLBACK(on_window_delete), ctx);
 
     gtk_widget_show_all(ctx->window);
 
@@ -179,30 +179,41 @@ ImageDocument* ui_create_document_tab(AppContext *ctx, const gchar *filename)
 void ui_close_document_tab(AppContext *ctx, ImageDocument *doc)
 {
     gint page_num;
-    GtkWidget *page;
+    gint n_pages;
 
     if (!doc || !ctx) {
         return;
     }
+
+    /* Get number of pages before removal */
+    n_pages = gtk_notebook_get_n_pages(GTK_NOTEBOOK(ctx->notebook));
 
     /* Find the page containing this document */
     page_num = gtk_notebook_page_num(GTK_NOTEBOOK(ctx->notebook), 
                                      doc->scrolled_window);
 
     if (page_num >= 0) {
+        printf("Closing document: %s (page %d of %d)\n", 
+               document_get_filename(doc), page_num + 1, n_pages);
+
+        /* Remove from document list first */
+        ctx->documents = g_list_remove(ctx->documents, doc);
+
+        /* Remove the notebook page */
         gtk_notebook_remove_page(GTK_NOTEBOOK(ctx->notebook), page_num);
+
+        /* Free the document */
+        document_free(doc);
+
+        /* Check if any pages left */
+        gint remaining = gtk_notebook_get_n_pages(GTK_NOTEBOOK(ctx->notebook));
+        printf("Remaining pages after close: %d\n", remaining);
+
+        /* Update window title (handles empty notebook) */
+        ui_update_window_title(ctx);
+
+        printf("Document closed successfully\n");
     }
-
-    /* Remove from document list */
-    ctx->documents = g_list_remove(ctx->documents, doc);
-
-    /* Free the document */
-    document_free(doc);
-
-    /* Update window title */
-    ui_update_window_title(ctx);
-
-    printf("Closed document\n");
 }
 
 /**
@@ -377,6 +388,27 @@ static void on_file_close(GtkWidget *widget, gpointer data)
 }
 
 /**
+ * Window delete event callback
+ */
+static gboolean on_window_delete(GtkWidget *widget, GdkEvent *event, gpointer data)
+{
+    (void)widget;  /* Unused */
+    (void)event;   /* Unused */
+
+    AppContext *ctx = (AppContext *)data;
+
+    printf("Window delete event triggered - shutting down\n");
+
+    /* Free the context (which frees all documents) */
+    ui_context_free(ctx);
+
+    /* Exit GTK main loop */
+    gtk_main_quit();
+
+    return FALSE;  /* Allow window to close */
+}
+
+/**
  * File > Exit callback
  */
 static void on_file_exit(GtkWidget *widget, gpointer data)
@@ -385,11 +417,8 @@ static void on_file_exit(GtkWidget *widget, gpointer data)
 
     AppContext *ctx = (AppContext *)data;
 
-    /* Free the context (which frees all documents) */
-    ui_context_free(ctx);
-
-    /* Exit GTK main loop */
-    gtk_main_quit();
+    /* Destroy the main window, which triggers delete-event */
+    gtk_widget_destroy(ctx->window);
 }
 
 /**
@@ -409,20 +438,21 @@ static void on_notebook_switch_page(GtkNotebook *notebook, GtkWidget *page,
 /**
  * Tab close button clicked callback
  */
-static gboolean on_tab_close_button_clicked(GtkWidget *button, GdkEvent *event,
-                                            gpointer user_data)
+static void on_tab_close_button_clicked(GtkButton *button, gpointer user_data)
 {
-    (void)button;  /* Unused */
-    (void)event;   /* Unused */
-
     ImageDocument *doc = (ImageDocument *)user_data;
     AppContext *ctx = (AppContext *)g_object_get_data(G_OBJECT(button), 
                                                        "app_context");
 
-    if (ctx && doc) {
-        ui_close_document_tab(ctx, doc);
-    }
+    printf("Tab close button clicked for document: %s\n", 
+           doc ? document_get_filename(doc) : "unknown");
+    printf("  button=%p, ctx=%p, doc=%p\n", button, ctx, doc);
 
-    return TRUE;
+    if (ctx && doc) {
+        printf("  Calling ui_close_document_tab...\n");
+        ui_close_document_tab(ctx, doc);
+    } else {
+        printf("  ERROR: ctx=%p or doc=%p is NULL\n", ctx, doc);
+    }
 }
 

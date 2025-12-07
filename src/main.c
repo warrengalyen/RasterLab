@@ -21,10 +21,7 @@ int main(int argc, char *argv[])
     /* Create the main application UI */
     app = ui_create_main_window();
 
-    /* Create a sample document tab to start */
-    ui_create_document_tab(app, "Untitled-1");
-
-    /* Start GTK main event loop */
+    /* Start GTK main event loop (no initial document) */
     gtk_main();
 
     return 0;

@@ -70,7 +70,7 @@ static cairo_surface_t* pixbuf_to_cairo_surface(GdkPixbuf *pixbuf)
  */
 static void draw_checkered_background(cairo_t *cr, gint x, gint y, gint width, gint height)
 {
-    const gint square_size = 8;    /* Size of each check square */
+    const gint square_size = 10;    /* Size of each check square */
     const double color1 = 0.85;    /* Light gray */
     const double color2 = 0.95;    /* Lighter gray */
     gint end_x = x + width;
