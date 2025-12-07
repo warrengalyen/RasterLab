@@ -255,9 +255,16 @@ static void brush_tool_mouse_move(Tool *tool, struct ImageDocument *doc, MouseEv
         return;
     }
 
-    /* Draw line from last position to current */
-    brush_draw_line(active_layer->surface, state->last_x, state->last_y, event->x, event->y);
+    /* Draw line from last position to current, adjusted for layer offset */
+    /* Convert image coordinates to layer-relative coordinates by subtracting layer offset */
+    gint layer_x1 = state->last_x - active_layer->offset_x;
+    gint layer_y1 = state->last_y - active_layer->offset_y;
+    gint layer_x2 = event->x - active_layer->offset_x;
+    gint layer_y2 = event->y - active_layer->offset_y;
+    
+    brush_draw_line(active_layer->surface, layer_x1, layer_y1, layer_x2, layer_y2);
 
+    /* Store the image-space coordinates (not layer-relative) for next iteration */
     state->last_x = event->x;
     state->last_y = event->y;
 
