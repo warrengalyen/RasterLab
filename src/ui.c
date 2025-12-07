@@ -1,5 +1,6 @@
 #include "ui.h"
 #include "document.h"
+#include "panels.h"
 #include <stdlib.h>
 #include <stdio.h>
 
@@ -122,36 +123,75 @@ static GtkWidget* create_menu_bar(AppContext *ctx)
 AppContext* ui_create_main_window(void)
 {
     AppContext *ctx = (AppContext *)g_malloc(sizeof(AppContext));
+    GtkWidget *main_vbox;
+    GtkWidget *tool_options_panel;
+    GtkWidget *tools_panel;
+    GtkWidget *layers_panel_widget;
+    GtkWidget *main_hpaned;
+    PanelHeader *tools_header;
+    PanelHeader *layers_header;
+    LayersPanel *layers_panel;
 
     ctx->documents = NULL;
 
     /* Create main window */
     ctx->window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_title(GTK_WINDOW(ctx->window), "Image Editor");
-    gtk_window_set_default_size(GTK_WINDOW(ctx->window), 1024, 768);
+    gtk_window_set_default_size(GTK_WINDOW(ctx->window), 1400, 900);
     gtk_window_set_position(GTK_WINDOW(ctx->window), GTK_WIN_POS_CENTER);
 
-    /* Create main container */
-    GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-    gtk_container_add(GTK_CONTAINER(ctx->window), vbox);
+    /* Main vertical box (menu + toolbar + content) */
+    main_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_container_add(GTK_CONTAINER(ctx->window), main_vbox);
 
-    /* Create menu bar */
+    /* Menu bar */
     ctx->menu_bar = create_menu_bar(ctx);
-    gtk_box_pack_start(GTK_BOX(vbox), ctx->menu_bar, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(main_vbox), ctx->menu_bar, FALSE, FALSE, 0);
 
-    /* Create notebook for document tabs */
+    /* ==== TOP PANEL: Tool Options ==== */
+    tool_options_panel = create_tool_options_panel();
+    PanelHeader *tool_options_header = panel_header_new("Tool Options", tool_options_panel);
+    gtk_box_pack_start(GTK_BOX(main_vbox), tool_options_header->container, FALSE, FALSE, 0);
+
+    /* ==== MAIN HORIZONTAL LAYOUT: Left | Center+Right ==== */
+    main_hpaned = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
+    gtk_paned_set_position(GTK_PANED(main_hpaned), 150);
+    gtk_box_pack_start(GTK_BOX(main_vbox), main_hpaned, TRUE, TRUE, 0);
+
+    /* ==== LEFT PANEL: Tools ==== */
+    tools_panel = create_tools_panel();
+    tools_header = panel_header_new("Tools", tools_panel);
+    gtk_paned_pack1(GTK_PANED(main_hpaned), tools_header->container, FALSE, TRUE);
+
+    /* ==== CENTER-RIGHT HORIZONTAL PANED: Center (notebook) | Right (layers) ==== */
+    GtkWidget *center_right_hpaned = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
+    gtk_paned_set_position(GTK_PANED(center_right_hpaned), 800);
+    gtk_paned_pack2(GTK_PANED(main_hpaned), center_right_hpaned, TRUE, TRUE);
+
+    /* CENTER: Notebook for document tabs */
     ctx->notebook = gtk_notebook_new();
     gtk_notebook_set_scrollable(GTK_NOTEBOOK(ctx->notebook), TRUE);
     gtk_notebook_set_tab_pos(GTK_NOTEBOOK(ctx->notebook), GTK_POS_TOP);
     g_signal_connect(ctx->notebook, "switch-page", 
                      G_CALLBACK(on_notebook_switch_page), ctx);
-    gtk_box_pack_start(GTK_BOX(vbox), ctx->notebook, TRUE, TRUE, 0);
+    gtk_paned_pack1(GTK_PANED(center_right_hpaned), ctx->notebook, TRUE, TRUE);
+
+    /* ==== RIGHT PANEL: Layers ==== */
+    layers_panel = create_layers_panel();
+    layers_panel_widget = layers_panel->panel;
+    layers_header = panel_header_new("Layers", layers_panel_widget);
+    gtk_paned_pack2(GTK_PANED(center_right_hpaned), layers_header->container, FALSE, TRUE);
+
+    /* Store layers panel reference for later updates */
+    g_object_set_data(G_OBJECT(ctx->window), "layers_panel", layers_panel);
 
     /* Connect window signals */
     g_signal_connect(ctx->window, "delete-event", 
                      G_CALLBACK(on_window_delete), ctx);
 
     gtk_widget_show_all(ctx->window);
+
+    printf("Main window created with dockable panels\n");
 
     return ctx;
 }

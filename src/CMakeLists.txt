@@ -3,6 +3,7 @@ set(SOURCES
     main.c
     ui.c
     document.c
+    panels.c
 )
 
 # Create the executable
