@@ -9,6 +9,7 @@
 /* Forward declarations */
 typedef struct AppContext AppContext;
 extern void ui_update_menu_and_button_states(AppContext *ctx);
+extern void ui_update_window_title(AppContext *ctx);
 
 /**
  * Stub handlers for Move tool
@@ -181,7 +182,11 @@ static void brush_tool_mouse_up(Tool *tool, struct ImageDocument *doc, MouseEven
         ctx = (AppContext *)tool->app_context;
         if (ctx) {
             ui_update_menu_and_button_states(ctx);
+            ui_update_window_title(ctx);  /* Update title to show dirty indicator */
         }
+        
+        /* Mark document as modified */
+        doc->modified = TRUE;
     }
 
     state->current_command = NULL;

@@ -7,6 +7,8 @@
 /* Forward declarations */
 static void on_file_open(GtkWidget *widget, gpointer data);
 static void on_file_open_response(GtkDialog *dialog, gint response_id, gpointer user_data);
+static void on_file_save_as(GtkWidget *widget, gpointer data);
+static void on_file_save_as_response(GtkDialog *dialog, gint response_id, gpointer user_data);
 static void on_file_close(GtkWidget *widget, gpointer data);
 static void on_file_exit(GtkWidget *widget, gpointer data);
 static void on_edit_undo(GtkWidget *widget, gpointer data);
@@ -57,6 +59,13 @@ static GtkWidget* create_file_menu(AppContext *ctx)
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item);
     gtk_widget_add_accelerator(menu_item, "activate", accel_group,
                                GDK_KEY_o, GDK_CONTROL_MASK, GTK_ACCEL_VISIBLE);
+
+    /* File > Save As */
+    menu_item = gtk_menu_item_new_with_mnemonic("_Save As");
+    g_signal_connect(menu_item, "activate", G_CALLBACK(on_file_save_as), ctx);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item);
+    gtk_widget_add_accelerator(menu_item, "activate", accel_group,
+                               GDK_KEY_s, GDK_CONTROL_MASK | GDK_SHIFT_MASK, GTK_ACCEL_VISIBLE);
 
     /* Separator */
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
@@ -378,7 +387,10 @@ ImageDocument* ui_create_document_tab(AppContext *ctx, const gchar *filename)
 /**
  * Close a document tab
  */
-void ui_close_document_tab(AppContext *ctx, ImageDocument *doc)
+/**
+ * Internal: Actually close the document without prompting
+ */
+static void ui_close_document_tab_internal(AppContext *ctx, ImageDocument *doc)
 {
     gint page_num;
     gint n_pages;
@@ -420,7 +432,79 @@ void ui_close_document_tab(AppContext *ctx, ImageDocument *doc)
 
          printf("Document closed successfully\n");
      }
- }
+}
+
+/**
+ * Public: Close document with unsaved changes prompt
+ */
+void ui_close_document_tab(AppContext *ctx, ImageDocument *doc)
+{
+    if (!doc || !ctx) {
+        return;
+    }
+
+    /* Check if document has unsaved changes */
+    if (document_is_dirty(doc)) {
+        GtkWidget *dialog;
+        gint response;
+        const gchar *filename = document_get_filename(doc);
+
+        /* Create confirmation dialog */
+        dialog = gtk_message_dialog_new(
+            GTK_WINDOW(ctx->window),
+            GTK_DIALOG_MODAL,
+            GTK_MESSAGE_WARNING,
+            GTK_BUTTONS_NONE,
+            "Save changes to \"%s\" before closing?",
+            filename);
+
+        gtk_message_dialog_format_secondary_text(
+            GTK_MESSAGE_DIALOG(dialog),
+            "If you don't save, changes will be lost.");
+
+        /* Add buttons */
+        gtk_dialog_add_buttons(GTK_DIALOG(dialog),
+                              "_Discard", GTK_RESPONSE_REJECT,
+                              "_Cancel", GTK_RESPONSE_CANCEL,
+                              "_Save", GTK_RESPONSE_ACCEPT,
+                              NULL);
+
+        /* Set default button to Save */
+        gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_ACCEPT);
+
+        /* Show dialog and get response */
+        response = gtk_dialog_run(GTK_DIALOG(dialog));
+        gtk_widget_destroy(dialog);
+
+        switch (response) {
+            case GTK_RESPONSE_ACCEPT:
+                /* User clicked Save */
+                printf("User wants to save before closing\n");
+                ui_save_document_as(ctx);
+                /* Note: We don't actually close here - let user complete save */
+                /* In a full implementation, we'd detect when save completes */
+                break;
+
+            case GTK_RESPONSE_REJECT:
+                /* User clicked Discard */
+                printf("User discarding changes\n");
+                ui_close_document_tab_internal(ctx, doc);
+                break;
+
+            case GTK_RESPONSE_CANCEL:
+            case GTK_RESPONSE_DELETE_EVENT:
+                /* User clicked Cancel or closed dialog */
+                printf("User cancelled close operation\n");
+                break;
+
+            default:
+                break;
+        }
+    } else {
+        /* No unsaved changes, close directly */
+        ui_close_document_tab_internal(ctx, doc);
+    }
+}
 
 /**
  * Get the current active document
@@ -598,6 +682,103 @@ static void on_file_open(GtkWidget *widget, gpointer data)
 }
 
 /**
+ * File > Save As response callback
+ */
+static void on_file_save_as_response(GtkDialog *dialog, gint response_id, gpointer user_data)
+{
+    AppContext *ctx = (AppContext *)user_data;
+
+    if (response_id == GTK_RESPONSE_ACCEPT) {
+        gchar *file_path = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));
+
+        if (file_path) {
+            ImageDocument *doc = ui_get_active_document(ctx);
+
+            if (doc) {
+                /* Save the document */
+                if (document_save_as(doc, file_path)) {
+                    /* Update window title to reflect new filename */
+                    ui_update_window_title(ctx);
+                    ui_update_status_bar(ctx);
+                    printf("Document saved: %s\n", file_path);
+                } else {
+                    g_warning("Failed to save document");
+                }
+            }
+
+            g_free(file_path);
+        }
+    }
+
+    gtk_widget_destroy(GTK_WIDGET(dialog));
+}
+
+/**
+ * File > Save As callback
+ */
+static void on_file_save_as(GtkWidget *widget, gpointer data)
+{
+    (void)widget;  /* Unused */
+
+    AppContext *ctx = (AppContext *)data;
+    ImageDocument *doc = ui_get_active_document(ctx);
+    GtkWidget *dialog;
+    GtkFileFilter *filter;
+
+    if (!doc) {
+        g_warning("No document open");
+        return;
+    }
+
+    /* Create file chooser dialog */
+    dialog = gtk_file_chooser_dialog_new(
+        "Save Image As",
+        GTK_WINDOW(ctx->window),
+        GTK_FILE_CHOOSER_ACTION_SAVE,
+        "_Cancel", GTK_RESPONSE_CANCEL,
+        "_Save", GTK_RESPONSE_ACCEPT,
+        NULL);
+
+    gtk_file_chooser_set_do_overwrite_confirmation(GTK_FILE_CHOOSER(dialog), TRUE);
+
+    /* Add file filters */
+    filter = gtk_file_filter_new();
+    gtk_file_filter_set_name(filter, "PNG Images");
+    gtk_file_filter_add_pattern(filter, "*.png");
+    gtk_file_filter_add_pattern(filter, "*.PNG");
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
+
+    filter = gtk_file_filter_new();
+    gtk_file_filter_set_name(filter, "JPEG Images");
+    gtk_file_filter_add_pattern(filter, "*.jpg");
+    gtk_file_filter_add_pattern(filter, "*.jpeg");
+    gtk_file_filter_add_pattern(filter, "*.JPG");
+    gtk_file_filter_add_pattern(filter, "*.JPEG");
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
+
+    filter = gtk_file_filter_new();
+    gtk_file_filter_set_name(filter, "All Files");
+    gtk_file_filter_add_pattern(filter, "*");
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
+
+    /* Set current filename if document has a path */
+    if (doc->file_path) {
+        gtk_file_chooser_set_filename(GTK_FILE_CHOOSER(dialog), doc->file_path);
+    } else if (doc->filename) {
+        /* Suggest a filename based on document name */
+        gchar *suggested = g_strdup_printf("%s.png", doc->filename);
+        gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(dialog), suggested);
+        g_free(suggested);
+    }
+
+    /* Connect response signal */
+    g_signal_connect(dialog, "response", G_CALLBACK(on_file_save_as_response), ctx);
+
+    /* Show dialog */
+    gtk_widget_show(dialog);
+}
+
+/**
  * File > Close callback
  */
 static void on_file_close(GtkWidget *widget, gpointer data)
@@ -675,8 +856,9 @@ static void on_edit_undo(GtkWidget *widget, gpointer data)
     /* Perform undo */
     document_undo(doc);
 
-    /* Update menu state */
+    /* Update menu state and window title */
     ui_update_menu_and_button_states(ctx);
+    ui_update_window_title(ctx);
 }
 
 /**
@@ -708,8 +890,9 @@ static void on_edit_redo(GtkWidget *widget, gpointer data)
     /* Perform redo */
     document_redo(doc);
 
-    /* Update menu state */
+    /* Update menu state and window title */
     ui_update_menu_and_button_states(ctx);
+    ui_update_window_title(ctx);
 }
 
 /**
@@ -977,5 +1160,17 @@ void ui_update_menu_and_button_states(AppContext *ctx)
     printf("UI State: document=%s, selection=%s\n",
            has_document ? "yes" : "no",
            has_selection ? "yes" : "no");
+}
+
+/**
+ * Save active document with file dialog
+ */
+void ui_save_document_as(AppContext *ctx)
+{
+    if (!ctx) {
+        return;
+    }
+
+    on_file_save_as(NULL, ctx);
 }
 

@@ -1015,6 +1015,9 @@ gboolean document_undo(ImageDocument *doc)
         gtk_widget_queue_draw(doc->drawing_area);
     }
 
+    /* Mark document as modified after undo */
+    doc->modified = TRUE;
+
     return TRUE;
 }
 
@@ -1045,6 +1048,9 @@ gboolean document_redo(ImageDocument *doc)
         gtk_widget_queue_draw(doc->drawing_area);
     }
 
+    /* Mark document as modified after redo */
+    doc->modified = TRUE;
+
     return TRUE;
 }
 
@@ -1070,5 +1076,280 @@ gboolean document_can_redo(ImageDocument *doc)
     }
 
     return !command_stack_is_empty(doc->redo_stack);
+}
+
+/**
+ * Convert Cairo image surface to GdkPixbuf
+ */
+static GdkPixbuf* cairo_surface_to_pixbuf(cairo_surface_t *surface, gboolean keep_alpha)
+{
+    GdkPixbuf *pixbuf;
+    gint width, height;
+    guchar *pixels;
+    guchar *surface_data;
+    gint rowstride;
+    gint x, y;
+
+    if (!surface) {
+        return NULL;
+    }
+
+    width = cairo_image_surface_get_width(surface);
+    height = cairo_image_surface_get_height(surface);
+
+    /* Create pixbuf with or without alpha channel */
+    pixbuf = gdk_pixbuf_new(GDK_COLORSPACE_RGB, keep_alpha ? TRUE : FALSE, 8, width, height);
+    if (!pixbuf) {
+        g_warning("Failed to create pixbuf");
+        return NULL;
+    }
+
+    pixels = gdk_pixbuf_get_pixels(pixbuf);
+    rowstride = gdk_pixbuf_get_rowstride(pixbuf);
+    surface_data = cairo_image_surface_get_data(surface);
+    gint surface_stride = cairo_image_surface_get_stride(surface);
+
+    /* Copy pixel data from Cairo surface to pixbuf */
+    for (y = 0; y < height; y++) {
+        guint32 *src = (guint32 *)(surface_data + y * surface_stride);
+        guchar *dst = pixels + y * rowstride;
+
+        for (x = 0; x < width; x++) {
+            guint32 pixel = src[x];
+            guchar a = (pixel >> 24) & 0xFF;
+            guchar r = (pixel >> 16) & 0xFF;
+            guchar g = (pixel >> 8) & 0xFF;
+            guchar b = pixel & 0xFF;
+
+            /* Cairo uses pre-multiplied alpha, we need to un-premultiply */
+            if (a > 0) {
+                r = (r * 255) / a;
+                g = (g * 255) / a;
+                b = (b * 255) / a;
+            }
+
+            dst[0] = r;
+            dst[1] = g;
+            dst[2] = b;
+
+            if (keep_alpha) {
+                dst[3] = a;
+                dst += 4;
+            } else {
+                dst += 3;
+            }
+        }
+    }
+
+    return pixbuf;
+}
+
+/**
+ * Flatten image to white background (for JPEG)
+ */
+static cairo_surface_t* flatten_to_white_background(cairo_surface_t *composite, guint width, guint height)
+{
+    cairo_surface_t *flattened;
+    cairo_t *cr;
+
+    /* Create RGB surface (no alpha) */
+    flattened = cairo_image_surface_create(CAIRO_FORMAT_RGB24, width, height);
+    if (!flattened) {
+        return NULL;
+    }
+
+    cr = cairo_create(flattened);
+
+    /* Paint white background */
+    cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+    cairo_paint(cr);
+
+    /* Composite the image on top */
+    cairo_set_source_surface(cr, composite, 0, 0);
+    cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+    cairo_paint(cr);
+
+    cairo_destroy(cr);
+
+    return flattened;
+}
+
+/**
+ * Save document as PNG with alpha channel
+ */
+gboolean document_save_as_png(ImageDocument *doc, const gchar *filename)
+{
+    cairo_surface_t *composite;
+    GdkPixbuf *pixbuf;
+    GError *error = NULL;
+    gboolean result = FALSE;
+
+    if (!doc || !filename) {
+        g_warning("Invalid parameters for document_save_as_png");
+        return FALSE;
+    }
+
+    /* Get the composite surface */
+    composite = document_get_composite_surface(doc);
+    if (!composite) {
+        g_warning("No composite surface to save");
+        return FALSE;
+    }
+
+    /* Convert to pixbuf with alpha channel */
+    pixbuf = cairo_surface_to_pixbuf(composite, TRUE);
+    if (!pixbuf) {
+        g_warning("Failed to convert surface to pixbuf");
+        return FALSE;
+    }
+
+    /* Save as PNG */
+    result = gdk_pixbuf_save(pixbuf, filename, "png", &error, NULL);
+
+    if (!result) {
+        g_warning("Failed to save PNG: %s", error ? error->message : "Unknown error");
+        if (error) {
+            g_error_free(error);
+        }
+    } else {
+        printf("Saved PNG: %s\n", filename);
+        /* Update document path */
+        if (doc->file_path) {
+            g_free(doc->file_path);
+        }
+        doc->file_path = g_strdup(filename);
+        doc->modified = FALSE;
+    }
+
+    g_object_unref(pixbuf);
+
+    return result;
+}
+
+/**
+ * Save document as JPEG (flattened with white background)
+ */
+gboolean document_save_as_jpeg(ImageDocument *doc, const gchar *filename, gint quality)
+{
+    cairo_surface_t *composite;
+    cairo_surface_t *flattened;
+    GdkPixbuf *pixbuf;
+    GError *error = NULL;
+    gboolean result = FALSE;
+    gchar quality_str[4];
+
+    if (!doc || !filename) {
+        g_warning("Invalid parameters for document_save_as_jpeg");
+        return FALSE;
+    }
+
+    /* Clamp quality to valid range */
+    if (quality < 0) quality = 0;
+    if (quality > 100) quality = 100;
+
+    /* Get the composite surface */
+    composite = document_get_composite_surface(doc);
+    if (!composite) {
+        g_warning("No composite surface to save");
+        return FALSE;
+    }
+
+    /* Flatten to white background */
+    flattened = flatten_to_white_background(composite, doc->width, doc->height);
+    if (!flattened) {
+        g_warning("Failed to flatten image");
+        return FALSE;
+    }
+
+    /* Convert to pixbuf (no alpha) */
+    pixbuf = cairo_surface_to_pixbuf(flattened, FALSE);
+    cairo_surface_destroy(flattened);
+
+    if (!pixbuf) {
+        g_warning("Failed to convert surface to pixbuf");
+        return FALSE;
+    }
+
+    /* Save as JPEG with quality parameter */
+    g_snprintf(quality_str, sizeof(quality_str), "%d", quality);
+    result = gdk_pixbuf_save(pixbuf, filename, "jpeg", &error, "quality", quality_str, NULL);
+
+    if (!result) {
+        g_warning("Failed to save JPEG: %s", error ? error->message : "Unknown error");
+        if (error) {
+            g_error_free(error);
+        }
+    } else {
+        printf("Saved JPEG: %s (quality=%d)\n", filename, quality);
+        /* Update document path */
+        if (doc->file_path) {
+            g_free(doc->file_path);
+        }
+        doc->file_path = g_strdup(filename);
+        doc->modified = FALSE;
+    }
+
+    g_object_unref(pixbuf);
+
+    return result;
+}
+
+/**
+ * Save document with auto-detection by file extension
+ */
+gboolean document_save_as(ImageDocument *doc, const gchar *filename)
+{
+    const gchar *ext;
+    gboolean result;
+
+    if (!doc || !filename) {
+        return FALSE;
+    }
+
+    /* Get file extension */
+    ext = strrchr(filename, '.');
+    if (!ext) {
+        g_warning("No file extension provided");
+        return FALSE;
+    }
+
+    ext++;  /* Skip the dot */
+
+    /* Save based on extension */
+    if (g_ascii_strcasecmp(ext, "png") == 0) {
+        result = document_save_as_png(doc, filename);
+    } else if (g_ascii_strcasecmp(ext, "jpg") == 0 || g_ascii_strcasecmp(ext, "jpeg") == 0) {
+        result = document_save_as_jpeg(doc, filename, 85);  /* Default quality */
+    } else {
+        g_warning("Unsupported file format: %s", ext);
+        return FALSE;
+    }
+
+    return result;
+}
+
+/**
+ * Mark document as saved
+ */
+void document_mark_saved(ImageDocument *doc)
+{
+    if (!doc) {
+        return;
+    }
+
+    doc->modified = FALSE;
+    printf("Document marked as saved\n");
+}
+
+/**
+ * Check if document is dirty
+ */
+gboolean document_is_dirty(ImageDocument *doc)
+{
+    if (!doc) {
+        return FALSE;
+    }
+
+    return doc->modified;
 }
 

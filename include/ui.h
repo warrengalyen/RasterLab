@@ -75,5 +75,11 @@ void ui_update_status_bar(AppContext *ctx);
  */
 void ui_update_menu_and_button_states(AppContext *ctx);
 
+/**
+ * Save active document with file dialog
+ * @param ctx The application context
+ */
+void ui_save_document_as(AppContext *ctx);
+
 #endif /* UI_H */
 

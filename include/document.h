@@ -243,5 +243,43 @@ gboolean document_can_undo(ImageDocument *doc);
  */
 gboolean document_can_redo(ImageDocument *doc);
 
+/**
+ * Save document as PNG with alpha channel
+ * @param doc The document
+ * @param filename Path to save file
+ * @return TRUE on success, FALSE on failure
+ */
+gboolean document_save_as_png(ImageDocument *doc, const gchar *filename);
+
+/**
+ * Save document as JPEG (flattened with white background)
+ * @param doc The document
+ * @param filename Path to save file
+ * @param quality JPEG quality (0-100, default 85)
+ * @return TRUE on success, FALSE on failure
+ */
+gboolean document_save_as_jpeg(ImageDocument *doc, const gchar *filename, gint quality);
+
+/**
+ * Save document with auto-detection by file extension
+ * @param doc The document
+ * @param filename Path to save file
+ * @return TRUE on success, FALSE on failure
+ */
+gboolean document_save_as(ImageDocument *doc, const gchar *filename);
+
+/**
+ * Mark document as saved (clear dirty flag)
+ * @param doc The document
+ */
+void document_mark_saved(ImageDocument *doc);
+
+/**
+ * Check if document has unsaved changes
+ * @param doc The document
+ * @return TRUE if document has unsaved changes
+ */
+gboolean document_is_dirty(ImageDocument *doc);
+
 #endif /* DOCUMENT_H */
 
