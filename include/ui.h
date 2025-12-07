@@ -23,6 +23,7 @@ typedef struct {
     GtkWidget *edit_menu_redo;   /* Edit > Redo menu item */
     ToolRegistry *tool_registry; /* Tool registry and management */
     ToolOptionsPanel *tool_options_panel; /* Tool options panel */
+    LayersPanel *layers_panel;   /* Layers panel for layer selection */
 } AppContext;
 
 /**

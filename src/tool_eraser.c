@@ -95,10 +95,10 @@ static void eraser_tool_mouse_down(Tool *tool, struct ImageDocument *doc, MouseE
     }
     state = (EraserToolState *)tool->user_data;
 
-    /* Get the active layer */
-    active_layer = document_get_active_layer(doc);
+    /* Get the selected layer (from layers panel) */
+    active_layer = document_get_selected_layer(doc);
     if (!active_layer || !active_layer->surface) {
-        printf("Eraser tool: no active layer with surface\n");
+        printf("Eraser tool: no selected layer with surface\n");
         return;
     }
 
@@ -136,10 +136,10 @@ static void eraser_tool_mouse_move(Tool *tool, struct ImageDocument *doc, MouseE
         return;
     }
 
-    /* Get the active layer */
-    active_layer = document_get_active_layer(doc);
+    /* Get the selected layer (from layers panel) */
+    active_layer = document_get_selected_layer(doc);
     if (!active_layer || !active_layer->surface) {
-        printf("Eraser tool: active layer deleted during erasing\n");
+        printf("Eraser tool: selected layer deleted during erasing\n");
         state->is_erasing = FALSE;
         return;
     }

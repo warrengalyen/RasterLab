@@ -39,10 +39,10 @@ static void move_tool_mouse_down(Tool *tool, struct ImageDocument *doc, MouseEve
     }
     state = (MoveToolState *)tool->user_data;
 
-    /* Get the top (active) layer */
-    active_layer = document_get_active_layer(doc);
+    /* Get the selected layer (from layers panel) */
+    active_layer = document_get_selected_layer(doc);
     if (!active_layer) {
-        printf("Move tool: no active layer\n");
+        printf("Move tool: no selected layer\n");
         return;
     }
 

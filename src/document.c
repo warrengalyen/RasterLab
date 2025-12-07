@@ -381,6 +381,7 @@ ImageDocument* document_new(const gchar *filename)
 
     /* Initialize rendering pipeline */
     doc->layers = NULL;
+    doc->selected_layer = NULL;
     doc->composite_surface = NULL;
     doc->composite_dirty = TRUE;
     doc->zoom_factor = 1.0;
@@ -989,6 +990,35 @@ ImageLayer* document_get_active_layer(ImageDocument *doc)
 
     /* Return the top layer (last in list) */
     return (ImageLayer *)g_list_nth_data(doc->layers, g_list_length(doc->layers) - 1);
+}
+
+/**
+ * Set the selected layer (for tool operations)
+ */
+void document_set_selected_layer(ImageDocument *doc, ImageLayer *layer)
+{
+    if (!doc) {
+        return;
+    }
+
+    doc->selected_layer = layer;
+}
+
+/**
+ * Get the selected layer (for tool operations)
+ */
+ImageLayer* document_get_selected_layer(ImageDocument *doc)
+{
+    if (!doc) {
+        return NULL;
+    }
+
+    /* Return selected layer if set, otherwise return active (top) layer */
+    if (doc->selected_layer) {
+        return doc->selected_layer;
+    }
+
+    return document_get_active_layer(doc);
 }
 
 /**

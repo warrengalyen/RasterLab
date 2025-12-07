@@ -53,6 +53,7 @@ typedef struct ImageDocument {
     
     /* Rendering pipeline */
     GList *layers;                /* List of ImageLayer objects */
+    ImageLayer *selected_layer;   /* Currently selected layer for tools */
     cairo_surface_t *composite_surface;  /* Cached composite surface */
     gboolean composite_dirty;     /* Does composite need re-rendering? */
     
@@ -216,6 +217,20 @@ ImageLayer* document_get_layer(ImageDocument *doc, guint index);
  * @return The top layer, or NULL if no layers exist
  */
 ImageLayer* document_get_active_layer(ImageDocument *doc);
+
+/**
+ * Set the selected layer (for tool operations)
+ * @param doc The document
+ * @param layer The layer to select, or NULL to select top layer
+ */
+void document_set_selected_layer(ImageDocument *doc, ImageLayer *layer);
+
+/**
+ * Get the selected layer (for tool operations)
+ * @param doc The document
+ * @return The selected layer, or top layer if none selected
+ */
+ImageLayer* document_get_selected_layer(ImageDocument *doc);
 
 /**
  * Get the number of layers in the document

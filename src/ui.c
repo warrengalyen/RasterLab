@@ -43,6 +43,14 @@ static void on_layer_selection_changed(GtkTreeSelection *selection, gpointer use
 
     printf("Layer selection changed in tree view\n");
     
+    /* Get the currently active document */
+    ImageDocument *active_doc = ui_get_active_document(ctx);
+    if (active_doc && ctx->layers_panel) {
+        /* Set the selected layer in the document so tools use the right layer */
+        ImageLayer *selected_layer = layers_panel_get_selected_layer(ctx->layers_panel);
+        document_set_selected_layer(active_doc, selected_layer);
+    }
+    
     /* Update menu and button states */
     ui_update_menu_and_button_states(ctx);
 }
@@ -270,6 +278,7 @@ AppContext* ui_create_main_window(void)
     ctx->layer_menu_duplicate = NULL;
     ctx->edit_menu_undo = NULL;
     ctx->edit_menu_redo = NULL;
+    ctx->layers_panel = NULL;  /* Initialize layers_panel early */
 
     /* Create and initialize tool manager */
     ctx->tool_registry = tool_manager_new();
@@ -336,16 +345,16 @@ AppContext* ui_create_main_window(void)
     gtk_paned_pack1(GTK_PANED(center_right_hpaned), ctx->notebook, TRUE, TRUE);
 
     /* ==== RIGHT PANEL: Layers ==== */
-    layers_panel = create_layers_panel();
-    layers_panel_widget = layers_panel->panel;
+    ctx->layers_panel = create_layers_panel();
+    layers_panel_widget = ctx->layers_panel->panel;
     layers_header = panel_header_new("Layers", layers_panel_widget);
     gtk_paned_pack2(GTK_PANED(center_right_hpaned), layers_header->container, FALSE, TRUE);
 
     /* Store layers panel reference for later updates */
-    g_object_set_data(G_OBJECT(ctx->window), "layers_panel", layers_panel);
+    g_object_set_data(G_OBJECT(ctx->window), "layers_panel", ctx->layers_panel);
 
     /* Connect layers panel buttons to callbacks */
-    layers_panel_connect_buttons(layers_panel,
+    layers_panel_connect_buttons(ctx->layers_panel,
                                 G_CALLBACK(on_layer_new),
                                 G_CALLBACK(on_layer_delete),
                                 G_CALLBACK(on_layer_duplicate),
@@ -353,7 +362,7 @@ AppContext* ui_create_main_window(void)
 
     /* Connect layer tree view selection changes to update UI state */
     GtkTreeSelection *layer_selection = gtk_tree_view_get_selection(
-        GTK_TREE_VIEW(layers_panel->tree_view));
+        GTK_TREE_VIEW(ctx->layers_panel->tree_view));
     g_signal_connect(layer_selection, "changed",
                      G_CALLBACK(on_layer_selection_changed), ctx);
 

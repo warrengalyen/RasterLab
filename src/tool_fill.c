@@ -63,10 +63,10 @@ static void fill_tool_mouse_down(Tool *tool, struct ImageDocument *doc, MouseEve
     }
     state = (FillToolState *)tool->user_data;
 
-    /* Get the active layer */
-    active_layer = document_get_active_layer(doc);
+    /* Get the selected layer (from layers panel) */
+    active_layer = document_get_selected_layer(doc);
     if (!active_layer || !active_layer->surface) {
-        printf("Fill tool: no active layer with surface\n");
+        printf("Fill tool: no selected layer with surface\n");
         return;
     }
 

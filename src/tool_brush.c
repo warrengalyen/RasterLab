@@ -118,10 +118,10 @@ static void brush_tool_mouse_down(Tool *tool, struct ImageDocument *doc, MouseEv
     }
     state = (BrushToolState *)tool->user_data;
 
-    /* Get the active layer */
-    active_layer = document_get_active_layer(doc);
+    /* Get the selected layer (from layers panel) */
+    active_layer = document_get_selected_layer(doc);
     if (!active_layer || !active_layer->surface) {
-        printf("Brush tool: no active layer with surface\n");
+        printf("Brush tool: no selected layer with surface\n");
         return;
     }
 
@@ -159,10 +159,10 @@ static void brush_tool_mouse_move(Tool *tool, struct ImageDocument *doc, MouseEv
         return;
     }
 
-    /* Get the active layer */
-    active_layer = document_get_active_layer(doc);
+    /* Get the selected layer (from layers panel) */
+    active_layer = document_get_selected_layer(doc);
     if (!active_layer || !active_layer->surface) {
-        printf("Brush tool: active layer deleted during drawing\n");
+        printf("Brush tool: selected layer deleted during drawing\n");
         state->is_drawing = FALSE;
         return;
     }
