@@ -185,6 +185,13 @@ AppContext* ui_create_main_window(void)
     /* Store layers panel reference for later updates */
     g_object_set_data(G_OBJECT(ctx->window), "layers_panel", layers_panel);
 
+    /* Connect layers panel buttons to callbacks */
+    layers_panel_connect_buttons(layers_panel,
+                                G_CALLBACK(on_layer_new),
+                                G_CALLBACK(on_layer_delete),
+                                G_CALLBACK(on_layer_duplicate),
+                                ctx);
+
     /* ==== STATUS BAR ==== */
     ctx->status_bar = gtk_statusbar_new();
     gtk_box_pack_end(GTK_BOX(main_vbox), ctx->status_bar, FALSE, FALSE, 0);
@@ -406,6 +413,13 @@ static void on_file_open_response(GtkDialog *dialog, gint response_id, gpointer 
                 } else {
                     /* Update status bar after successful load */
                     ui_update_status_bar(ctx);
+
+                    /* Update layers panel with loaded document */
+                    LayersPanel *layers_panel = (LayersPanel *)g_object_get_data(
+                        G_OBJECT(ctx->window), "layers_panel");
+                    if (layers_panel) {
+                        layers_panel_update(layers_panel, doc);
+                    }
                 }
             }
 
@@ -524,8 +538,17 @@ static void on_notebook_switch_page(GtkNotebook *notebook, GtkWidget *page,
     (void)page_num;   /* Unused */
 
     AppContext *ctx = (AppContext *)user_data;
+    ImageDocument *doc = ui_get_active_document(ctx);
+    LayersPanel *layers_panel = (LayersPanel *)g_object_get_data(G_OBJECT(ctx->window), 
+                                                                  "layers_panel");
+
     ui_update_window_title(ctx);
     ui_update_status_bar(ctx);
+
+    /* Update layers panel with current document's layers */
+    if (layers_panel && doc) {
+        layers_panel_update(layers_panel, doc);
+    }
 }
 
 /**
@@ -558,6 +581,8 @@ static void on_layer_new(GtkWidget *widget, gpointer data)
 
     AppContext *ctx = (AppContext *)data;
     ImageDocument *doc = ui_get_active_document(ctx);
+    LayersPanel *layers_panel = (LayersPanel *)g_object_get_data(G_OBJECT(ctx->window), 
+                                                                  "layers_panel");
     
     if (!doc) {
         g_warning("No document open");
@@ -573,6 +598,11 @@ static void on_layer_new(GtkWidget *widget, gpointer data)
     
     if (new_layer) {
         printf("New layer created\n");
+
+        /* Update layers panel */
+        if (layers_panel) {
+            layers_panel_update(layers_panel, doc);
+        }
     }
 }
 
@@ -585,17 +615,32 @@ static void on_layer_delete(GtkWidget *widget, gpointer data)
 
     AppContext *ctx = (AppContext *)data;
     ImageDocument *doc = ui_get_active_document(ctx);
+    LayersPanel *layers_panel = (LayersPanel *)g_object_get_data(G_OBJECT(ctx->window), 
+                                                                  "layers_panel");
     
     if (!doc || !doc->layers) {
         g_warning("No document or layers");
         return;
     }
 
-    /* Delete the last (top) layer */
-    ImageLayer *top_layer = (ImageLayer *)g_list_last(doc->layers)->data;
+    /* Delete the currently selected layer */
+    ImageLayer *selected_layer = NULL;
+    if (layers_panel) {
+        selected_layer = layers_panel_get_selected_layer(layers_panel);
+    }
+
+    if (!selected_layer) {
+        g_warning("No layer selected");
+        return;
+    }
     
-    if (document_delete_layer(doc, top_layer)) {
+    if (document_delete_layer(doc, selected_layer)) {
         printf("Layer deleted\n");
+
+        /* Update layers panel */
+        if (layers_panel) {
+            layers_panel_update(layers_panel, doc);
+        }
     }
 }
 
@@ -608,23 +653,38 @@ static void on_layer_duplicate(GtkWidget *widget, gpointer data)
 
     AppContext *ctx = (AppContext *)data;
     ImageDocument *doc = ui_get_active_document(ctx);
+    LayersPanel *layers_panel = (LayersPanel *)g_object_get_data(G_OBJECT(ctx->window), 
+                                                                  "layers_panel");
     
     if (!doc || !doc->layers) {
         g_warning("No document or layers");
         return;
     }
 
-    /* Duplicate the last (top) layer */
-    ImageLayer *top_layer = (ImageLayer *)g_list_last(doc->layers)->data;
+    /* Duplicate the currently selected layer */
+    ImageLayer *selected_layer = NULL;
+    if (layers_panel) {
+        selected_layer = layers_panel_get_selected_layer(layers_panel);
+    }
+
+    if (!selected_layer) {
+        g_warning("No layer selected");
+        return;
+    }
     
     static int dup_count = 1;
-    gchar *layer_name = g_strdup_printf("%s copy %d", top_layer->name, dup_count++);
+    gchar *layer_name = g_strdup_printf("%s copy %d", selected_layer->name, dup_count++);
     
-    ImageLayer *dup_layer = document_duplicate_layer(doc, top_layer, layer_name);
+    ImageLayer *dup_layer = document_duplicate_layer(doc, selected_layer, layer_name);
     g_free(layer_name);
     
     if (dup_layer) {
         printf("Layer duplicated\n");
+
+        /* Update layers panel */
+        if (layers_panel) {
+            layers_panel_update(layers_panel, doc);
+        }
     }
 }
 

@@ -151,6 +151,84 @@ GtkWidget* create_tool_options_panel(void)
 }
 
 /**
+ * Layer visibility toggle callback
+ */
+static void on_layer_visibility_toggled(GtkCellRendererToggle *cell_renderer,
+                                        gchar *path_str,
+                                        gpointer user_data)
+{
+    LayersPanel *layers_panel = (LayersPanel *)user_data;
+    GtkTreeIter iter;
+    gboolean visible;
+
+    if (!gtk_tree_model_get_iter_from_string(GTK_TREE_MODEL(layers_panel->store), 
+                                             &iter, path_str)) {
+        return;
+    }
+
+    /* Get current visibility value */
+    gtk_tree_model_get(GTK_TREE_MODEL(layers_panel->store), &iter,
+                      0, &visible,
+                      -1);
+
+    /* Toggle visibility */
+    visible = !visible;
+    gtk_list_store_set(layers_panel->store, &iter,
+                      0, visible,
+                      -1);
+
+    printf("Layer visibility toggled\n");
+}
+
+/**
+ * Layer name edited callback
+ */
+static void on_layer_name_edited(GtkCellRendererText *renderer,
+                                 gchar *path_str,
+                                 gchar *new_text,
+                                 gpointer user_data)
+{
+    LayersPanel *layers_panel = (LayersPanel *)user_data;
+    GtkTreeIter iter;
+
+    (void)renderer;  /* Unused */
+
+    if (!new_text || strlen(new_text) == 0) {
+        return;  /* Don't allow empty names */
+    }
+
+    if (!gtk_tree_model_get_iter_from_string(GTK_TREE_MODEL(layers_panel->store),
+                                             &iter, path_str)) {
+        return;
+    }
+
+    /* Update layer name in document */
+    if (layers_panel->current_doc) {
+        /* Get the layer from the position */
+        gint row = atoi(path_str);
+        guint layer_count = document_get_layer_count(layers_panel->current_doc);
+        
+        /* Layers are displayed in reverse order */
+        gint layer_index = layer_count - 1 - row;
+        
+        if (layer_index >= 0 && layer_index < (gint)layer_count) {
+            ImageLayer *layer = document_get_layer(layers_panel->current_doc, layer_index);
+            if (layer) {
+                g_free(layer->name);
+                layer->name = g_strdup(new_text);
+            }
+        }
+    }
+
+    /* Update name in list store */
+    gtk_list_store_set(layers_panel->store, &iter,
+                      2, new_text,
+                      -1);
+
+    printf("Layer name changed to: %s\n", new_text);
+}
+
+/**
  * Layer tree view row activated callback
  */
 static gboolean on_layer_row_activated(GtkTreeView *tree_view, GtkTreePath *path,
@@ -163,6 +241,30 @@ static gboolean on_layer_row_activated(GtkTreeView *tree_view, GtkTreePath *path
 
     printf("Layer selected\n");
     return FALSE;
+}
+
+/**
+ * Panel button callbacks
+ */
+static void on_panel_btn_new_clicked(GtkButton *button, gpointer user_data)
+{
+    (void)button;  /* Unused */
+    (void)user_data;  /* Context passed differently */
+    printf("New layer button clicked (handled by UI callback)\n");
+}
+
+static void on_panel_btn_delete_clicked(GtkButton *button, gpointer user_data)
+{
+    (void)button;  /* Unused */
+    (void)user_data;  /* Context passed differently */
+    printf("Delete layer button clicked (handled by UI callback)\n");
+}
+
+static void on_panel_btn_duplicate_clicked(GtkButton *button, gpointer user_data)
+{
+    (void)button;  /* Unused */
+    (void)user_data;  /* Context passed differently */
+    printf("Duplicate layer button clicked (handled by UI callback)\n");
 }
 
 /**
@@ -205,14 +307,19 @@ LayersPanel* create_layers_panel(void)
                                                       renderer,
                                                       "active", 0,
                                                       NULL);
+    g_signal_connect(renderer, "toggled",
+                     G_CALLBACK(on_layer_visibility_toggled), layers_panel);
     gtk_tree_view_append_column(GTK_TREE_VIEW(layers_panel->tree_view), column);
 
-    /* Name column */
+    /* Name column (editable) */
     renderer = gtk_cell_renderer_text_new();
+    g_object_set(renderer, "editable", TRUE, NULL);
     column = gtk_tree_view_column_new_with_attributes("Layer",
                                                       renderer,
                                                       "text", 2,
                                                       NULL);
+    g_signal_connect(renderer, "edited",
+                     G_CALLBACK(on_layer_name_edited), layers_panel);
     gtk_tree_view_column_set_expand(column, TRUE);
     gtk_tree_view_append_column(GTK_TREE_VIEW(layers_panel->tree_view), column);
 
@@ -231,13 +338,18 @@ LayersPanel* create_layers_panel(void)
     gtk_widget_set_margin_end(controls, 5);
     gtk_widget_set_margin_bottom(controls, 5);
 
-    GtkWidget *btn_new = gtk_button_new_with_label("New");
-    GtkWidget *btn_delete = gtk_button_new_with_label("Delete");
-    GtkWidget *btn_duplicate = gtk_button_new_with_label("Duplicate");
+    layers_panel->btn_new = gtk_button_new_with_label("New");
+    layers_panel->btn_delete = gtk_button_new_with_label("Delete");
+    layers_panel->btn_duplicate = gtk_button_new_with_label("Duplicate");
 
-    gtk_box_pack_start(GTK_BOX(controls), btn_new, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(controls), btn_delete, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(controls), btn_duplicate, FALSE, FALSE, 0);
+    /* Store panel reference in buttons for callback access */
+    g_object_set_data(G_OBJECT(layers_panel->btn_new), "layers_panel", layers_panel);
+    g_object_set_data(G_OBJECT(layers_panel->btn_delete), "layers_panel", layers_panel);
+    g_object_set_data(G_OBJECT(layers_panel->btn_duplicate), "layers_panel", layers_panel);
+
+    gtk_box_pack_start(GTK_BOX(controls), layers_panel->btn_new, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(controls), layers_panel->btn_delete, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(controls), layers_panel->btn_duplicate, FALSE, FALSE, 0);
 
     gtk_box_pack_start(GTK_BOX(layers_panel->panel), controls, FALSE, FALSE, 0);
 
@@ -283,6 +395,70 @@ void layers_panel_update(LayersPanel *layers_panel, ImageDocument *doc)
     }
 
     printf("Layers panel updated with %u layers\n", layer_count);
+}
+
+/**
+ * Get the currently selected layer from the panel
+ */
+ImageLayer* layers_panel_get_selected_layer(LayersPanel *layers_panel)
+{
+    GtkTreeSelection *selection;
+    GtkTreeIter iter;
+    gchar *layer_name = NULL;
+
+    if (!layers_panel || !layers_panel->current_doc) {
+        return NULL;
+    }
+
+    /* Get the selection */
+    selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(layers_panel->tree_view));
+
+    if (!gtk_tree_selection_get_selected(selection, NULL, &iter)) {
+        return NULL;  /* No selection */
+    }
+
+    /* Get the layer name from the selected row */
+    gtk_tree_model_get(GTK_TREE_MODEL(layers_panel->store), &iter,
+                      2, &layer_name,
+                      -1);
+
+    if (!layer_name) {
+        return NULL;
+    }
+
+    /* Find the layer in the document by name */
+    guint layer_count = document_get_layer_count(layers_panel->current_doc);
+    for (guint i = 0; i < layer_count; i++) {
+        ImageLayer *layer = document_get_layer(layers_panel->current_doc, i);
+        if (layer && g_strcmp0(layer->name, layer_name) == 0) {
+            g_free(layer_name);
+            return layer;
+        }
+    }
+
+    g_free(layer_name);
+    return NULL;
+}
+
+/**
+ * Connect layers panel buttons to UI callbacks
+ */
+void layers_panel_connect_buttons(LayersPanel *layers_panel,
+                                  GCallback new_callback,
+                                  GCallback delete_callback,
+                                  GCallback duplicate_callback,
+                                  gpointer user_data)
+{
+    if (!layers_panel) {
+        return;
+    }
+
+    g_signal_connect(layers_panel->btn_new, "clicked",
+                     new_callback, user_data);
+    g_signal_connect(layers_panel->btn_delete, "clicked",
+                     delete_callback, user_data);
+    g_signal_connect(layers_panel->btn_duplicate, "clicked",
+                     duplicate_callback, user_data);
 }
 
 /**
