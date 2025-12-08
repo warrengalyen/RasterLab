@@ -500,6 +500,8 @@ static void on_layer_visibility_toggled(GtkCellRendererToggle *cell_renderer,
     GtkTreeIter iter;
     gboolean visible;
 
+    (void)cell_renderer;  /* Unused */
+
     if (!gtk_tree_model_get_iter_from_string(GTK_TREE_MODEL(layers_panel->store), 
                                              &iter, path_str)) {
         return;
@@ -512,11 +514,32 @@ static void on_layer_visibility_toggled(GtkCellRendererToggle *cell_renderer,
 
     /* Toggle visibility */
     visible = !visible;
+
+    /* Update layer visibility in document */
+    if (layers_panel->current_doc) {
+        /* Get the layer from the position */
+        gint row = atoi(path_str);
+        guint layer_count = document_get_layer_count(layers_panel->current_doc);
+        
+        /* Layers are displayed in reverse order */
+        gint layer_index = layer_count - 1 - row;
+        
+        if (layer_index >= 0 && layer_index < (gint)layer_count) {
+            ImageLayer *layer = document_get_layer(layers_panel->current_doc, layer_index);
+            if (layer) {
+                layer->visible = visible;
+                /* Mark composite as dirty and trigger redraw */
+                document_invalidate_composite(layers_panel->current_doc);
+            }
+        }
+    }
+
+    /* Update visibility in list store */
     gtk_list_store_set(layers_panel->store, &iter,
                       0, visible,
                       -1);
 
-    printf("Layer visibility toggled\n");
+    printf("Layer visibility toggled to %s\n", visible ? "visible" : "hidden");
 }
 
 /* Forward declarations for opacity callbacks */
