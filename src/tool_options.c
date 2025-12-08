@@ -53,7 +53,7 @@ void tool_options_set_size(ToolOptions *opts, gfloat size)
     
     /* Clamp size to 1-100 */
     opts->size = fmaxf(1.0f, fminf(100.0f, size));
-    printf("Tool size set to: %.1f\n", opts->size);
+    //printf("Tool size set to: %.1f\n", opts->size);
 }
 
 /**
@@ -67,7 +67,7 @@ void tool_options_set_opacity(ToolOptions *opts, gfloat opacity)
     
     /* Clamp opacity to 0-1 */
     opts->opacity = fmaxf(0.0f, fminf(1.0f, opacity));
-    printf("Tool opacity set to: %.2f\n", opts->opacity);
+    //printf("Tool opacity set to: %.2f\n", opts->opacity);
 }
 
 /**
@@ -81,6 +81,6 @@ void tool_options_set_hardness(ToolOptions *opts, gfloat hardness)
     
     /* Clamp hardness to 0-1 */
     opts->hardness = fmaxf(0.0f, fminf(1.0f, hardness));
-    printf("Tool hardness set to: %.2f\n", opts->hardness);
+    //printf("Tool hardness set to: %.2f\n", opts->hardness);
 }
 

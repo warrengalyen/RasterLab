@@ -132,7 +132,7 @@ static void brush_tool_mouse_down(Tool *tool, struct ImageDocument *doc, MouseEv
     /* Get the selected layer (from layers panel) */
     active_layer = document_get_selected_layer(doc);
     if (!active_layer || !active_layer->surface) {
-        printf("Brush tool: no selected layer with surface\n");
+        //printf("Brush tool: no selected layer with surface\n");
         return;
     }
 
@@ -145,10 +145,10 @@ static void brush_tool_mouse_down(Tool *tool, struct ImageDocument *doc, MouseEv
     /* Create a draw command for undo/redo */
     state->current_command = command_create_draw(active_layer);
     if (state->current_command && doc->undo_stack) {
-        printf("Brush tool: draw command created\n");
+        //printf("Brush tool: draw command created\n");
     }
 
-    printf("Brush tool: started drawing at (%d, %d)\n", event->x, event->y);
+    //printf("Brush tool: started drawing at (%d, %d)\n", event->x, event->y);
 }
 
 /**
@@ -173,7 +173,7 @@ static void brush_tool_mouse_move(Tool *tool, struct ImageDocument *doc, MouseEv
     /* Get the selected layer (from layers panel) */
     active_layer = document_get_selected_layer(doc);
     if (!active_layer || !active_layer->surface) {
-        printf("Brush tool: selected layer deleted during drawing\n");
+        //printf("Brush tool: selected layer deleted during drawing\n");
         state->is_drawing = FALSE;
         return;
     }
@@ -197,8 +197,8 @@ static void brush_tool_mouse_move(Tool *tool, struct ImageDocument *doc, MouseEv
     /* Mark composite for redraw and update thumbnail */
     document_invalidate_composite(doc);
 
-    printf("Brush tool: drawing line from (%d, %d) to (%d, %d)\n",
-           layer_x1, layer_y1, layer_x2, layer_y2);
+    // printf("Brush tool: drawing line from (%d, %d) to (%d, %d)\n",
+    //        layer_x1, layer_y1, layer_x2, layer_y2);
 }
 
 /**
@@ -224,7 +224,7 @@ static void brush_tool_mouse_up(Tool *tool, struct ImageDocument *doc, MouseEven
     /* Push draw command to undo stack */
     if (state->current_command && doc->undo_stack) {
         command_stack_push(doc->undo_stack, state->current_command);
-        printf("Brush tool: draw command pushed to undo stack\n");
+        //printf("Brush tool: draw command pushed to undo stack\n");
 
         /* Clear redo stack */
         if (doc->redo_stack) {
@@ -246,7 +246,7 @@ static void brush_tool_mouse_up(Tool *tool, struct ImageDocument *doc, MouseEven
     state->current_command = NULL;
     state->active_layer = NULL;
 
-    printf("Brush tool: finished drawing\n");
+    //printf("Brush tool: finished drawing\n");
 }
 
 /**
@@ -267,7 +267,7 @@ Tool* tool_brush_create(void)
     tool->mouse_move = brush_tool_mouse_move;
     tool->mouse_up = brush_tool_mouse_up;
 
-    printf("Brush tool created\n");
+    //printf("Brush tool created\n");
 
     return tool;
 }

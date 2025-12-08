@@ -42,7 +42,7 @@ static void move_tool_mouse_down(Tool *tool, struct ImageDocument *doc, MouseEve
     /* Get the selected layer (from layers panel) */
     active_layer = document_get_selected_layer(doc);
     if (!active_layer) {
-        printf("Move tool: no selected layer\n");
+        //printf("Move tool: no selected layer\n");
         return;
     }
 
@@ -54,7 +54,7 @@ static void move_tool_mouse_down(Tool *tool, struct ImageDocument *doc, MouseEve
     state->initial_offset_y = active_layer->offset_y;
     state->active_layer = active_layer;
 
-    printf("Move tool: started dragging layer at (%d, %d)\n", event->x, event->y);
+    //printf("Move tool: started dragging layer at (%d, %d)\n", event->x, event->y);
 }
 
 /**
@@ -86,8 +86,8 @@ static void move_tool_mouse_move(Tool *tool, struct ImageDocument *doc, MouseEve
     /* Mark composite for redraw and update thumbnail */
     document_invalidate_composite(doc);
 
-    printf("Move tool: moved to offset (%d, %d)\n", 
-           state->active_layer->offset_x, state->active_layer->offset_y);
+    // printf("Move tool: moved to offset (%d, %d)\n", 
+    //        state->active_layer->offset_x, state->active_layer->offset_y);
 }
 
 /**
@@ -126,7 +126,7 @@ static void move_tool_mouse_up(Tool *tool, struct ImageDocument *doc, MouseEvent
 
         if (cmd && doc->undo_stack) {
             command_stack_push(doc->undo_stack, cmd);
-            printf("Move tool: move command pushed to undo stack\n");
+            //printf("Move tool: move command pushed to undo stack\n");
 
             /* Clear redo stack since new action performed */
             if (doc->redo_stack) {
@@ -143,13 +143,13 @@ static void move_tool_mouse_up(Tool *tool, struct ImageDocument *doc, MouseEvent
 
         /* Layer was moved - mark document as modified */
         doc->modified = TRUE;
-        printf("Move tool: layer moved - document marked as modified\n");
+        //printf("Move tool: layer moved - document marked as modified\n");
     }
 
     state->is_dragging = FALSE;
     state->active_layer = NULL;
 
-    printf("Move tool: finished dragging\n");
+    //printf("Move tool: finished dragging\n");
 }
 
 /**
@@ -169,7 +169,7 @@ Tool* tool_move_create(void)
     tool->mouse_move = move_tool_mouse_move;
     tool->mouse_up = move_tool_mouse_up;
 
-    printf("Move tool created\n");
+    //printf("Move tool created\n");
 
     return tool;
 }

@@ -59,7 +59,7 @@ static void on_tool_button_clicked(GtkToggleButton *button, gpointer user_data)
 
     if (registry) {
         if (tool_manager_activate(registry, tool_type)) {
-            printf("Tool %d activated\n", tool_type);
+            //printf("Tool %d activated\n", tool_type);
             
             /* Set flag to prevent recursive calls */
             g_updating_tools = TRUE;

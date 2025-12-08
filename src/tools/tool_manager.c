@@ -65,7 +65,7 @@ gboolean tool_manager_init_defaults(ToolRegistry *registry)
     /* Activate Move tool by default */
     tool_manager_activate(registry, TOOL_MOVE);
 
-    printf("Tool manager initialized with %d default tools\n", TOOL_COUNT);
+    //printf("Tool manager initialized with %d default tools\n", TOOL_COUNT);
 
     return TRUE;
 }
@@ -80,7 +80,7 @@ gboolean tool_manager_register(ToolRegistry *registry, Tool *tool, ToolType type
     }
 
     registry->tools[type] = tool;
-    printf("Tool registered: %s (type=%d)\n", tool->name, type);
+    //printf("Tool registered: %s (type=%d)\n", tool->name, type);
 
     return TRUE;
 }
@@ -102,7 +102,7 @@ gboolean tool_manager_activate(ToolRegistry *registry, ToolType type)
     }
 
     registry->active_tool = tool;
-    printf("Tool activated: %s\n", tool->name);
+    //printf("Tool activated: %s\n", tool->name);
 
     return TRUE;
 }

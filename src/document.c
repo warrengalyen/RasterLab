@@ -528,9 +528,9 @@ gboolean document_load_image_from_file(ImageDocument *doc, const gchar *file_pat
 
     g_object_unref(pixbuf);
 
-    printf("Loaded image: %s (%ux%u, %u channels, alpha=%s)\n",
-           doc->filename, doc->width, doc->height, doc->channels,
-           doc->has_alpha ? "yes" : "no");
+    // printf("Loaded image: %s (%ux%u, %u channels, alpha=%s)\n",
+    //        doc->filename, doc->width, doc->height, doc->channels,
+    //        doc->has_alpha ? "yes" : "no");
 
     return TRUE;
 }
@@ -781,7 +781,7 @@ ImageLayer* document_add_layer(ImageDocument *doc, const gchar *name)
     /* Mark composite as needing re-render */
     document_invalidate_composite(doc);
 
-    printf("Added layer: %s\n", name);
+    //printf("Added layer: %s\n", name);
 
     return layer;
 }
@@ -816,7 +816,7 @@ gboolean document_delete_layer(ImageDocument *doc, ImageLayer *layer)
     /* Mark composite as needing re-render */
     document_invalidate_composite(doc);
 
-    printf("Deleted layer\n");
+    //printf("Deleted layer\n");
 
     return TRUE;
 }
@@ -861,7 +861,7 @@ ImageLayer* document_duplicate_layer(ImageDocument *doc, ImageLayer *layer, cons
     /* Mark composite as needing re-render */
     document_invalidate_composite(doc);
 
-    printf("Duplicated layer: %s\n", name);
+    //printf("Duplicated layer: %s\n", name);
 
     return new_layer;
 }
@@ -1185,7 +1185,7 @@ gboolean document_save_as_png(ImageDocument *doc, const gchar *filename)
             g_error_free(error);
         }
     } else {
-        printf("Saved PNG: %s\n", filename);
+        //printf("Saved PNG: %s\n", filename);
         /* Update document path */
         if (doc->file_path) {
             g_free(doc->file_path);
@@ -1253,7 +1253,7 @@ gboolean document_save_as_jpeg(ImageDocument *doc, const gchar *filename, gint q
             g_error_free(error);
         }
     } else {
-        printf("Saved JPEG: %s (quality=%d)\n", filename, quality);
+        //printf("Saved JPEG: %s (quality=%d)\n", filename, quality);
         /* Update document path */
         if (doc->file_path) {
             g_free(doc->file_path);
@@ -1311,7 +1311,7 @@ void document_mark_saved(ImageDocument *doc)
     }
 
     doc->modified = FALSE;
-    printf("Document marked as saved\n");
+    //printf("Document marked as saved\n");
 }
 
 /**
@@ -1341,7 +1341,7 @@ void document_zoom_in(ImageDocument *doc)
     }
 
     document_set_zoom(doc, doc->zoom_factor);
-    printf("Zoom: %.0f%%\n", doc->zoom_factor * 100);
+    //printf("Zoom: %.0f%%\n", doc->zoom_factor * 100);
 }
 
 /**
@@ -1359,7 +1359,7 @@ void document_zoom_out(ImageDocument *doc)
     }
 
     document_set_zoom(doc, doc->zoom_factor);
-    printf("Zoom: %.0f%%\n", doc->zoom_factor * 100);
+    //printf("Zoom: %.0f%%\n", doc->zoom_factor * 100);
 }
 
 /**
@@ -1385,7 +1385,7 @@ void document_zoom_fit(ImageDocument *doc)
         
         doc->zoom_factor = zoom;
         document_set_zoom(doc, zoom);
-        printf("Zoom fit: %.0f%%\n", zoom * 100);
+        //printf("Zoom fit: %.0f%%\n", zoom * 100);
     }
 }
 
@@ -1400,6 +1400,6 @@ void document_zoom_reset(ImageDocument *doc)
 
     doc->zoom_factor = 1.0;
     document_set_zoom(doc, 1.0);
-    printf("Zoom reset: 100%%\n");
+    //printf("Zoom reset: 100%%\n");
 }
 

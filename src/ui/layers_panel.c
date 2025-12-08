@@ -95,7 +95,7 @@ static gboolean on_treeview_button_press(GtkWidget *widget,
     }
 
     gtk_tree_path_free(path);
-    printf("Layer visibility toggled to %s\n", visible ? "visible" : "hidden");
+    //printf("Layer visibility toggled to %s\n", visible ? "visible" : "hidden");
     return TRUE;
 }
 
@@ -155,7 +155,7 @@ static void on_blend_mode_changed(GtkComboBox *combo, gpointer user_data)
     /* Mark composite as dirty and trigger redraw */
     document_invalidate_composite(layers_panel->current_doc);
     
-    printf("Layer blend mode changed to %d\n", blend_mode);
+    //printf("Layer blend mode changed to %d\n", blend_mode);
 }
 
 /**
@@ -337,7 +337,7 @@ static void on_layer_name_edited(GtkCellRendererText *renderer,
                       2, new_text,
                       -1);
 
-    printf("Layer name changed to: %s\n", new_text);
+    //printf("Layer name changed to: %s\n", new_text);
 }
 
 /**
@@ -351,7 +351,7 @@ static gboolean on_layer_row_activated(GtkTreeView *tree_view, GtkTreePath *path
     (void)column;
     (void)user_data;
 
-    printf("Layer selected\n");
+    //printf("Layer selected\n");
     return FALSE;
 }
 
@@ -615,21 +615,21 @@ static void on_panel_btn_new_clicked(GtkButton *button, gpointer user_data)
 {
     (void)button;  /* Unused */
     (void)user_data;  /* Context passed differently */
-    printf("New layer button clicked (handled by UI callback)\n");
+    //printf("New layer button clicked (handled by UI callback)\n");
 }
 
 static void on_panel_btn_delete_clicked(GtkButton *button, gpointer user_data)
 {
     (void)button;  /* Unused */
     (void)user_data;  /* Context passed differently */
-    printf("Delete layer button clicked (handled by UI callback)\n");
+    //printf("Delete layer button clicked (handled by UI callback)\n");
 }
 
 static void on_panel_btn_duplicate_clicked(GtkButton *button, gpointer user_data)
 {
     (void)button;  /* Unused */
     (void)user_data;  /* Context passed differently */
-    printf("Duplicate layer button clicked (handled by UI callback)\n");
+    //printf("Duplicate layer button clicked (handled by UI callback)\n");
 }
 
 /**
@@ -972,7 +972,7 @@ void layers_panel_update(LayersPanel *layers_panel, ImageDocument *doc)
         }
     }
 
-    printf("Layers panel updated with %u layers\n", layer_count);
+    //printf("Layers panel updated with %u layers\n", layer_count);
     
     /* Always select the layer at index 0 (last row in tree view since layers are displayed in reverse) */
     if (layer_count > 0 && layers_panel->tree_view) {

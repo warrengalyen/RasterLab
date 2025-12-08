@@ -98,7 +98,7 @@ static void eraser_tool_mouse_down(Tool *tool, struct ImageDocument *doc, MouseE
     /* Get the selected layer (from layers panel) */
     active_layer = document_get_selected_layer(doc);
     if (!active_layer || !active_layer->surface) {
-        printf("Eraser tool: no selected layer with surface\n");
+        //printf("Eraser tool: no selected layer with surface\n");
         return;
     }
 
@@ -111,10 +111,10 @@ static void eraser_tool_mouse_down(Tool *tool, struct ImageDocument *doc, MouseE
     /* Create a draw command for undo/redo */
     state->current_command = command_create_draw(active_layer);
     if (state->current_command && doc->undo_stack) {
-        printf("Eraser tool: erase command created\n");
+        //printf("Eraser tool: erase command created\n");
     }
 
-    printf("Eraser tool: started erasing at (%d, %d)\n", event->x, event->y);
+    //printf("Eraser tool: started erasing at (%d, %d)\n", event->x, event->y);
 }
 
 /**
@@ -139,7 +139,7 @@ static void eraser_tool_mouse_move(Tool *tool, struct ImageDocument *doc, MouseE
     /* Get the selected layer (from layers panel) */
     active_layer = document_get_selected_layer(doc);
     if (!active_layer || !active_layer->surface) {
-        printf("Eraser tool: selected layer deleted during erasing\n");
+        //printf("Eraser tool: selected layer deleted during erasing\n");
         state->is_erasing = FALSE;
         return;
     }
@@ -160,8 +160,8 @@ static void eraser_tool_mouse_move(Tool *tool, struct ImageDocument *doc, MouseE
     /* Mark composite for redraw and update thumbnail */
     document_invalidate_composite(doc);
 
-    printf("Eraser tool: erasing line from (%d, %d) to (%d, %d)\n",
-           layer_x1, layer_y1, layer_x2, layer_y2);
+    // printf("Eraser tool: erasing line from (%d, %d) to (%d, %d)\n",
+    //        layer_x1, layer_y1, layer_x2, layer_y2);
 }
 
 /**
@@ -187,7 +187,7 @@ static void eraser_tool_mouse_up(Tool *tool, struct ImageDocument *doc, MouseEve
     /* Push erase command to undo stack */
     if (state->current_command && doc->undo_stack) {
         command_stack_push(doc->undo_stack, state->current_command);
-        printf("Eraser tool: erase command pushed to undo stack\n");
+        //printf("Eraser tool: erase command pushed to undo stack\n");
 
         /* Clear redo stack */
         if (doc->redo_stack) {
@@ -209,7 +209,7 @@ static void eraser_tool_mouse_up(Tool *tool, struct ImageDocument *doc, MouseEve
     state->current_command = NULL;
     state->active_layer = NULL;
 
-    printf("Eraser tool: finished erasing\n");
+    //printf("Eraser tool: finished erasing\n");
 }
 
 /**
@@ -230,7 +230,7 @@ Tool* tool_eraser_create(void)
     tool->mouse_move = eraser_tool_mouse_move;
     tool->mouse_up = eraser_tool_mouse_up;
 
-    printf("Eraser tool created\n");
+    //printf("Eraser tool created\n");
 
     return tool;
 }

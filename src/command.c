@@ -64,7 +64,7 @@ void command_execute(Command *cmd, struct ImageDocument *doc)
         cmd->apply(cmd, doc);
     }
 
-    printf("Command executed: %s\n", cmd->name);
+    //printf("Command executed: %s\n", cmd->name);
 }
 
 /**
@@ -80,7 +80,7 @@ void command_undo(Command *cmd, struct ImageDocument *doc)
         cmd->revert(cmd, doc);
     }
 
-    printf("Command undone: %s\n", cmd->name);
+    //printf("Command undone: %s\n", cmd->name);
 }
 
 /**
@@ -210,7 +210,7 @@ static void draw_command_apply(Command *cmd, struct ImageDocument *doc)
     (void)cmd;
     (void)doc;
     /* Drawing was already applied in real-time */
-    printf("Draw command applied (no-op)\n");
+    //printf("Draw command applied (no-op)\n");
 }
 
 /**
@@ -230,7 +230,7 @@ static void draw_command_revert(Command *cmd, struct ImageDocument *doc)
     data = (DrawCommandData *)cmd->user_data;
 
     if (!data->layer || !data->snapshot) {
-        printf("Draw command revert: missing data\n");
+        //printf("Draw command revert: missing data\n");
         return;
     }
 
@@ -245,13 +245,13 @@ static void draw_command_revert(Command *cmd, struct ImageDocument *doc)
     }
 
     if (!layer_found) {
-        printf("Draw command revert: layer has been deleted, cannot undo\n");
+        //printf("Draw command revert: layer has been deleted, cannot undo\n");
         return;
     }
 
     /* Verify layer surface still exists */
     if (!data->layer->surface) {
-        printf("Draw command revert: layer surface is NULL, cannot undo\n");
+        //printf("Draw command revert: layer surface is NULL, cannot undo\n");
         return;
     }
 
@@ -267,7 +267,7 @@ static void draw_command_revert(Command *cmd, struct ImageDocument *doc)
         doc->composite_dirty = TRUE;
     }
 
-    printf("Draw command reverted: restored layer from snapshot\n");
+    //printf("Draw command reverted: restored layer from snapshot\n");
 }
 
 /**
@@ -393,8 +393,8 @@ static void move_command_apply(Command *cmd, struct ImageDocument *doc)
         gtk_widget_queue_draw(doc->drawing_area);
     }
 
-    printf("Move command applied: layer moved to (%d, %d)\n", 
-           data->new_offset_x, data->new_offset_y);
+    // printf("Move command applied: layer moved to (%d, %d)\n", 
+    //        data->new_offset_x, data->new_offset_y);
 }
 
 /**
@@ -424,8 +424,8 @@ static void move_command_revert(Command *cmd, struct ImageDocument *doc)
         gtk_widget_queue_draw(doc->drawing_area);
     }
 
-    printf("Move command reverted: layer restored to (%d, %d)\n",
-           data->old_offset_x, data->old_offset_y);
+    // printf("Move command reverted: layer restored to (%d, %d)\n",
+    //        data->old_offset_x, data->old_offset_y);
 }
 
 /**

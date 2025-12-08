@@ -42,11 +42,11 @@ static void on_layer_selection_changed(GtkTreeSelection *selection, gpointer use
     AppContext *ctx = (AppContext *)user_data;
 
     if (!ctx) {
-        printf("ERROR: on_layer_selection_changed called with NULL ctx\n");
+        //printf("ERROR: on_layer_selection_changed called with NULL ctx\n");
         return;
     }
 
-    printf("Layer selection changed in tree view\n");
+    //printf("Layer selection changed in tree view\n");
     
     /* Get the currently active document */
     ImageDocument *active_doc = ui_get_active_document(ctx);
@@ -397,7 +397,7 @@ AppContext* ui_create_main_window(void)
     /* Initialize menu and button states */
     ui_update_menu_and_button_states(ctx);
 
-    printf("Main window created with dockable panels and status bar\n");
+    //printf("Main window created with dockable panels and status bar\n");
 
     return ctx;
 }
@@ -468,7 +468,7 @@ ImageDocument* ui_create_document_tab(AppContext *ctx, const gchar *filename)
     /* Update window title */
     ui_update_window_title(ctx);
 
-    printf("Opened document: %s\n", filename);
+    //printf("Opened document: %s\n", filename);
 
     return doc;
 }
@@ -496,8 +496,8 @@ static void ui_close_document_tab_internal(AppContext *ctx, ImageDocument *doc)
                                      doc->scrolled_window);
 
     if (page_num >= 0) {
-        printf("Closing document: %s (page %d of %d)\n", 
-               document_get_filename(doc), page_num + 1, n_pages);
+        // printf("Closing document: %s (page %d of %d)\n", 
+        //        document_get_filename(doc), page_num + 1, n_pages);
 
         /* Remove from document list first */
         ctx->documents = g_list_remove(ctx->documents, doc);
@@ -510,7 +510,7 @@ static void ui_close_document_tab_internal(AppContext *ctx, ImageDocument *doc)
 
         /* Check if any pages left */
         gint remaining = gtk_notebook_get_n_pages(GTK_NOTEBOOK(ctx->notebook));
-        printf("Remaining pages after close: %d\n", remaining);
+        //printf("Remaining pages after close: %d\n", remaining);
 
          /* Update window title (handles empty notebook) */
          ui_update_window_title(ctx);
@@ -519,7 +519,7 @@ static void ui_close_document_tab_internal(AppContext *ctx, ImageDocument *doc)
          ui_update_status_bar(ctx, NULL);
          ui_update_menu_and_button_states(ctx);
 
-         printf("Document closed successfully\n");
+         //printf("Document closed successfully\n");
      }
 }
 
@@ -568,7 +568,7 @@ void ui_close_document_tab(AppContext *ctx, ImageDocument *doc)
         switch (response) {
             case GTK_RESPONSE_ACCEPT:
                 /* User clicked Save */
-                printf("User wants to save before closing\n");
+                //printf("User wants to save before closing\n");
                 ui_save_document_as(ctx);
                 /* Note: We don't actually close here - let user complete save */
                 /* In a full implementation, we'd detect when save completes */
@@ -576,14 +576,14 @@ void ui_close_document_tab(AppContext *ctx, ImageDocument *doc)
 
             case GTK_RESPONSE_REJECT:
                 /* User clicked Discard */
-                printf("User discarding changes\n");
+                //printf("User discarding changes\n");
                 ui_close_document_tab_internal(ctx, doc);
                 break;
 
             case GTK_RESPONSE_CANCEL:
             case GTK_RESPONSE_DELETE_EVENT:
                 /* User clicked Cancel or closed dialog */
-                printf("User cancelled close operation\n");
+                //printf("User cancelled close operation\n");
                 break;
 
             default:
@@ -789,7 +789,7 @@ static void on_file_save_as_response(GtkDialog *dialog, gint response_id, gpoint
                     /* Update window title to reflect new filename */
                     ui_update_window_title(ctx);
                     ui_update_status_bar(ctx, NULL);
-                    printf("Document saved: %s\n", file_path);
+                    //printf("Document saved: %s\n", file_path);
                 } else {
                     g_warning("Failed to save document");
                 }
@@ -892,7 +892,7 @@ static gboolean on_window_delete(GtkWidget *widget, GdkEvent *event, gpointer da
 
     AppContext *ctx = (AppContext *)data;
 
-    printf("Window delete event triggered - shutting down\n");
+    //printf("Window delete event triggered - shutting down\n");
 
     /* Free the context (which frees all documents) */
     ui_context_free(ctx);
@@ -1099,12 +1099,12 @@ static void on_tab_close_button_clicked(GtkButton *button, gpointer user_data)
     AppContext *ctx = (AppContext *)g_object_get_data(G_OBJECT(button), 
                                                        "app_context");
 
-    printf("Tab close button clicked for document: %s\n", 
-           doc ? document_get_filename(doc) : "unknown");
-    printf("  button=%p, ctx=%p, doc=%p\n", button, ctx, doc);
+    // printf("Tab close button clicked for document: %s\n", 
+    //        doc ? document_get_filename(doc) : "unknown");
+    // printf("  button=%p, ctx=%p, doc=%p\n", button, ctx, doc);
 
     if (ctx && doc) {
-        printf("  Calling ui_close_document_tab...\n");
+        // printf("  Calling ui_close_document_tab...\n");
         ui_close_document_tab(ctx, doc);
     } else {
         printf("  ERROR: ctx=%p or doc=%p is NULL\n", ctx, doc);
@@ -1136,7 +1136,7 @@ static void on_layer_new(GtkWidget *widget, gpointer data)
     g_free(layer_name);
     
     if (new_layer) {
-        printf("New layer created\n");
+        // printf("New layer created\n");
 
         /* Update layers panel */
         if (layers_panel) {
@@ -1174,7 +1174,7 @@ static void on_layer_delete(GtkWidget *widget, gpointer data)
     }
     
     if (document_delete_layer(doc, selected_layer)) {
-        printf("Layer deleted\n");
+        // printf("Layer deleted\n");
 
         /* Update layers panel */
         if (layers_panel) {
@@ -1218,7 +1218,7 @@ static void on_layer_duplicate(GtkWidget *widget, gpointer data)
     g_free(layer_name);
     
     if (dup_layer) {
-        printf("Layer duplicated\n");
+        // printf("Layer duplicated\n");
 
         /* Update layers panel */
         if (layers_panel) {
@@ -1256,7 +1256,7 @@ static void on_layer_move_up(GtkWidget *widget, gpointer data)
     }
     
     if (document_layer_move_up(doc, selected_layer)) {
-        printf("Layer moved up\n");
+        // printf("Layer moved up\n");
 
         /* Update layers panel */
         if (layers_panel) {
@@ -1297,7 +1297,7 @@ static void on_layer_move_down(GtkWidget *widget, gpointer data)
     }
     
     if (document_layer_move_down(doc, selected_layer)) {
-        printf("Layer moved down\n");
+        //printf("Layer moved down\n");
 
         /* Update layers panel */
         if (layers_panel) {
@@ -1365,7 +1365,7 @@ void ui_update_menu_and_button_states(AppContext *ctx)
     gboolean has_selection;
 
     if (!ctx || !ctx->window) {
-        printf("DEBUG: ui_update_menu_and_button_states called with NULL ctx or ctx->window\n");
+        //printf("DEBUG: ui_update_menu_and_button_states called with NULL ctx or ctx->window\n");
         return;
     }
 
@@ -1411,9 +1411,9 @@ void ui_update_menu_and_button_states(AppContext *ctx)
         gtk_widget_set_sensitive(ctx->layer_menu_duplicate, has_document && has_selection);
     }
 
-    printf("UI State: document=%s, selection=%s\n",
-           has_document ? "yes" : "no",
-           has_selection ? "yes" : "no");
+    // printf("UI State: document=%s, selection=%s\n",
+    //        has_document ? "yes" : "no",
+    //        has_selection ? "yes" : "no");
 }
 
 /**

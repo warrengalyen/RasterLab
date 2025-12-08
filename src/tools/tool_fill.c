@@ -76,7 +76,7 @@ static void fill_tool_mouse_down(Tool *tool, struct ImageDocument *doc, MouseEve
     /* Get the selected layer (from layers panel) */
     active_layer = document_get_selected_layer(doc);
     if (!active_layer || !active_layer->surface) {
-        printf("Fill tool: no selected layer with surface\n");
+        //printf("Fill tool: no selected layer with surface\n");
         return;
     }
 
@@ -93,7 +93,7 @@ static void fill_tool_mouse_down(Tool *tool, struct ImageDocument *doc, MouseEve
     /* Push fill command to undo stack */
     if (state->current_command && doc->undo_stack) {
         command_stack_push(doc->undo_stack, state->current_command);
-        printf("Fill tool: fill command pushed to undo stack\n");
+        //printf("Fill tool: fill command pushed to undo stack\n");
 
         /* Clear redo stack */
         if (doc->redo_stack) {
@@ -114,7 +114,7 @@ static void fill_tool_mouse_down(Tool *tool, struct ImageDocument *doc, MouseEve
     /* Mark composite for redraw and update thumbnail */
     document_invalidate_composite(doc);
 
-    printf("Fill tool: filled at (%d, %d)\n", layer_x, layer_y);
+    //printf("Fill tool: filled at (%d, %d)\n", layer_x, layer_y);
 }
 
 /**
@@ -156,7 +156,7 @@ Tool* tool_fill_create(void)
     tool->mouse_move = fill_tool_mouse_move;
     tool->mouse_up = fill_tool_mouse_up;
 
-    printf("Fill tool created\n");
+    //printf("Fill tool created\n");
 
     return tool;
 }
