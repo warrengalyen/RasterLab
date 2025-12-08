@@ -1369,8 +1369,9 @@ LayersPanel* create_layers_panel(void)
     gtk_tree_view_column_set_expand(column, TRUE);
     gtk_tree_view_append_column(GTK_TREE_VIEW(layers_panel->tree_view), column);
     
-    /* Set fixed row height to match thumbnail size */
-    gtk_tree_view_set_fixed_height_mode(GTK_TREE_VIEW(layers_panel->tree_view), TRUE);
+    /* Note: We don't use gtk_tree_view_set_fixed_height_mode because the Name column
+     * needs to expand, which conflicts with fixed height mode. The yalign and ypad
+     * properties on the cell renderer control the vertical alignment instead. */
 
     /* Store panel reference in buttons for callback access and set icons */
     if (layers_panel->btn_new) {
