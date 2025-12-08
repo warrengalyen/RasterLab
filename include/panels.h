@@ -46,6 +46,7 @@ typedef struct {
     GtkWidget *spin_opacity;     /* Opacity spin button */
     GtkWidget *btn_opacity_reset; /* Opacity reset button */
     GtkWidget *combo_blend;      /* Blend mode combo box */
+    GtkWidget *overview_widget;  /* Overview thumbnail widget */
     gpointer app_context;        /* Reference to AppContext for callbacks */
 } LayersPanel;
 

@@ -493,6 +493,8 @@ void tool_options_panel_free(ToolOptionsPanel *panel)
 static GdkPixbuf* create_layer_thumbnail(cairo_surface_t *layer_surface, gint thumb_size, gboolean visible);
 static GdkPixbuf* get_visibility_icon(gboolean visible);
 static GdkPixbuf* cairo_surface_to_pixbuf(cairo_surface_t *surface, gboolean keep_alpha);
+static GtkWidget* create_overview_widget(LayersPanel *layers_panel);
+static gboolean on_overview_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data);
 
 /**
  * Treeview button press event handler - handles visibility icon clicks
@@ -977,6 +979,167 @@ static GdkPixbuf* create_layer_thumbnail(cairo_surface_t *layer_surface, gint th
 }
 
 /**
+ * Overview widget draw callback
+ */
+static gboolean on_overview_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
+{
+    LayersPanel *layers_panel = (LayersPanel *)user_data;
+    ImageDocument *doc;
+    cairo_surface_t *composite;
+    GdkPixbuf *thumbnail_pixbuf = NULL;
+    GdkPixbuf *scaled_thumb = NULL;
+    gint widget_width, widget_height;
+    gint doc_width, doc_height;
+    gdouble scale_x, scale_y, scale;
+    gint thumb_width, thumb_height;
+    gint thumb_x, thumb_y;
+    gint viewport_x, viewport_y;
+    gint viewport_width, viewport_height;
+    GtkAdjustment *hadj = NULL, *vadj = NULL;
+    gdouble zoom_factor;
+    
+    if (!layers_panel) {
+        return FALSE;
+    }
+    
+    doc = layers_panel->current_doc;
+    if (!doc || !doc->composite_surface) {
+        /* Draw empty state */
+        widget_width = gtk_widget_get_allocated_width(widget);
+        widget_height = gtk_widget_get_allocated_height(widget);
+        cairo_set_source_rgb(cr, 0.9, 0.9, 0.9);
+        cairo_rectangle(cr, 0, 0, widget_width, widget_height);
+        cairo_fill(cr);
+        return FALSE;
+    }
+    
+    widget_width = gtk_widget_get_allocated_width(widget);
+    widget_height = gtk_widget_get_allocated_height(widget);
+    
+    composite = document_get_composite_surface(doc);
+    if (!composite) {
+        return FALSE;
+    }
+    
+    doc_width = cairo_image_surface_get_width(composite);
+    doc_height = cairo_image_surface_get_height(composite);
+    
+    if (doc_width <= 0 || doc_height <= 0) {
+        return FALSE;
+    }
+    
+    /* Calculate scale to fit thumbnail */
+    scale_x = (gdouble)(widget_width - 8) / doc_width;
+    scale_y = (gdouble)(widget_height - 8) / doc_height;
+    scale = (scale_x < scale_y) ? scale_x : scale_y;
+    
+    thumb_width = (gint)(doc_width * scale);
+    thumb_height = (gint)(doc_height * scale);
+    thumb_x = (widget_width - thumb_width) / 2;
+    thumb_y = (widget_height - thumb_height) / 2;
+    
+    /* Convert composite to pixbuf */
+    thumbnail_pixbuf = cairo_surface_to_pixbuf(composite, TRUE);
+    if (!thumbnail_pixbuf) {
+        return FALSE;
+    }
+    
+    /* Scale pixbuf to thumbnail size */
+    scaled_thumb = gdk_pixbuf_scale_simple(thumbnail_pixbuf, thumb_width, thumb_height, GDK_INTERP_BILINEAR);
+    g_object_unref(thumbnail_pixbuf);
+    
+    if (!scaled_thumb) {
+        return FALSE;
+    }
+    
+    /* Draw thumbnail */
+    gdk_cairo_set_source_pixbuf(cr, scaled_thumb, thumb_x, thumb_y);
+    cairo_paint(cr);
+    g_object_unref(scaled_thumb);
+    
+    /* Get viewport information from scrolled window */
+    if (doc->scrolled_window) {
+        hadj = gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(doc->scrolled_window));
+        vadj = gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(doc->scrolled_window));
+        zoom_factor = document_get_zoom(doc);
+        
+        if (hadj && vadj) {
+            /* Calculate viewport rectangle in document coordinates */
+            viewport_x = (gint)(gtk_adjustment_get_value(hadj) / zoom_factor);
+            viewport_y = (gint)(gtk_adjustment_get_value(vadj) / zoom_factor);
+            viewport_width = (gint)(gtk_adjustment_get_page_size(hadj) / zoom_factor);
+            viewport_height = (gint)(gtk_adjustment_get_page_size(vadj) / zoom_factor);
+            
+            /* Convert to thumbnail coordinates */
+            gint rect_x = thumb_x + (gint)(viewport_x * scale);
+            gint rect_y = thumb_y + (gint)(viewport_y * scale);
+            gint rect_w = (gint)(viewport_width * scale);
+            gint rect_h = (gint)(viewport_height * scale);
+            
+            /* Clamp rectangle to thumbnail boundaries */
+            if (rect_x < thumb_x) {
+                rect_w -= (thumb_x - rect_x);
+                rect_x = thumb_x;
+            }
+            if (rect_y < thumb_y) {
+                rect_h -= (thumb_y - rect_y);
+                rect_y = thumb_y;
+            }
+            if (rect_x + rect_w > thumb_x + thumb_width) {
+                rect_w = (thumb_x + thumb_width) - rect_x;
+            }
+            if (rect_y + rect_h > thumb_y + thumb_height) {
+                rect_h = (thumb_y + thumb_height) - rect_y;
+            }
+            
+            /* Only draw rectangle if it's within thumbnail bounds */
+            if (rect_w > 0 && rect_h > 0 && 
+                rect_x >= thumb_x && rect_y >= thumb_y &&
+                rect_x + rect_w <= thumb_x + thumb_width &&
+                rect_y + rect_h <= thumb_y + thumb_height) {
+                
+                /* Draw selection rectangle */
+                cairo_save(cr);
+                cairo_set_line_width(cr, 2.0);
+                cairo_set_source_rgba(cr, 0.0, 0.5, 1.0, 0.8);  /* Blue with transparency */
+                cairo_rectangle(cr, rect_x, rect_y, rect_w, rect_h);
+                cairo_stroke(cr);
+                
+                /* Draw inner border for better visibility */
+                cairo_set_line_width(cr, 1.0);
+                cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.9);  /* White inner border */
+                cairo_rectangle(cr, rect_x + 1, rect_y + 1, rect_w - 2, rect_h - 2);
+                cairo_stroke(cr);
+                cairo_restore(cr);
+            }
+        }
+    }
+    
+    return FALSE;
+}
+
+/**
+ * Create overview widget for composite thumbnail
+ */
+static GtkWidget* create_overview_widget(LayersPanel *layers_panel)
+{
+    GtkWidget *drawing_area;
+    
+    drawing_area = gtk_drawing_area_new();
+    gtk_widget_set_size_request(drawing_area, -1, 100);  /* Fixed height of 100 */
+    gtk_widget_set_vexpand(drawing_area, FALSE);  /* Don't expand vertically */
+    gtk_widget_set_hexpand(drawing_area, TRUE);   /* Expand horizontally */
+    
+    /* Connect draw signal */
+    g_signal_connect(drawing_area, "draw", G_CALLBACK(on_overview_draw), layers_panel);
+    
+    /* Store layers panel reference */
+    g_object_set_data(G_OBJECT(drawing_area), "layers_panel", layers_panel);
+    
+    return drawing_area;
+}
+
+/**
  * Get visibility icon pixbuf
  */
 static GdkPixbuf* get_visibility_icon(gboolean visible)
@@ -1091,6 +1254,7 @@ LayersPanel* create_layers_panel(void)
         layers_panel->spin_opacity = NULL;
         layers_panel->btn_opacity_reset = NULL;
         layers_panel->combo_blend = NULL;
+        layers_panel->overview_widget = NULL;
         layers_panel->current_doc = NULL;
         layers_panel->app_context = NULL;
         return layers_panel;
@@ -1286,7 +1450,15 @@ LayersPanel* create_layers_panel(void)
                         G_CALLBACK(on_blend_mode_changed), layers_panel);
     }
 
-    /* Add Glade panel as single accordion section */
+    /* Create overview widget for composite thumbnail */
+    layers_panel->overview_widget = create_overview_widget(layers_panel);
+    
+    /* Ensure layers panel content expands vertically */
+    gtk_widget_set_vexpand(glade_panel, TRUE);
+    gtk_widget_set_hexpand(glade_panel, TRUE);
+    
+    /* Add overview section first, then layers section */
+    accordion_add_section(layers_panel->accordion, "Overview", layers_panel->overview_widget);
     accordion_add_section(layers_panel->accordion, "Layers", glade_panel);
 
     /* Make accordion expand to fill available vertical space */
