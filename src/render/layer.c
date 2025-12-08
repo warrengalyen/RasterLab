@@ -108,8 +108,35 @@ gboolean document_delete_layer(ImageDocument *doc, ImageLayer *layer)
         return FALSE;
     }
 
+    /* Clear selected_layer reference if it's the layer being deleted */
+    if (doc->selected_layer == layer) {
+        doc->selected_layer = NULL;
+    }
+
+    /* Remove layer from list FIRST to prevent any code from accessing it */
     doc->layers = g_list_remove(doc->layers, layer);
+
+    /* Destroy composite surface to ensure no references to layer surface remain */
+    /* This must happen after removing from list but before freeing the layer */
+    if (doc->composite_surface) {
+        /* Flush any pending operations on the composite surface */
+        cairo_surface_flush(doc->composite_surface);
+        cairo_surface_destroy(doc->composite_surface);
+        doc->composite_surface = NULL;
+    }
+    doc->composite_dirty = TRUE;
+    
+    /* Now free the layer (destroys its surface) */
+    /* This must happen after removing from list and destroying composite */
     layer_free(layer);
+
+    /* Update selected layer to point to a valid layer (layer at index 0) */
+    if (doc->layers) {
+        ImageLayer *new_selected = document_get_layer(doc, 0);
+        if (new_selected) {
+            doc->selected_layer = new_selected;
+        }
+    }
 
     /* Mark composite as needing re-render */
     document_invalidate_composite(doc);

@@ -60,7 +60,17 @@ gboolean document_render_composite(ImageDocument *doc)
     for (iter = doc->layers; iter; iter = iter->next) {
         layer = (ImageLayer *)iter->data;
 
+        /* Skip if layer is NULL (shouldn't happen, but be safe) */
+        if (!layer) {
+            continue;
+        }
+
         if (!layer->visible || layer->opacity <= 0.0) {
+            continue;
+        }
+
+        /* Skip if layer surface is NULL or invalid */
+        if (!layer->surface) {
             continue;
         }
 
@@ -88,6 +98,8 @@ gboolean document_render_composite(ImageDocument *doc)
         cairo_restore(cr);
     }
 
+    /* Finish all Cairo operations and flush the surface */
+    cairo_surface_flush(doc->composite_surface);
     cairo_destroy(cr);
     doc->composite_dirty = FALSE;
 
