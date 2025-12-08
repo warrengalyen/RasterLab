@@ -4,10 +4,16 @@
 #include <gtk/gtk.h>
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <cairo.h>
+#include "render/dirty.h"
 
 /* Forward declarations */
 typedef struct _CommandStack CommandStack;
 struct ImageDocument;  /* Forward declaration for circular deps */
+
+/* Forward declaration for tile grid - full definition in render/tile.h */
+/* Note: document.c includes render/tile.h to get full definition */
+struct TileGrid;
+typedef struct TileGrid TileGrid;
 
 /**
  * Blend modes for layers
@@ -25,6 +31,8 @@ typedef enum {
 typedef struct ImageLayer {
     gchar *name;                  /* Layer name */
     cairo_surface_t *surface;     /* Layer content */
+    cairo_surface_t *cache_surface; /* Cached rendered layer (with opacity/blend applied) */
+    gboolean cache_dirty;         /* Does cache need regeneration? */
     gdouble opacity;              /* Layer opacity (0.0 - 1.0) */
     gboolean visible;             /* Is layer visible? */
     guint width;                  /* Layer width in pixels */
@@ -54,8 +62,10 @@ typedef struct ImageDocument {
     /* Rendering pipeline */
     GList *layers;                /* List of ImageLayer objects */
     ImageLayer *selected_layer;   /* Currently selected layer for tools */
-    cairo_surface_t *composite_surface;  /* Cached composite surface */
+    cairo_surface_t *composite_surface;  /* Cached composite surface (legacy, may be NULL with tiles) */
     gboolean composite_dirty;     /* Does composite need re-rendering? */
+    DirtyRect dirty_region;      /* Accumulated dirty rectangle region */
+    TileGrid *tile_grid;          /* Tile-based rendering grid (replaces full-surface rendering) */
     
     /* Viewport and zoom */
     gdouble zoom_factor;          /* Current zoom level (1.0 = 100%) */

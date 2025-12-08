@@ -39,6 +39,8 @@ set(SOURCES
     render/render_utils.c
     render/layer.c
     render/compositor.c
+    render/dirty.c
+    render/tile.c
     ${GRESOURCE_FILE}
 )
 

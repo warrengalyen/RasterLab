@@ -2,6 +2,9 @@
 #include "command.h"
 #include "document.h"
 #include "ui/tools_panel.h"
+#include "render/compositor.h"
+#include "render/dirty.h"
+#include "render/layer.h"
 #include <stdlib.h>
 #include <stdio.h>
 
@@ -108,10 +111,13 @@ static void fill_tool_mouse_down(Tool *tool, struct ImageDocument *doc, MouseEve
         }
     }
 
+    /* Invalidate layer cache since pixels changed */
+    layer_invalidate_cache(active_layer);
+
     /* Mark document as modified */
     doc->modified = TRUE;
 
-    /* Mark composite for redraw and update thumbnail */
+    /* For fill tool, invalidate entire composite (fill can affect large areas) */
     document_invalidate_composite(doc);
 
     //printf("Fill tool: filled at (%d, %d)\n", layer_x, layer_y);

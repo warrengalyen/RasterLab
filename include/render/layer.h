@@ -114,5 +114,18 @@ void document_set_selected_layer(ImageDocument *doc, ImageLayer *layer);
  */
 ImageLayer* document_get_selected_layer(ImageDocument *doc);
 
+/**
+ * Invalidate layer cache (mark as needing regeneration)
+ * @param layer The layer to invalidate
+ */
+void layer_invalidate_cache(ImageLayer *layer);
+
+/**
+ * Ensure layer cache is up to date (regenerate if dirty)
+ * @param layer The layer to update
+ * @return TRUE if successful, FALSE otherwise
+ */
+gboolean layer_ensure_cache(ImageLayer *layer);
+
 #endif /* LAYER_H */
 

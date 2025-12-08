@@ -2,6 +2,24 @@
 #include <stdio.h>
 
 /**
+ * Clip Cairo context to dirty rectangle
+ * @param ctx Render context
+ */
+void render_clip_to_dirty(RenderContext *ctx)
+{
+    if (!ctx || !ctx->use_dirty_rect || dirty_rect_is_empty(&ctx->dirty_rect)) {
+        return;
+    }
+    
+    cairo_rectangle(ctx->cr, 
+                   ctx->dirty_rect.x, 
+                   ctx->dirty_rect.y, 
+                   ctx->dirty_rect.width, 
+                   ctx->dirty_rect.height);
+    cairo_clip(ctx->cr);
+}
+
+/**
  * Convert GdkPixbuf to Cairo image surface
  */
 cairo_surface_t* pixbuf_to_cairo_surface(GdkPixbuf *pixbuf)

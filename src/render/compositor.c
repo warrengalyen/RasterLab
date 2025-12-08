@@ -1,11 +1,14 @@
 #include "render/compositor.h"
+#include "render/layer.h"
+#include "render/tile.h"
 #include "ui/layers_panel.h"
 #include <stdio.h>
 
 /**
  * Map BlendMode enum to Cairo operator
+ * Exported for use by tile rendering
  */
-static cairo_operator_t blend_mode_to_cairo_operator(BlendMode blend_mode)
+cairo_operator_t blend_mode_to_cairo_operator(BlendMode blend_mode)
 {
     switch (blend_mode) {
         case BLEND_MODE_NORMAL:
@@ -22,7 +25,7 @@ static cairo_operator_t blend_mode_to_cairo_operator(BlendMode blend_mode)
 }
 
 /**
- * Render all layers to composite surface
+ * Render all layers to composite surface (full render)
  */
 gboolean document_render_composite(ImageDocument *doc)
 {
@@ -56,7 +59,7 @@ gboolean document_render_composite(ImageDocument *doc)
     /* Track if this is the first visible layer */
     gboolean is_first_visible_layer = TRUE;
 
-    /* Composite each visible layer */
+    /* Composite each visible layer using cached surfaces */
     for (iter = doc->layers; iter; iter = iter->next) {
         layer = (ImageLayer *)iter->data;
 
@@ -74,10 +77,135 @@ gboolean document_render_composite(ImageDocument *doc)
             continue;
         }
 
-        /* Draw layer with offset and opacity */
+        /* Ensure layer cache is up to date */
+        if (!layer_ensure_cache(layer)) {
+            continue;
+        }
+
+        /* Draw layer with offset using cached surface */
         cairo_save(cr);
         cairo_translate(cr, layer->offset_x, layer->offset_y);
-        cairo_set_source_surface(cr, layer->surface, 0, 0);
+        cairo_set_source_surface(cr, layer->cache_surface, 0, 0);
+        
+        /* Set operator based on layer's blend mode
+           First visible layer always uses OVER to establish the base */
+        cairo_operator_t op;
+        if (is_first_visible_layer) {
+            op = CAIRO_OPERATOR_OVER;
+            is_first_visible_layer = FALSE;
+        } else {
+            op = blend_mode_to_cairo_operator(layer->blend_mode);
+        }
+        cairo_set_operator(cr, op);
+        cairo_paint(cr);
+        cairo_restore(cr);
+    }
+
+    /* Finish all Cairo operations and flush the surface */
+    cairo_surface_flush(doc->composite_surface);
+    cairo_destroy(cr);
+    doc->composite_dirty = FALSE;
+    
+    /* Clear dirty region after full render */
+    dirty_rect_init(&doc->dirty_region);
+
+    return TRUE;
+}
+
+/**
+ * Render only dirty regions to composite surface (optimized)
+ */
+gboolean document_render_composite_dirty(ImageDocument *doc, const DirtyRect *dirty_rect)
+{
+    cairo_t *cr;
+    GList *iter;
+    ImageLayer *layer;
+    DirtyRect clipped_rect;
+    gint layer_x, layer_y, layer_right, layer_bottom;
+    gint dirty_left, dirty_top, dirty_right, dirty_bottom;
+    gint intersect_left, intersect_top, intersect_right, intersect_bottom;
+
+    if (!doc || doc->width == 0 || doc->height == 0) {
+        return FALSE;
+    }
+    
+    if (!dirty_rect || dirty_rect_is_empty(dirty_rect)) {
+        return TRUE;  /* Nothing to render */
+    }
+
+    /* Create composite surface if needed */
+    if (!doc->composite_surface) {
+        doc->composite_surface = cairo_image_surface_create(
+            CAIRO_FORMAT_ARGB32, doc->width, doc->height);
+    }
+
+    if (cairo_surface_status(doc->composite_surface) != CAIRO_STATUS_SUCCESS) {
+        g_warning("Failed to create composite surface");
+        return FALSE;
+    }
+
+    /* Clip dirty rect to document bounds */
+    clipped_rect = *dirty_rect;
+    dirty_rect_clamp(&clipped_rect, doc->width, doc->height);
+    
+    if (dirty_rect_is_empty(&clipped_rect)) {
+        return TRUE;  /* Clipped to nothing */
+    }
+
+    dirty_left = clipped_rect.x;
+    dirty_top = clipped_rect.y;
+    dirty_right = dirty_left + clipped_rect.width;
+    dirty_bottom = dirty_top + clipped_rect.height;
+
+    cr = cairo_create(doc->composite_surface);
+    
+    /* First, clear the entire dirty region to transparent */
+    cairo_save(cr);
+    cairo_rectangle(cr, dirty_left, dirty_top, clipped_rect.width, clipped_rect.height);
+    cairo_clip(cr);
+    cairo_set_operator(cr, CAIRO_OPERATOR_CLEAR);
+    cairo_paint(cr);
+    cairo_restore(cr);
+    
+    /* Track if this is the first visible layer */
+    gboolean is_first_visible_layer = TRUE;
+
+    /* Composite each visible layer that intersects the dirty region */
+    for (iter = doc->layers; iter; iter = iter->next) {
+        layer = (ImageLayer *)iter->data;
+
+        if (!layer || !layer->visible || layer->opacity <= 0.0 || !layer->surface) {
+            continue;
+        }
+
+        /* Calculate layer bounds in document coordinates */
+        layer_x = layer->offset_x;
+        layer_y = layer->offset_y;
+        layer_right = layer_x + layer->width;
+        layer_bottom = layer_y + layer->height;
+
+        /* Check if layer intersects dirty region */
+        intersect_left = (layer_x > dirty_left) ? layer_x : dirty_left;
+        intersect_top = (layer_y > dirty_top) ? layer_y : dirty_top;
+        intersect_right = (layer_right < dirty_right) ? layer_right : dirty_right;
+        intersect_bottom = (layer_bottom < dirty_bottom) ? layer_bottom : dirty_bottom;
+
+        if (intersect_left >= intersect_right || intersect_top >= intersect_bottom) {
+            continue;  /* No intersection */
+        }
+
+        /* Calculate source region in layer coordinates */
+        gint src_x = intersect_left - layer_x;
+        gint src_y = intersect_top - layer_y;
+        gint src_width = intersect_right - intersect_left;
+        gint src_height = intersect_bottom - intersect_top;
+
+        /* Draw only the intersecting region */
+        cairo_save(cr);
+        
+        /* Clip to intersection region in document coordinates */
+        cairo_rectangle(cr, intersect_left, intersect_top, src_width, src_height);
+        cairo_clip(cr);
         
         /* Set operator based on layer's blend mode
            First visible layer always uses OVER to establish the base */
@@ -90,18 +218,36 @@ gboolean document_render_composite(ImageDocument *doc)
         }
         cairo_set_operator(cr, op);
         
-        if (layer->opacity < 1.0) {
-            cairo_paint_with_alpha(cr, layer->opacity);
+        /* OPTIMIZATION: For large layers with dirty cache, use source directly
+           with opacity applied on-the-fly instead of regenerating entire cache.
+           This is much faster for frequent updates during drawing. */
+        guint layer_area = layer->width * layer->height;
+        const guint LARGE_LAYER_THRESHOLD = 1500 * 1500;  /* ~2.25 million pixels */
+        
+        if (layer->cache_dirty && layer_area > LARGE_LAYER_THRESHOLD) {
+            /* Use source surface directly with opacity - no cache needed for this render */
+            cairo_set_source_surface(cr, layer->surface, layer_x, layer_y);
+            if (layer->opacity < 1.0) {
+                cairo_paint_with_alpha(cr, layer->opacity);
+            } else {
+                cairo_paint(cr);
+            }
         } else {
+            /* Use cached surface (either valid or small enough to regenerate quickly) */
+            if (!layer_ensure_cache(layer)) {
+                cairo_restore(cr);
+                continue;
+            }
+            cairo_set_source_surface(cr, layer->cache_surface, layer_x, layer_y);
             cairo_paint(cr);
         }
+        
         cairo_restore(cr);
     }
 
     /* Finish all Cairo operations and flush the surface */
     cairo_surface_flush(doc->composite_surface);
     cairo_destroy(cr);
-    doc->composite_dirty = FALSE;
 
     return TRUE;
 }
@@ -115,16 +261,147 @@ cairo_surface_t* document_get_composite_surface(ImageDocument *doc)
         return NULL;
     }
 
-    /* Re-render if composite is dirty */
-    if (doc->composite_dirty) {
-        document_render_composite(doc);
+    /* TILE-BASED: For tile-based rendering, composite tiles if needed */
+    if (doc->tile_grid && doc->composite_dirty) {
+        tile_grid_composite(doc, doc->tile_grid);
+        doc->composite_dirty = FALSE;
+        dirty_rect_init(&doc->dirty_region);
+    }
+
+    /* Only create composite surface when actually needed (e.g., for saving) */
+    /* For overview thumbnails, use document_generate_thumbnail_from_tiles() instead */
+    if (!doc->composite_surface && doc->width > 0 && doc->height > 0) {
+        doc->composite_surface = cairo_image_surface_create(
+            CAIRO_FORMAT_ARGB32, doc->width, doc->height);
+        
+        if (cairo_surface_status(doc->composite_surface) == CAIRO_STATUS_SUCCESS) {
+            /* Copy from tiles if available, otherwise render */
+            if (doc->tile_grid) {
+                /* Ensure all tiles are composited first */
+                tile_grid_composite(doc, doc->tile_grid);
+                
+                /* Copy tiles to composite surface */
+                cairo_t *cr = cairo_create(doc->composite_surface);
+                gint tx, ty;
+                
+                for (ty = 0; ty < doc->tile_grid->tiles_y; ty++) {
+                    for (tx = 0; tx < doc->tile_grid->tiles_x; tx++) {
+                        Tile *tile = &doc->tile_grid->tiles[ty][tx];
+                        if (tile && tile->surface) {
+                            cairo_set_source_surface(cr, tile->surface, tile->px, tile->py);
+                            cairo_paint(cr);
+                        }
+                    }
+                }
+                
+                cairo_destroy(cr);
+                cairo_surface_flush(doc->composite_surface);
+            } else {
+                /* Fallback to full render */
+                document_render_composite(doc);
+            }
+        }
     }
 
     return doc->composite_surface;
 }
 
 /**
+ * Generate a thumbnail surface by directly compositing layers at thumbnail size
+ * This avoids tile boundary artifacts by rendering layers directly at scale
+ */
+cairo_surface_t* document_generate_thumbnail_from_tiles(ImageDocument *doc, gint thumb_width, gint thumb_height)
+{
+    cairo_surface_t *thumb_surface;
+    cairo_t *cr;
+    GList *iter;
+    ImageLayer *layer;
+    gdouble scale_x, scale_y, scale;
+    gboolean is_first_visible_layer = TRUE;
+    
+    if (!doc || doc->width <= 0 || doc->height <= 0) {
+        return NULL;
+    }
+    
+    if (thumb_width <= 0 || thumb_height <= 0) {
+        return NULL;
+    }
+    
+    /* Calculate scale to fit thumbnail */
+    scale_x = (gdouble)thumb_width / doc->width;
+    scale_y = (gdouble)thumb_height / doc->height;
+    scale = (scale_x < scale_y) ? scale_x : scale_y;
+    
+    /* Create thumbnail surface */
+    thumb_surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, thumb_width, thumb_height);
+    if (cairo_surface_status(thumb_surface) != CAIRO_STATUS_SUCCESS) {
+        return NULL;
+    }
+    
+    cr = cairo_create(thumb_surface);
+    
+    /* Clear to transparent */
+    cairo_set_operator(cr, CAIRO_OPERATOR_CLEAR);
+    cairo_paint(cr);
+    cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+    
+    /* Scale context to thumbnail size */
+    cairo_scale(cr, scale, scale);
+    
+    /* Set bilinear filtering for better quality when scaling down layers */
+    cairo_pattern_t *dummy = cairo_pattern_create_rgba(0, 0, 0, 0);
+    cairo_set_source(cr, dummy);
+    cairo_pattern_destroy(dummy);
+    
+    /* Composite each visible layer directly at thumbnail scale */
+    for (iter = doc->layers; iter; iter = iter->next) {
+        layer = (ImageLayer *)iter->data;
+        
+        if (!layer || !layer->visible || layer->opacity <= 0.0 || !layer->surface) {
+            continue;
+        }
+        
+        /* Ensure layer cache is up to date */
+        if (!layer_ensure_cache(layer)) {
+            continue;
+        }
+        
+        cairo_save(cr);
+        
+        /* Translate to layer position */
+        cairo_translate(cr, layer->offset_x, layer->offset_y);
+        
+        /* Set source with bilinear filtering for smooth scaling */
+        cairo_set_source_surface(cr, layer->cache_surface, 0, 0);
+        cairo_pattern_t *pattern = cairo_get_source(cr);
+        cairo_pattern_set_filter(pattern, CAIRO_FILTER_BILINEAR);
+        
+        /* Set operator based on layer's blend mode */
+        cairo_operator_t op;
+        if (is_first_visible_layer) {
+            op = CAIRO_OPERATOR_OVER;
+            is_first_visible_layer = FALSE;
+        } else {
+            op = blend_mode_to_cairo_operator(layer->blend_mode);
+        }
+        cairo_set_operator(cr, op);
+        
+        /* Paint layer (opacity is already applied in cache) */
+        cairo_paint(cr);
+        
+        cairo_restore(cr);
+    }
+    
+    cairo_destroy(cr);
+    cairo_surface_flush(thumb_surface);
+    
+    return thumb_surface;
+}
+
+/**
  * Mark composite surface as needing re-render
+ * 
+ * TILE-BASED: Now marks all tiles as dirty instead of full surface
  */
 void document_invalidate_composite(ImageDocument *doc)
 {
@@ -135,8 +412,86 @@ void document_invalidate_composite(ImageDocument *doc)
     }
 
     doc->composite_dirty = TRUE;
+    
+    /* TILE-BASED: Mark all tiles as dirty - composite surface will be regenerated on-demand when needed */
+    /* Don't invalidate composite surface here - it's only created when actually needed (e.g., saving) */
+    
+    /* Mark entire document as dirty */
+    dirty_rect_set(&doc->dirty_region, 0, 0, doc->width, doc->height);
+    
+    /* Mark all tiles as dirty for tile-based rendering */
+    if (doc->tile_grid) {
+        tile_grid_mark_rect_dirty(doc->tile_grid, 0, 0, doc->width, doc->height);
+    }
 
     /* Trigger redraw */
+    if (doc->drawing_area) {
+        gtk_widget_queue_draw(doc->drawing_area);
+        
+        /* Update selected layer thumbnail if layers panel is available */
+        layers_panel = (LayersPanel *)g_object_get_data(G_OBJECT(doc->drawing_area), "layers_panel");
+        if (layers_panel) {
+            /* Only update if this document is the current one in the layers panel */
+            if (layers_panel->current_doc == doc) {
+                layers_panel_update_selected_thumbnail(layers_panel);
+                
+                /* Update overview widget */
+                if (layers_panel->overview_widget) {
+                    gtk_widget_queue_draw(layers_panel->overview_widget);
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Mark a specific region as dirty
+ * 
+ * TILE-BASED: Now marks intersecting tiles as dirty instead of just tracking rectangle
+ */
+void document_invalidate_region(ImageDocument *doc, const DirtyRect *dirty_rect)
+{
+    LayersPanel *layers_panel;
+    DirtyRect clamped_rect;
+
+    if (!doc || !dirty_rect) {
+        return;
+    }
+
+    if (dirty_rect_is_empty(dirty_rect)) {
+        return;
+    }
+
+    /* Clamp to document bounds */
+    clamped_rect = *dirty_rect;
+    dirty_rect_clamp(&clamped_rect, doc->width, doc->height);
+    
+    if (dirty_rect_is_empty(&clamped_rect)) {
+        return;
+    }
+
+    /* Union with existing dirty region */
+    if (dirty_rect_is_empty(&doc->dirty_region)) {
+        doc->dirty_region = clamped_rect;
+    } else {
+        dirty_rect_union(&doc->dirty_region, &clamped_rect, &doc->dirty_region);
+    }
+    
+    doc->composite_dirty = TRUE;
+    
+    /* TILE-BASED: Mark intersecting tiles as dirty - composite surface will be regenerated on-demand when needed */
+    /* Don't invalidate composite surface here - it's only created when actually needed (e.g., saving) */
+    
+    /* Mark intersecting tiles as dirty for tile-based rendering */
+    if (doc->tile_grid) {
+        tile_grid_mark_rect_dirty(doc->tile_grid, 
+                                  clamped_rect.x, clamped_rect.y,
+                                  clamped_rect.width, clamped_rect.height);
+    }
+
+    /* Trigger redraw - use queue_draw instead of queue_draw_area for now
+       queue_draw_area can cause artifacts and doesn't work well with zoom/transform
+       GTK will optimize the redraw based on the clip region in the draw callback */
     if (doc->drawing_area) {
         gtk_widget_queue_draw(doc->drawing_area);
         

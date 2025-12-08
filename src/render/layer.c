@@ -33,6 +33,8 @@ ImageLayer* layer_new(const gchar *name, guint width, guint height, gboolean has
     layer->blend_mode = BLEND_MODE_NORMAL;
     layer->offset_x = 0;  /* Initialize layer offset */
     layer->offset_y = 0;
+    layer->cache_surface = NULL;  /* Cache created on demand */
+    layer->cache_dirty = TRUE;    /* Cache needs initial generation */
 
     return layer;
 }
@@ -52,6 +54,10 @@ void layer_free(ImageLayer *layer)
 
     if (layer->surface) {
         cairo_surface_destroy(layer->surface);
+    }
+    
+    if (layer->cache_surface) {
+        cairo_surface_destroy(layer->cache_surface);
     }
 
     g_free(layer);
@@ -345,5 +351,89 @@ ImageLayer* document_get_selected_layer(ImageDocument *doc)
     }
 
     return document_get_active_layer(doc);
+}
+
+/**
+ * Invalidate layer cache (mark as needing regeneration)
+ */
+void layer_invalidate_cache(ImageLayer *layer)
+{
+    if (!layer) {
+        return;
+    }
+    
+    layer->cache_dirty = TRUE;
+    
+    /* Destroy old cache */
+    if (layer->cache_surface) {
+        cairo_surface_destroy(layer->cache_surface);
+        layer->cache_surface = NULL;
+    }
+}
+
+/**
+ * Ensure layer cache is up to date (regenerate if dirty)
+ * Creates a cached surface with opacity and blend mode pre-applied
+ * 
+ * OPTIMIZATION: For large layers, we can use the source surface directly
+ * with opacity applied on-the-fly instead of caching, if the cache
+ * would be too expensive to regenerate frequently.
+ */
+gboolean layer_ensure_cache(ImageLayer *layer)
+{
+    cairo_t *cr;
+    
+    if (!layer || !layer->surface) {
+        return FALSE;
+    }
+    
+    /* Return if cache is valid */
+    if (!layer->cache_dirty && layer->cache_surface) {
+        return TRUE;
+    }
+    
+    /* For very large layers (2000x2000+), consider skipping cache
+       and using source directly with opacity applied on-the-fly.
+       Cache is most beneficial for opacity/blend mode changes,
+       not for pixel content changes during drawing. */
+    guint layer_area = layer->width * layer->height;
+    const guint LARGE_LAYER_THRESHOLD = 2000 * 2000;  /* 4 million pixels */
+    
+    /* If layer is very large and cache is dirty, we might skip caching
+       during active drawing operations. But for now, we'll still cache
+       since it helps with opacity/blend mode performance. */
+    
+    /* Destroy old cache if exists */
+    if (layer->cache_surface) {
+        cairo_surface_destroy(layer->cache_surface);
+        layer->cache_surface = NULL;
+    }
+    
+    /* Create cache surface with same dimensions as layer */
+    layer->cache_surface = cairo_image_surface_create(
+        CAIRO_FORMAT_ARGB32, layer->width, layer->height);
+    
+    if (cairo_surface_status(layer->cache_surface) != CAIRO_STATUS_SUCCESS) {
+        g_warning("Failed to create layer cache surface");
+        layer->cache_surface = NULL;
+        return FALSE;
+    }
+    
+    /* Render layer surface to cache with opacity applied */
+    cr = cairo_create(layer->cache_surface);
+    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+    cairo_set_source_surface(cr, layer->surface, 0, 0);
+    
+    if (layer->opacity < 1.0) {
+        cairo_paint_with_alpha(cr, layer->opacity);
+    } else {
+        cairo_paint(cr);
+    }
+    
+    cairo_destroy(cr);
+    cairo_surface_flush(layer->cache_surface);
+    layer->cache_dirty = FALSE;
+    
+    return TRUE;
 }
 

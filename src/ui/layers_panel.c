@@ -2,6 +2,9 @@
 #include "document.h"
 #include "accordion.h"
 #include "render/render_utils.h"
+#include "render/layer.h"
+#include "render/compositor.h"
+#include "render/dirty.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -152,8 +155,16 @@ static void on_blend_mode_changed(GtkComboBox *combo, gpointer user_data)
     /* Update layer blend mode */
     selected_layer->blend_mode = blend_mode;
     
-    /* Mark composite as dirty and trigger redraw */
-    document_invalidate_composite(layers_panel->current_doc);
+    /* Mark cache as dirty but don't destroy it - will be regenerated lazily */
+    selected_layer->cache_dirty = TRUE;
+    
+    /* Invalidate entire layer region (blend mode affects how layer composites) */
+    DirtyRect dirty_rect;
+    dirty_rect_set(&dirty_rect, selected_layer->offset_x, selected_layer->offset_y,
+                   selected_layer->width, selected_layer->height);
+    dirty_rect_clamp(&dirty_rect, layers_panel->current_doc->width, 
+                    layers_panel->current_doc->height);
+    document_invalidate_region(layers_panel->current_doc, &dirty_rect);
     
     //printf("Layer blend mode changed to %d\n", blend_mode);
 }
@@ -179,6 +190,9 @@ static void on_opacity_scale_changed(GtkRange *range, gpointer user_data)
     /* Update layer opacity (convert from 0-100 to 0.0-1.0) */
     selected_layer->opacity = value / 100.0;
     
+    /* Invalidate layer cache since opacity affects rendering */
+    layer_invalidate_cache(selected_layer);
+    
     /* Update spin button to stay in sync */
     if (layers_panel->spin_opacity) {
         g_signal_handlers_block_by_func(layers_panel->spin_opacity,
@@ -190,7 +204,7 @@ static void on_opacity_scale_changed(GtkRange *range, gpointer user_data)
                                          layers_panel);
     }
     
-    /* Invalidate composite to redraw with new opacity */
+    /* Invalidate entire composite (opacity affects how layer composites) */
     document_invalidate_composite(layers_panel->current_doc);
     
     /* Queue redraw */
@@ -220,6 +234,9 @@ static void on_opacity_spin_changed(GtkSpinButton *spin_button, gpointer user_da
     /* Update layer opacity (convert from 0-100 to 0.0-1.0) */
     selected_layer->opacity = value / 100.0;
     
+    /* Mark cache as dirty but don't destroy it - will be regenerated lazily */
+    selected_layer->cache_dirty = TRUE;
+    
     /* Update scale to stay in sync */
     if (layers_panel->scale_opacity) {
         g_signal_handlers_block_by_func(layers_panel->scale_opacity,
@@ -231,8 +248,13 @@ static void on_opacity_spin_changed(GtkSpinButton *spin_button, gpointer user_da
                                          layers_panel);
     }
     
-    /* Invalidate composite to redraw with new opacity */
-    document_invalidate_composite(layers_panel->current_doc);
+    /* Invalidate entire layer region (opacity affects how layer composites) */
+    DirtyRect dirty_rect;
+    dirty_rect_set(&dirty_rect, selected_layer->offset_x, selected_layer->offset_y,
+                   selected_layer->width, selected_layer->height);
+    dirty_rect_clamp(&dirty_rect, layers_panel->current_doc->width, 
+                    layers_panel->current_doc->height);
+    document_invalidate_region(layers_panel->current_doc, &dirty_rect);
     
     /* Queue redraw */
     if (layers_panel->current_doc->drawing_area) {
@@ -262,6 +284,9 @@ static void on_opacity_reset_clicked(GtkButton *button, gpointer user_data)
     /* Reset opacity to 100% (1.0) */
     selected_layer->opacity = 1.0;
     
+    /* Mark cache as dirty but don't destroy it - will be regenerated lazily */
+    selected_layer->cache_dirty = TRUE;
+    
     /* Update controls */
     if (layers_panel->scale_opacity) {
         g_signal_handlers_block_by_func(layers_panel->scale_opacity,
@@ -283,8 +308,13 @@ static void on_opacity_reset_clicked(GtkButton *button, gpointer user_data)
                                          layers_panel);
     }
     
-    /* Invalidate composite to redraw with new opacity */
-    document_invalidate_composite(layers_panel->current_doc);
+    /* Invalidate entire layer region (opacity affects how layer composites) */
+    DirtyRect dirty_rect;
+    dirty_rect_set(&dirty_rect, selected_layer->offset_x, selected_layer->offset_y,
+                   selected_layer->width, selected_layer->height);
+    dirty_rect_clamp(&dirty_rect, layers_panel->current_doc->width, 
+                    layers_panel->current_doc->height);
+    document_invalidate_region(layers_panel->current_doc, &dirty_rect);
     
     /* Queue redraw */
     if (layers_panel->current_doc->drawing_area) {
@@ -453,7 +483,7 @@ static gboolean on_overview_draw(GtkWidget *widget, cairo_t *cr, gpointer user_d
     }
     
     doc = layers_panel->current_doc;
-    if (!doc || !doc->composite_surface) {
+    if (!doc) {
         /* Draw empty state */
         widget_width = gtk_widget_get_allocated_width(widget);
         widget_height = gtk_widget_get_allocated_height(widget);
@@ -466,13 +496,8 @@ static gboolean on_overview_draw(GtkWidget *widget, cairo_t *cr, gpointer user_d
     widget_width = gtk_widget_get_allocated_width(widget);
     widget_height = gtk_widget_get_allocated_height(widget);
     
-    composite = document_get_composite_surface(doc);
-    if (!composite) {
-        return FALSE;
-    }
-    
-    doc_width = cairo_image_surface_get_width(composite);
-    doc_height = cairo_image_surface_get_height(composite);
+    doc_width = doc->width;
+    doc_height = doc->height;
     
     if (doc_width <= 0 || doc_height <= 0) {
         return FALSE;
@@ -488,15 +513,19 @@ static gboolean on_overview_draw(GtkWidget *widget, cairo_t *cr, gpointer user_d
     thumb_x = (widget_width - thumb_width) / 2;
     thumb_y = (widget_height - thumb_height) / 2;
     
-    /* Convert composite to pixbuf */
-    thumbnail_pixbuf = cairo_surface_to_pixbuf(composite, TRUE);
-    if (!thumbnail_pixbuf) {
+    /* TILE-BASED: Generate thumbnail directly from tiles at thumbnail size (much faster) */
+    composite = document_generate_thumbnail_from_tiles(doc, thumb_width, thumb_height);
+    if (!composite) {
+        /* Draw empty state if thumbnail generation failed */
+        cairo_set_source_rgb(cr, 0.9, 0.9, 0.9);
+        cairo_rectangle(cr, 0, 0, widget_width, widget_height);
+        cairo_fill(cr);
         return FALSE;
     }
     
-    /* Scale pixbuf to thumbnail size */
-    scaled_thumb = gdk_pixbuf_scale_simple(thumbnail_pixbuf, thumb_width, thumb_height, GDK_INTERP_BILINEAR);
-    g_object_unref(thumbnail_pixbuf);
+    /* Convert thumbnail surface to pixbuf */
+    scaled_thumb = cairo_surface_to_pixbuf(composite, TRUE);
+    cairo_surface_destroy(composite);
     
     if (!scaled_thumb) {
         return FALSE;

@@ -3,6 +3,9 @@
 #include "document.h"
 #include "tool_options.h"
 #include "ui/tools_panel.h"
+#include "render/compositor.h"
+#include "render/dirty.h"
+#include "render/layer.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
@@ -189,13 +192,41 @@ static void brush_tool_mouse_move(Tool *tool, struct ImageDocument *doc, MouseEv
 
     brush_draw_line(active_layer->surface, layer_x1, layer_y1, layer_x2, layer_y2);
 
+    /* Mark layer cache as dirty but don't destroy it yet
+       We'll regenerate it lazily only when needed for compositing
+       This avoids expensive cache regeneration on every mouse move */
+    active_layer->cache_dirty = TRUE;
+
+    /* Calculate dirty rectangle BEFORE updating last_x/y
+       Use the previous position and current position */
+    ToolOptions *opts = tool_options_get_global();
+    gfloat brush_size = opts ? opts->size : 5.0f;
+    gint margin = (gint)(brush_size / 2.0f) + 3;  /* Add margin for anti-aliasing */
+    
+    /* Calculate bounding box of stroke in document coordinates
+       Use state->last_x/y (previous position) and event->x/y (current position) */
+    gint min_x = (state->last_x < event->x) ? state->last_x : event->x;
+    gint max_x = (state->last_x > event->x) ? state->last_x : event->x;
+    gint min_y = (state->last_y < event->y) ? state->last_y : event->y;
+    gint max_y = (state->last_y > event->y) ? state->last_y : event->y;
+    
     /* Store the image-space coordinates (not layer-relative) 
-       for next iteration */
+       for next iteration - AFTER calculating dirty rect */
     state->last_x = event->x;
     state->last_y = event->y;
-
-    /* Mark composite for redraw and update thumbnail */
-    document_invalidate_composite(doc);
+    
+    DirtyRect dirty_rect;
+    dirty_rect_set(&dirty_rect, min_x - margin, min_y - margin,
+                   (max_x - min_x) + 2 * margin,
+                   (max_y - min_y) + 2 * margin);
+    dirty_rect_clamp(&dirty_rect, doc->width, doc->height);
+    
+    /* Only invalidate the stroke region
+       For performance, we batch invalidations - the compositor will
+       union all dirty regions and render once */
+    if (!dirty_rect_is_empty(&dirty_rect)) {
+        document_invalidate_region(doc, &dirty_rect);
+    }
 
     // printf("Brush tool: drawing line from (%d, %d) to (%d, %d)\n",
     //        layer_x1, layer_y1, layer_x2, layer_y2);

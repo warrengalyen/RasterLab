@@ -5,6 +5,7 @@
 #include "render/layer.h"
 #include "render/compositor.h"
 #include "render/render_utils.h"
+#include "render/tile.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -22,12 +23,27 @@ static gboolean on_drawing_area_motion_notify(GtkWidget *widget, GdkEventMotion 
 /**
  * Drawing area draw callback
  */
+/**
+ * Drawing area draw callback - TILE-BASED RENDERING
+ * 
+ * OLD BEHAVIOR: Drew entire composite surface at once
+ * NEW BEHAVIOR: Loops over tiles and draws only visible tiles
+ * 
+ * This dramatically improves performance for large images by:
+ * - Only compositing dirty tiles instead of entire surface
+ * - Only drawing tiles that are visible in the viewport
+ * - Caching composited tiles to avoid recompositing
+ */
 static gboolean on_drawing_area_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
 {
     ImageDocument *doc = (ImageDocument *)user_data;
-    cairo_surface_t *composite;
     double x1, y1, x2, y2;
     gint clip_width, clip_height;
+    gint viewport_x, viewport_y, viewport_w, viewport_h;
+    gint start_tile_x, start_tile_y, end_tile_x, end_tile_y;
+    gint tx, ty;
+    Tile *tile;
+    gdouble zoom = doc->zoom_factor;
 
     /* Get the clip region to determine what needs to be drawn */
     cairo_clip_extents(cr, &x1, &y1, &x2, &y2);
@@ -35,25 +51,46 @@ static gboolean on_drawing_area_draw(GtkWidget *widget, cairo_t *cr, gpointer us
     clip_height = (gint)(y2 - y1);
 
     /* Draw the document if image is loaded */
-    if (doc->layers && g_list_length(doc->layers) > 0) {
-        /* Get the composite rendered surface */
-        composite = document_get_composite_surface(doc);
-
-        if (composite) {
-            /* Apply zoom first if needed */
-            if (doc->zoom_factor != 1.0) {
-                cairo_scale(cr, doc->zoom_factor, doc->zoom_factor);
+    if (doc->layers && g_list_length(doc->layers) > 0 && doc->tile_grid) {
+        /* Composite dirty tiles before drawing */
+        tile_grid_composite(doc, doc->tile_grid);
+        
+        /* Calculate viewport in document coordinates (unscaled) */
+        viewport_x = (gint)(x1 / zoom);
+        viewport_y = (gint)(y1 / zoom);
+        viewport_w = (gint)(clip_width / zoom);
+        viewport_h = (gint)(clip_height / zoom);
+        
+        /* Calculate which tiles are visible in viewport */
+        tile_grid_pixel_to_tile(doc->tile_grid, viewport_x, viewport_y, &start_tile_x, &start_tile_y);
+        tile_grid_pixel_to_tile(doc->tile_grid, viewport_x + viewport_w, viewport_y + viewport_h, &end_tile_x, &end_tile_y);
+        
+        /* Clamp to grid bounds */
+        if (start_tile_x < 0) start_tile_x = 0;
+        if (start_tile_y < 0) start_tile_y = 0;
+        if (end_tile_x >= doc->tile_grid->tiles_x) end_tile_x = doc->tile_grid->tiles_x - 1;
+        if (end_tile_y >= doc->tile_grid->tiles_y) end_tile_y = doc->tile_grid->tiles_y - 1;
+        
+        /* Apply zoom transform */
+        if (zoom != 1.0) {
+            cairo_scale(cr, zoom, zoom);
+        }
+        
+        /* Draw checkered background for visible area */
+        draw_checkered_background(cr, viewport_w, viewport_h);
+        
+        /* Draw each visible tile */
+        for (ty = start_tile_y; ty <= end_tile_y; ty++) {
+            for (tx = start_tile_x; tx <= end_tile_x; tx++) {
+                tile = tile_grid_get_tile(doc->tile_grid, tx, ty);
+                
+                if (tile && tile->surface) {
+                    /* Draw tile at its document pixel position */
+                    cairo_set_source_surface(cr, tile->surface, tile->px, tile->py);
+                    cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+                    cairo_paint(cr);
+                }
             }
-
-            /* Always draw checkered background underneath to show canvas boundaries
-               This helps visualize the canvas bounds and transparency areas */
-            draw_checkered_background(cr, clip_width / doc->zoom_factor, 
-                                     clip_height / doc->zoom_factor);
-
-            /* Draw composite surface with proper alpha blending */
-            cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
-            cairo_set_source_surface(cr, composite, 0, 0);
-            cairo_paint(cr);
         }
     } else {
         /* Draw checkered background for empty canvas */
@@ -245,6 +282,8 @@ ImageDocument* document_new(const gchar *filename)
     doc->selected_layer = NULL;
     doc->composite_surface = NULL;
     doc->composite_dirty = TRUE;
+    dirty_rect_init(&doc->dirty_region);
+    doc->tile_grid = NULL;  /* Will be created when image is loaded */
     doc->zoom_factor = 1.0;
 
     /* Initialize undo/redo stacks (max 50 undo steps) */
@@ -280,6 +319,11 @@ void document_free(ImageDocument *doc)
     /* Free composite surface */
     if (doc->composite_surface) {
         cairo_surface_destroy(doc->composite_surface);
+    }
+    
+    /* Free tile grid */
+    if (doc->tile_grid) {
+        tile_grid_free(doc->tile_grid);
     }
 
     /* Free undo/redo stacks */
@@ -413,6 +457,21 @@ gboolean document_load_image_from_file(ImageDocument *doc, const gchar *file_pat
     doc->channels = gdk_pixbuf_get_n_channels(pixbuf);
     doc->bit_depth = 8;  /* GdkPixbuf always uses 8 bits per channel */
     doc->has_alpha = gdk_pixbuf_get_has_alpha(pixbuf);  /* Preserve original format info */
+
+    /* Free old tile grid if exists */
+    if (doc->tile_grid) {
+        tile_grid_free(doc->tile_grid);
+        doc->tile_grid = NULL;
+    }
+    
+    /* Create tile grid for tile-based rendering
+       Tile size of 128 is a good balance between memory and performance */
+    doc->tile_grid = tile_grid_create(doc->width, doc->height, 128);
+    if (!doc->tile_grid) {
+        g_warning("Failed to create tile grid");
+        g_object_unref(pixbuf);
+        return FALSE;
+    }
 
     /* Free old layers if exists */
     for (GList *iter = doc->layers; iter; iter = iter->next) {

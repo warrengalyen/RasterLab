@@ -1,6 +1,8 @@
 #include "tool_move.h"
 #include "command.h"
 #include "document.h"
+#include "render/compositor.h"
+#include "render/dirty.h"
 #include <stdlib.h>
 #include <stdio.h>
 
@@ -18,6 +20,8 @@ typedef struct {
     gint start_y;                 /* Mouse down position Y */
     gint initial_offset_x;        /* Layer offset at drag start */
     gint initial_offset_y;        /* Layer offset at drag start */
+    gint last_offset_x;           /* Last known offset (for dirty rect tracking) */
+    gint last_offset_y;           /* Last known offset (for dirty rect tracking) */
     struct ImageLayer *active_layer; /* Layer being moved */
 } MoveToolState;
 
@@ -52,6 +56,8 @@ static void move_tool_mouse_down(Tool *tool, struct ImageDocument *doc, MouseEve
     state->start_y = event->y;
     state->initial_offset_x = active_layer->offset_x;
     state->initial_offset_y = active_layer->offset_y;
+    state->last_offset_x = active_layer->offset_x;
+    state->last_offset_y = active_layer->offset_y;
     state->active_layer = active_layer;
 
     //printf("Move tool: started dragging layer at (%d, %d)\n", event->x, event->y);
@@ -59,11 +65,15 @@ static void move_tool_mouse_down(Tool *tool, struct ImageDocument *doc, MouseEve
 
 /**
  * Move tool: mouse move - update layer offset
+ * Optimized to only invalidate old and new regions
  */
 static void move_tool_mouse_move(Tool *tool, struct ImageDocument *doc, MouseEvent *event)
 {
     MoveToolState *state;
     gint dx, dy;
+    gint old_x, old_y, new_x, new_y;
+    DirtyRect old_rect, new_rect, union_rect;
+    gint brush_margin = 2;  /* Small margin for anti-aliasing */
 
     if (!tool || !doc || !tool->user_data) {
         return;
@@ -79,12 +89,46 @@ static void move_tool_mouse_move(Tool *tool, struct ImageDocument *doc, MouseEve
     dx = event->x - state->start_x;
     dy = event->y - state->start_y;
 
-    /* Update layer offset */
-    state->active_layer->offset_x = state->initial_offset_x + dx;
-    state->active_layer->offset_y = state->initial_offset_y + dy;
+    /* Calculate new position */
+    new_x = state->initial_offset_x + dx;
+    new_y = state->initial_offset_y + dy;
 
-    /* Mark composite for redraw and update thumbnail */
-    document_invalidate_composite(doc);
+    /* Get old position (from last update) */
+    old_x = state->last_offset_x;
+    old_y = state->last_offset_y;
+
+    /* If position hasn't changed, do nothing */
+    if (old_x == new_x && old_y == new_y) {
+        return;
+    }
+
+    /* Calculate old region (where layer was last frame) */
+    dirty_rect_set(&old_rect, old_x, old_y, 
+                   state->active_layer->width, 
+                   state->active_layer->height);
+    dirty_rect_clamp(&old_rect, doc->width, doc->height);
+
+    /* Calculate new region (where layer is now) */
+    dirty_rect_set(&new_rect, new_x, new_y, 
+                   state->active_layer->width, 
+                   state->active_layer->height);
+    dirty_rect_clamp(&new_rect, doc->width, doc->height);
+
+    /* Union both regions */
+    dirty_rect_union(&old_rect, &new_rect, &union_rect);
+
+    /* Update layer offset */
+    state->active_layer->offset_x = new_x;
+    state->active_layer->offset_y = new_y;
+    
+    /* Update last known position */
+    state->last_offset_x = new_x;
+    state->last_offset_y = new_y;
+
+    /* Only invalidate the union of old and new regions */
+    if (!dirty_rect_is_empty(&union_rect)) {
+        document_invalidate_region(doc, &union_rect);
+    }
 
     // printf("Move tool: moved to offset (%d, %d)\n", 
     //        state->active_layer->offset_x, state->active_layer->offset_y);

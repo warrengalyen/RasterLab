@@ -3,6 +3,23 @@
 
 #include <gtk/gtk.h>
 #include <cairo/cairo.h>
+#include "render/dirty.h"
+
+/**
+ * Unified rendering context for dirty rectangle optimization
+ * All rendering functions should optionally accept this to clip operations
+ */
+typedef struct {
+    cairo_t *cr;              /* Cairo context for drawing */
+    DirtyRect dirty_rect;      /* Current dirty rectangle region */
+    gboolean use_dirty_rect;  /* Whether to use dirty rectangle clipping */
+} RenderContext;
+
+/**
+ * Clip Cairo context to dirty rectangle
+ * @param ctx Render context
+ */
+void render_clip_to_dirty(RenderContext *ctx);
 
 /**
  * Convert GdkPixbuf to Cairo image surface
