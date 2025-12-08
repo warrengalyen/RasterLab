@@ -389,7 +389,7 @@ AppContext* ui_create_main_window(void)
     gtk_widget_show_all(ctx->window);
 
     /* Update status bar with initial information */
-    ui_update_status_bar(ctx);
+    ui_update_status_bar(ctx, NULL);
 
     /* Initialize menu and button states */
     ui_update_menu_and_button_states(ctx);
@@ -513,7 +513,7 @@ static void ui_close_document_tab_internal(AppContext *ctx, ImageDocument *doc)
          ui_update_window_title(ctx);
 
          /* Update status bar and menu/button states */
-         ui_update_status_bar(ctx);
+         ui_update_status_bar(ctx, NULL);
          ui_update_menu_and_button_states(ctx);
 
          printf("Document closed successfully\n");
@@ -698,7 +698,7 @@ static void on_file_open_response(GtkDialog *dialog, gint response_id, gpointer 
                     g_warning("Failed to load image: %s", file_path);
                 } else {
                     /* Update status bar after successful load */
-                    ui_update_status_bar(ctx);
+                    ui_update_status_bar(ctx, NULL);
 
                     /* Update layers panel with loaded document */
                     LayersPanel *layers_panel = (LayersPanel *)g_object_get_data(
@@ -785,7 +785,7 @@ static void on_file_save_as_response(GtkDialog *dialog, gint response_id, gpoint
                 if (document_save_as(doc, file_path)) {
                     /* Update window title to reflect new filename */
                     ui_update_window_title(ctx);
-                    ui_update_status_bar(ctx);
+                    ui_update_status_bar(ctx, NULL);
                     printf("Document saved: %s\n", file_path);
                 } else {
                     g_warning("Failed to save document");
@@ -993,7 +993,7 @@ static void on_view_zoom_in(GtkWidget *widget, gpointer data)
 
     if (doc) {
         document_zoom_in(doc);
-        ui_update_status_bar(ctx);
+        ui_update_status_bar(ctx, NULL);
     }
 }
 
@@ -1009,7 +1009,7 @@ static void on_view_zoom_out(GtkWidget *widget, gpointer data)
 
     if (doc) {
         document_zoom_out(doc);
-        ui_update_status_bar(ctx);
+        ui_update_status_bar(ctx, NULL);
     }
 }
 
@@ -1025,7 +1025,7 @@ static void on_view_zoom_reset(GtkWidget *widget, gpointer data)
 
     if (doc) {
         document_zoom_reset(doc);
-        ui_update_status_bar(ctx);
+        ui_update_status_bar(ctx, NULL);
     }
 }
 
@@ -1041,7 +1041,7 @@ static void on_view_zoom_fit(GtkWidget *widget, gpointer data)
 
     if (doc) {
         document_zoom_fit(doc);
-        ui_update_status_bar(ctx);
+        ui_update_status_bar(ctx, NULL);
     }
 }
 
@@ -1076,7 +1076,7 @@ static void on_notebook_switch_page(GtkNotebook *notebook, GtkWidget *page,
     }
 
     ui_update_window_title(ctx);
-    ui_update_status_bar(ctx);
+    ui_update_status_bar(ctx, doc);
 
     /* Update layers panel with current document's layers */
     if (layers_panel && doc) {
@@ -1309,17 +1309,18 @@ static void on_layer_move_down(GtkWidget *widget, gpointer data)
 /**
  * Update the status bar with document information
  */
-void ui_update_status_bar(AppContext *ctx)
+void ui_update_status_bar(AppContext *ctx, ImageDocument *doc)
 {
-    ImageDocument *doc;
     gchar *status_text;
 
     if (!ctx || !ctx->status_bar) {
         return;
     }
 
-    /* Get active document */
-    doc = ui_get_active_document(ctx);
+    /* Get active document if not provided */
+    if (!doc) {
+        doc = ui_get_active_document(ctx);
+    }
 
     /* Clear previous context */
     gtk_statusbar_pop(GTK_STATUSBAR(ctx->status_bar), 0);

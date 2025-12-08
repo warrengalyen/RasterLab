@@ -69,8 +69,9 @@ void ui_context_free(AppContext *ctx);
 /**
  * Update the status bar with document information
  * @param ctx The application context
+ * @param doc Optional document to display. If NULL, fetches active document.
  */
-void ui_update_status_bar(AppContext *ctx);
+void ui_update_status_bar(AppContext *ctx, ImageDocument *doc);
 
 /**
  * Update menu and button sensitivity based on document and layer state
