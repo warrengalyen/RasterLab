@@ -26,11 +26,11 @@ set(SOURCES
     panels.c
     accordion.c
     tools.c
-    tool_manager.c
-    tool_move.c
-    tool_brush.c
-    tool_eraser.c
-    tool_fill.c
+    tools/tool_manager.c
+    tools/tool_move.c
+    tools/tool_brush.c
+    tools/tool_eraser.c
+    tools/tool_fill.c
     tool_options.c
     command.c
     ui/tools_panel.c
