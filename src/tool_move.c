@@ -83,11 +83,8 @@ static void move_tool_mouse_move(Tool *tool, struct ImageDocument *doc, MouseEve
     state->active_layer->offset_x = state->initial_offset_x + dx;
     state->active_layer->offset_y = state->initial_offset_y + dy;
 
-    /* Mark composite for redraw */
-    doc->composite_dirty = TRUE;
-    if (doc->drawing_area) {
-        gtk_widget_queue_draw(doc->drawing_area);
-    }
+    /* Mark composite for redraw and update thumbnail */
+    document_invalidate_composite(doc);
 
     printf("Move tool: moved to offset (%d, %d)\n", 
            state->active_layer->offset_x, state->active_layer->offset_y);

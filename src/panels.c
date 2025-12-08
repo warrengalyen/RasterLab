@@ -489,27 +489,55 @@ void tool_options_panel_free(ToolOptionsPanel *panel)
     }
 }
 
+/* Forward declarations */
+static GdkPixbuf* create_layer_thumbnail(cairo_surface_t *layer_surface, gint thumb_size, gboolean visible);
+static GdkPixbuf* get_visibility_icon(gboolean visible);
+static GdkPixbuf* cairo_surface_to_pixbuf(cairo_surface_t *surface, gboolean keep_alpha);
+
 /**
- * Layer visibility toggle callback
+ * Treeview button press event handler - handles visibility icon clicks
  */
-static void on_layer_visibility_toggled(GtkCellRendererToggle *cell_renderer,
-                                        gchar *path_str,
-                                        gpointer user_data)
+static gboolean on_treeview_button_press(GtkWidget *widget,
+                                         GdkEventButton *event,
+                                         gpointer user_data)
 {
     LayersPanel *layers_panel = (LayersPanel *)user_data;
+    GtkTreeView *tree_view = GTK_TREE_VIEW(widget);
+    GtkTreePath *path = NULL;
+    GtkTreeViewColumn *column = NULL;
+    gint cell_x, cell_y;
     GtkTreeIter iter;
     gboolean visible;
+    GdkPixbuf *visibility_icon;
+    ImageLayer *layer;
 
-    (void)cell_renderer;  /* Unused */
+    if (event->button != 1 || event->type != GDK_BUTTON_PRESS) {
+        return FALSE;
+    }
 
-    if (!gtk_tree_model_get_iter_from_string(GTK_TREE_MODEL(layers_panel->store), 
-                                             &iter, path_str)) {
-        return;
+    /* Check if click is in visibility column */
+    if (!gtk_tree_view_get_path_at_pos(tree_view, (gint)event->x, (gint)event->y,
+                                       &path, &column, &cell_x, &cell_y)) {
+        return FALSE;
+    }
+
+    GtkTreeViewColumn *visibility_column = GTK_TREE_VIEW_COLUMN(
+        g_object_get_data(G_OBJECT(widget), "visibility_column"));
+    
+    if (column != visibility_column) {
+        gtk_tree_path_free(path);
+        return FALSE;
+    }
+
+    /* Get the row */
+    if (!gtk_tree_model_get_iter(GTK_TREE_MODEL(layers_panel->store), &iter, path)) {
+        gtk_tree_path_free(path);
+        return FALSE;
     }
 
     /* Get current visibility value */
     gtk_tree_model_get(GTK_TREE_MODEL(layers_panel->store), &iter,
-                      0, &visible,
+                      3, &visible,
                       -1);
 
     /* Toggle visibility */
@@ -517,29 +545,41 @@ static void on_layer_visibility_toggled(GtkCellRendererToggle *cell_renderer,
 
     /* Update layer visibility in document */
     if (layers_panel->current_doc) {
-        /* Get the layer from the position */
-        gint row = atoi(path_str);
+        /* Get the layer from the row */
+        gint *indices = gtk_tree_path_get_indices(path);
+        gint row = indices[0];
         guint layer_count = document_get_layer_count(layers_panel->current_doc);
         
         /* Layers are displayed in reverse order */
         gint layer_index = layer_count - 1 - row;
         
         if (layer_index >= 0 && layer_index < (gint)layer_count) {
-            ImageLayer *layer = document_get_layer(layers_panel->current_doc, layer_index);
+            layer = document_get_layer(layers_panel->current_doc, layer_index);
             if (layer) {
                 layer->visible = visible;
                 /* Mark composite as dirty and trigger redraw */
                 document_invalidate_composite(layers_panel->current_doc);
+                
+                /* Update thumbnail with new visibility state */
+                GdkPixbuf *thumbnail = create_layer_thumbnail(layer->surface, 48, visible);
+                visibility_icon = get_visibility_icon(visible);
+                
+                if (thumbnail && visibility_icon) {
+                    gtk_list_store_set(layers_panel->store, &iter,
+                                      0, visibility_icon,
+                                      1, thumbnail,
+                                      3, visible,
+                                      -1);
+                    g_object_unref(visibility_icon);
+                    g_object_unref(thumbnail);
+                }
             }
         }
     }
 
-    /* Update visibility in list store */
-    gtk_list_store_set(layers_panel->store, &iter,
-                      0, visible,
-                      -1);
-
+    gtk_tree_path_free(path);
     printf("Layer visibility toggled to %s\n", visible ? "visible" : "hidden");
+    return TRUE;
 }
 
 /* Forward declarations for opacity callbacks */
@@ -799,6 +839,163 @@ static gboolean on_layer_row_activated(GtkTreeView *tree_view, GtkTreePath *path
 }
 
 /**
+ * Convert Cairo surface to GdkPixbuf (helper function for thumbnails)
+ */
+static GdkPixbuf* cairo_surface_to_pixbuf(cairo_surface_t *surface, gboolean keep_alpha)
+{
+    GdkPixbuf *pixbuf;
+    gint width, height;
+    guchar *pixels;
+    guchar *surface_data;
+    gint rowstride;
+    gint x, y;
+
+    if (!surface) {
+        return NULL;
+    }
+
+    width = cairo_image_surface_get_width(surface);
+    height = cairo_image_surface_get_height(surface);
+
+    /* Create pixbuf with or without alpha channel */
+    pixbuf = gdk_pixbuf_new(GDK_COLORSPACE_RGB, keep_alpha ? TRUE : FALSE, 8, width, height);
+    if (!pixbuf) {
+        g_warning("Failed to create pixbuf");
+        return NULL;
+    }
+
+    pixels = gdk_pixbuf_get_pixels(pixbuf);
+    rowstride = gdk_pixbuf_get_rowstride(pixbuf);
+    surface_data = cairo_image_surface_get_data(surface);
+    gint surface_stride = cairo_image_surface_get_stride(surface);
+
+    /* Copy pixel data from Cairo surface to pixbuf */
+    for (y = 0; y < height; y++) {
+        guint32 *src = (guint32 *)(surface_data + y * surface_stride);
+        guchar *dst = pixels + y * rowstride;
+
+        for (x = 0; x < width; x++) {
+            guint32 pixel = src[x];
+            guchar a = (pixel >> 24) & 0xFF;
+            guchar r = (pixel >> 16) & 0xFF;
+            guchar g = (pixel >> 8) & 0xFF;
+            guchar b = pixel & 0xFF;
+
+            /* Cairo uses pre-multiplied alpha, we need to un-premultiply */
+            if (a > 0) {
+                r = (r * 255) / a;
+                g = (g * 255) / a;
+                b = (b * 255) / a;
+            }
+
+            dst[0] = r;
+            dst[1] = g;
+            dst[2] = b;
+
+            if (keep_alpha) {
+                dst[3] = a;
+                dst += 4;
+            } else {
+                dst += 3;
+            }
+        }
+    }
+
+    return pixbuf;
+}
+
+/**
+ * Create a thumbnail from a layer surface
+ */
+static GdkPixbuf* create_layer_thumbnail(cairo_surface_t *layer_surface, gint thumb_size, gboolean visible)
+{
+    GdkPixbuf *thumbnail = NULL;
+    GdkPixbuf *full_pixbuf = NULL;
+    cairo_surface_t *thumb_surface = NULL;
+    cairo_t *cr = NULL;
+    gint layer_width, layer_height;
+    gdouble scale_x, scale_y, scale;
+
+    if (!layer_surface) {
+        return NULL;
+    }
+
+    layer_width = cairo_image_surface_get_width(layer_surface);
+    layer_height = cairo_image_surface_get_height(layer_surface);
+
+    if (layer_width <= 0 || layer_height <= 0) {
+        return NULL;
+    }
+
+    /* Calculate scale to fit thumbnail size */
+    scale_x = (gdouble)thumb_size / layer_width;
+    scale_y = (gdouble)thumb_size / layer_height;
+    scale = (scale_x < scale_y) ? scale_x : scale_y;
+
+    gint thumb_width = (gint)(layer_width * scale);
+    gint thumb_height = (gint)(layer_height * scale);
+
+    /* Create thumbnail surface */
+    thumb_surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, thumb_size, thumb_size);
+    if (!thumb_surface) {
+        return NULL;
+    }
+
+    cr = cairo_create(thumb_surface);
+    
+    /* Clear to transparent */
+    cairo_set_operator(cr, CAIRO_OPERATOR_CLEAR);
+    cairo_paint(cr);
+    cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+    
+    /* Draw layer scaled and centered */
+    cairo_save(cr);
+    cairo_translate(cr, (thumb_size - thumb_width) / 2.0, (thumb_size - thumb_height) / 2.0);
+    cairo_scale(cr, scale, scale);
+    cairo_set_source_surface(cr, layer_surface, 0, 0);
+    cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+    cairo_paint(cr);
+    cairo_restore(cr);
+
+    /* If not visible, apply grayscale/disabled effect */
+    if (!visible) {
+        /* Convert to grayscale and reduce opacity */
+        cairo_save(cr);
+        cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+        cairo_set_source_rgba(cr, 0.5, 0.5, 0.5, 0.5);
+        cairo_paint(cr);
+        cairo_restore(cr);
+    }
+
+    cairo_destroy(cr);
+
+    /* Convert to pixbuf */
+    full_pixbuf = cairo_surface_to_pixbuf(thumb_surface, TRUE);
+    cairo_surface_destroy(thumb_surface);
+
+    return full_pixbuf;
+}
+
+/**
+ * Get visibility icon pixbuf
+ */
+static GdkPixbuf* get_visibility_icon(gboolean visible)
+{
+    const gchar *resource_path = visible 
+        ? "/icons/imageeditor/visibility-on.png"
+        : "/icons/imageeditor/visibility-off.png";
+    
+    GdkPixbuf *pixbuf = gdk_pixbuf_new_from_resource(resource_path, NULL);
+    if (pixbuf) {
+        /* Scale to 16x16 for treeview */
+        GdkPixbuf *scaled = gdk_pixbuf_scale_simple(pixbuf, 16, 16, GDK_INTERP_BILINEAR);
+        g_object_unref(pixbuf);
+        return scaled;
+    }
+    return NULL;
+}
+
+/**
  * Panel button callbacks
  */
 static void on_panel_btn_new_clicked(GtkButton *button, gpointer user_data)
@@ -947,32 +1144,58 @@ LayersPanel* create_layers_panel(void)
     g_object_set_data_full(G_OBJECT(layers_panel->panel), "builder", builder, g_object_unref);
 
     /* Create list store for layers */
+    /* Column 0: Visibility icon (pixbuf) */
+    /* Column 1: Thumbnail (pixbuf) */
+    /* Column 2: Layer name (string) */
+    /* Column 3: Visible state (boolean, for internal use) */
     layers_panel->store = gtk_list_store_new(4,
-                                             G_TYPE_BOOLEAN,  /* Visible */
+                                             GDK_TYPE_PIXBUF, /* Visibility icon */
                                              GDK_TYPE_PIXBUF, /* Thumbnail */
                                              G_TYPE_STRING,   /* Name */
-                                             G_TYPE_DOUBLE);  /* Opacity */
+                                             G_TYPE_BOOLEAN); /* Visible state */
 
     /* Create tree view */
     layers_panel->tree_view = gtk_tree_view_new_with_model(GTK_TREE_MODEL(layers_panel->store));
     gtk_tree_view_set_headers_visible(GTK_TREE_VIEW(layers_panel->tree_view), FALSE);
     g_signal_connect(layers_panel->tree_view, "row-activated",
                      G_CALLBACK(on_layer_row_activated), NULL);
+    g_signal_connect(layers_panel->tree_view, "button-press-event",
+                     G_CALLBACK(on_treeview_button_press), layers_panel);
     gtk_container_add(GTK_CONTAINER(scroll_window), layers_panel->tree_view);
 
-    /* Visibility column (checkbox) */
-    renderer = gtk_cell_renderer_toggle_new();
+    /* Visibility column (icon) - clickable */
+    renderer = gtk_cell_renderer_pixbuf_new();
+    g_object_set(renderer, "xpad", 4, "ypad", 4, NULL);
     column = gtk_tree_view_column_new_with_attributes("Visible",
                                                       renderer,
-                                                      "active", 0,
+                                                      "pixbuf", 0,
                                                       NULL);
-    g_signal_connect(renderer, "toggled",
-                     G_CALLBACK(on_layer_visibility_toggled), layers_panel);
+    gtk_tree_view_column_set_sizing(column, GTK_TREE_VIEW_COLUMN_FIXED);
+    gtk_tree_view_column_set_fixed_width(column, 24);
+    gtk_tree_view_append_column(GTK_TREE_VIEW(layers_panel->tree_view), column);
+    
+    /* Store column reference for click detection */
+    g_object_set_data(G_OBJECT(layers_panel->tree_view), "visibility_column", column);
+
+    /* Thumbnail column */
+    renderer = gtk_cell_renderer_pixbuf_new();
+    g_object_set(renderer, "xpad", 4, "ypad", 4, NULL);
+    column = gtk_tree_view_column_new_with_attributes("Thumbnail",
+                                                      renderer,
+                                                      "pixbuf", 1,
+                                                      NULL);
+    gtk_tree_view_column_set_sizing(column, GTK_TREE_VIEW_COLUMN_FIXED);
+    gtk_tree_view_column_set_fixed_width(column, 48);
     gtk_tree_view_append_column(GTK_TREE_VIEW(layers_panel->tree_view), column);
 
     /* Name column (editable) */
     renderer = gtk_cell_renderer_text_new();
-    g_object_set(renderer, "editable", TRUE, NULL);
+    g_object_set(renderer, 
+                 "editable", TRUE,
+                 "yalign", 0.5,      /* Center vertically */
+                 "ypad", 0,          /* No vertical padding */
+                 "height", -1,       /* Let height fit content */
+                 NULL);
     column = gtk_tree_view_column_new_with_attributes("Layer",
                                                       renderer,
                                                       "text", 2,
@@ -981,14 +1204,9 @@ LayersPanel* create_layers_panel(void)
                      G_CALLBACK(on_layer_name_edited), layers_panel);
     gtk_tree_view_column_set_expand(column, TRUE);
     gtk_tree_view_append_column(GTK_TREE_VIEW(layers_panel->tree_view), column);
-
-    /* Opacity column (placeholder) */
-    renderer = gtk_cell_renderer_text_new();
-    column = gtk_tree_view_column_new_with_attributes("Opacity",
-                                                      renderer,
-                                                      "text", 3,
-                                                      NULL);
-    gtk_tree_view_append_column(GTK_TREE_VIEW(layers_panel->tree_view), column);
+    
+    /* Set fixed row height to match thumbnail size */
+    gtk_tree_view_set_fixed_height_mode(GTK_TREE_VIEW(layers_panel->tree_view), TRUE);
 
     /* Store panel reference in buttons for callback access and set icons */
     if (layers_panel->btn_new) {
@@ -1105,15 +1323,24 @@ void layers_panel_update(LayersPanel *layers_panel, ImageDocument *doc)
 
         if (layer) {
             GtkTreeIter iter;
-            gchar opacity_str[16];
-            snprintf(opacity_str, sizeof(opacity_str), "%.0f%%", layer->opacity * 100.0);
+            GdkPixbuf *visibility_icon = get_visibility_icon(layer->visible);
+            GdkPixbuf *thumbnail = create_layer_thumbnail(layer->surface, 48, layer->visible);
 
             gtk_list_store_append(layers_panel->store, &iter);
             gtk_list_store_set(layers_panel->store, &iter,
-                              0, layer->visible,
-                              2, layer->name,
-                              3, g_strdup(opacity_str),
+                              0, visibility_icon,  /* Visibility icon */
+                              1, thumbnail,        /* Thumbnail */
+                              2, layer->name,      /* Name */
+                              3, layer->visible,   /* Visible state */
                               -1);
+
+            /* Unref pixbufs - the store will take ownership */
+            if (visibility_icon) {
+                g_object_unref(visibility_icon);
+            }
+            if (thumbnail) {
+                g_object_unref(thumbnail);
+            }
         }
     }
 
@@ -1141,6 +1368,122 @@ void layers_panel_update(LayersPanel *layers_panel, ImageDocument *doc)
         if (layer_0) {
             document_set_selected_layer(doc, layer_0);
         }
+    }
+}
+
+/**
+ * Update thumbnails for all layers in the panel
+ * Call this after layer content changes to refresh thumbnails
+ */
+void layers_panel_refresh_thumbnails(LayersPanel *layers_panel)
+{
+    if (!layers_panel || !layers_panel->current_doc || !layers_panel->store) {
+        return;
+    }
+
+    guint layer_count = document_get_layer_count(layers_panel->current_doc);
+    GtkTreeIter iter;
+    gboolean valid = gtk_tree_model_get_iter_first(GTK_TREE_MODEL(layers_panel->store), &iter);
+    gint row = 0;
+
+    while (valid) {
+        /* Get layer from row (layers are displayed in reverse order) */
+        gint layer_index = layer_count - 1 - row;
+        
+        if (layer_index >= 0 && layer_index < (gint)layer_count) {
+            ImageLayer *layer = document_get_layer(layers_panel->current_doc, layer_index);
+            
+            if (layer) {
+                GdkPixbuf *thumbnail = create_layer_thumbnail(layer->surface, 48, layer->visible);
+                GdkPixbuf *visibility_icon = get_visibility_icon(layer->visible);
+                
+                if (thumbnail && visibility_icon) {
+                    gtk_list_store_set(layers_panel->store, &iter,
+                                      0, visibility_icon,
+                                      1, thumbnail,
+                                      3, layer->visible,
+                                      -1);
+                    g_object_unref(visibility_icon);
+                    g_object_unref(thumbnail);
+                }
+            }
+        }
+        
+        row++;
+        valid = gtk_tree_model_iter_next(GTK_TREE_MODEL(layers_panel->store), &iter);
+    }
+}
+
+/**
+ * Update thumbnail for the currently selected layer only
+ * Call this after drawing operations to update the selected layer's thumbnail
+ */
+void layers_panel_update_selected_thumbnail(LayersPanel *layers_panel)
+{
+    ImageLayer *selected_layer;
+    GdkPixbuf *thumbnail;
+    GdkPixbuf *visibility_icon;
+    ImageDocument *doc;
+    GtkTreeSelection *selection;
+    GtkTreeIter iter;
+    gchar *layer_name = NULL;
+    ImageLayer *tree_layer = NULL;
+
+    if (!layers_panel || !layers_panel->tree_view || !layers_panel->store) {
+        return;
+    }
+
+    /* Get the current document from the layers panel */
+    doc = layers_panel->current_doc;
+    if (!doc) {
+        return;
+    }
+
+    /* Get the document's selected layer directly */
+    selected_layer = document_get_selected_layer(doc);
+    if (!selected_layer || !selected_layer->surface) {
+        return;
+    }
+
+    /* Get the treeview selection to find the row */
+    selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(layers_panel->tree_view));
+    if (!selection) {
+        return;
+    }
+
+    if (!gtk_tree_selection_get_selected(selection, NULL, &iter)) {
+        return;  /* No selection in treeview */
+    }
+
+    /* Get the layer name from the selected row */
+    gtk_tree_model_get(GTK_TREE_MODEL(layers_panel->store), &iter,
+                      2, &layer_name,
+                      -1);
+
+    if (!layer_name) {
+        return;
+    }
+
+    /* Verify this is the same layer as the document's selected layer */
+    if (g_strcmp0(layer_name, selected_layer->name) != 0) {
+        g_free(layer_name);
+        return;  /* Treeview selection doesn't match document selection */
+    }
+
+    g_free(layer_name);
+
+    /* Generate new thumbnail and visibility icon */
+    thumbnail = create_layer_thumbnail(selected_layer->surface, 48, selected_layer->visible);
+    visibility_icon = get_visibility_icon(selected_layer->visible);
+
+    if (thumbnail && visibility_icon) {
+        gtk_list_store_set(layers_panel->store, &iter,
+                          0, visibility_icon,
+                          1, thumbnail,
+                          3, selected_layer->visible,
+                          -1);
+        g_object_unref(visibility_icon);
+        g_object_unref(thumbnail);
     }
 }
 

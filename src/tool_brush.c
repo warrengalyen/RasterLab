@@ -194,11 +194,8 @@ static void brush_tool_mouse_move(Tool *tool, struct ImageDocument *doc, MouseEv
     state->last_x = event->x;
     state->last_y = event->y;
 
-    /* Mark composite for redraw */
-    doc->composite_dirty = TRUE;
-    if (doc->drawing_area) {
-        gtk_widget_queue_draw(doc->drawing_area);
-    }
+    /* Mark composite for redraw and update thumbnail */
+    document_invalidate_composite(doc);
 
     printf("Brush tool: drawing line from (%d, %d) to (%d, %d)\n",
            layer_x1, layer_y1, layer_x2, layer_y2);

@@ -129,6 +129,20 @@ LayersPanel* create_layers_panel(void);
 void layers_panel_update(LayersPanel *layers_panel, ImageDocument *doc);
 
 /**
+ * Update thumbnails for all layers in the panel
+ * Call this after layer content changes to refresh thumbnails
+ * @param layers_panel The layers panel
+ */
+void layers_panel_refresh_thumbnails(LayersPanel *layers_panel);
+
+/**
+ * Update thumbnail for the currently selected layer only
+ * Call this after drawing operations to update the selected layer's thumbnail
+ * @param layers_panel The layers panel
+ */
+void layers_panel_update_selected_thumbnail(LayersPanel *layers_panel);
+
+/**
  * Get the currently selected layer from the panel
  * @param layers_panel The layers panel
  * @return The selected layer, or NULL if none selected

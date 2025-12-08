@@ -453,6 +453,10 @@ ImageDocument* ui_create_document_tab(AppContext *ctx, const gchar *filename)
         if (ctx->tool_registry) {
             g_object_set_data(G_OBJECT(doc->drawing_area), "tool_registry", ctx->tool_registry);
         }
+        /* Store layers panel reference for thumbnail updates */
+        if (ctx->layers_panel) {
+            g_object_set_data(G_OBJECT(doc->drawing_area), "layers_panel", ctx->layers_panel);
+        }
     }
 
     /* Add document to list */

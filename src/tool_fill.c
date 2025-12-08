@@ -111,11 +111,8 @@ static void fill_tool_mouse_down(Tool *tool, struct ImageDocument *doc, MouseEve
     /* Mark document as modified */
     doc->modified = TRUE;
 
-    /* Mark composite for redraw */
-    doc->composite_dirty = TRUE;
-    if (doc->drawing_area) {
-        gtk_widget_queue_draw(doc->drawing_area);
-    }
+    /* Mark composite for redraw and update thumbnail */
+    document_invalidate_composite(doc);
 
     printf("Fill tool: filled at (%d, %d)\n", layer_x, layer_y);
 }

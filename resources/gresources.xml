@@ -12,6 +12,8 @@
     <file preprocess="xml-stripblanks">layer-down.svg</file>
     <file preprocess="xml-stripblanks">layer-duplicate.svg</file>
     <file preprocess="xml-stripblanks">reset.svg</file>
+    <file preprocess="to-pixdata">visibility-on.png</file>
+    <file preprocess="to-pixdata">visibility-off.png</file>
   </gresource>
   <gresource prefix="/ui">
     <file>tool_panel.glade</file>

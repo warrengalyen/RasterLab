@@ -2,6 +2,7 @@
 #include "command.h"
 #include "tools.h"
 #include "tool_manager.h"
+#include "panels.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -816,6 +817,8 @@ cairo_surface_t* document_get_composite_surface(ImageDocument *doc)
  */
 void document_invalidate_composite(ImageDocument *doc)
 {
+    LayersPanel *layers_panel;
+
     if (!doc) {
         return;
     }
@@ -825,6 +828,14 @@ void document_invalidate_composite(ImageDocument *doc)
     /* Trigger redraw */
     if (doc->drawing_area) {
         gtk_widget_queue_draw(doc->drawing_area);
+        
+        /* Update selected layer thumbnail if layers panel is available */
+        layers_panel = (LayersPanel *)g_object_get_data(G_OBJECT(doc->drawing_area), "layers_panel");
+        if (layers_panel) {
+            /* Ensure the layers panel knows about this document */
+            layers_panel->current_doc = doc;
+            layers_panel_update_selected_thumbnail(layers_panel);
+        }
     }
 }
 
