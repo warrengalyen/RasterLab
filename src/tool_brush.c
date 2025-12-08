@@ -2,7 +2,7 @@
 #include "command.h"
 #include "document.h"
 #include "tool_options.h"
-#include "panels.h"
+#include "ui/tools_panel.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>

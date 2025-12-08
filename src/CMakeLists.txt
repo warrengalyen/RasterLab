@@ -33,6 +33,9 @@ set(SOURCES
     tool_fill.c
     tool_options.c
     command.c
+    ui/tools_panel.c
+    ui/tool_options_panel.c
+    ui/layers_panel.c
     ${GRESOURCE_FILE}
 )
 

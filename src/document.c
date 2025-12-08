@@ -2,7 +2,7 @@
 #include "command.h"
 #include "tools.h"
 #include "tool_manager.h"
-#include "panels.h"
+#include "ui/layers_panel.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>

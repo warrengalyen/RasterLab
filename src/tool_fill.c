@@ -1,7 +1,7 @@
 #include "tool_fill.h"
 #include "command.h"
 #include "document.h"
-#include "panels.h"
+#include "ui/tools_panel.h"
 #include <stdlib.h>
 #include <stdio.h>
 

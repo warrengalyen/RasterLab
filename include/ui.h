@@ -6,6 +6,9 @@
 #include "tools.h"
 #include "command.h"
 #include "panels.h"
+#include "ui/tools_panel.h"
+#include "ui/tool_options_panel.h"
+#include "ui/layers_panel.h"
 
 /**
  * Application context structure

@@ -1,6 +1,9 @@
 #include "ui.h"
 #include "document.h"
 #include "panels.h"
+#include "ui/tools_panel.h"
+#include "ui/tool_options_panel.h"
+#include "ui/layers_panel.h"
 #include "tool_manager.h"
 #include <stdlib.h>
 #include <stdio.h>
