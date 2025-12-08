@@ -36,6 +36,7 @@ set(SOURCES
     ui/tools_panel.c
     ui/tool_options_panel.c
     ui/layers_panel.c
+    render/render_utils.c
     ${GRESOURCE_FILE}
 )
 

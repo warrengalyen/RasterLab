@@ -1,13 +1,13 @@
 #include "ui/layers_panel.h"
 #include "document.h"
 #include "accordion.h"
+#include "render/render_utils.h"
 #include <stdio.h>
 #include <string.h>
 
 /* Forward declarations */
 static GdkPixbuf* create_layer_thumbnail(cairo_surface_t *layer_surface, gint thumb_size, gboolean visible);
 static GdkPixbuf* get_visibility_icon(gboolean visible);
-static GdkPixbuf* cairo_surface_to_pixbuf(cairo_surface_t *surface, gboolean keep_alpha);
 static GtkWidget* create_overview_widget(LayersPanel *layers_panel);
 static gboolean on_overview_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data);
 
@@ -355,71 +355,6 @@ static gboolean on_layer_row_activated(GtkTreeView *tree_view, GtkTreePath *path
     return FALSE;
 }
 
-/**
- * Convert Cairo surface to GdkPixbuf (helper function for thumbnails)
- */
-static GdkPixbuf* cairo_surface_to_pixbuf(cairo_surface_t *surface, gboolean keep_alpha)
-{
-    GdkPixbuf *pixbuf;
-    gint width, height;
-    guchar *pixels;
-    guchar *surface_data;
-    gint rowstride;
-    gint x, y;
-
-    if (!surface) {
-        return NULL;
-    }
-
-    width = cairo_image_surface_get_width(surface);
-    height = cairo_image_surface_get_height(surface);
-
-    /* Create pixbuf with or without alpha channel */
-    pixbuf = gdk_pixbuf_new(GDK_COLORSPACE_RGB, keep_alpha ? TRUE : FALSE, 8, width, height);
-    if (!pixbuf) {
-        g_warning("Failed to create pixbuf");
-        return NULL;
-    }
-
-    pixels = gdk_pixbuf_get_pixels(pixbuf);
-    rowstride = gdk_pixbuf_get_rowstride(pixbuf);
-    surface_data = cairo_image_surface_get_data(surface);
-    gint surface_stride = cairo_image_surface_get_stride(surface);
-
-    /* Copy pixel data from Cairo surface to pixbuf */
-    for (y = 0; y < height; y++) {
-        guint32 *src = (guint32 *)(surface_data + y * surface_stride);
-        guchar *dst = pixels + y * rowstride;
-
-        for (x = 0; x < width; x++) {
-            guint32 pixel = src[x];
-            guchar a = (pixel >> 24) & 0xFF;
-            guchar r = (pixel >> 16) & 0xFF;
-            guchar g = (pixel >> 8) & 0xFF;
-            guchar b = pixel & 0xFF;
-
-            /* Cairo uses pre-multiplied alpha, we need to un-premultiply */
-            if (a > 0) {
-                r = (r * 255) / a;
-                g = (g * 255) / a;
-                b = (b * 255) / a;
-            }
-
-            dst[0] = r;
-            dst[1] = g;
-            dst[2] = b;
-
-            if (keep_alpha) {
-                dst[3] = a;
-                dst += 4;
-            } else {
-                dst += 3;
-            }
-        }
-    }
-
-    return pixbuf;
-}
 
 /**
  * Create a thumbnail from a layer surface
