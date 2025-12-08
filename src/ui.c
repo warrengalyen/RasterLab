@@ -1052,13 +1052,28 @@ static void on_notebook_switch_page(GtkNotebook *notebook, GtkWidget *page,
                                      guint page_num, gpointer user_data)
 {
     (void)notebook;   /* Unused */
-    (void)page;       /* Unused */
     (void)page_num;   /* Unused */
 
     AppContext *ctx = (AppContext *)user_data;
-    ImageDocument *doc = ui_get_active_document(ctx);
+    ImageDocument *doc = NULL;
     LayersPanel *layers_panel = (LayersPanel *)g_object_get_data(G_OBJECT(ctx->window), 
                                                                   "layers_panel");
+
+    /* Find the document that matches the page widget (scrolled window) */
+    if (page) {
+        for (GList *iter = ctx->documents; iter; iter = iter->next) {
+            ImageDocument *d = (ImageDocument *)iter->data;
+            if (d->scrolled_window == page) {
+                doc = d;
+                break;
+            }
+        }
+    }
+
+    /* Fallback to ui_get_active_document if page matching fails */
+    if (!doc) {
+        doc = ui_get_active_document(ctx);
+    }
 
     ui_update_window_title(ctx);
     ui_update_status_bar(ctx);

@@ -832,9 +832,15 @@ void document_invalidate_composite(ImageDocument *doc)
         /* Update selected layer thumbnail if layers panel is available */
         layers_panel = (LayersPanel *)g_object_get_data(G_OBJECT(doc->drawing_area), "layers_panel");
         if (layers_panel) {
-            /* Ensure the layers panel knows about this document */
-            layers_panel->current_doc = doc;
-            layers_panel_update_selected_thumbnail(layers_panel);
+            /* Only update if this document is the current one in the layers panel */
+            if (layers_panel->current_doc == doc) {
+                layers_panel_update_selected_thumbnail(layers_panel);
+                
+                /* Update overview widget */
+                if (layers_panel->overview_widget) {
+                    gtk_widget_queue_draw(layers_panel->overview_widget);
+                }
+            }
         }
     }
 }

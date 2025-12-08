@@ -1486,6 +1486,11 @@ void layers_panel_update(LayersPanel *layers_panel, ImageDocument *doc)
 
     /* Clear existing layers */
     gtk_list_store_clear(layers_panel->store);
+    
+    /* Update overview widget to show new document */
+    if (layers_panel->overview_widget) {
+        gtk_widget_queue_draw(layers_panel->overview_widget);
+    }
 
     /* Add all layers from document */
     guint layer_count = document_get_layer_count(doc);
