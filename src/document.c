@@ -562,7 +562,7 @@ gboolean document_load_image_from_file(ImageDocument *doc, const gchar *file_pat
 
     /* Create base layer from loaded image - always with alpha support
        This allows tools like the eraser to work on any image type */
-    ImageLayer *base_layer = layer_new("Base", doc->width, doc->height, TRUE);
+    ImageLayer *base_layer = layer_new("Background", doc->width, doc->height, TRUE);
     
     /* Convert pixbuf to Cairo surface and copy to layer */
     cairo_surface_t *temp_surface = pixbuf_to_cairo_surface(pixbuf);
@@ -581,6 +581,12 @@ gboolean document_load_image_from_file(ImageDocument *doc, const gchar *file_pat
 
     /* Add layer to document */
     doc->layers = g_list_append(doc->layers, base_layer);
+    
+    /* Set the selected layer to index 0 (base layer) */
+    ImageLayer *layer_0 = document_get_layer(doc, 0);
+    if (layer_0) {
+        document_set_selected_layer(doc, layer_0);
+    }
 
     /* Mark composite as needing re-render */
     document_invalidate_composite(doc);
@@ -697,6 +703,25 @@ gdouble document_get_zoom(ImageDocument *doc)
 }
 
 /**
+ * Map BlendMode enum to Cairo operator
+ */
+static cairo_operator_t blend_mode_to_cairo_operator(BlendMode blend_mode)
+{
+    switch (blend_mode) {
+        case BLEND_MODE_NORMAL:
+            return CAIRO_OPERATOR_OVER;
+        case BLEND_MODE_MULTIPLY:
+            return CAIRO_OPERATOR_MULTIPLY;
+        case BLEND_MODE_SCREEN:
+            return CAIRO_OPERATOR_SCREEN;
+        case BLEND_MODE_OVERLAY:
+            return CAIRO_OPERATOR_OVERLAY;
+        default:
+            return CAIRO_OPERATOR_OVER;
+    }
+}
+
+/**
  * Render all layers to composite surface
  */
 gboolean document_render_composite(ImageDocument *doc)
@@ -728,6 +753,9 @@ gboolean document_render_composite(ImageDocument *doc)
     /* Set operator for proper alpha blending */
     cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
 
+    /* Track if this is the first visible layer */
+    gboolean is_first_visible_layer = TRUE;
+
     /* Composite each visible layer */
     for (iter = doc->layers; iter; iter = iter->next) {
         layer = (ImageLayer *)iter->data;
@@ -741,8 +769,16 @@ gboolean document_render_composite(ImageDocument *doc)
         cairo_translate(cr, layer->offset_x, layer->offset_y);
         cairo_set_source_surface(cr, layer->surface, 0, 0);
         
-        /* Ensure proper operator for alpha blending */
-        cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+        /* Set operator based on layer's blend mode
+           First visible layer always uses OVER to establish the base */
+        cairo_operator_t op;
+        if (is_first_visible_layer) {
+            op = CAIRO_OPERATOR_OVER;
+            is_first_visible_layer = FALSE;
+        } else {
+            op = blend_mode_to_cairo_operator(layer->blend_mode);
+        }
+        cairo_set_operator(cr, op);
         
         if (layer->opacity < 1.0) {
             cairo_paint_with_alpha(cr, layer->opacity);

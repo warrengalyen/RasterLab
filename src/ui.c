@@ -335,7 +335,6 @@ AppContext* ui_create_main_window(void)
 
     /* ==== CENTER-RIGHT HORIZONTAL PANED: Center (notebook) | Right (layers) ==== */
     GtkWidget *center_right_hpaned = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
-    gtk_paned_set_position(GTK_PANED(center_right_hpaned), 800);
     gtk_box_pack_start(GTK_BOX(main_hbox), center_right_hpaned, TRUE, TRUE, 0);
 
     /* CENTER: Notebook for document tabs */
@@ -349,6 +348,8 @@ AppContext* ui_create_main_window(void)
     /* ==== RIGHT PANEL: Layers ==== */
     ctx->layers_panel = create_layers_panel();
     layers_panel_widget = ctx->layers_panel->panel;
+    /* Set fixed width of 350 pixels for the right panel */
+    gtk_widget_set_size_request(layers_panel_widget, 350, -1);
     gtk_paned_pack2(GTK_PANED(center_right_hpaned), layers_panel_widget, FALSE, TRUE);
 
     /* Store layers panel reference for later updates */

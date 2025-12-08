@@ -5,12 +5,12 @@
   <object class="GtkBox" id="layers_panel">
     <property name="visible">True</property>
     <property name="can-focus">False</property>
+    <property name="margin-right">5</property>
     <property name="orientation">vertical</property>
     <child>
       <object class="GtkBox" id="opacity_controls">
         <property name="visible">True</property>
         <property name="can-focus">False</property>
-        <property name="margin-start">5</property>
         <child>
           <object class="GtkLabel" id="label_opacity">
             <property name="visible">True</property>
@@ -28,6 +28,7 @@
           <object class="GtkScale" id="scale_opacity">
             <property name="visible">True</property>
             <property name="can-focus">True</property>
+            <property name="margin-right">5</property>
             <property name="round-digits">1</property>
             <property name="draw-value">False</property>
           </object>
@@ -41,6 +42,7 @@
           <object class="GtkSpinButton" id="spin_opacity">
             <property name="visible">True</property>
             <property name="can-focus">True</property>
+            <property name="margin-right">5</property>
             <property name="value">100</property>
           </object>
           <packing>
@@ -69,6 +71,43 @@
       </packing>
     </child>
     <child>
+      <object class="GtkBox" id="blend_controls">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="margin-top">5</property>
+        <property name="margin-bottom">5</property>
+        <child>
+          <object class="GtkLabel" id="lalbel_blend">
+            <property name="visible">True</property>
+            <property name="can-focus">False</property>
+            <property name="margin-right">10</property>
+            <property name="label" translatable="yes">blend:</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">0</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkComboBox" id="combo_blend">
+            <property name="visible">True</property>
+            <property name="can-focus">False</property>
+          </object>
+          <packing>
+            <property name="expand">True</property>
+            <property name="fill">True</property>
+            <property name="position">1</property>
+          </packing>
+        </child>
+      </object>
+      <packing>
+        <property name="expand">False</property>
+        <property name="fill">True</property>
+        <property name="position">1</property>
+      </packing>
+    </child>
+    <child>
       <object class="GtkScrolledWindow" id="layers_scroll">
         <property name="visible">True</property>
         <property name="can-focus">True</property>
@@ -79,7 +118,7 @@
       <packing>
         <property name="expand">True</property>
         <property name="fill">True</property>
-        <property name="position">1</property>
+        <property name="position">2</property>
       </packing>
     </child>
     <child>
@@ -87,8 +126,6 @@
         <property name="visible">True</property>
         <property name="can-focus">False</property>
         <property name="halign">center</property>
-        <property name="margin-start">5</property>
-        <property name="margin-end">5</property>
         <property name="margin-top">5</property>
         <property name="margin-bottom">5</property>
         <property name="spacing">5</property>
@@ -97,6 +134,7 @@
             <property name="visible">True</property>
             <property name="can-focus">True</property>
             <property name="receives-default">True</property>
+            <property name="tooltip-markup" translatable="yes">&lt;b&gt;Add layer&lt;/b&gt;</property>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -109,6 +147,7 @@
             <property name="visible">True</property>
             <property name="can-focus">True</property>
             <property name="receives-default">True</property>
+            <property name="tooltip-text" translatable="yes">&lt;b&gt;Delete layer&lt;/b&gt;</property>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -121,6 +160,7 @@
             <property name="visible">True</property>
             <property name="can-focus">True</property>
             <property name="receives-default">True</property>
+            <property name="tooltip-text" translatable="yes">&lt;b&gt;Move layer up&lt;/b&gt;</property>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -133,6 +173,7 @@
             <property name="visible">True</property>
             <property name="can-focus">True</property>
             <property name="receives-default">True</property>
+            <property name="tooltip-text" translatable="yes">&lt;b&gt;Move layer down&lt;/b&gt;</property>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -145,6 +186,7 @@
             <property name="visible">True</property>
             <property name="can-focus">True</property>
             <property name="receives-default">True</property>
+            <property name="tooltip-text" translatable="yes">&lt;b&gt;Duplicate layer&lt;/b&gt;</property>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -156,7 +198,7 @@
       <packing>
         <property name="expand">False</property>
         <property name="fill">True</property>
-        <property name="position">2</property>
+        <property name="position">3</property>
       </packing>
     </child>
   </object>

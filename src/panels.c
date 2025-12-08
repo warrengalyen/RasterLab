@@ -547,6 +547,60 @@ static void on_opacity_scale_changed(GtkRange *range, gpointer user_data);
 static void on_opacity_spin_changed(GtkSpinButton *spin_button, gpointer user_data);
 static void on_opacity_reset_clicked(GtkButton *button, gpointer user_data);
 
+/* Forward declaration for blend mode callback */
+static void on_blend_mode_changed(GtkComboBox *combo, gpointer user_data);
+
+/**
+ * Blend mode changed callback
+ */
+static void on_blend_mode_changed(GtkComboBox *combo, gpointer user_data)
+{
+    LayersPanel *layers_panel = (LayersPanel *)user_data;
+    gint active = gtk_combo_box_get_active(combo);
+    ImageLayer *selected_layer;
+    BlendMode blend_mode;
+    
+    if (!layers_panel || !layers_panel->current_doc) {
+        return;
+    }
+    
+    if (active < 0) {
+        return;  /* No selection */
+    }
+    
+    /* Map combo box index to BlendMode enum */
+    switch (active) {
+        case 0:
+            blend_mode = BLEND_MODE_NORMAL;
+            break;
+        case 1:
+            blend_mode = BLEND_MODE_MULTIPLY;
+            break;
+        case 2:
+            blend_mode = BLEND_MODE_SCREEN;
+            break;
+        case 3:
+            blend_mode = BLEND_MODE_OVERLAY;
+            break;
+        default:
+            blend_mode = BLEND_MODE_NORMAL;
+            break;
+    }
+    
+    selected_layer = layers_panel_get_selected_layer(layers_panel);
+    if (!selected_layer) {
+        return;
+    }
+    
+    /* Update layer blend mode */
+    selected_layer->blend_mode = blend_mode;
+    
+    /* Mark composite as dirty and trigger redraw */
+    document_invalidate_composite(layers_panel->current_doc);
+    
+    printf("Layer blend mode changed to %d\n", blend_mode);
+}
+
 /**
  * Opacity scale changed callback
  */
@@ -839,6 +893,7 @@ LayersPanel* create_layers_panel(void)
         layers_panel->scale_opacity = NULL;
         layers_panel->spin_opacity = NULL;
         layers_panel->btn_opacity_reset = NULL;
+        layers_panel->combo_blend = NULL;
         layers_panel->current_doc = NULL;
         layers_panel->app_context = NULL;
         return layers_panel;
@@ -860,6 +915,7 @@ LayersPanel* create_layers_panel(void)
         layers_panel->scale_opacity = NULL;
         layers_panel->spin_opacity = NULL;
         layers_panel->btn_opacity_reset = NULL;
+        layers_panel->combo_blend = NULL;
         layers_panel->current_doc = NULL;
         layers_panel->app_context = NULL;
         return layers_panel;
@@ -879,6 +935,9 @@ LayersPanel* create_layers_panel(void)
     layers_panel->scale_opacity = GTK_WIDGET(gtk_builder_get_object(builder, "scale_opacity"));
     layers_panel->spin_opacity = GTK_WIDGET(gtk_builder_get_object(builder, "spin_opacity"));
     layers_panel->btn_opacity_reset = GTK_WIDGET(gtk_builder_get_object(builder, "btn_opacity_reset"));
+    
+    /* Get blend mode combo box from builder */
+    layers_panel->combo_blend = GTK_WIDGET(gtk_builder_get_object(builder, "combo_blend"));
     
     /* Create accordion widget - this becomes the main panel container */
     layers_panel->accordion = accordion_new();
@@ -972,6 +1031,42 @@ LayersPanel* create_layers_panel(void)
         g_signal_connect(layers_panel->btn_opacity_reset, "clicked",
                         G_CALLBACK(on_opacity_reset_clicked), layers_panel);
     }
+    
+    /* Set up blend mode combo box */
+    if (layers_panel->combo_blend) {
+        /* Create list store for blend modes */
+        GtkListStore *blend_store = gtk_list_store_new(1, G_TYPE_STRING);
+        GtkTreeIter iter;
+        
+        /* Add blend mode options */
+        gtk_list_store_append(blend_store, &iter);
+        gtk_list_store_set(blend_store, &iter, 0, "Normal", -1);
+        
+        gtk_list_store_append(blend_store, &iter);
+        gtk_list_store_set(blend_store, &iter, 0, "Multiply", -1);
+        
+        gtk_list_store_append(blend_store, &iter);
+        gtk_list_store_set(blend_store, &iter, 0, "Screen", -1);
+        
+        gtk_list_store_append(blend_store, &iter);
+        gtk_list_store_set(blend_store, &iter, 0, "Overlay", -1);
+        
+        /* Set the model */
+        gtk_combo_box_set_model(GTK_COMBO_BOX(layers_panel->combo_blend), GTK_TREE_MODEL(blend_store));
+        g_object_unref(blend_store);
+        
+        /* Set up cell renderer */
+        GtkCellRenderer *cell = gtk_cell_renderer_text_new();
+        gtk_cell_layout_pack_start(GTK_CELL_LAYOUT(layers_panel->combo_blend), cell, TRUE);
+        gtk_cell_layout_set_attributes(GTK_CELL_LAYOUT(layers_panel->combo_blend), cell, "text", 0, NULL);
+        
+        /* Set default to Normal */
+        gtk_combo_box_set_active(GTK_COMBO_BOX(layers_panel->combo_blend), 0);
+        
+        /* Connect signal handler */
+        g_signal_connect(layers_panel->combo_blend, "changed",
+                        G_CALLBACK(on_blend_mode_changed), layers_panel);
+    }
 
     /* Add Glade panel as single accordion section */
     accordion_add_section(layers_panel->accordion, "Layers", glade_panel);
@@ -1023,6 +1118,30 @@ void layers_panel_update(LayersPanel *layers_panel, ImageDocument *doc)
     }
 
     printf("Layers panel updated with %u layers\n", layer_count);
+    
+    /* Always select the layer at index 0 (last row in tree view since layers are displayed in reverse) */
+    if (layer_count > 0 && layers_panel->tree_view) {
+        GtkTreeSelection *selection = gtk_tree_view_get_selection(
+            GTK_TREE_VIEW(layers_panel->tree_view));
+        GtkTreeIter iter;
+        
+        /* Navigate to the last row (which corresponds to index 0) */
+        if (gtk_tree_model_get_iter_first(GTK_TREE_MODEL(layers_panel->store), &iter)) {
+            /* Move to the last row */
+            for (guint i = 0; i < layer_count - 1; i++) {
+                if (!gtk_tree_model_iter_next(GTK_TREE_MODEL(layers_panel->store), &iter)) {
+                    break;
+                }
+            }
+            gtk_tree_selection_select_iter(selection, &iter);
+        }
+        
+        /* Ensure document's selected layer is set to index 0 */
+        ImageLayer *layer_0 = document_get_layer(doc, 0);
+        if (layer_0) {
+            document_set_selected_layer(doc, layer_0);
+        }
+    }
 }
 
 /**
@@ -1122,6 +1241,39 @@ void layers_panel_update_opacity_controls(LayersPanel *layers_panel)
         if (layers_panel->btn_opacity_reset) {
             gtk_widget_set_sensitive(layers_panel->btn_opacity_reset, TRUE);
         }
+        
+        /* Update blend mode combo box */
+        if (layers_panel->combo_blend) {
+            gint blend_index = 0;
+            
+            /* Map BlendMode enum to combo box index */
+            switch (selected_layer->blend_mode) {
+                case BLEND_MODE_NORMAL:
+                    blend_index = 0;
+                    break;
+                case BLEND_MODE_MULTIPLY:
+                    blend_index = 1;
+                    break;
+                case BLEND_MODE_SCREEN:
+                    blend_index = 2;
+                    break;
+                case BLEND_MODE_OVERLAY:
+                    blend_index = 3;
+                    break;
+                default:
+                    blend_index = 0;
+                    break;
+            }
+            
+            g_signal_handlers_block_by_func(layers_panel->combo_blend,
+                                           G_CALLBACK(on_blend_mode_changed),
+                                           layers_panel);
+            gtk_combo_box_set_active(GTK_COMBO_BOX(layers_panel->combo_blend), blend_index);
+            gtk_widget_set_sensitive(layers_panel->combo_blend, TRUE);
+            g_signal_handlers_unblock_by_func(layers_panel->combo_blend,
+                                             G_CALLBACK(on_blend_mode_changed),
+                                             layers_panel);
+        }
     } else {
         /* No layer selected - disable controls */
         if (layers_panel->scale_opacity) {
@@ -1132,6 +1284,9 @@ void layers_panel_update_opacity_controls(LayersPanel *layers_panel)
         }
         if (layers_panel->btn_opacity_reset) {
             gtk_widget_set_sensitive(layers_panel->btn_opacity_reset, FALSE);
+        }
+        if (layers_panel->combo_blend) {
+            gtk_widget_set_sensitive(layers_panel->combo_blend, FALSE);
         }
     }
 }
