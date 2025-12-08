@@ -502,6 +502,14 @@ static gboolean on_overview_draw(GtkWidget *widget, cairo_t *cr, gpointer user_d
         return FALSE;
     }
     
+    /* Draw checkered background behind thumbnail (clipped to thumbnail bounds) */
+    cairo_save(cr);
+    cairo_rectangle(cr, thumb_x, thumb_y, thumb_width, thumb_height);
+    cairo_clip(cr);
+    cairo_translate(cr, thumb_x, thumb_y);
+    draw_checkered_background(cr, thumb_width, thumb_height);
+    cairo_restore(cr);
+    
     /* Draw thumbnail */
     gdk_cairo_set_source_pixbuf(cr, scaled_thumb, thumb_x, thumb_y);
     cairo_paint(cr);
