@@ -192,13 +192,21 @@ AccordionSection* accordion_add_section(Accordion *accordion,
     gtk_widget_set_margin_start(section->content_box, 10);
     gtk_widget_set_margin_end(section->content_box, 0);
     gtk_widget_set_margin_bottom(section->content_box, 5);
-    gtk_widget_set_vexpand(section->content_box, TRUE);
+    
+    /* Check if content widget wants to expand vertically */
+    gboolean content_vexpand = gtk_widget_get_vexpand(content);
+    gboolean content_hexpand = gtk_widget_get_hexpand(content);
+    
+    /* Set content box expansion based on content widget */
+    gtk_widget_set_vexpand(section->content_box, content_vexpand);
     gtk_widget_set_hexpand(section->content_box, TRUE);
-    gtk_box_pack_start(GTK_BOX(section->content_box), content, TRUE, TRUE, 0);
+    
+    /* Pack content with appropriate expansion settings */
+    gtk_box_pack_start(GTK_BOX(section->content_box), content, content_vexpand, content_vexpand, 0);
     
     /* Pack header and content into main box */
     gtk_box_pack_start(GTK_BOX(acc->main_box), section->header_button, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(acc->main_box), section->content_box, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(acc->main_box), section->content_box, content_vexpand, content_vexpand, 0);
     
     /* Add to sections list */
     acc->sections = g_list_append(acc->sections, section);
