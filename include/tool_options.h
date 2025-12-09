@@ -12,6 +12,7 @@ typedef struct {
     gfloat opacity;     /* Tool opacity 0-1 (0=transparent, 1=opaque) */
     gfloat hardness;    /* Brush hardness 0-1 (0=soft, 1=hard) */
     gfloat flow;        /* Eraser flow 0-1 (0=no effect, 1=full effect) */
+    gfloat spacing;     /* Eraser spacing 0-1 (0.01=very close, 1.0=far apart) */
 } ToolOptions;
 
 /**
@@ -59,6 +60,13 @@ void tool_options_set_hardness(ToolOptions *opts, gfloat hardness);
  * @param flow New flow (clamped to 0-1)
  */
 void tool_options_set_flow(ToolOptions *opts, gfloat flow);
+
+/**
+ * Set spacing
+ * @param opts The tool options
+ * @param spacing New spacing (clamped to 0-1)
+ */
+void tool_options_set_spacing(ToolOptions *opts, gfloat spacing);
 
 #endif /* TOOL_OPTIONS_H */
 

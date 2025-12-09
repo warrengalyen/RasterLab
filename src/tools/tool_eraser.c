@@ -26,7 +26,6 @@ typedef struct {
     gdouble spacing;                    /* Spacing between eraser points (0.0-1.0) */
 } EraserToolState;
 
-const gdouble ERASER_STAMP_SPACING = 0.25f;
 
 /**
  * Stamp eraser at a specific point with gradient based on hardness
@@ -198,7 +197,12 @@ static void eraser_tool_mouse_down(Tool *tool, struct ImageDocument *doc, MouseE
     state->last_y = event->y;
     state->active_layer = active_layer;
 
-    state->spacing = ERASER_STAMP_SPACING;
+    /* Get spacing from tool options */
+    ToolOptions *opts = tool_options_get_global();
+    state->spacing = opts ? opts->spacing : 0.25f;
+
+    gfloat eraser_size = opts ? opts->size : 5.0f;
+    gint margin = (gint)(eraser_size / 2.0f) + 3;
 
     /* Erase initial dot at mouse down position */
     gint layer_x = event->x - active_layer->offset_x;
@@ -208,10 +212,6 @@ static void eraser_tool_mouse_down(Tool *tool, struct ImageDocument *doc, MouseE
     active_layer->cache_dirty = TRUE;
 
     /* Mark initial dot area as dirty */
-    ToolOptions *opts = tool_options_get_global();
-    gfloat eraser_size = opts ? opts->size : 5.0f;
-    gint margin = (gint)(eraser_size / 2.0f) + 3;
-
     DirtyRect dirty_rect;
     dirty_rect_set(&dirty_rect, event->x - margin, event->y - margin,
                     eraser_size + 2 * margin, eraser_size + 2 * margin);

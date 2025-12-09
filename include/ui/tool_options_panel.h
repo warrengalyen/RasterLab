@@ -16,6 +16,7 @@ typedef struct {
     GtkWidget *opacity_scale;    /* Opacity slider (current panel) */
     GtkWidget *hardness_scale;   /* Hardness slider (current panel) */
     GtkWidget *flow_scale;        /* Flow slider (current panel, eraser only) */
+    GtkWidget *spacing_scale;     /* Spacing slider (current panel, eraser only) */
     ToolType current_tool_type;  /* Currently displayed tool type */
 } ToolOptionsPanel;
 

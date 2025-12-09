@@ -56,6 +56,19 @@ static void on_tool_flow_changed(GtkScale *scale, gpointer user_data)
 }
 
 /**
+ * Tool options panel callback for spacing slider
+ */
+static void on_tool_spacing_changed(GtkScale *scale, gpointer user_data)
+{
+    (void)user_data;  /* Unused */
+    gfloat spacing = gtk_range_get_value(GTK_RANGE(scale));
+    ToolOptions *opts = tool_options_get_global();
+    if (opts) {
+        tool_options_set_spacing(opts, spacing / 100.0f);
+    }
+}
+
+/**
  * Set scale widget value
  */
 static void set_scale_value(GtkWidget *scale, gdouble value)
@@ -77,7 +90,7 @@ static void set_scale_value(GtkWidget *scale, gdouble value)
 static GtkWidget* load_panel_from_glade(const gchar *resource_path, const gchar *panel_id,
                                          GtkWidget **title_label, GtkWidget **size_scale,
                                          GtkWidget **opacity_scale, GtkWidget **hardness_scale,
-                                         GtkWidget **flow_scale)
+                                         GtkWidget **flow_scale, GtkWidget **spacing_scale)
 {
     GtkBuilder *builder;
     GError *error = NULL;
@@ -122,6 +135,7 @@ static GtkWidget* load_panel_from_glade(const gchar *resource_path, const gchar 
     const gchar *opacity_id = (g_strcmp0(panel_id, "brush_options_panel") == 0) ? "brush_opacity_scale" : "eraser_opacity_scale";
     const gchar *hardness_id = (g_strcmp0(panel_id, "brush_options_panel") == 0) ? "brush_hardness_scale" : "eraser_hardness_scale";
     const gchar *flow_id = "eraser_flow_scale";  /* Only for eraser panel */
+    const gchar *spacing_id = "eraser_spacing_scale";  /* Only for eraser panel */
 
     if (title_label) {
         GtkWidget *widget = GTK_WIDGET(gtk_builder_get_object(builder, title_id));
@@ -187,6 +201,20 @@ static GtkWidget* load_panel_from_glade(const gchar *resource_path, const gchar 
         }
     }
 
+    if (spacing_scale && g_strcmp0(panel_id, "eraser_options_panel") == 0) {
+        GtkWidget *widget = GTK_WIDGET(gtk_builder_get_object(builder, spacing_id));
+        if (!widget) {
+            g_warning("Failed to get %s from builder", spacing_id);
+            *spacing_scale = NULL;
+        } else {
+            *spacing_scale = widget;
+            if (opts) {
+                set_scale_value(widget, opts->spacing * 100.0);
+                g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_spacing_changed), NULL);
+            }
+        }
+    }
+
     /* Don't show the panel here - let the container handle it */
     /* gtk_widget_show_all(panel); */
 
@@ -210,6 +238,8 @@ ToolOptionsPanel* create_tool_options_panel(void)
     tool_opts_panel->size_scale = NULL;
     tool_opts_panel->opacity_scale = NULL;
     tool_opts_panel->hardness_scale = NULL;
+    tool_opts_panel->flow_scale = NULL;
+    tool_opts_panel->spacing_scale = NULL;
     tool_opts_panel->current_tool_type = TOOL_MOVE;  /* Start with no tool selected */
 
     /* Create container to hold the current panel */
@@ -229,7 +259,8 @@ ToolOptionsPanel* create_tool_options_panel(void)
         &brush_size,
         &brush_opacity,
         &brush_hardness,
-        NULL);  /* Brush doesn't have flow */
+        NULL,  /* Brush doesn't have flow */
+        NULL);  /* Brush doesn't have spacing */
 
     if (!tool_opts_panel->brush_panel) {
         g_warning("Failed to load brush options panel from Glade");
@@ -252,14 +283,15 @@ ToolOptionsPanel* create_tool_options_panel(void)
     gtk_widget_set_no_show_all(tool_opts_panel->brush_panel, TRUE);
 
     /* Load eraser panel from Glade (but don't show it yet) */
-    GtkWidget *eraser_title = NULL, *eraser_size = NULL, *eraser_opacity = NULL, *eraser_hardness = NULL, *eraser_flow = NULL;
+    GtkWidget *eraser_title = NULL, *eraser_size = NULL, *eraser_opacity = NULL, *eraser_hardness = NULL, *eraser_flow = NULL, *eraser_spacing = NULL;
     tool_opts_panel->eraser_panel = load_panel_from_glade(
         "/ui/eraser_options.glade", "eraser_options_panel",
         &eraser_title,
         &eraser_size,
         &eraser_opacity,
         &eraser_hardness,
-        &eraser_flow);
+        &eraser_flow,
+        &eraser_spacing);
 
     if (!tool_opts_panel->eraser_panel) {
         g_warning("Failed to load eraser options panel from Glade");
@@ -282,6 +314,9 @@ ToolOptionsPanel* create_tool_options_panel(void)
         }
         if (eraser_flow) {
             g_object_set_data(G_OBJECT(tool_opts_panel->eraser_panel), "flow_scale", eraser_flow);
+        }
+        if (eraser_spacing) {
+            g_object_set_data(G_OBJECT(tool_opts_panel->eraser_panel), "spacing_scale", eraser_spacing);
         }
         /* Hide eraser panel initially - will be shown when tool is selected */
         gtk_widget_set_visible(tool_opts_panel->eraser_panel, FALSE);
@@ -415,6 +450,15 @@ void tool_options_panel_switch_tool(ToolOptionsPanel *panel, const gchar *tool_n
                 g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_flow_changed), NULL);
             }
         }
+        widget = GTK_WIDGET(g_object_get_data(G_OBJECT(panel->eraser_panel), "spacing_scale"));
+        if (widget) {
+            panel->spacing_scale = widget;
+            if (opts) {
+                set_scale_value(widget, opts->spacing * 100.0);
+                g_signal_handlers_disconnect_by_func(widget, G_CALLBACK(on_tool_spacing_changed), NULL);
+                g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_spacing_changed), NULL);
+            }
+        }
     } else {
         /* For tools without options (Move, Fill, etc.), hide main panel container */
         if (panel->panel) {
@@ -426,6 +470,7 @@ void tool_options_panel_switch_tool(ToolOptionsPanel *panel, const gchar *tool_n
         panel->opacity_scale = NULL;
         panel->hardness_scale = NULL;
         panel->flow_scale = NULL;
+        panel->spacing_scale = NULL;
     }
 
     panel->current_tool_type = new_tool_type;
