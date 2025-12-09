@@ -43,22 +43,12 @@ static void on_tool_hardness_changed(GtkScale *scale, gpointer user_data)
 }
 
 /**
- * Initialize a scale widget with adjustment and value
+ * Set scale widget value
  */
-static void initialize_scale(GtkWidget *scale, gdouble min, gdouble max, gdouble step, gdouble value)
+static void set_scale_value(GtkWidget *scale, gdouble value)
 {
     if (!scale) {
         return;
-    }
-    
-    GtkAdjustment *adj = gtk_range_get_adjustment(GTK_RANGE(scale));
-    if (!adj) {
-        /* Create adjustment if it doesn't exist */
-        adj = gtk_adjustment_new(value, min, max, step, step * 10, 0);
-        gtk_range_set_adjustment(GTK_RANGE(scale), adj);
-    } else {
-        /* Update existing adjustment */
-        gtk_adjustment_configure(adj, value, min, max, step, step * 10, 0);
     }
     
     /* Set the value */
@@ -134,7 +124,7 @@ static GtkWidget* load_panel_from_glade(const gchar *resource_path, const gchar 
         } else {
             *size_scale = widget;
             if (opts) {
-                initialize_scale(widget, 1.0, 100.0, 1.0, opts->size);
+                set_scale_value(widget, opts->size);
                 g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_size_changed), NULL);
             }
         }
@@ -148,7 +138,7 @@ static GtkWidget* load_panel_from_glade(const gchar *resource_path, const gchar 
         } else {
             *opacity_scale = widget;
             if (opts) {
-                initialize_scale(widget, 0.0, 100.0, 1.0, opts->opacity * 100.0);
+                set_scale_value(widget, opts->opacity * 100.0);
                 g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_opacity_changed), NULL);
             }
         }
@@ -162,7 +152,7 @@ static GtkWidget* load_panel_from_glade(const gchar *resource_path, const gchar 
         } else {
             *hardness_scale = widget;
             if (opts) {
-                initialize_scale(widget, 0.0, 100.0, 1.0, opts->hardness * 100.0);
+                set_scale_value(widget, opts->hardness * 100.0);
                 g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_hardness_changed), NULL);
             }
         }
@@ -316,7 +306,7 @@ void tool_options_panel_switch_tool(ToolOptionsPanel *panel, const gchar *tool_n
             if (widget) {
                 panel->size_scale = widget;
                 if (opts) {
-                    initialize_scale(widget, 1.0, 100.0, 1.0, opts->size);
+                    set_scale_value(widget, opts->size);
                     /* Reconnect signal in case it was disconnected */
                     g_signal_handlers_disconnect_by_func(widget, G_CALLBACK(on_tool_size_changed), NULL);
                     g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_size_changed), NULL);
@@ -326,7 +316,7 @@ void tool_options_panel_switch_tool(ToolOptionsPanel *panel, const gchar *tool_n
             if (widget) {
                 panel->opacity_scale = widget;
                 if (opts) {
-                    initialize_scale(widget, 0.0, 100.0, 1.0, opts->opacity * 100.0);
+                    set_scale_value(widget, opts->opacity * 100.0);
                     g_signal_handlers_disconnect_by_func(widget, G_CALLBACK(on_tool_opacity_changed), NULL);
                     g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_opacity_changed), NULL);
                 }
@@ -335,7 +325,7 @@ void tool_options_panel_switch_tool(ToolOptionsPanel *panel, const gchar *tool_n
             if (widget) {
                 panel->hardness_scale = widget;
                 if (opts) {
-                    initialize_scale(widget, 0.0, 100.0, 1.0, opts->hardness * 100.0);
+                    set_scale_value(widget, opts->hardness * 100.0);
                     g_signal_handlers_disconnect_by_func(widget, G_CALLBACK(on_tool_hardness_changed), NULL);
                     g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_hardness_changed), NULL);
                 }
@@ -359,7 +349,7 @@ void tool_options_panel_switch_tool(ToolOptionsPanel *panel, const gchar *tool_n
         if (widget) {
             panel->size_scale = widget;
             if (opts) {
-                initialize_scale(widget, 1.0, 100.0, 1.0, opts->size);
+                set_scale_value(widget, opts->size);
                 g_signal_handlers_disconnect_by_func(widget, G_CALLBACK(on_tool_size_changed), NULL);
                 g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_size_changed), NULL);
             }
@@ -368,7 +358,7 @@ void tool_options_panel_switch_tool(ToolOptionsPanel *panel, const gchar *tool_n
         if (widget) {
             panel->opacity_scale = widget;
             if (opts) {
-                initialize_scale(widget, 0.0, 100.0, 1.0, opts->opacity * 100.0);
+                set_scale_value(widget, opts->opacity * 100.0);
                 g_signal_handlers_disconnect_by_func(widget, G_CALLBACK(on_tool_opacity_changed), NULL);
                 g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_opacity_changed), NULL);
             }
@@ -377,7 +367,7 @@ void tool_options_panel_switch_tool(ToolOptionsPanel *panel, const gchar *tool_n
         if (widget) {
             panel->hardness_scale = widget;
             if (opts) {
-                initialize_scale(widget, 0.0, 100.0, 1.0, opts->hardness * 100.0);
+                set_scale_value(widget, opts->hardness * 100.0);
                 g_signal_handlers_disconnect_by_func(widget, G_CALLBACK(on_tool_hardness_changed), NULL);
                 g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_hardness_changed), NULL);
             }
