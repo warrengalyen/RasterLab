@@ -17,6 +17,7 @@ ToolOptions* tool_options_new(void)
     opts->size = 5.0f;          /* 5px brush size */
     opts->opacity = 1.0f;       /* 100% opacity */
     opts->hardness = 1.0f;      /* Hard edge */
+    opts->flow = 1.0f;          /* Full flow */
     
     return opts;
 }
@@ -82,5 +83,19 @@ void tool_options_set_hardness(ToolOptions *opts, gfloat hardness)
     /* Clamp hardness to 0-1 */
     opts->hardness = fmaxf(0.0f, fminf(1.0f, hardness));
     //printf("Tool hardness set to: %.2f\n", opts->hardness);
+}
+
+/**
+ * Set flow
+ */
+void tool_options_set_flow(ToolOptions *opts, gfloat flow)
+{
+    if (!opts) {
+        return;
+    }
+    
+    /* Clamp flow to 0-1 */
+    opts->flow = fmaxf(0.0f, fminf(1.0f, flow));
+    //printf("Tool flow set to: %.2f\n", opts->flow);
 }
 

@@ -15,6 +15,7 @@ typedef struct {
     GtkWidget *size_scale;       /* Size slider (current panel) */
     GtkWidget *opacity_scale;    /* Opacity slider (current panel) */
     GtkWidget *hardness_scale;   /* Hardness slider (current panel) */
+    GtkWidget *flow_scale;        /* Flow slider (current panel, eraser only) */
     ToolType current_tool_type;  /* Currently displayed tool type */
 } ToolOptionsPanel;
 
@@ -30,13 +31,6 @@ ToolOptionsPanel* create_tool_options_panel(void);
  * @param tool_name The name of the currently selected tool
  */
 void tool_options_panel_switch_tool(ToolOptionsPanel *panel, const gchar *tool_name);
-
-/**
- * Update tool options panel visibility based on tool capabilities
- * @param panel The tool options panel
- * @param options The tool option flags
- */
-void tool_options_panel_update_visibility(ToolOptionsPanel *panel, ToolOptionFlags options);
 
 /**
  * Free a tool options panel

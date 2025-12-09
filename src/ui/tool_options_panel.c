@@ -43,6 +43,19 @@ static void on_tool_hardness_changed(GtkScale *scale, gpointer user_data)
 }
 
 /**
+ * Tool options panel callback for flow slider
+ */
+static void on_tool_flow_changed(GtkScale *scale, gpointer user_data)
+{
+    (void)user_data;  /* Unused */
+    gfloat flow = gtk_range_get_value(GTK_RANGE(scale));
+    ToolOptions *opts = tool_options_get_global();
+    if (opts) {
+        tool_options_set_flow(opts, flow / 100.0f);
+    }
+}
+
+/**
  * Set scale widget value
  */
 static void set_scale_value(GtkWidget *scale, gdouble value)
@@ -63,7 +76,8 @@ static void set_scale_value(GtkWidget *scale, gdouble value)
  */
 static GtkWidget* load_panel_from_glade(const gchar *resource_path, const gchar *panel_id,
                                          GtkWidget **title_label, GtkWidget **size_scale,
-                                         GtkWidget **opacity_scale, GtkWidget **hardness_scale)
+                                         GtkWidget **opacity_scale, GtkWidget **hardness_scale,
+                                         GtkWidget **flow_scale)
 {
     GtkBuilder *builder;
     GError *error = NULL;
@@ -107,6 +121,7 @@ static GtkWidget* load_panel_from_glade(const gchar *resource_path, const gchar 
     const gchar *size_id = (g_strcmp0(panel_id, "brush_options_panel") == 0) ? "brush_size_scale" : "eraser_size_scale";
     const gchar *opacity_id = (g_strcmp0(panel_id, "brush_options_panel") == 0) ? "brush_opacity_scale" : "eraser_opacity_scale";
     const gchar *hardness_id = (g_strcmp0(panel_id, "brush_options_panel") == 0) ? "brush_hardness_scale" : "eraser_hardness_scale";
+    const gchar *flow_id = "eraser_flow_scale";  /* Only for eraser panel */
 
     if (title_label) {
         GtkWidget *widget = GTK_WIDGET(gtk_builder_get_object(builder, title_id));
@@ -158,6 +173,20 @@ static GtkWidget* load_panel_from_glade(const gchar *resource_path, const gchar 
         }
     }
 
+    if (flow_scale && g_strcmp0(panel_id, "eraser_options_panel") == 0) {
+        GtkWidget *widget = GTK_WIDGET(gtk_builder_get_object(builder, flow_id));
+        if (!widget) {
+            g_warning("Failed to get %s from builder", flow_id);
+            *flow_scale = NULL;
+        } else {
+            *flow_scale = widget;
+            if (opts) {
+                set_scale_value(widget, opts->flow * 100.0);
+                g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_flow_changed), NULL);
+            }
+        }
+    }
+
     /* Don't show the panel here - let the container handle it */
     /* gtk_widget_show_all(panel); */
 
@@ -199,7 +228,8 @@ ToolOptionsPanel* create_tool_options_panel(void)
         &brush_title,
         &brush_size,
         &brush_opacity,
-        &brush_hardness);
+        &brush_hardness,
+        NULL);  /* Brush doesn't have flow */
 
     if (!tool_opts_panel->brush_panel) {
         g_warning("Failed to load brush options panel from Glade");
@@ -222,13 +252,14 @@ ToolOptionsPanel* create_tool_options_panel(void)
     gtk_widget_set_no_show_all(tool_opts_panel->brush_panel, TRUE);
 
     /* Load eraser panel from Glade (but don't show it yet) */
-    GtkWidget *eraser_title = NULL, *eraser_size = NULL, *eraser_opacity = NULL, *eraser_hardness = NULL;
+    GtkWidget *eraser_title = NULL, *eraser_size = NULL, *eraser_opacity = NULL, *eraser_hardness = NULL, *eraser_flow = NULL;
     tool_opts_panel->eraser_panel = load_panel_from_glade(
         "/ui/eraser_options.glade", "eraser_options_panel",
         &eraser_title,
         &eraser_size,
         &eraser_opacity,
-        &eraser_hardness);
+        &eraser_hardness,
+        &eraser_flow);
 
     if (!tool_opts_panel->eraser_panel) {
         g_warning("Failed to load eraser options panel from Glade");
@@ -248,6 +279,9 @@ ToolOptionsPanel* create_tool_options_panel(void)
         }
         if (eraser_hardness) {
             g_object_set_data(G_OBJECT(tool_opts_panel->eraser_panel), "hardness_scale", eraser_hardness);
+        }
+        if (eraser_flow) {
+            g_object_set_data(G_OBJECT(tool_opts_panel->eraser_panel), "flow_scale", eraser_flow);
         }
         /* Hide eraser panel initially - will be shown when tool is selected */
         gtk_widget_set_visible(tool_opts_panel->eraser_panel, FALSE);
@@ -372,6 +406,15 @@ void tool_options_panel_switch_tool(ToolOptionsPanel *panel, const gchar *tool_n
                 g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_hardness_changed), NULL);
             }
         }
+        widget = GTK_WIDGET(g_object_get_data(G_OBJECT(panel->eraser_panel), "flow_scale"));
+        if (widget) {
+            panel->flow_scale = widget;
+            if (opts) {
+                set_scale_value(widget, opts->flow * 100.0);
+                g_signal_handlers_disconnect_by_func(widget, G_CALLBACK(on_tool_flow_changed), NULL);
+                g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_flow_changed), NULL);
+            }
+        }
     } else {
         /* For tools without options (Move, Fill, etc.), hide main panel container */
         if (panel->panel) {
@@ -382,56 +425,12 @@ void tool_options_panel_switch_tool(ToolOptionsPanel *panel, const gchar *tool_n
         panel->size_scale = NULL;
         panel->opacity_scale = NULL;
         panel->hardness_scale = NULL;
+        panel->flow_scale = NULL;
     }
 
     panel->current_tool_type = new_tool_type;
 }
 
-/**
- * Update tool options panel visibility based on tool capabilities
- */
-void tool_options_panel_update_visibility(ToolOptionsPanel *panel, ToolOptionFlags options)
-{
-    if (!panel) {
-        return;
-    }
-
-    /* Show/hide size slider based on TOOL_OPT_SIZE flag */
-    if (panel->size_scale) {
-        GtkWidget *size_box = gtk_widget_get_parent(panel->size_scale);
-        if (size_box) {
-            if (options & TOOL_OPT_SIZE) {
-                gtk_widget_show(size_box);
-            } else {
-                gtk_widget_hide(size_box);
-            }
-        }
-    }
-
-    /* Show/hide opacity slider based on TOOL_OPT_OPACITY flag */
-    if (panel->opacity_scale) {
-        GtkWidget *opacity_box = gtk_widget_get_parent(panel->opacity_scale);
-        if (opacity_box) {
-            if (options & TOOL_OPT_OPACITY) {
-                gtk_widget_show(opacity_box);
-            } else {
-                gtk_widget_hide(opacity_box);
-            }
-        }
-    }
-
-    /* Show/hide hardness slider based on TOOL_OPT_HARDNESS flag */
-    if (panel->hardness_scale) {
-        GtkWidget *hardness_box = gtk_widget_get_parent(panel->hardness_scale);
-        if (hardness_box) {
-            if (options & TOOL_OPT_HARDNESS) {
-                gtk_widget_show(hardness_box);
-            } else {
-                gtk_widget_hide(hardness_box);
-            }
-        }
-    }
-}
 
 /**
  * Free a tool options panel

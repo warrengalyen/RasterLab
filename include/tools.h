@@ -28,6 +28,7 @@ typedef enum {
     TOOL_OPT_SIZE = (1 << 0),          /* Tool supports size parameter */
     TOOL_OPT_OPACITY = (1 << 1),       /* Tool supports opacity parameter */
     TOOL_OPT_HARDNESS = (1 << 2),      /* Tool supports hardness parameter */
+    TOOL_OPT_FLOW = (1 << 3),          /* Tool supports flow parameter */
 } ToolOptionFlags;
 
 /**
