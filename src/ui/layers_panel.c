@@ -632,8 +632,8 @@ static GtkWidget* create_overview_widget(LayersPanel *layers_panel)
 static GdkPixbuf* get_visibility_icon(gboolean visible)
 {
     const gchar *resource_path = visible 
-        ? "/icons/imageeditor/visibility-on.png"
-        : "/icons/imageeditor/visibility-off.png";
+        ? "/icons/visibility-on.png"
+        : "/icons/visibility-off.png";
     
     GdkPixbuf *pixbuf = gdk_pixbuf_new_from_resource(resource_path, NULL);
     if (pixbuf) {
@@ -863,21 +863,21 @@ LayersPanel* create_layers_panel(void)
     /* Store panel reference in buttons for callback access and set icons */
     if (layers_panel->btn_new) {
         g_object_set_data(G_OBJECT(layers_panel->btn_new), "layers_panel", layers_panel);
-        set_button_icon(GTK_BUTTON(layers_panel->btn_new), "/icons/imageeditor/layer-add.svg", 32, 32);
+        set_button_icon(GTK_BUTTON(layers_panel->btn_new), "/icons/layer-add.svg", 32, 32);
     }
     if (layers_panel->btn_delete) {
         g_object_set_data(G_OBJECT(layers_panel->btn_delete), "layers_panel", layers_panel);
-        set_button_icon(GTK_BUTTON(layers_panel->btn_delete), "/icons/imageeditor/layer-delete.svg", 32, 32);
+        set_button_icon(GTK_BUTTON(layers_panel->btn_delete), "/icons/layer-delete.svg", 32, 32);
     }
     if (layers_panel->btn_duplicate) {
         g_object_set_data(G_OBJECT(layers_panel->btn_duplicate), "layers_panel", layers_panel);
-        set_button_icon(GTK_BUTTON(layers_panel->btn_duplicate), "/icons/imageeditor/layer-duplicate.svg", 32, 32);
+        set_button_icon(GTK_BUTTON(layers_panel->btn_duplicate), "/icons/layer-duplicate.svg", 32, 32);
     }
     if (layers_panel->btn_up) {
-        set_button_icon(GTK_BUTTON(layers_panel->btn_up), "/icons/imageeditor/layer-up.svg", 32, 32);
+        set_button_icon(GTK_BUTTON(layers_panel->btn_up), "/icons/layer-up.svg", 32, 32);
     }
     if (layers_panel->btn_down) {
-        set_button_icon(GTK_BUTTON(layers_panel->btn_down), "/icons/imageeditor/layer-down.svg", 32, 32);
+        set_button_icon(GTK_BUTTON(layers_panel->btn_down), "/icons/layer-down.svg", 32, 32);
     }
     
     /* Set up opacity controls */
@@ -897,7 +897,7 @@ LayersPanel* create_layers_panel(void)
     }
     
     if (layers_panel->btn_opacity_reset) {
-        set_button_icon(GTK_BUTTON(layers_panel->btn_opacity_reset), "/icons/imageeditor/reset.svg", 16, 16);
+        set_button_icon(GTK_BUTTON(layers_panel->btn_opacity_reset), "/icons/reset.svg", 16, 16);
         g_signal_connect(layers_panel->btn_opacity_reset, "clicked",
                         G_CALLBACK(on_opacity_reset_clicked), layers_panel);
     }

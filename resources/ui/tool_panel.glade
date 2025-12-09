@@ -29,7 +29,7 @@
           <object class="GtkImage" id="move_icon">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="resource">/icons/imageeditor/move.png</property>
+            <property name="resource">/icons/move.png</property>
             <property name="pixel_size">24</property>
           </object>
         </child>
@@ -54,7 +54,7 @@
           <object class="GtkImage" id="brush_icon">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="resource">/icons/imageeditor/paintbrush.png</property>
+            <property name="resource">/icons/paintbrush.png</property>
             <property name="pixel_size">24</property>
           </object>
         </child>
@@ -79,7 +79,7 @@
           <object class="GtkImage" id="eraser_icon">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="resource">/icons/imageeditor/eraser.png</property>
+            <property name="resource">/icons/eraser.png</property>
             <property name="pixel_size">24</property>
           </object>
         </child>
@@ -104,7 +104,7 @@
           <object class="GtkImage" id="fill_icon">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="resource">/icons/imageeditor/flood-fill.png</property>
+            <property name="resource">/icons/flood-fill.png</property>
             <property name="pixel_size">24</property>
           </object>
         </child>

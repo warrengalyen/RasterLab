@@ -134,7 +134,7 @@ AccordionSection* accordion_add_section(Accordion *accordion,
     gtk_box_pack_start(GTK_BOX(header_box), title_label, TRUE, TRUE, 0);
     
     /* Create caret icon image (chevron.png from resources, scaled to 16x16) */
-    GdkPixbuf *chevron_pixbuf = gdk_pixbuf_new_from_resource("/icons/imageeditor/chevron.png", NULL);
+    GdkPixbuf *chevron_pixbuf = gdk_pixbuf_new_from_resource("/icons/chevron.png", NULL);
     if (chevron_pixbuf) {
         GdkPixbuf *scaled_pixbuf = gdk_pixbuf_scale_simple(chevron_pixbuf, 16, 16, 
                                                            GDK_INTERP_BILINEAR);
