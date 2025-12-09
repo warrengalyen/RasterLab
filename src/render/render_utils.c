@@ -91,6 +91,7 @@ GdkPixbuf* cairo_surface_to_pixbuf(cairo_surface_t *surface, gboolean keep_alpha
     guchar *surface_data;
     gint rowstride;
     gint x, y;
+    cairo_format_t format;
 
     if (!surface) {
         return NULL;
@@ -98,6 +99,12 @@ GdkPixbuf* cairo_surface_to_pixbuf(cairo_surface_t *surface, gboolean keep_alpha
 
     width = cairo_image_surface_get_width(surface);
     height = cairo_image_surface_get_height(surface);
+    format = cairo_image_surface_get_format(surface);
+
+    /* Verify surface has alpha if we need to keep it */
+    if (keep_alpha && format != CAIRO_FORMAT_ARGB32) {
+        g_warning("Surface format is not ARGB32, alpha may not be preserved");
+    }
 
     /* Create pixbuf with or without alpha channel */
     pixbuf = gdk_pixbuf_new(GDK_COLORSPACE_RGB, keep_alpha ? TRUE : FALSE, 8, width, height);
@@ -108,28 +115,44 @@ GdkPixbuf* cairo_surface_to_pixbuf(cairo_surface_t *surface, gboolean keep_alpha
 
     pixels = gdk_pixbuf_get_pixels(pixbuf);
     rowstride = gdk_pixbuf_get_rowstride(pixbuf);
+    
+    /* Flush surface to ensure all drawing operations are complete before reading */
+    cairo_surface_flush(surface);
     surface_data = cairo_image_surface_get_data(surface);
     gint surface_stride = cairo_image_surface_get_stride(surface);
 
-    /* Copy pixel data from Cairo surface to pixbuf */
+    /* Copy pixel data from Cairo surface to pixbuf
+       Cairo ARGB32 format: on little-endian, bytes in memory are BGRA
+       When read as 32-bit int: 0xAARRGGBB (A=MSB, B=LSB) */
     for (y = 0; y < height; y++) {
-        guint32 *src = (guint32 *)(surface_data + y * surface_stride);
+        guchar *src_row = surface_data + y * surface_stride;
         guchar *dst = pixels + y * rowstride;
 
         for (x = 0; x < width; x++) {
-            guint32 pixel = src[x];
-            guchar a = (pixel >> 24) & 0xFF;
-            guchar r = (pixel >> 16) & 0xFF;
-            guchar g = (pixel >> 8) & 0xFF;
-            guchar b = pixel & 0xFF;
+            /* Read bytes directly to avoid endianness issues
+               Cairo ARGB32: bytes are BGRA in memory on little-endian */
+            guchar b = src_row[x * 4 + 0];
+            guchar g = src_row[x * 4 + 1];
+            guchar r = src_row[x * 4 + 2];
+            guchar a = src_row[x * 4 + 3];
 
             /* Cairo uses pre-multiplied alpha, we need to un-premultiply */
-            if (a > 0) {
-                r = (r * 255) / a;
-                g = (g * 255) / a;
-                b = (b * 255) / a;
+            if (a > 0 && a < 255) {
+                /* Un-premultiply: convert from pre-multiplied to straight alpha */
+                r = (r * 255 + a / 2) / a;  /* Add rounding */
+                g = (g * 255 + a / 2) / a;
+                b = (b * 255 + a / 2) / a;
+                /* Clamp to valid range */
+                if (r > 255) r = 255;
+                if (g > 255) g = 255;
+                if (b > 255) b = 255;
+            } else if (a == 0) {
+                /* Fully transparent pixel - set RGB to 0 to ensure transparency */
+                r = g = b = 0;
             }
+            /* If a == 255, no un-premultiplication needed (already straight alpha) */
 
+            /* Write to pixbuf (RGBA format) */
             dst[0] = r;
             dst[1] = g;
             dst[2] = b;

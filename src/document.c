@@ -731,8 +731,8 @@ gboolean document_save_as_png(ImageDocument *doc, const gchar *filename)
         return FALSE;
     }
 
-    /* Get the composite surface */
-    composite = document_get_composite_surface(doc);
+    /* Get a fresh composite surface for export (includes all layers) */
+    composite = document_export_composite_surface(doc);
     if (!composite) {
         g_warning("No composite surface to save");
         return FALSE;
@@ -745,7 +745,13 @@ gboolean document_save_as_png(ImageDocument *doc, const gchar *filename)
         return FALSE;
     }
 
-    /* Save as PNG */
+    /* Verify pixbuf has alpha channel (should always be true when keep_alpha=TRUE) */
+    if (!gdk_pixbuf_get_has_alpha(pixbuf)) {
+        g_warning("Pixbuf does not have alpha channel - this should not happen");
+    }
+
+    /* Save as PNG with alpha channel preserved
+       gdk_pixbuf_save automatically saves alpha if pixbuf has it */
     result = gdk_pixbuf_save(pixbuf, filename, "png", &error, NULL);
 
     if (!result) {
@@ -764,6 +770,9 @@ gboolean document_save_as_png(ImageDocument *doc, const gchar *filename)
     }
 
     g_object_unref(pixbuf);
+    
+    /* Clean up the export surface */
+    cairo_surface_destroy(composite);
 
     return result;
 }
@@ -789,8 +798,8 @@ gboolean document_save_as_jpeg(ImageDocument *doc, const gchar *filename, gint q
     if (quality < 0) quality = 0;
     if (quality > 100) quality = 100;
 
-    /* Get the composite surface */
-    composite = document_get_composite_surface(doc);
+    /* Get a fresh composite surface for export (includes all layers) */
+    composite = document_export_composite_surface(doc);
     if (!composite) {
         g_warning("No composite surface to save");
         return FALSE;
@@ -798,6 +807,9 @@ gboolean document_save_as_jpeg(ImageDocument *doc, const gchar *filename, gint q
 
     /* Flatten to white background */
     flattened = compositor_flatten_to_white_background(composite, doc->width, doc->height);
+    
+    /* Clean up the export surface */
+    cairo_surface_destroy(composite);
     if (!flattened) {
         g_warning("Failed to flatten image");
         return FALSE;

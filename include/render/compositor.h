@@ -35,6 +35,15 @@ gboolean document_render_composite_dirty(ImageDocument *doc, const DirtyRect *di
 cairo_surface_t* document_get_composite_surface(ImageDocument *doc);
 
 /**
+ * Generate a fresh composite surface with all layers for export/saving
+ * This always generates a new surface (doesn't use cache) to ensure
+ * all layers are included and the image is up to date
+ * @param doc The document
+ * @return New composite surface, or NULL on error. Caller must call cairo_surface_destroy().
+ */
+cairo_surface_t* document_export_composite_surface(ImageDocument *doc);
+
+/**
  * Generate a thumbnail surface directly from tiles at the specified size
  * This is much more efficient than creating a full composite surface for thumbnails
  * @param doc The document

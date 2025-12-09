@@ -307,6 +307,105 @@ cairo_surface_t* document_get_composite_surface(ImageDocument *doc)
 }
 
 /**
+ * Generate a fresh composite surface with all layers for export/saving
+ * This always generates a new surface (doesn't use cache) to ensure
+ * all layers are included and the image is up to date
+ * @param doc The document
+ * @return New composite surface, or NULL on error. Caller must call cairo_surface_destroy().
+ */
+cairo_surface_t* document_export_composite_surface(ImageDocument *doc)
+{
+    cairo_surface_t *export_surface;
+    cairo_t *cr;
+    GList *iter;
+    ImageLayer *layer;
+    gboolean is_first_visible_layer = TRUE;
+    
+    if (!doc || doc->width == 0 || doc->height == 0) {
+        return NULL;
+    }
+
+    /* Create new surface for export (always fresh) */
+    export_surface = cairo_image_surface_create(
+        CAIRO_FORMAT_ARGB32, doc->width, doc->height);
+    
+    if (cairo_surface_status(export_surface) != CAIRO_STATUS_SUCCESS) {
+        g_warning("Failed to create export composite surface");
+        return NULL;
+    }
+
+    cr = cairo_create(export_surface);
+    
+    /* Clear to transparent */
+    cairo_set_operator(cr, CAIRO_OPERATOR_CLEAR);
+    cairo_paint(cr);
+    cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+
+    /* For tile-based rendering, ensure all tiles are composited first */
+    if (doc->tile_grid) {
+        /* Mark all tiles as dirty to ensure they're all composited */
+        gint tx, ty;
+        for (ty = 0; ty < doc->tile_grid->tiles_y; ty++) {
+            for (tx = 0; tx < doc->tile_grid->tiles_x; tx++) {
+                Tile *tile = &doc->tile_grid->tiles[ty][tx];
+                if (tile) {
+                    tile->dirty = TRUE;
+                }
+            }
+        }
+        /* Composite all tiles */
+        tile_grid_composite(doc, doc->tile_grid);
+        
+        /* Copy tiles to export surface */
+        for (ty = 0; ty < doc->tile_grid->tiles_y; ty++) {
+            for (tx = 0; tx < doc->tile_grid->tiles_x; tx++) {
+                Tile *tile = &doc->tile_grid->tiles[ty][tx];
+                if (tile && tile->surface) {
+                    cairo_set_source_surface(cr, tile->surface, tile->px, tile->py);
+                    cairo_paint(cr);
+                }
+            }
+        }
+    } else {
+        /* Non-tile-based: composite all visible layers directly */
+        for (iter = doc->layers; iter; iter = iter->next) {
+            layer = (ImageLayer *)iter->data;
+
+            if (!layer || !layer->visible || layer->opacity <= 0.0 || !layer->surface) {
+                continue;
+            }
+
+            /* Ensure layer cache is up to date */
+            if (!layer_ensure_cache(layer)) {
+                continue;
+            }
+
+            /* Draw layer with offset using cached surface */
+            cairo_save(cr);
+            cairo_translate(cr, layer->offset_x, layer->offset_y);
+            cairo_set_source_surface(cr, layer->cache_surface, 0, 0);
+            
+            /* Set operator based on layer's blend mode */
+            cairo_operator_t op;
+            if (is_first_visible_layer) {
+                op = CAIRO_OPERATOR_OVER;
+                is_first_visible_layer = FALSE;
+            } else {
+                op = blend_mode_to_cairo_operator(layer->blend_mode);
+            }
+            cairo_set_operator(cr, op);
+            cairo_paint(cr);
+            cairo_restore(cr);
+        }
+    }
+
+    cairo_destroy(cr);
+    cairo_surface_flush(export_surface);
+
+    return export_surface;
+}
+
+/**
  * Generate a thumbnail surface by directly compositing layers at thumbnail size
  * This avoids tile boundary artifacts by rendering layers directly at scale
  */
