@@ -7,6 +7,25 @@
 #include "tool_manager.h"
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
+
+/* Log handler to suppress harmless GTK Builder menu warnings */
+static gboolean gtk_builder_menu_warning_handler(const gchar *log_domain,
+                                                 GLogLevelFlags log_level,
+                                                 const gchar *message,
+                                                 gpointer user_data)
+{
+    (void)log_domain;
+    (void)log_level;
+    (void)user_data;
+    
+    /* Suppress warnings about adding GtkMenu to GtkMenuItem */
+    if (message && strstr(message, "Cannot add an object of type GtkMenu")) {
+        return TRUE;  /* Suppress this warning */
+    }
+    
+    return FALSE;  /* Let other warnings through */
+}
 
 /* Forward declarations */
 static void on_file_open(GtkWidget *widget, gpointer data);
@@ -271,11 +290,8 @@ static GtkWidget* create_menu_bar(AppContext *ctx)
 AppContext* ui_create_main_window(void)
 {
     AppContext *ctx = (AppContext *)g_malloc(sizeof(AppContext));
-    GtkWidget *main_vbox;
-    GtkWidget *tool_options_panel;
     GtkWidget *tools_panel;
     GtkWidget *layers_panel_widget;
-    LayersPanel *layers_panel;
 
     ctx->documents = NULL;
     ctx->layer_menu_new = NULL;
@@ -303,34 +319,165 @@ AppContext* ui_create_main_window(void)
         }
     }
 
-    /* Create main window */
-    ctx->window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-    gtk_window_set_title(GTK_WINDOW(ctx->window), "Image Editor");
-    gtk_window_set_default_size(GTK_WINDOW(ctx->window), 1600, 1000);
-    gtk_window_set_position(GTK_WINDOW(ctx->window), GTK_WIN_POS_CENTER);
+    /* Suppress GTK Builder warnings about menus (these are harmless when using standalone menus) */
+    static gboolean menu_warning_suppressed = FALSE;
+    if (!menu_warning_suppressed) {
+        g_log_set_handler("Gtk", G_LOG_LEVEL_WARNING, 
+                         (GLogFunc)gtk_builder_menu_warning_handler, NULL);
+        menu_warning_suppressed = TRUE;
+    }
+    
+    /* Load main window from Glade */
+    GtkBuilder *builder = gtk_builder_new_from_resource("/ui/main_window.glade");
+    if (!builder) {
+        g_warning("Failed to load main window from Glade");
+        g_free(ctx);
+        return NULL;
+    }
+
+    /* Get main window */
+    ctx->window = GTK_WIDGET(gtk_builder_get_object(builder, "main_window"));
+    if (!ctx->window) {
+        g_warning("Failed to get main_window from Glade");
+        g_object_unref(builder);
+        g_free(ctx);
+        return NULL;
+    }
     gtk_window_set_icon_name(GTK_WINDOW(ctx->window), "image-editor");
 
-    /* Main vertical box (menu + toolbar + content) */
-    main_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-    gtk_container_add(GTK_CONTAINER(ctx->window), main_vbox);
+    /* Get main containers */
+    GtkWidget *main_vbox = GTK_WIDGET(gtk_builder_get_object(builder, "main_vbox"));
+    GtkWidget *menu_bar_container = GTK_WIDGET(gtk_builder_get_object(builder, "menu_bar_container"));
+    GtkWidget *tool_options_container = GTK_WIDGET(gtk_builder_get_object(builder, "tool_options_container"));
+    GtkWidget *main_hbox = GTK_WIDGET(gtk_builder_get_object(builder, "main_hbox"));
+    GtkWidget *tools_panel_container = GTK_WIDGET(gtk_builder_get_object(builder, "tools_panel_container"));
+    GtkWidget *center_right_hpaned = GTK_WIDGET(gtk_builder_get_object(builder, "center_right_hpaned"));
+    ctx->notebook = GTK_WIDGET(gtk_builder_get_object(builder, "notebook"));
+    GtkWidget *layers_panel_container = GTK_WIDGET(gtk_builder_get_object(builder, "layers_panel_container"));
+    ctx->status_bar = GTK_WIDGET(gtk_builder_get_object(builder, "status_bar"));
 
-    /* Menu bar */
-    ctx->menu_bar = create_menu_bar(ctx);
-    gtk_box_pack_start(GTK_BOX(main_vbox), ctx->menu_bar, FALSE, FALSE, 0);
+    if (!main_vbox || !tool_options_container || !main_hbox ||
+        !tools_panel_container || !center_right_hpaned || !ctx->notebook ||
+        !layers_panel_container || !ctx->status_bar) {
+        g_warning("Failed to get required widgets from Glade");
+        g_object_unref(builder);
+        g_free(ctx);
+        return NULL;
+    }
+
+    /* Connect notebook signal */
+    g_signal_connect(ctx->notebook, "switch-page", 
+                     G_CALLBACK(on_notebook_switch_page), ctx);
+
+    /* Get menu bar and menu items from Glade */
+    ctx->menu_bar = GTK_WIDGET(gtk_builder_get_object(builder, "menu_bar"));
+    
+    /* Get menus and menu items - set submenus immediately to avoid GTK Builder warnings */
+    GtkWidget *file_menu = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu"));
+    GtkWidget *edit_menu = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu"));
+    GtkWidget *view_menu = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu"));
+    GtkWidget *layer_menu = GTK_WIDGET(gtk_builder_get_object(builder, "layer_menu"));
+    
+    GtkWidget *file_menu_item = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_item"));
+    GtkWidget *edit_menu_item = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu_item"));
+    GtkWidget *view_menu_item = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_item"));
+    GtkWidget *layer_menu_item = GTK_WIDGET(gtk_builder_get_object(builder, "layer_menu_item"));
+    
+    /* Set submenus immediately after loading to prevent GTK Builder from trying to attach them */
+    if (file_menu && file_menu_item) {
+        gtk_menu_item_set_submenu(GTK_MENU_ITEM(file_menu_item), file_menu);
+    }
+    if (edit_menu && edit_menu_item) {
+        gtk_menu_item_set_submenu(GTK_MENU_ITEM(edit_menu_item), edit_menu);
+    }
+    if (view_menu && view_menu_item) {
+        gtk_menu_item_set_submenu(GTK_MENU_ITEM(view_menu_item), view_menu);
+    }
+    if (layer_menu && layer_menu_item) {
+        gtk_menu_item_set_submenu(GTK_MENU_ITEM(layer_menu_item), layer_menu);
+    }
+    
+    /* Get menu items that need to be updated programmatically */
+    /* Note: These must be retrieved AFTER setting submenus to ensure menus are properly attached */
+    ctx->edit_menu_undo = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu_undo"));
+    ctx->edit_menu_redo = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu_redo"));
+    ctx->layer_menu_new = GTK_WIDGET(gtk_builder_get_object(builder, "layer_menu_new"));
+    ctx->layer_menu_duplicate = GTK_WIDGET(gtk_builder_get_object(builder, "layer_menu_duplicate"));
+    ctx->layer_menu_delete = GTK_WIDGET(gtk_builder_get_object(builder, "layer_menu_delete"));
+    
+    /* Validate menu items exist before proceeding */
+    if (!ctx->edit_menu_undo || !ctx->edit_menu_redo || !ctx->layer_menu_new || 
+        !ctx->layer_menu_duplicate || !ctx->layer_menu_delete) {
+        g_warning("Some menu items failed to load from Glade");
+    }
+    
+    /* Connect menu signals */
+    GtkWidget *file_menu_open = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_open"));
+    GtkWidget *file_menu_save_as = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_save_as"));
+    GtkWidget *file_menu_close = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_close"));
+    GtkWidget *file_menu_exit = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_exit"));
+    
+    if (file_menu_open) {
+        g_signal_connect(file_menu_open, "activate", G_CALLBACK(on_file_open), ctx);
+    }
+    if (file_menu_save_as) {
+        g_signal_connect(file_menu_save_as, "activate", G_CALLBACK(on_file_save_as), ctx);
+    }
+    if (file_menu_close) {
+        g_signal_connect(file_menu_close, "activate", G_CALLBACK(on_file_close), ctx);
+    }
+    if (file_menu_exit) {
+        g_signal_connect(file_menu_exit, "activate", G_CALLBACK(on_file_exit), ctx);
+    }
+    
+    if (ctx->edit_menu_undo) {
+        g_signal_connect(ctx->edit_menu_undo, "activate", G_CALLBACK(on_edit_undo), ctx);
+    }
+    if (ctx->edit_menu_redo) {
+        g_signal_connect(ctx->edit_menu_redo, "activate", G_CALLBACK(on_edit_redo), ctx);
+    }
+    
+    GtkWidget *view_menu_zoom_in = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_in"));
+    GtkWidget *view_menu_zoom_out = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_out"));
+    GtkWidget *view_menu_zoom_reset = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_reset"));
+    GtkWidget *view_menu_zoom_fit = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_fit"));
+    
+    if (view_menu_zoom_in) {
+        g_signal_connect(view_menu_zoom_in, "activate", G_CALLBACK(on_view_zoom_in), ctx);
+    }
+    if (view_menu_zoom_out) {
+        g_signal_connect(view_menu_zoom_out, "activate", G_CALLBACK(on_view_zoom_out), ctx);
+    }
+    if (view_menu_zoom_reset) {
+        g_signal_connect(view_menu_zoom_reset, "activate", G_CALLBACK(on_view_zoom_reset), ctx);
+    }
+    if (view_menu_zoom_fit) {
+        g_signal_connect(view_menu_zoom_fit, "activate", G_CALLBACK(on_view_zoom_fit), ctx);
+    }
+    
+    if (ctx->layer_menu_new) {
+        g_signal_connect(ctx->layer_menu_new, "activate", G_CALLBACK(on_layer_new), ctx);
+    }
+    if (ctx->layer_menu_duplicate) {
+        g_signal_connect(ctx->layer_menu_duplicate, "activate", G_CALLBACK(on_layer_duplicate), ctx);
+    }
+    if (ctx->layer_menu_delete) {
+        g_signal_connect(ctx->layer_menu_delete, "activate", G_CALLBACK(on_layer_delete), ctx);
+    }
+    
+    /* Add accelerator group to window for keyboard shortcuts */
+    GtkAccelGroup *accel_group = gtk_accel_group_new();
+    gtk_window_add_accel_group(GTK_WINDOW(ctx->window), accel_group);
 
     /* ==== TOP PANEL: Tool Options ==== */
     ctx->tool_options_panel = create_tool_options_panel();
     if (!ctx->tool_options_panel || !ctx->tool_options_panel->panel) {
         g_warning("Failed to create tool options panel");
+        g_object_unref(builder);
         g_free(ctx);
         return NULL;
     }
-    gtk_box_pack_start(GTK_BOX(main_vbox), ctx->tool_options_panel->panel, FALSE, FALSE, 0);
-
-    /* ==== MAIN HORIZONTAL LAYOUT: Tools (fixed) | Center+Right (resizable) ==== */
-    /* Use a regular horizontal box instead of paned to avoid resizing the tools panel */
-    GtkWidget *main_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-    gtk_box_pack_start(GTK_BOX(main_vbox), main_hbox, TRUE, TRUE, 0);
+    gtk_container_add(GTK_CONTAINER(tool_options_container), ctx->tool_options_panel->panel);
 
     /* ==== LEFT PANEL: Tools (fixed width) ==== */
     tools_panel = create_tools_panel(ctx->tool_registry);
@@ -338,27 +485,13 @@ AppContext* ui_create_main_window(void)
     /* Connect tools panel to tool options panel for title updates */
     tools_panel_set_options_panel(ctx->tool_options_panel);
     
-    /* Add tools panel with fixed width (no expansion, no shrinking) */
-    gtk_box_pack_start(GTK_BOX(main_hbox), tools_panel, FALSE, FALSE, 0);
-
-    /* ==== CENTER-RIGHT HORIZONTAL PANED: Center (notebook) | Right (layers) ==== */
-    GtkWidget *center_right_hpaned = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
-    gtk_box_pack_start(GTK_BOX(main_hbox), center_right_hpaned, TRUE, TRUE, 0);
-
-    /* CENTER: Notebook for document tabs */
-    ctx->notebook = gtk_notebook_new();
-    gtk_notebook_set_scrollable(GTK_NOTEBOOK(ctx->notebook), TRUE);
-    gtk_notebook_set_tab_pos(GTK_NOTEBOOK(ctx->notebook), GTK_POS_TOP);
-    g_signal_connect(ctx->notebook, "switch-page", 
-                     G_CALLBACK(on_notebook_switch_page), ctx);
-    gtk_paned_pack1(GTK_PANED(center_right_hpaned), ctx->notebook, TRUE, TRUE);
+    /* Add tools panel to container */
+    gtk_container_add(GTK_CONTAINER(tools_panel_container), tools_panel);
 
     /* ==== RIGHT PANEL: Layers ==== */
     ctx->layers_panel = create_layers_panel();
     layers_panel_widget = ctx->layers_panel->panel;
-    /* Set fixed width of 350 pixels for the right panel */
-    gtk_widget_set_size_request(layers_panel_widget, 350, -1);
-    gtk_paned_pack2(GTK_PANED(center_right_hpaned), layers_panel_widget, FALSE, TRUE);
+    gtk_container_add(GTK_CONTAINER(layers_panel_container), layers_panel_widget);
 
     /* Store layers panel reference for later updates */
     g_object_set_data(G_OBJECT(ctx->window), "layers_panel", ctx->layers_panel);
@@ -386,13 +519,14 @@ AppContext* ui_create_main_window(void)
     g_signal_connect(layer_selection, "changed",
                      G_CALLBACK(on_layer_selection_changed), ctx);
 
-    /* ==== STATUS BAR ==== */
-    ctx->status_bar = gtk_statusbar_new();
-    gtk_box_pack_end(GTK_BOX(main_vbox), ctx->status_bar, FALSE, FALSE, 0);
+    /* Status bar is already in Glade file, no need to add it */
 
     /* Connect window signals */
     g_signal_connect(ctx->window, "delete-event", 
                      G_CALLBACK(on_window_delete), ctx);
+
+    /* Clean up builder - widgets are now owned by their containers */
+    g_object_unref(builder);
 
     gtk_widget_show_all(ctx->window);
 
@@ -1395,23 +1529,23 @@ void ui_update_menu_and_button_states(AppContext *ctx)
     }
 
     /* Update Edit menu item states (undo/redo) */
-    if (ctx->edit_menu_undo) {
+    if (ctx->edit_menu_undo && GTK_IS_WIDGET(ctx->edit_menu_undo)) {
         gtk_widget_set_sensitive(ctx->edit_menu_undo, 
                                 has_document && document_can_undo(doc));
     }
-    if (ctx->edit_menu_redo) {
+    if (ctx->edit_menu_redo && GTK_IS_WIDGET(ctx->edit_menu_redo)) {
         gtk_widget_set_sensitive(ctx->edit_menu_redo, 
                                 has_document && document_can_redo(doc));
     }
 
     /* Update Layer menu item states */
-    if (ctx->layer_menu_new) {
+    if (ctx->layer_menu_new && GTK_IS_WIDGET(ctx->layer_menu_new)) {
         gtk_widget_set_sensitive(ctx->layer_menu_new, has_document);
     }
-    if (ctx->layer_menu_delete) {
+    if (ctx->layer_menu_delete && GTK_IS_WIDGET(ctx->layer_menu_delete)) {
         gtk_widget_set_sensitive(ctx->layer_menu_delete, has_document && has_selection);
     }
-    if (ctx->layer_menu_duplicate) {
+    if (ctx->layer_menu_duplicate && GTK_IS_WIDGET(ctx->layer_menu_duplicate)) {
         gtk_widget_set_sensitive(ctx->layer_menu_duplicate, has_document && has_selection);
     }
 
