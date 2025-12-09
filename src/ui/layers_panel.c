@@ -1,6 +1,6 @@
 #include "ui/layers_panel.h"
 #include "document.h"
-#include "accordion.h"
+#include "ui/widgets/accordion.h"
 #include "render/render_utils.h"
 #include "render/layer.h"
 #include "render/compositor.h"

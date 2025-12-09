@@ -3,7 +3,7 @@
 
 #include <gtk/gtk.h>
 #include "document.h"
-#include "accordion.h"
+#include "ui/widgets/accordion.h"
 
 /**
  * Layers panel structure

@@ -1,4 +1,4 @@
-#include "accordion.h"
+#include "ui/widgets/accordion.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -195,7 +195,6 @@ AccordionSection* accordion_add_section(Accordion *accordion,
     
     /* Check if content widget wants to expand vertically */
     gboolean content_vexpand = gtk_widget_get_vexpand(content);
-    gboolean content_hexpand = gtk_widget_get_hexpand(content);
     
     /* Set content box expansion based on content widget */
     gtk_widget_set_vexpand(section->content_box, content_vexpand);
