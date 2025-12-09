@@ -19,11 +19,10 @@ extern void ui_update_window_title(AppContext *ctx);
  */
 typedef struct {
     gboolean is_erasing;                /* Currently erasing? */
-    gdouble last_x;                     /* Last mouse X position */
-    gdouble last_y;                     /* Last mouse Y position */
+    gint last_x;                        /* Last mouse X position */
+    gint last_y;                        /* Last mouse Y position */
     struct ImageLayer *active_layer;    /* Layer being erased from */
     Command *current_command;           /* Current erase command for undo */
-    gdouble spacing;                    /* Spacing between eraser points (0.0-1.0) */
 } EraserToolState;
 
 
@@ -31,8 +30,8 @@ typedef struct {
  * Stamp eraser at a specific point with gradient based on hardness
  * Flow parameter controls the strength of each stamp (0.0-1.0)
  */
-static void eraser_stamp_at(cairo_t *cr, gdouble x, gdouble y, 
-                            gfloat size, gfloat opacity, gfloat hardness, gfloat flow) {
+static void eraser_stamp_at(cairo_t *cr, gdouble x, gdouble y, gfloat size, 
+							gfloat opacity, gfloat hardness, gfloat flow) {
   cairo_pattern_t *pattern;
   gdouble radius = size / 2.0;
 
@@ -85,16 +84,15 @@ static void eraser_stamp_at(cairo_t *cr, gdouble x, gdouble y,
  * Uses tool options for size, opacity, and hardness
  * Interpoltes stamps along the line for smooth strokes
  */
-static void eraser_erase_line(cairo_surface_t *surface,
-                              gdouble x1, gdouble y1, gdouble x2, gdouble y2,
-                              gfloat spacing)
-{
+static void eraser_erase_line(cairo_surface_t *surface, gdouble x1, gdouble y1, 
+   							  gdouble x2, gdouble y2) {
     cairo_t *cr;
     ToolOptions *opts;
     gfloat eraser_size;
     gfloat eraser_opacity;
     gfloat hardness;
     gfloat flow;
+    gfloat spacing;
 
     if (!surface) {
         return;
@@ -106,6 +104,7 @@ static void eraser_erase_line(cairo_surface_t *surface,
     eraser_opacity = opts ? opts->opacity : 1.0f;
     hardness = opts ? opts->hardness : 1.0f;
     flow = opts ? opts->flow : 1.0f;
+    spacing = opts ? opts->spacing : 0.25f; /* Default 25% spacing */
 
     cr = cairo_create(surface);
 
@@ -118,7 +117,7 @@ static void eraser_erase_line(cairo_surface_t *surface,
     gfloat stamp_spacing = eraser_size * spacing;
     gint num_stamps = (gint)(distance / stamp_spacing) + 1;
 
-    if (num_stamps > 2) {
+    if (num_stamps < 2) {
         num_stamps = 2; /* at least draw start and end points */
     }
 
@@ -196,14 +195,6 @@ static void eraser_tool_mouse_down(Tool *tool, struct ImageDocument *doc, MouseE
     state->last_x = event->x;
     state->last_y = event->y;
     state->active_layer = active_layer;
-
-    /* Get spacing from tool options */
-    ToolOptions *opts = tool_options_get_global();
-    state->spacing = opts ? opts->spacing : 0.25f;
-
-    gfloat eraser_size = opts ? opts->size : 5.0f;
-    gint margin = (gint)(eraser_size / 2.0f) + 3;
-
     /* Erase initial dot at mouse down position */
     gint layer_x = event->x - active_layer->offset_x;
     gint layer_y = event->y - active_layer->offset_y;
@@ -212,6 +203,9 @@ static void eraser_tool_mouse_down(Tool *tool, struct ImageDocument *doc, MouseE
     active_layer->cache_dirty = TRUE;
 
     /* Mark initial dot area as dirty */
+	ToolOptions *opts = tool_options_get_global();
+    gfloat eraser_size = opts ? opts->size : 5.0f;
+    gint margin = (gint)(eraser_size / 2.0f) + 3;
     DirtyRect dirty_rect;
     dirty_rect_set(&dirty_rect, event->x - margin, event->y - margin,
                     eraser_size + 2 * margin, eraser_size + 2 * margin);
@@ -233,8 +227,8 @@ static void eraser_tool_mouse_down(Tool *tool, struct ImageDocument *doc, MouseE
 /**
  * Eraser tool: mouse move - erase strokes
  */
-static void eraser_tool_mouse_move(Tool *tool, struct ImageDocument *doc, MouseEvent *event)
-{
+static void eraser_tool_mouse_move(Tool *tool, struct ImageDocument *doc, 
+									MouseEvent *event) {
     EraserToolState *state;
     struct ImageLayer *active_layer;
 
@@ -264,7 +258,7 @@ static void eraser_tool_mouse_move(Tool *tool, struct ImageDocument *doc, MouseE
     gdouble layer_y2 = (gdouble)(event->y - active_layer->offset_y);
 
     eraser_erase_line(active_layer->surface, layer_x1, layer_y1, layer_x2,
-                      layer_y2, state->spacing);
+                      layer_y2);
 
     /* Mark layer cache as dirty but don't destroy it yet
        We'll regenerate it lazily only when needed for compositing
@@ -358,9 +352,10 @@ Tool* tool_eraser_create(void)
 {
     Tool *tool;
 
-    /* Eraser tool supports size, opacity, hardness, and flow */
+    /* Eraser tool supports size, opacity, hardness, flow, and spacing */
     tool = tool_new("Eraser", TOOL_ERASER, GDK_CROSSHAIR,
-                    TOOL_OPT_SIZE | TOOL_OPT_OPACITY | TOOL_OPT_HARDNESS | TOOL_OPT_FLOW);
+                    TOOL_OPT_SIZE | TOOL_OPT_OPACITY | TOOL_OPT_HARDNESS |
+                        TOOL_OPT_FLOW | TOOL_OPT_SPACING);
     if (!tool) {
         return NULL;
     }

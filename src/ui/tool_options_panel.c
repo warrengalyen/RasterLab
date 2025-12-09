@@ -134,8 +134,8 @@ static GtkWidget* load_panel_from_glade(const gchar *resource_path, const gchar 
     const gchar *size_id = (g_strcmp0(panel_id, "brush_options_panel") == 0) ? "brush_size_scale" : "eraser_size_scale";
     const gchar *opacity_id = (g_strcmp0(panel_id, "brush_options_panel") == 0) ? "brush_opacity_scale" : "eraser_opacity_scale";
     const gchar *hardness_id = (g_strcmp0(panel_id, "brush_options_panel") == 0) ? "brush_hardness_scale" : "eraser_hardness_scale";
-    const gchar *flow_id = "eraser_flow_scale";  /* Only for eraser panel */
-    const gchar *spacing_id = "eraser_spacing_scale";  /* Only for eraser panel */
+    const gchar *flow_id = (g_strcmp0(panel_id, "brush_options_panel") == 0) ? "brush_flow_scale" : "eraser_flow_scale";
+    const gchar *spacing_id = (g_strcmp0(panel_id, "brush_options_panel") == 0) ? "brush_spacing_scale" : "eraser_spacing_scale";
 
     if (title_label) {
         GtkWidget *widget = GTK_WIDGET(gtk_builder_get_object(builder, title_id));
@@ -187,7 +187,7 @@ static GtkWidget* load_panel_from_glade(const gchar *resource_path, const gchar 
         }
     }
 
-    if (flow_scale && g_strcmp0(panel_id, "eraser_options_panel") == 0) {
+    if (flow_scale) {
         GtkWidget *widget = GTK_WIDGET(gtk_builder_get_object(builder, flow_id));
         if (!widget) {
             g_warning("Failed to get %s from builder", flow_id);
@@ -201,7 +201,7 @@ static GtkWidget* load_panel_from_glade(const gchar *resource_path, const gchar 
         }
     }
 
-    if (spacing_scale && g_strcmp0(panel_id, "eraser_options_panel") == 0) {
+    if (spacing_scale) {
         GtkWidget *widget = GTK_WIDGET(gtk_builder_get_object(builder, spacing_id));
         if (!widget) {
             g_warning("Failed to get %s from builder", spacing_id);
@@ -252,15 +252,15 @@ ToolOptionsPanel* create_tool_options_panel(void)
     tool_opts_panel->panel = container;
 
     /* Load brush panel from Glade */
-    GtkWidget *brush_title = NULL, *brush_size = NULL, *brush_opacity = NULL, *brush_hardness = NULL;
+    GtkWidget *brush_title = NULL, *brush_size = NULL, *brush_opacity = NULL, *brush_hardness = NULL, *brush_flow = NULL, *brush_spacing = NULL;
     tool_opts_panel->brush_panel = load_panel_from_glade(
         "/ui/brush_options.glade", "brush_options_panel",
         &brush_title,
         &brush_size,
         &brush_opacity,
         &brush_hardness,
-        NULL,  /* Brush doesn't have flow */
-        NULL);  /* Brush doesn't have spacing */
+        &brush_flow,
+        &brush_spacing);
 
     if (!tool_opts_panel->brush_panel) {
         g_warning("Failed to load brush options panel from Glade");
@@ -277,6 +277,8 @@ ToolOptionsPanel* create_tool_options_panel(void)
     tool_opts_panel->size_scale = brush_size;
     tool_opts_panel->opacity_scale = brush_opacity;
     tool_opts_panel->hardness_scale = brush_hardness;
+    tool_opts_panel->flow_scale = brush_flow;
+    tool_opts_panel->spacing_scale = brush_spacing;
     
     /* Hide brush panel initially - will be shown when tool is selected */
     gtk_widget_set_visible(tool_opts_panel->brush_panel, FALSE);
@@ -397,6 +399,24 @@ void tool_options_panel_switch_tool(ToolOptionsPanel *panel, const gchar *tool_n
                     set_scale_value(widget, opts->hardness * 100.0);
                     g_signal_handlers_disconnect_by_func(widget, G_CALLBACK(on_tool_hardness_changed), NULL);
                     g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_hardness_changed), NULL);
+                }
+            }
+            widget = GTK_WIDGET(gtk_builder_get_object(builder, "brush_flow_scale"));
+            if (widget) {
+                panel->flow_scale = widget;
+                if (opts) {
+                    set_scale_value(widget, opts->flow * 100.0);
+                    g_signal_handlers_disconnect_by_func(widget, G_CALLBACK(on_tool_flow_changed), NULL);
+                    g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_flow_changed), NULL);
+                }
+            }
+            widget = GTK_WIDGET(gtk_builder_get_object(builder, "brush_spacing_scale"));
+            if (widget) {
+                panel->spacing_scale = widget;
+                if (opts) {
+                    set_scale_value(widget, opts->spacing * 100.0);
+                    g_signal_handlers_disconnect_by_func(widget, G_CALLBACK(on_tool_spacing_changed), NULL);
+                    g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_spacing_changed), NULL);
                 }
             }
         }
