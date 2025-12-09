@@ -9,10 +9,13 @@
  */
 typedef struct {
     GtkWidget *panel;            /* Main panel container */
-    GtkWidget *title_label;      /* Title showing tool name */
-    GtkWidget *size_scale;       /* Size slider */
-    GtkWidget *opacity_scale;    /* Opacity slider */
-    GtkWidget *hardness_scale;   /* Hardness slider */
+    GtkWidget *brush_panel;      /* Brush tool options panel (from Glade) */
+    GtkWidget *eraser_panel;     /* Eraser tool options panel (from Glade) */
+    GtkWidget *title_label;      /* Title showing tool name (current panel) */
+    GtkWidget *size_scale;       /* Size slider (current panel) */
+    GtkWidget *opacity_scale;    /* Opacity slider (current panel) */
+    GtkWidget *hardness_scale;   /* Hardness slider (current panel) */
+    ToolType current_tool_type;  /* Currently displayed tool type */
 } ToolOptionsPanel;
 
 /**
@@ -22,11 +25,11 @@ typedef struct {
 ToolOptionsPanel* create_tool_options_panel(void);
 
 /**
- * Update tool options panel title and visibility
+ * Switch tool options panel based on tool type
  * @param panel The tool options panel
  * @param tool_name The name of the currently selected tool
  */
-void tool_options_panel_update_title(ToolOptionsPanel *panel, const gchar *tool_name);
+void tool_options_panel_switch_tool(ToolOptionsPanel *panel, const gchar *tool_name);
 
 /**
  * Update tool options panel visibility based on tool capabilities

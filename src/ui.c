@@ -320,6 +320,11 @@ AppContext* ui_create_main_window(void)
 
     /* ==== TOP PANEL: Tool Options ==== */
     ctx->tool_options_panel = create_tool_options_panel();
+    if (!ctx->tool_options_panel || !ctx->tool_options_panel->panel) {
+        g_warning("Failed to create tool options panel");
+        g_free(ctx);
+        return NULL;
+    }
     gtk_box_pack_start(GTK_BOX(main_vbox), ctx->tool_options_panel->panel, FALSE, FALSE, 0);
 
     /* ==== MAIN HORIZONTAL LAYOUT: Tools (fixed) | Center+Right (resizable) ==== */
@@ -1365,7 +1370,6 @@ void ui_update_menu_and_button_states(AppContext *ctx)
     gboolean has_selection;
 
     if (!ctx || !ctx->window) {
-        //printf("DEBUG: ui_update_menu_and_button_states called with NULL ctx or ctx->window\n");
         return;
     }
 

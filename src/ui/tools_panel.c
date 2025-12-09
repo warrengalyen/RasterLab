@@ -79,7 +79,7 @@ static void on_tool_button_clicked(GtkToggleButton *button, gpointer user_data)
             /* Update tool options panel title and visibility */
             Tool *active_tool = tool_manager_get_active(registry);
             if (active_tool && g_tool_options_panel) {
-                tool_options_panel_update_title(g_tool_options_panel, active_tool->name);
+                tool_options_panel_switch_tool(g_tool_options_panel, active_tool->name);
                 tool_options_panel_update_visibility(g_tool_options_panel, active_tool->options);
             }
         }

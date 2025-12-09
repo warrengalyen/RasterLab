@@ -11,10 +11,6 @@ add_custom_command(
          --generate-source
          ${CMAKE_SOURCE_DIR}/resources/gresources.xml
     DEPENDS ${CMAKE_SOURCE_DIR}/resources/gresources.xml
-            ${CMAKE_SOURCE_DIR}/resources/move.png
-            ${CMAKE_SOURCE_DIR}/resources/paintbrush.png
-            ${CMAKE_SOURCE_DIR}/resources/eraser.png
-            ${CMAKE_SOURCE_DIR}/resources/flood-fill.png
     COMMENT "Compiling gresources"
 )
 

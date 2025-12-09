@@ -3,5 +3,6 @@
         "*.json": "jsonc",
         "*.c": "c",
         "*.h": "c",
+        "*.glade": "xml",
     }
 }

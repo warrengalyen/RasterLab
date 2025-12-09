@@ -18,5 +18,7 @@
   <gresource prefix="/ui">
     <file>tool_panel.glade</file>
     <file>layers_panel.glade</file>
+    <file>brush_options.glade</file>
+    <file>eraser_options.glade</file>
   </gresource>
 </gresources>
