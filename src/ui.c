@@ -347,17 +347,15 @@ AppContext* ui_create_main_window(void)
 
     /* Get main containers */
     GtkWidget *main_vbox = GTK_WIDGET(gtk_builder_get_object(builder, "main_vbox"));
-    GtkWidget *menu_bar_container = GTK_WIDGET(gtk_builder_get_object(builder, "menu_bar_container"));
     GtkWidget *tool_options_container = GTK_WIDGET(gtk_builder_get_object(builder, "tool_options_container"));
     GtkWidget *main_hbox = GTK_WIDGET(gtk_builder_get_object(builder, "main_hbox"));
-    GtkWidget *tools_panel_container = GTK_WIDGET(gtk_builder_get_object(builder, "tools_panel_container"));
     GtkWidget *center_right_hpaned = GTK_WIDGET(gtk_builder_get_object(builder, "center_right_hpaned"));
     ctx->notebook = GTK_WIDGET(gtk_builder_get_object(builder, "notebook"));
     GtkWidget *layers_panel_container = GTK_WIDGET(gtk_builder_get_object(builder, "layers_panel_container"));
     ctx->status_bar = GTK_WIDGET(gtk_builder_get_object(builder, "status_bar"));
 
     if (!main_vbox || !tool_options_container || !main_hbox ||
-        !tools_panel_container || !center_right_hpaned || !ctx->notebook ||
+        !center_right_hpaned || !ctx->notebook ||
         !layers_panel_container || !ctx->status_bar) {
         g_warning("Failed to get required widgets from Glade");
         g_object_unref(builder);
@@ -480,13 +478,11 @@ AppContext* ui_create_main_window(void)
     gtk_container_add(GTK_CONTAINER(tool_options_container), ctx->tool_options_panel->panel);
 
     /* ==== LEFT PANEL: Tools (fixed width) ==== */
-    tools_panel = create_tools_panel(ctx->tool_registry);
+    /* Tool panel is now loaded from main window Glade file */
+    tools_panel = tools_panel_initialize_from_builder(builder, ctx->tool_registry);
     
     /* Connect tools panel to tool options panel for title updates */
     tools_panel_set_options_panel(ctx->tool_options_panel);
-    
-    /* Add tools panel to container */
-    gtk_container_add(GTK_CONTAINER(tools_panel_container), tools_panel);
 
     /* ==== RIGHT PANEL: Layers ==== */
     ctx->layers_panel = create_layers_panel();

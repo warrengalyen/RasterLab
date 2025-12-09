@@ -7,11 +7,12 @@
 #include "ui/tool_options_panel.h"
 
 /**
- * Create the tools panel (icon list)
+ * Initialize tools panel from an existing builder (used when panel is in main window)
+ * @param builder The GtkBuilder containing the tool panel
  * @param tool_registry The tool registry for tool selection callbacks
  * @return The tools panel widget
  */
-GtkWidget* create_tools_panel(ToolRegistry *tool_registry);
+GtkWidget* tools_panel_initialize_from_builder(GtkBuilder *builder, ToolRegistry *tool_registry);
 
 /**
  * Set the tool options panel reference for tool selection callbacks

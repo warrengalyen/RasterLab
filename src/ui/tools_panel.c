@@ -4,7 +4,7 @@
 
 /**
  * Global reference to tool options panel for callbacks
- * This is set by create_tools_panel and used to update title
+ * This is set by tools_panel_set_options_panel and used to update title
  */
 static ToolOptionsPanel *g_tool_options_panel = NULL;
 
@@ -106,35 +106,24 @@ gboolean tools_panel_get_foreground_color(GdkRGBA *rgba)
 }
 
 /**
- * Create the tools panel (loads from Glade file)
+ * Initialize tools panel from an existing builder (used when panel is in main window)
  */
-GtkWidget* create_tools_panel(ToolRegistry *tool_registry)
+GtkWidget* tools_panel_initialize_from_builder(GtkBuilder *builder, ToolRegistry *tool_registry)
 {
-    GtkBuilder *builder;
-    GError *error = NULL;
     GtkWidget *panel;
+    GError *error = NULL;
     
-    /* Load the Glade file from resources */
-    builder = gtk_builder_new();
-    if (!gtk_builder_add_from_resource(builder, "/ui/tool_panel.glade", &error)) {
-        g_warning("Failed to load tool_panel.glade: %s", error->message);
-        g_error_free(error);
-        g_object_unref(builder);
-        
-        /* Fallback: create empty panel */
+    if (!builder) {
+        g_warning("Invalid builder for tools panel initialization");
         return gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     }
     
     /* Get the main panel from the builder */
     panel = GTK_WIDGET(gtk_builder_get_object(builder, "tool_panel"));
     if (!panel) {
-        g_warning("Failed to get tool_panel object from builder");
-        g_object_unref(builder);
+        g_warning("Failed to get tool_panel object from builder. Make sure main_window.glade includes the tool_panel with id='tool_panel'");
         return gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     }
-    
-    /* Keep builder alive by storing it on the panel as object data */
-    g_object_set_data_full(G_OBJECT(panel), "builder", builder, g_object_unref);
     
     /* Enforce 48px width constraint */
     gtk_widget_set_size_request(panel, 48, -1);
