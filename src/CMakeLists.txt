@@ -18,6 +18,7 @@ add_custom_command(
 set(SOURCES
     main.c
     ui.c
+    ui/ui_filter.c
     document.c
     panels.c
     ui/widgets/accordion.c
