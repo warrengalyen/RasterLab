@@ -14,6 +14,7 @@ pkg_check_modules(GTK3 REQUIRED gtk+-3.0 gdk-pixbuf-2.0)
 
 # Include directories
 include_directories(${CMAKE_SOURCE_DIR}/include)
+include_directories(${CMAKE_SOURCE_DIR}/lib)
 include_directories(${GTK3_INCLUDE_DIRS})
 
 # Link directories

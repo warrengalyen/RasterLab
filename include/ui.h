@@ -88,5 +88,12 @@ void ui_update_menu_and_button_states(AppContext *ctx);
  */
 void ui_save_document_as(AppContext *ctx);
 
+/**
+ * Update the status bar time label with processing time
+ * @param ctx The application context
+ * @param time_seconds Processing time in seconds
+ */
+void ui_update_status_bar_time(AppContext *ctx, gdouble time_seconds);
+
 #endif /* UI_H */
 

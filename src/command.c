@@ -1,5 +1,8 @@
 #include "command.h"
 #include "document.h"
+#include "render/layer.h"
+#include "render/tile.h"
+#include "render/dirty.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -262,9 +265,29 @@ static void draw_command_revert(Command *cmd, struct ImageDocument *doc)
     cairo_paint(cr);
     cairo_destroy(cr);
 
-    /* Mark composite as dirty */
+    /* Mark layer cache as dirty since pixels changed */
+    layer_invalidate_cache(data->layer);
+
+    /* Mark composite as dirty and invalidate tiles */
     if (doc) {
         doc->composite_dirty = TRUE;
+        
+        /* Mark tiles as dirty for tile-based rendering */
+        if (doc->tile_grid && data->layer) {
+            /* Mark the entire layer region as dirty */
+            DirtyRect dirty_rect;
+            dirty_rect_set(&dirty_rect, 
+                          data->layer->offset_x, 
+                          data->layer->offset_y,
+                          data->layer->width, 
+                          data->layer->height);
+            dirty_rect_clamp(&dirty_rect, doc->width, doc->height);
+            if (!dirty_rect_is_empty(&dirty_rect)) {
+                tile_grid_mark_rect_dirty(doc->tile_grid,
+                                          dirty_rect.x, dirty_rect.y,
+                                          dirty_rect.width, dirty_rect.height);
+            }
+        }
     }
 
     //printf("Draw command reverted: restored layer from snapshot\n");
