@@ -22,6 +22,7 @@ set(SOURCES
     panels.c
     ui/widgets/accordion.c
     ui/widgets/filter_preview.c
+    ui/widgets/filter_dialog.c
     tools.c
     tools/tool_manager.c
     tools/tool_move.c

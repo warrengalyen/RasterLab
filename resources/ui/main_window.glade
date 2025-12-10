@@ -13,6 +13,14 @@
         <property name="use-underline">True</property>
       </object>
     </child>
+    <child>
+      <object class="GtkMenuItem" id="adjust_menu_vibrance">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Vibrance</property>
+        <property name="use-underline">True</property>
+      </object>
+    </child>
   </object>
   <object class="GtkMenu" id="edit_menu">
     <property name="visible">True</property>
