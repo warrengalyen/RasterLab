@@ -21,6 +21,7 @@ set(SOURCES
     document.c
     panels.c
     ui/widgets/accordion.c
+    ui/widgets/filter_preview.c
     tools.c
     tools/tool_manager.c
     tools/tool_move.c
@@ -32,6 +33,7 @@ set(SOURCES
     ui/tools_panel.c
     ui/tool_options_panel.c
     ui/layers_panel.c
+    filters/adjustments.c
     render/render_utils.c
     render/layer.c
     render/compositor.c
@@ -45,6 +47,9 @@ add_executable(image-editor ${SOURCES})
 
 # Link GTK3 libraries
 target_link_libraries(image-editor ${GTK3_LIBRARIES})
+
+# Link Ocular static library
+target_link_libraries(image-editor ${CMAKE_SOURCE_DIR}/lib/libocular.a)
 
 # Add compile flags from pkg-config
 target_compile_options(image-editor PRIVATE ${GTK3_CFLAGS_OTHER})
