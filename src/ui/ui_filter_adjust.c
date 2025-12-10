@@ -6,6 +6,8 @@
 #include "ui/filters/filter_whitebalance.h"
 #include "ui/filters/filter_equalize.h"
 #include "ui/filters/filter_stretch.h"
+#include "ui/filters/filter_backlight.h"
+#include "ui/filters/filter_sepia.h"
 #include "filters.h"
 #include <glib.h>
 
@@ -266,6 +268,124 @@ static void on_histogram_stretch(GtkWidget *widget, gpointer data)
 }
 
 /**
+ * Sepia filter preview update callback
+ * Called when control values change to update the preview
+ */
+static gboolean on_sepia_preview_update(FilterDialog *dialog,
+                                        const gdouble *values,
+                                        gint num_values,
+                                        gpointer user_data)
+{
+    ImageLayer *temp_layer = (ImageLayer *)user_data;
+    ImageLayer *original_layer;
+    FilterControlParam *controls;
+    cairo_t *cr;
+
+    if (!dialog || !values || num_values < 1 || !temp_layer) {
+        return FALSE;
+    }
+
+    /* Get the original layer from the dialog's stored data */
+    original_layer = (ImageLayer *)g_object_get_data(G_OBJECT(filter_dialog_get_window(dialog)), "original_layer");
+    
+    if (!original_layer) {
+        return FALSE;
+    }
+
+    /* Get control parameters from dialog's stored data */
+    controls = (FilterControlParam *)g_object_get_data(G_OBJECT(filter_dialog_get_window(dialog)), "control_params");
+    if (!controls) {
+        return FALSE;
+    }
+
+    /* Copy original layer to temp layer */
+    cr = cairo_create(temp_layer->surface);
+    cairo_set_source_surface(cr, original_layer->surface, 0, 0);
+    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+    cairo_paint(cr);
+    cairo_destroy(cr);
+
+    /* Scale UI value to filter range and apply sepia filter to temp layer */
+    {
+        gdouble scaled_intensity = adjustments_scale_value(
+            values[0],
+            controls[0].min_value,
+            controls[0].max_value,
+            controls[0].filter_min,
+            controls[0].filter_max
+        );
+        gfloat filter_values[1] = { (gfloat)scaled_intensity };
+        if (!filter_sepia_apply(temp_layer, filter_values, 1)) {
+            return FALSE;
+        }
+    }
+
+    /* Update preview */
+    filter_dialog_update_after_layer(dialog, temp_layer);
+
+    return TRUE;
+}
+
+/**
+ * Adjustments > Sepia callback
+ */
+static void on_adjust_sepia(GtkWidget *widget, gpointer data)
+{
+    (void)widget;  /* Unused */
+
+    AppContext *ctx = (AppContext *)data;
+    FilterControlParam controls[1];
+    gdouble values[1];
+    gint response;
+    gdouble scaled_intensity;
+
+    if (!ctx) {
+        return;
+    }
+
+    /* Define sepia control parameter */
+    controls[0].label = "Intensity";
+    controls[0].min_value = 0.0;      /* UI range: 0 to 100 */
+    controls[0].max_value = 100.0;
+    controls[0].default_value = 100.0;
+    controls[0].step = 1.0;
+    controls[0].decimals = 0;
+    controls[0].filter_min = 0.0;     /* Filter range: 0 to 100 */
+    controls[0].filter_max = 100.0;
+
+    /* Show filter dialog */
+    response = ui_show_filter_dialog(ctx, "Sepia", controls, 1, 
+                                     on_sepia_preview_update, values);
+
+    if (response == GTK_RESPONSE_OK) {
+        /* Scale UI value to filter range */
+        scaled_intensity = adjustments_scale_value(
+            values[0],
+            controls[0].min_value,
+            controls[0].max_value,
+            controls[0].filter_min,
+            controls[0].filter_max
+        );
+
+        /* Apply sepia filter */
+        gfloat filter_values[1] = { (gfloat)scaled_intensity };
+        ui_apply_layer_filter_with_value(ctx, filter_sepia_apply, 
+                                        "sepia", filter_values, 1);
+    }
+}
+
+/**
+ * Adjustments > Backlight Repair callback
+ */
+static void on_adjust_backlight(GtkWidget *widget, gpointer data)
+{
+    (void)widget;  /* Unused */
+
+    AppContext *ctx = (AppContext *)data;
+    ui_apply_layer_filter(ctx, filter_backlight_apply, "backlight repair");
+}
+
+/**
  * Setup Adjustments menu from Glade builder
  */
 void ui_filter_adjust_setup_menu(GtkBuilder *builder, AppContext *ctx)
@@ -302,6 +422,17 @@ void ui_filter_adjust_setup_menu(GtkBuilder *builder, AppContext *ctx)
     GtkWidget *histogram_menu_stretch = GTK_WIDGET(gtk_builder_get_object(builder, "histogram_menu_stretch"));
     if (histogram_menu_stretch) {
         g_signal_connect(histogram_menu_stretch, "activate", G_CALLBACK(on_histogram_stretch), ctx);
+    }
+    
+    /* Connect additional Adjustments menu signals */
+    GtkWidget *adjust_menu_sepia = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_sepia"));
+    if (adjust_menu_sepia) {
+        g_signal_connect(adjust_menu_sepia, "activate", G_CALLBACK(on_adjust_sepia), ctx);
+    }
+    
+    GtkWidget *adjust_menu_backlight = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_backlight"));
+    if (adjust_menu_backlight) {
+        g_signal_connect(adjust_menu_backlight, "activate", G_CALLBACK(on_adjust_backlight), ctx);
     }
 }
 

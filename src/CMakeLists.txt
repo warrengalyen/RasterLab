@@ -61,6 +61,8 @@ set(SOURCES
     ui/filters/filter_whitebalance.c
     ui/filters/filter_equalize.c
     ui/filters/filter_stretch.c
+    ui/filters/filter_backlight.c
+    ui/filters/filter_sepia.c
     render/render_utils.c
     render/layer.c
     render/compositor.c
