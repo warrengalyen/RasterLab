@@ -4,6 +4,7 @@
 #include "ui/tools_panel.h"
 #include "ui/tool_options_panel.h"
 #include "ui/layers_panel.h"
+#include "ui/widgets/filter_dialog.h"
 #include "tool_manager.h"
 #include "render/layer.h"
 #include "render/compositor.h"
@@ -61,6 +62,8 @@ static void setup_view_menu(GtkBuilder *builder, AppContext *ctx, GtkAccelGroup 
 static void setup_layer_menu(GtkBuilder *builder, AppContext *ctx);
 static void setup_adjust_menu(GtkBuilder *builder, AppContext *ctx);
 static void on_adjust_grayscale(GtkWidget *widget, gpointer data);
+static void on_adjust_vibrance(GtkWidget *widget, gpointer data);
+static gboolean on_vibrance_preview_update(FilterDialog *dialog, const gdouble *values, gint num_values, gpointer user_data);
 static gint64 start_processing_timer(void);
 static gdouble stop_processing_timer(gint64 start_time);
 
@@ -899,6 +902,11 @@ static void setup_adjust_menu(GtkBuilder *builder, AppContext *ctx)
     if (adjust_menu_grayscale) {
         g_signal_connect(adjust_menu_grayscale, "activate", G_CALLBACK(on_adjust_grayscale), ctx);
     }
+    
+    GtkWidget *adjust_menu_vibrance = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_vibrance"));
+    if (adjust_menu_vibrance) {
+        g_signal_connect(adjust_menu_vibrance, "activate", G_CALLBACK(on_adjust_vibrance), ctx);
+    }
 }
 
 /**
@@ -1620,11 +1628,11 @@ void ui_update_status_bar_time(AppContext *ctx, gdouble time_seconds)
 
     /* Format time: show seconds with appropriate precision */
     if (time_seconds < 0.001) {
-        time_text = g_strdup_printf("%.3f ms", time_seconds * 1000.0);
+        time_text = g_strdup_printf("Time taken: %.3f ms", time_seconds * 1000.0);
     } else if (time_seconds < 1.0) {
-        time_text = g_strdup_printf("%.3f s", time_seconds);
+        time_text = g_strdup_printf("Time taken: %.3f s", time_seconds);
     } else {
-        time_text = g_strdup_printf("%.2f s", time_seconds);
+        time_text = g_strdup_printf("Time taken: %.2f s", time_seconds);
     }
 
     /* Update label */
@@ -1714,44 +1722,50 @@ static gdouble stop_processing_timer(gint64 start_time)
 }
 
 /**
- * Adjustments > Grayscale callback
+ * Apply a filter adjustment to the active layer with undo/redo support
  */
-static void on_adjust_grayscale(GtkWidget *widget, gpointer data)
+gboolean ui_apply_layer_filter(AppContext *ctx, 
+                                gboolean (*filter_func)(ImageLayer *layer),
+                                const gchar *filter_name)
 {
-    (void)widget;  /* Unused */
-
-    AppContext *ctx = (AppContext *)data;
-    ImageDocument *doc = ui_get_active_document(ctx);
+    ImageDocument *doc;
     ImageLayer *layer;
+    Command *cmd;
+    gint64 start_time;
     gdouble processing_time;
 
+    if (!ctx || !filter_func || !filter_name) {
+        return FALSE;
+    }
+
+    doc = ui_get_active_document(ctx);
     if (!doc) {
         g_warning("No document open");
-        return;
+        return FALSE;
     }
 
     /* Get the currently selected layer */
     layer = document_get_selected_layer(doc);
     if (!layer) {
         g_warning("No layer selected");
-        return;
+        return FALSE;
     }
 
     /* Create a draw command for undo/redo (saves layer snapshot) */
-    Command *cmd = command_create_draw(layer);
+    cmd = command_create_draw(layer);
     if (!cmd) {
-        g_warning("Failed to create undo command for grayscale filter");
-        return;
+        g_warning("Failed to create undo command for %s filter", filter_name);
+        return FALSE;
     }
 
     /* Start timing */
-    gint64 start_time = start_processing_timer();
+    start_time = start_processing_timer();
     
-    /* Apply grayscale filter */
-    if (!adjustments_apply_grayscale(layer)) {
-        g_warning("Failed to apply grayscale filter");
+    /* Apply filter */
+    if (!filter_func(layer)) {
+        g_warning("Failed to apply %s filter", filter_name);
         command_free(cmd);
-        return;
+        return FALSE;
     }
 
     /* Get processing time */
@@ -1784,6 +1798,234 @@ static void on_adjust_grayscale(GtkWidget *widget, gpointer data)
     /* Update window title and menu states */
     ui_update_window_title(ctx);
     ui_update_menu_and_button_states(ctx);
+
+    return TRUE;
+}
+
+/**
+ * Adjustments > Grayscale callback
+ */
+static void on_adjust_grayscale(GtkWidget *widget, gpointer data)
+{
+    (void)widget;  /* Unused */
+
+    AppContext *ctx = (AppContext *)data;
+    ui_apply_layer_filter(ctx, adjustments_apply_grayscale, "grayscale");
+}
+
+/**
+ * Adjustments > Vibrance callback
+ */
+static void on_adjust_vibrance(GtkWidget *widget, gpointer data)
+{
+    (void)widget;  /* Unused */
+
+    AppContext *ctx = (AppContext *)data;
+    ImageDocument *doc;
+    ImageLayer *layer;
+    FilterDialog *dialog;
+    FilterControlParam controls[1];
+    gdouble values[1];
+    gint response;
+    ImageLayer *temp_layer;
+    Command *cmd;
+    gint64 start_time;
+    gdouble processing_time;
+    cairo_t *cr;
+
+    if (!ctx) {
+        return;
+    }
+
+    doc = ui_get_active_document(ctx);
+    if (!doc) {
+        g_warning("No document open");
+        return;
+    }
+
+    /* Get the currently selected layer */
+    layer = document_get_selected_layer(doc);
+    if (!layer) {
+        g_warning("No layer selected");
+        return;
+    }
+
+    /* Define vibrance control parameter */
+    controls[0].label = "vibrance";
+    controls[0].min_value = -100.0;      /* UI range: -100 to 100 */
+    controls[0].max_value = 100.0;
+    controls[0].default_value = 0.0;
+    controls[0].step = 1.0;
+    controls[0].decimals = 0;
+    controls[0].filter_min = 0.0;       /* Filter range: 0.0 to 1.0 */
+    controls[0].filter_max = 1.0;
+
+    /* Create filter dialog */
+    dialog = filter_dialog_new("Vibrance", controls, 1);
+    if (!dialog) {
+        g_warning("Failed to create vibrance filter dialog");
+        return;
+    }
+
+    /* Create a copy of the layer for preview */
+    temp_layer = layer_new("Temp", layer->width, layer->height, TRUE);
+    if (!temp_layer) {
+        g_warning("Failed to create temporary layer for preview");
+        filter_dialog_free(dialog);
+        return;
+    }
+
+    /* Copy layer surface to temp layer */
+    cr = cairo_create(temp_layer->surface);
+    cairo_set_source_surface(cr, layer->surface, 0, 0);
+    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+    cairo_paint(cr);
+    cairo_destroy(cr);
+
+    /* Set layers in dialog */
+    filter_dialog_set_layers(dialog, layer, temp_layer);
+
+    /* Store original layer reference and control params for preview callback */
+    g_object_set_data(G_OBJECT(filter_dialog_get_window(dialog)), "original_layer", layer);
+    g_object_set_data(G_OBJECT(filter_dialog_get_window(dialog)), "control_params", controls);
+
+    /* Set up live preview callback */
+    filter_dialog_set_preview_callback(dialog, on_vibrance_preview_update, temp_layer);
+
+    /* Set dialog as transient for main window */
+    if (ctx->window) {
+        gtk_window_set_transient_for(filter_dialog_get_window(dialog), GTK_WINDOW(ctx->window));
+    }
+
+    /* Run dialog */
+    response = filter_dialog_run(dialog, GTK_WINDOW(ctx->window), values, 1);
+
+    if (response == GTK_RESPONSE_OK) {
+        /* Create a draw command for undo/redo (saves layer snapshot) */
+        cmd = command_create_draw(layer);
+        if (!cmd) {
+            g_warning("Failed to create undo command for vibrance filter");
+            filter_dialog_free(dialog);
+            layer_free(temp_layer);
+            return;
+        }
+
+        /* Start timing */
+        start_time = start_processing_timer();
+        
+        /* Scale UI value to filter range */
+        gdouble scaled_vibrance = adjustments_scale_value(
+            values[0],
+            controls[0].min_value,
+            controls[0].max_value,
+            controls[0].filter_min,
+            controls[0].filter_max
+        );
+        
+        /* Apply vibrance filter */
+        if (!adjustments_apply_vibrance(layer, (gfloat)scaled_vibrance)) {
+            g_warning("Failed to apply vibrance filter");
+            command_free(cmd);
+            filter_dialog_free(dialog);
+            layer_free(temp_layer);
+            return;
+        }
+
+        /* Get processing time */
+        processing_time = stop_processing_timer(start_time);
+
+        /* Push command to undo stack */
+        if (doc->undo_stack) {
+            command_stack_push(doc->undo_stack, cmd);
+
+            /* Clear redo stack */
+            if (doc->redo_stack) {
+                command_stack_clear(doc->redo_stack);
+            }
+        } else {
+            command_free(cmd);
+        }
+
+        /* Invalidate layer cache */
+        layer_invalidate_cache(layer);
+
+        /* Mark document as modified */
+        doc->modified = TRUE;
+
+        /* Invalidate document for redraw */
+        document_invalidate_composite(doc);
+
+        /* Update status bar with processing time */
+        ui_update_status_bar_time(ctx, processing_time);
+
+        /* Update window title and menu states */
+        ui_update_window_title(ctx);
+        ui_update_menu_and_button_states(ctx);
+    }
+
+    /* Clean up */
+    g_object_set_data(G_OBJECT(filter_dialog_get_window(dialog)), "original_layer", NULL);
+    g_object_set_data(G_OBJECT(filter_dialog_get_window(dialog)), "control_params", NULL);
+    filter_dialog_free(dialog);
+    layer_free(temp_layer);
+}
+
+/**
+ * Vibrance filter preview update callback
+ * Called when control values change to update the preview
+ */
+static gboolean on_vibrance_preview_update(FilterDialog *dialog,
+                                           const gdouble *values,
+                                           gint num_values,
+                                           gpointer user_data)
+{
+    ImageLayer *temp_layer = (ImageLayer *)user_data;
+    ImageLayer *original_layer;
+    FilterControlParam *controls;
+    cairo_t *cr;
+
+    if (!dialog || !values || num_values < 1 || !temp_layer) {
+        return FALSE;
+    }
+
+    /* Get the original layer from the dialog's stored data */
+    original_layer = (ImageLayer *)g_object_get_data(G_OBJECT(filter_dialog_get_window(dialog)), "original_layer");
+    
+    if (!original_layer) {
+        return FALSE;
+    }
+
+    /* Get control parameters from dialog's stored data */
+    controls = (FilterControlParam *)g_object_get_data(G_OBJECT(filter_dialog_get_window(dialog)), "control_params");
+    if (!controls) {
+        return FALSE;
+    }
+
+    /* Copy original layer to temp layer */
+    cr = cairo_create(temp_layer->surface);
+    cairo_set_source_surface(cr, original_layer->surface, 0, 0);
+    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+    cairo_paint(cr);
+    cairo_destroy(cr);
+
+    /* Scale UI value to filter range and apply vibrance filter to temp layer */
+    {
+        gdouble scaled_vibrance = adjustments_scale_value(
+            values[0],
+            controls[0].min_value,
+            controls[0].max_value,
+            controls[0].filter_min,
+            controls[0].filter_max
+        );
+        if (!adjustments_apply_vibrance(temp_layer, (gfloat)scaled_vibrance)) {
+            return FALSE;
+        }
+    }
+
+    /* Update preview */
+    filter_dialog_update_after_layer(dialog, temp_layer);
+
+    return TRUE;
 }
 
 /**

@@ -95,5 +95,17 @@ void ui_save_document_as(AppContext *ctx);
  */
 void ui_update_status_bar_time(AppContext *ctx, gdouble time_seconds);
 
+/**
+ * Apply a filter adjustment to the active layer with undo/redo support
+ * This is a reusable function for applying filters that modify layer pixels
+ * @param ctx The application context
+ * @param filter_func Function pointer to the filter function (returns TRUE on success)
+ * @param filter_name Name of the filter for error messages
+ * @return TRUE if filter was applied successfully, FALSE otherwise
+ */
+gboolean ui_apply_layer_filter(AppContext *ctx, 
+                                gboolean (*filter_func)(ImageLayer *layer),
+                                const gchar *filter_name);
+
 #endif /* UI_H */
 
