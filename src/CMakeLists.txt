@@ -55,7 +55,10 @@ set(SOURCES
     ui/tools_panel.c
     ui/tool_options_panel.c
     ui/layers_panel.c
-    filters/adjustments.c
+    filters/filters.c
+    ui/filters/filter_grayscale.c
+    ui/filters/filter_vibrance.c
+    ui/filters/filter_whitebalance.c
     render/render_utils.c
     render/layer.c
     render/compositor.c

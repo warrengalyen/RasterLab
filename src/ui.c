@@ -1674,10 +1674,6 @@ void ui_update_menu_and_button_states(AppContext *ctx)
     if (ctx->layer_menu_duplicate && GTK_IS_WIDGET(ctx->layer_menu_duplicate)) {
         gtk_widget_set_sensitive(ctx->layer_menu_duplicate, has_document && has_selection);
     }
-
-    // printf("UI State: document=%s, selection=%s\n",
-    //        has_document ? "yes" : "no",
-    //        has_selection ? "yes" : "no");
 }
 
 /**

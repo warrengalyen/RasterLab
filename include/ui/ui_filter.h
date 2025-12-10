@@ -18,18 +18,20 @@ gboolean ui_apply_layer_filter(AppContext *ctx,
                                 const gchar *filter_name);
 
 /**
- * Apply a filter with a parameter value to the currently selected layer
- * This is a reusable function for applying filters that take a single parameter
+ * Apply a filter with parameter values to the currently selected layer
+ * This is a reusable function for applying filters that take one or more parameters
  * @param ctx The application context
- * @param filter_func Function pointer to the filter function (takes layer and value, returns TRUE on success)
+ * @param filter_func Function pointer to the filter function (takes layer, values array, and count, returns TRUE on success)
  * @param filter_name Name of the filter for error messages
- * @param value The parameter value to pass to the filter function
+ * @param values Array of parameter values to pass to the filter function
+ * @param num_values Number of values in the array
  * @return TRUE if filter was applied successfully, FALSE otherwise
  */
 gboolean ui_apply_layer_filter_with_value(AppContext *ctx,
-                                          gboolean (*filter_func)(ImageLayer *layer, gfloat value),
+                                          gboolean (*filter_func)(ImageLayer *layer, const gfloat *values, gint num_values),
                                           const gchar *filter_name,
-                                          gfloat value);
+                                          const gfloat *values,
+                                          gint num_values);
 
 /**
  * Show a filter dialog and get user values

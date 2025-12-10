@@ -1,5 +1,5 @@
-#ifndef ADJUSTMENTS_H
-#define ADJUSTMENTS_H
+#ifndef FILTERS_H
+#define FILTERS_H
 
 #include "render/layer.h"
 #include <glib.h>
@@ -39,13 +39,6 @@ gboolean adjustments_grayscale_to_cairo(cairo_surface_t *surface, const guchar *
 gboolean adjustments_validate_surface(cairo_surface_t *surface, gint *width, gint *height);
 
 /**
- * Apply grayscale filter to a layer using Ocular library
- * @param layer The layer to apply the filter to
- * @return TRUE if successful, FALSE otherwise
- */
-gboolean adjustments_apply_grayscale(ImageLayer *layer);
-
-/**
  * Scale a value from UI range to filter range
  * @param ui_value Value in UI range
  * @param ui_min Minimum value in UI range
@@ -60,13 +53,5 @@ gdouble adjustments_scale_value(gdouble ui_value,
                                 gdouble filter_min,
                                 gdouble filter_max);
 
-/**
- * Apply vibrance filter to a layer using Ocular library
- * @param layer The layer to apply the filter to
- * @param vibrance Vibrance value (0.0-1.0)
- * @return TRUE if successful, FALSE otherwise
- */
-gboolean adjustments_apply_vibrance(ImageLayer *layer, gfloat vibrance);
-
-#endif /* ADJUSTMENTS_H */
+#endif /* FILTERS_H */
 

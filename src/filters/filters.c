@@ -1,4 +1,4 @@
-#include "adjustments.h"
+#include "filters.h"
 #include "render/layer.h"
 #include "ocular.h"
 #include <glib.h>
@@ -196,78 +196,6 @@ gboolean adjustments_grayscale_to_cairo(cairo_surface_t *surface, const guchar *
 }
 
 /**
- * Apply grayscale filter to a layer using Ocular library
- */
-gboolean adjustments_apply_grayscale(ImageLayer *layer)
-{
-    cairo_surface_t *surface;
-    gint width, height;
-    guchar *rgb_input, *grayscale_output;
-    OC_STATUS status;
-
-    if (!layer || !layer->surface) {
-        return FALSE;
-    }
-
-    surface = layer->surface;
-
-    /* Validate surface and get dimensions */
-    if (!adjustments_validate_surface(surface, &width, &height)) {
-        return FALSE;
-    }
-
-    /* Allocate buffers:
-       - rgb_input: RGB format (3 channels) for Ocular input
-       - grayscale_output: Single channel grayscale output from Ocular */
-    rgb_input = (guchar *)g_malloc(width * height * 3);
-    grayscale_output = (guchar *)g_malloc(width * height);
-    
-    if (!rgb_input || !grayscale_output) {
-        g_warning("Grayscale filter: Failed to allocate memory");
-        g_free(rgb_input);
-        g_free(grayscale_output);
-        return FALSE;
-    }
-
-    /* Convert from Cairo ARGB32 to RGB */
-    if (!adjustments_cairo_to_rgb(surface, rgb_input)) {
-        g_warning("Grayscale filter: Failed to convert surface to RGB");
-        g_free(rgb_input);
-        g_free(grayscale_output);
-        return FALSE;
-    }
-
-    /* Apply grayscale filter using Ocular library
-       Input: RGB format (stride = width * 3)
-       Output: Single channel grayscale (stride = width) */
-    status = ocularGrayscaleFilter(rgb_input, grayscale_output, width, height, width * 3);
-    
-    if (status != OC_STATUS_OK) {
-        g_warning("Grayscale filter: Ocular filter returned error %d", status);
-        g_free(rgb_input);
-        g_free(grayscale_output);
-        return FALSE;
-    }
-
-    /* Convert back from single channel grayscale to Cairo ARGB32 */
-    if (!adjustments_grayscale_to_cairo(surface, grayscale_output)) {
-        g_warning("Grayscale filter: Failed to convert grayscale to surface");
-        g_free(rgb_input);
-        g_free(grayscale_output);
-        return FALSE;
-    }
-
-    /* Free temporary buffers */
-    g_free(rgb_input);
-    g_free(grayscale_output);
-
-    return TRUE;
-}
-
-/**
- * Apply vibrance filter to a layer using Ocular library
- */
-/**
  * Scale a value from UI range to filter range
  */
 gdouble adjustments_scale_value(gdouble ui_value,
@@ -298,67 +226,3 @@ gdouble adjustments_scale_value(gdouble ui_value,
     range_filter = filter_max - filter_min;
     return filter_min + (normalized * range_filter);
 }
-
-gboolean adjustments_apply_vibrance(ImageLayer *layer, gfloat vibrance)
-{
-    cairo_surface_t *surface;
-    gint width, height;
-    guchar *rgb_input, *rgb_output;
-    OC_STATUS status;
-
-    if (!layer || !layer->surface) {
-        return FALSE;
-    }
-
-    surface = layer->surface;
-
-    /* Validate surface and get dimensions */
-    if (!adjustments_validate_surface(surface, &width, &height)) {
-        return FALSE;
-    }
-
-    /* Allocate buffers for RGB input and output */
-    rgb_input = (guchar *)g_malloc(width * height * 3);
-    rgb_output = (guchar *)g_malloc(width * height * 3);
-    
-    if (!rgb_input || !rgb_output) {
-        g_warning("Vibrance filter: Failed to allocate memory");
-        g_free(rgb_input);
-        g_free(rgb_output);
-        return FALSE;
-    }
-
-    /* Convert from Cairo ARGB32 to RGB */
-    if (!adjustments_cairo_to_rgb(surface, rgb_input)) {
-        g_warning("Vibrance filter: Failed to convert surface to RGB");
-        g_free(rgb_input);
-        g_free(rgb_output);
-        return FALSE;
-    }
-
-    /* Apply vibrance filter using Ocular library
-       Input and output: RGB format (stride = width * 3) */
-    status = ocularVibranceFilter(rgb_input, rgb_output, width, height, width * 3, vibrance);
-    
-    if (status != OC_STATUS_OK) {
-        g_warning("Vibrance filter: Ocular filter returned error %d", status);
-        g_free(rgb_input);
-        g_free(rgb_output);
-        return FALSE;
-    }
-
-    /* Convert back from RGB to Cairo ARGB32 */
-    if (!adjustments_rgb_to_cairo(surface, rgb_output)) {
-        g_warning("Vibrance filter: Failed to convert RGB to surface");
-        g_free(rgb_input);
-        g_free(rgb_output);
-        return FALSE;
-    }
-
-    /* Free temporary buffers */
-    g_free(rgb_input);
-    g_free(rgb_output);
-
-    return TRUE;
-}
-

@@ -1,6 +1,6 @@
 #include "ui/ui_filter.h"
 #include "ui.h"
-#include "adjustments.h"
+#include "filters.h"
 #include "command.h"
 #include "render/layer.h"
 #include <glib.h>
@@ -107,12 +107,13 @@ gboolean ui_apply_layer_filter(AppContext *ctx,
 }
 
 /**
- * Apply a filter with a parameter value to the currently selected layer
+ * Apply a filter with parameter values to the currently selected layer
  */
 gboolean ui_apply_layer_filter_with_value(AppContext *ctx,
-                                          gboolean (*filter_func)(ImageLayer *layer, gfloat value),
+                                          gboolean (*filter_func)(ImageLayer *layer, const gfloat *values, gint num_values),
                                           const gchar *filter_name,
-                                          gfloat value)
+                                          const gfloat *values,
+                                          gint num_values)
 {
     ImageDocument *doc;
     ImageLayer *layer;
@@ -120,7 +121,7 @@ gboolean ui_apply_layer_filter_with_value(AppContext *ctx,
     gint64 start_time;
     gdouble processing_time;
 
-    if (!ctx || !filter_func || !filter_name) {
+    if (!ctx || !filter_func || !filter_name || !values || num_values <= 0) {
         return FALSE;
     }
 
@@ -148,7 +149,7 @@ gboolean ui_apply_layer_filter_with_value(AppContext *ctx,
     start_time = start_processing_timer();
 
     /* Apply filter */
-    if (!filter_func(layer, value)) {
+    if (!filter_func(layer, values, num_values)) {
         g_warning("Failed to apply %s filter", filter_name);
         command_free(cmd);
         return FALSE;
