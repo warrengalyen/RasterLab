@@ -5,9 +5,14 @@
 #include "ui/tool_options_panel.h"
 #include "ui/layers_panel.h"
 #include "tool_manager.h"
+#include "render/layer.h"
+#include "render/compositor.h"
+#include "adjustments.h"
+#include "command.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <glib.h>
 
 /* Log handler to suppress harmless GTK Builder menu warnings */
 static gboolean gtk_builder_menu_warning_handler(const gchar *log_domain,
@@ -50,6 +55,14 @@ static void on_notebook_switch_page(GtkNotebook *notebook, GtkWidget *page,
                                      guint page_num, gpointer user_data);
 static void on_tab_close_button_clicked(GtkButton *button, gpointer user_data);
 static void on_layer_selection_changed(GtkTreeSelection *selection, gpointer user_data);
+static void setup_file_menu(GtkBuilder *builder, AppContext *ctx, GtkAccelGroup *accel_group);
+static void setup_edit_menu(GtkBuilder *builder, AppContext *ctx, GtkAccelGroup *accel_group);
+static void setup_view_menu(GtkBuilder *builder, AppContext *ctx, GtkAccelGroup *accel_group);
+static void setup_layer_menu(GtkBuilder *builder, AppContext *ctx);
+static void setup_adjust_menu(GtkBuilder *builder, AppContext *ctx);
+static void on_adjust_grayscale(GtkWidget *widget, gpointer data);
+static gint64 start_processing_timer(void);
+static gdouble stop_processing_timer(gint64 start_time);
 
 /**
  * Layer selection changed callback - proper signal handler signature
@@ -363,6 +376,10 @@ AppContext* ui_create_main_window(void)
         return NULL;
     }
 
+    /* Store builder reference in window for later use (e.g., status bar labels) */
+    g_object_ref(builder);
+    g_object_set_data_full(G_OBJECT(ctx->window), "main_builder", builder, g_object_unref);
+
     /* Connect notebook signal */
     g_signal_connect(ctx->notebook, "switch-page", 
                      G_CALLBACK(on_notebook_switch_page), ctx);
@@ -370,102 +387,16 @@ AppContext* ui_create_main_window(void)
     /* Get menu bar and menu items from Glade */
     ctx->menu_bar = GTK_WIDGET(gtk_builder_get_object(builder, "menu_bar"));
     
-    /* Get menus and menu items - set submenus immediately to avoid GTK Builder warnings */
-    GtkWidget *file_menu = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu"));
-    GtkWidget *edit_menu = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu"));
-    GtkWidget *view_menu = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu"));
-    GtkWidget *layer_menu = GTK_WIDGET(gtk_builder_get_object(builder, "layer_menu"));
-    
-    GtkWidget *file_menu_item = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_item"));
-    GtkWidget *edit_menu_item = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu_item"));
-    GtkWidget *view_menu_item = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_item"));
-    GtkWidget *layer_menu_item = GTK_WIDGET(gtk_builder_get_object(builder, "layer_menu_item"));
-    
-    /* Set submenus immediately after loading to prevent GTK Builder from trying to attach them */
-    if (file_menu && file_menu_item) {
-        gtk_menu_item_set_submenu(GTK_MENU_ITEM(file_menu_item), file_menu);
-    }
-    if (edit_menu && edit_menu_item) {
-        gtk_menu_item_set_submenu(GTK_MENU_ITEM(edit_menu_item), edit_menu);
-    }
-    if (view_menu && view_menu_item) {
-        gtk_menu_item_set_submenu(GTK_MENU_ITEM(view_menu_item), view_menu);
-    }
-    if (layer_menu && layer_menu_item) {
-        gtk_menu_item_set_submenu(GTK_MENU_ITEM(layer_menu_item), layer_menu);
-    }
-    
-    /* Get menu items that need to be updated programmatically */
-    /* Note: These must be retrieved AFTER setting submenus to ensure menus are properly attached */
-    ctx->edit_menu_undo = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu_undo"));
-    ctx->edit_menu_redo = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu_redo"));
-    ctx->layer_menu_new = GTK_WIDGET(gtk_builder_get_object(builder, "layer_menu_new"));
-    ctx->layer_menu_duplicate = GTK_WIDGET(gtk_builder_get_object(builder, "layer_menu_duplicate"));
-    ctx->layer_menu_delete = GTK_WIDGET(gtk_builder_get_object(builder, "layer_menu_delete"));
-    
-    /* Validate menu items exist before proceeding */
-    if (!ctx->edit_menu_undo || !ctx->edit_menu_redo || !ctx->layer_menu_new || 
-        !ctx->layer_menu_duplicate || !ctx->layer_menu_delete) {
-        g_warning("Some menu items failed to load from Glade");
-    }
-    
-    /* Connect menu signals */
-    GtkWidget *file_menu_open = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_open"));
-    GtkWidget *file_menu_save_as = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_save_as"));
-    GtkWidget *file_menu_close = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_close"));
-    GtkWidget *file_menu_exit = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_exit"));
-    
-    if (file_menu_open) {
-        g_signal_connect(file_menu_open, "activate", G_CALLBACK(on_file_open), ctx);
-    }
-    if (file_menu_save_as) {
-        g_signal_connect(file_menu_save_as, "activate", G_CALLBACK(on_file_save_as), ctx);
-    }
-    if (file_menu_close) {
-        g_signal_connect(file_menu_close, "activate", G_CALLBACK(on_file_close), ctx);
-    }
-    if (file_menu_exit) {
-        g_signal_connect(file_menu_exit, "activate", G_CALLBACK(on_file_exit), ctx);
-    }
-    
-    if (ctx->edit_menu_undo) {
-        g_signal_connect(ctx->edit_menu_undo, "activate", G_CALLBACK(on_edit_undo), ctx);
-    }
-    if (ctx->edit_menu_redo) {
-        g_signal_connect(ctx->edit_menu_redo, "activate", G_CALLBACK(on_edit_redo), ctx);
-    }
-    
-    GtkWidget *view_menu_zoom_in = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_in"));
-    GtkWidget *view_menu_zoom_out = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_out"));
-    GtkWidget *view_menu_zoom_reset = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_reset"));
-    GtkWidget *view_menu_zoom_fit = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_fit"));
-    
-    if (view_menu_zoom_in) {
-        g_signal_connect(view_menu_zoom_in, "activate", G_CALLBACK(on_view_zoom_in), ctx);
-    }
-    if (view_menu_zoom_out) {
-        g_signal_connect(view_menu_zoom_out, "activate", G_CALLBACK(on_view_zoom_out), ctx);
-    }
-    if (view_menu_zoom_reset) {
-        g_signal_connect(view_menu_zoom_reset, "activate", G_CALLBACK(on_view_zoom_reset), ctx);
-    }
-    if (view_menu_zoom_fit) {
-        g_signal_connect(view_menu_zoom_fit, "activate", G_CALLBACK(on_view_zoom_fit), ctx);
-    }
-    
-    if (ctx->layer_menu_new) {
-        g_signal_connect(ctx->layer_menu_new, "activate", G_CALLBACK(on_layer_new), ctx);
-    }
-    if (ctx->layer_menu_duplicate) {
-        g_signal_connect(ctx->layer_menu_duplicate, "activate", G_CALLBACK(on_layer_duplicate), ctx);
-    }
-    if (ctx->layer_menu_delete) {
-        g_signal_connect(ctx->layer_menu_delete, "activate", G_CALLBACK(on_layer_delete), ctx);
-    }
-    
-    /* Add accelerator group to window for keyboard shortcuts */
+    /* Create accelerator group for keyboard shortcuts */
     GtkAccelGroup *accel_group = gtk_accel_group_new();
     gtk_window_add_accel_group(GTK_WINDOW(ctx->window), accel_group);
+    
+    /* Setup each menu separately */
+    setup_file_menu(builder, ctx, accel_group);
+    setup_edit_menu(builder, ctx, accel_group);
+    setup_view_menu(builder, ctx, accel_group);
+    setup_layer_menu(builder, ctx);
+    setup_adjust_menu(builder, ctx);
 
     /* ==== TOP PANEL: Tool Options ==== */
     ctx->tool_options_panel = create_tool_options_panel();
@@ -816,6 +747,161 @@ void ui_context_free(AppContext *ctx)
 }
 
 /**
+ * Setup File menu from Glade builder
+ */
+static void setup_file_menu(GtkBuilder *builder, AppContext *ctx, GtkAccelGroup *accel_group)
+{
+    GtkWidget *file_menu = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu"));
+    GtkWidget *file_menu_item = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_item"));
+    
+    if (file_menu && file_menu_item) {
+        gtk_menu_item_set_submenu(GTK_MENU_ITEM(file_menu_item), file_menu);
+    }
+    
+    /* Connect File menu signals */
+    GtkWidget *file_menu_open = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_open"));
+    GtkWidget *file_menu_save_as = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_save_as"));
+    GtkWidget *file_menu_close = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_close"));
+    GtkWidget *file_menu_exit = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_exit"));
+    
+    if (file_menu_open) {
+        g_signal_connect(file_menu_open, "activate", G_CALLBACK(on_file_open), ctx);
+        gtk_widget_add_accelerator(file_menu_open, "activate", accel_group,
+                                   GDK_KEY_o, GDK_CONTROL_MASK, GTK_ACCEL_VISIBLE);
+    }
+    if (file_menu_save_as) {
+        g_signal_connect(file_menu_save_as, "activate", G_CALLBACK(on_file_save_as), ctx);
+        gtk_widget_add_accelerator(file_menu_save_as, "activate", accel_group,
+                                   GDK_KEY_s, GDK_CONTROL_MASK | GDK_SHIFT_MASK, GTK_ACCEL_VISIBLE);
+    }
+    if (file_menu_close) {
+        g_signal_connect(file_menu_close, "activate", G_CALLBACK(on_file_close), ctx);
+    }
+    if (file_menu_exit) {
+        g_signal_connect(file_menu_exit, "activate", G_CALLBACK(on_file_exit), ctx);
+    }
+}
+
+/**
+ * Setup Edit menu from Glade builder
+ */
+static void setup_edit_menu(GtkBuilder *builder, AppContext *ctx, GtkAccelGroup *accel_group)
+{
+    GtkWidget *edit_menu = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu"));
+    GtkWidget *edit_menu_item = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu_item"));
+    
+    if (edit_menu && edit_menu_item) {
+        gtk_menu_item_set_submenu(GTK_MENU_ITEM(edit_menu_item), edit_menu);
+    }
+    
+    /* Get menu items that need to be updated programmatically */
+    ctx->edit_menu_undo = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu_undo"));
+    ctx->edit_menu_redo = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu_redo"));
+    
+    /* Connect Edit menu signals */
+    if (ctx->edit_menu_undo) {
+        /* Connect signal handler */
+        g_signal_connect(ctx->edit_menu_undo, "activate", G_CALLBACK(on_edit_undo), ctx);
+        /* Add accelerator manually to ensure it works */
+        gtk_widget_add_accelerator(ctx->edit_menu_undo, "activate", accel_group,
+                                   GDK_KEY_z, GDK_CONTROL_MASK, GTK_ACCEL_VISIBLE);
+    } else {
+        g_warning("Failed to get edit_menu_undo from builder");
+    }
+    if (ctx->edit_menu_redo) {
+        /* Connect signal handler */
+        g_signal_connect(ctx->edit_menu_redo, "activate", G_CALLBACK(on_edit_redo), ctx);
+        /* Add accelerator manually to ensure it works */
+        gtk_widget_add_accelerator(ctx->edit_menu_redo, "activate", accel_group,
+                                   GDK_KEY_y, GDK_CONTROL_MASK, GTK_ACCEL_VISIBLE);
+    } else {
+        g_warning("Failed to get edit_menu_redo from builder");
+    }
+}
+
+/**
+ * Setup View menu from Glade builder
+ */
+static void setup_view_menu(GtkBuilder *builder, AppContext *ctx, GtkAccelGroup *accel_group)
+{
+    (void)accel_group;  /* Not used for View menu yet */
+    
+    GtkWidget *view_menu = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu"));
+    GtkWidget *view_menu_item = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_item"));
+    
+    if (view_menu && view_menu_item) {
+        gtk_menu_item_set_submenu(GTK_MENU_ITEM(view_menu_item), view_menu);
+    }
+    
+    /* Connect View menu signals */
+    GtkWidget *view_menu_zoom_in = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_in"));
+    GtkWidget *view_menu_zoom_out = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_out"));
+    GtkWidget *view_menu_zoom_reset = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_reset"));
+    GtkWidget *view_menu_zoom_fit = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_fit"));
+    
+    if (view_menu_zoom_in) {
+        g_signal_connect(view_menu_zoom_in, "activate", G_CALLBACK(on_view_zoom_in), ctx);
+    }
+    if (view_menu_zoom_out) {
+        g_signal_connect(view_menu_zoom_out, "activate", G_CALLBACK(on_view_zoom_out), ctx);
+    }
+    if (view_menu_zoom_reset) {
+        g_signal_connect(view_menu_zoom_reset, "activate", G_CALLBACK(on_view_zoom_reset), ctx);
+    }
+    if (view_menu_zoom_fit) {
+        g_signal_connect(view_menu_zoom_fit, "activate", G_CALLBACK(on_view_zoom_fit), ctx);
+    }
+}
+
+/**
+ * Setup Layer menu from Glade builder
+ */
+static void setup_layer_menu(GtkBuilder *builder, AppContext *ctx)
+{
+    GtkWidget *layer_menu = GTK_WIDGET(gtk_builder_get_object(builder, "layer_menu"));
+    GtkWidget *layer_menu_item = GTK_WIDGET(gtk_builder_get_object(builder, "layer_menu_item"));
+    
+    if (layer_menu && layer_menu_item) {
+        gtk_menu_item_set_submenu(GTK_MENU_ITEM(layer_menu_item), layer_menu);
+    }
+    
+    /* Get menu items that need to be updated programmatically */
+    ctx->layer_menu_new = GTK_WIDGET(gtk_builder_get_object(builder, "layer_menu_new"));
+    ctx->layer_menu_duplicate = GTK_WIDGET(gtk_builder_get_object(builder, "layer_menu_duplicate"));
+    ctx->layer_menu_delete = GTK_WIDGET(gtk_builder_get_object(builder, "layer_menu_delete"));
+    
+    /* Connect Layer menu signals */
+    if (ctx->layer_menu_new) {
+        g_signal_connect(ctx->layer_menu_new, "activate", G_CALLBACK(on_layer_new), ctx);
+    }
+    if (ctx->layer_menu_duplicate) {
+        g_signal_connect(ctx->layer_menu_duplicate, "activate", G_CALLBACK(on_layer_duplicate), ctx);
+    }
+    if (ctx->layer_menu_delete) {
+        g_signal_connect(ctx->layer_menu_delete, "activate", G_CALLBACK(on_layer_delete), ctx);
+    }
+}
+
+/**
+ * Setup Adjustments menu from Glade builder
+ */
+static void setup_adjust_menu(GtkBuilder *builder, AppContext *ctx)
+{
+    GtkWidget *adjust_menu = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu"));
+    GtkWidget *adjust_menu_item = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_item"));
+    
+    if (adjust_menu && adjust_menu_item) {
+        gtk_menu_item_set_submenu(GTK_MENU_ITEM(adjust_menu_item), adjust_menu);
+    }
+    
+    /* Connect Adjustments menu signals */
+    GtkWidget *adjust_menu_grayscale = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_grayscale"));
+    if (adjust_menu_grayscale) {
+        g_signal_connect(adjust_menu_grayscale, "activate", G_CALLBACK(on_adjust_grayscale), ctx);
+    }
+}
+
+/**
  * File Open dialog response callback
  */
 static void on_file_open_response(GtkDialog *dialog, gint response_id, gpointer user_data)
@@ -1060,25 +1146,22 @@ static void on_edit_undo(GtkWidget *widget, gpointer data)
 
     AppContext *ctx = (AppContext *)data;
     ImageDocument *doc;
-    gint page_num;
 
-    if (!ctx || !ctx->notebook) {
+    if (!ctx) {
         return;
     }
 
     /* Get current document */
-    page_num = gtk_notebook_get_current_page(GTK_NOTEBOOK(ctx->notebook));
-    if (page_num < 0) {
-        return;
-    }
-
-    doc = (ImageDocument *)g_list_nth_data(ctx->documents, page_num);
+    doc = ui_get_active_document(ctx);
     if (!doc) {
         return;
     }
 
     /* Perform undo */
     document_undo(doc);
+
+    /* Invalidate document for redraw (marks tiles dirty, updates layers panel) */
+    document_invalidate_composite(doc);
 
     /* Update menu state and window title */
     ui_update_menu_and_button_states(ctx);
@@ -1094,25 +1177,22 @@ static void on_edit_redo(GtkWidget *widget, gpointer data)
 
     AppContext *ctx = (AppContext *)data;
     ImageDocument *doc;
-    gint page_num;
 
-    if (!ctx || !ctx->notebook) {
+    if (!ctx) {
         return;
     }
 
     /* Get current document */
-    page_num = gtk_notebook_get_current_page(GTK_NOTEBOOK(ctx->notebook));
-    if (page_num < 0) {
-        return;
-    }
-
-    doc = (ImageDocument *)g_list_nth_data(ctx->documents, page_num);
+    doc = ui_get_active_document(ctx);
     if (!doc) {
         return;
     }
 
     /* Perform redo */
     document_redo(doc);
+
+    /* Invalidate document for redraw (marks tiles dirty, updates layers panel) */
+    document_invalidate_composite(doc);
 
     /* Update menu state and window title */
     ui_update_menu_and_button_states(ctx);
@@ -1449,7 +1529,9 @@ static void on_layer_move_down(GtkWidget *widget, gpointer data)
  */
 void ui_update_status_bar(AppContext *ctx, ImageDocument *doc)
 {
-    gchar *status_text;
+    GtkWidget *size_label, *bitdepth_label, *zoom_label;
+    GtkBuilder *builder;
+    gchar *size_text, *bitdepth_text, *zoom_text;
 
     if (!ctx || !ctx->status_bar) {
         return;
@@ -1460,16 +1542,32 @@ void ui_update_status_bar(AppContext *ctx, ImageDocument *doc)
         doc = ui_get_active_document(ctx);
     }
 
-    /* Clear previous context */
-    gtk_statusbar_pop(GTK_STATUSBAR(ctx->status_bar), 0);
+    /* Get builder from window to retrieve status bar labels */
+    builder = GTK_BUILDER(g_object_get_data(G_OBJECT(ctx->window), "main_builder"));
+    if (!builder) {
+        return;
+    }
+
+    /* Get status bar labels */
+    size_label = GTK_WIDGET(gtk_builder_get_object(builder, "sb_label_size"));
+    bitdepth_label = GTK_WIDGET(gtk_builder_get_object(builder, "sb_label_bitdepth"));
+    zoom_label = GTK_WIDGET(gtk_builder_get_object(builder, "sb_label_zoom"));
+
+    if (!size_label || !bitdepth_label || !zoom_label) {
+        return;
+    }
 
     if (!doc || doc->width == 0) {
         /* No document or empty document */
-        status_text = g_strdup("Ready");
+        size_text = g_strdup("—");
+        bitdepth_text = g_strdup("—");
+        zoom_text = g_strdup("—");
     } else {
-        /* Format: WIDTHxHEIGHT | BitDepth-bit CHANNELS | ZOOMx% */
+        /* Size label: WIDTH x HEIGHT */
+        size_text = g_strdup_printf("%u × %u", doc->width, doc->height);
+
+        /* Bit depth label: BITDEPTH-bit CHANNELS */
         gchar channels_str[32];
-        
         if (doc->channels == 3) {
             snprintf(channels_str, sizeof(channels_str), "RGB");
         } else if (doc->channels == 4) {
@@ -1477,16 +1575,61 @@ void ui_update_status_bar(AppContext *ctx, ImageDocument *doc)
         } else {
             snprintf(channels_str, sizeof(channels_str), "%u-channel", doc->channels);
         }
+        bitdepth_text = g_strdup_printf("%u-bit %s", doc->bit_depth, channels_str);
 
-        status_text = g_strdup_printf("%ux%u | %u-bit %s | %.0f%%",
-                                     doc->width, doc->height,
-                                     doc->bit_depth,
-                                     channels_str,
-                                     doc->zoom_factor * 100.0);
+        /* Zoom label: ZOOM% */
+        zoom_text = g_strdup_printf("%.0f%%", doc->zoom_factor * 100.0);
     }
 
-    gtk_statusbar_push(GTK_STATUSBAR(ctx->status_bar), 0, status_text);
-    g_free(status_text);
+    /* Update labels */
+    gtk_label_set_text(GTK_LABEL(size_label), size_text);
+    gtk_label_set_text(GTK_LABEL(bitdepth_label), bitdepth_text);
+    gtk_label_set_text(GTK_LABEL(zoom_label), zoom_text);
+
+    g_free(size_text);
+    g_free(bitdepth_text);
+    g_free(zoom_text);
+}
+
+/**
+ * Update the status bar time label with processing time
+ * @param ctx The application context
+ * @param time_seconds Processing time in seconds
+ */
+void ui_update_status_bar_time(AppContext *ctx, gdouble time_seconds)
+{
+    GtkWidget *time_label;
+    GtkBuilder *builder;
+    gchar *time_text;
+
+    if (!ctx || !ctx->status_bar) {
+        return;
+    }
+
+    /* Get builder from window to retrieve status bar labels */
+    builder = GTK_BUILDER(g_object_get_data(G_OBJECT(ctx->window), "main_builder"));
+    if (!builder) {
+        return;
+    }
+
+    /* Get time label */
+    time_label = GTK_WIDGET(gtk_builder_get_object(builder, "sb_label_time"));
+    if (!time_label) {
+        return;
+    }
+
+    /* Format time: show seconds with appropriate precision */
+    if (time_seconds < 0.001) {
+        time_text = g_strdup_printf("%.3f ms", time_seconds * 1000.0);
+    } else if (time_seconds < 1.0) {
+        time_text = g_strdup_printf("%.3f s", time_seconds);
+    } else {
+        time_text = g_strdup_printf("%.2f s", time_seconds);
+    }
+
+    /* Update label */
+    gtk_label_set_text(GTK_LABEL(time_label), time_text);
+    g_free(time_text);
 }
 
 /**
@@ -1548,6 +1691,99 @@ void ui_update_menu_and_button_states(AppContext *ctx)
     // printf("UI State: document=%s, selection=%s\n",
     //        has_document ? "yes" : "no",
     //        has_selection ? "yes" : "no");
+}
+
+/**
+ * Start processing timer
+ * @return Start time in microseconds
+ */
+static gint64 start_processing_timer(void)
+{
+    return g_get_monotonic_time();
+}
+
+/**
+ * Stop processing timer and get elapsed time in seconds
+ * @param start_time Start time from start_processing_timer()
+ * @return Elapsed time in seconds
+ */
+static gdouble stop_processing_timer(gint64 start_time)
+{
+    gint64 current_time = g_get_monotonic_time();
+    return (gdouble)(current_time - start_time) / 1000000.0;
+}
+
+/**
+ * Adjustments > Grayscale callback
+ */
+static void on_adjust_grayscale(GtkWidget *widget, gpointer data)
+{
+    (void)widget;  /* Unused */
+
+    AppContext *ctx = (AppContext *)data;
+    ImageDocument *doc = ui_get_active_document(ctx);
+    ImageLayer *layer;
+    gdouble processing_time;
+
+    if (!doc) {
+        g_warning("No document open");
+        return;
+    }
+
+    /* Get the currently selected layer */
+    layer = document_get_selected_layer(doc);
+    if (!layer) {
+        g_warning("No layer selected");
+        return;
+    }
+
+    /* Create a draw command for undo/redo (saves layer snapshot) */
+    Command *cmd = command_create_draw(layer);
+    if (!cmd) {
+        g_warning("Failed to create undo command for grayscale filter");
+        return;
+    }
+
+    /* Start timing */
+    gint64 start_time = start_processing_timer();
+    
+    /* Apply grayscale filter */
+    if (!adjustments_apply_grayscale(layer)) {
+        g_warning("Failed to apply grayscale filter");
+        command_free(cmd);
+        return;
+    }
+
+    /* Get processing time */
+    processing_time = stop_processing_timer(start_time);
+
+    /* Push command to undo stack */
+    if (doc->undo_stack) {
+        command_stack_push(doc->undo_stack, cmd);
+
+        /* Clear redo stack */
+        if (doc->redo_stack) {
+            command_stack_clear(doc->redo_stack);
+        }
+    } else {
+        command_free(cmd);
+    }
+
+    /* Invalidate layer cache */
+    layer_invalidate_cache(layer);
+
+    /* Mark document as modified */
+    doc->modified = TRUE;
+
+    /* Invalidate document for redraw */
+    document_invalidate_composite(doc);
+
+    /* Update status bar with processing time */
+    ui_update_status_bar_time(ctx, processing_time);
+
+    /* Update window title and menu states */
+    ui_update_window_title(ctx);
+    ui_update_menu_and_button_states(ctx);
 }
 
 /**
