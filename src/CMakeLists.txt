@@ -59,6 +59,8 @@ set(SOURCES
     ui/filters/filter_grayscale.c
     ui/filters/filter_vibrance.c
     ui/filters/filter_whitebalance.c
+    ui/filters/filter_equalize.c
+    ui/filters/filter_stretch.c
     render/render_utils.c
     render/layer.c
     render/compositor.c

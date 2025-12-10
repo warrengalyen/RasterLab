@@ -4,6 +4,8 @@
 #include "ui/filters/filter_grayscale.h"
 #include "ui/filters/filter_vibrance.h"
 #include "ui/filters/filter_whitebalance.h"
+#include "ui/filters/filter_equalize.h"
+#include "ui/filters/filter_stretch.h"
 #include "filters.h"
 #include <glib.h>
 
@@ -242,6 +244,28 @@ static void on_adjust_vibrance(GtkWidget *widget, gpointer data)
 }
 
 /**
+ * Histogram > Equalize callback
+ */
+static void on_histogram_equalize(GtkWidget *widget, gpointer data)
+{
+    (void)widget;  /* Unused */
+
+    AppContext *ctx = (AppContext *)data;
+    ui_apply_layer_filter(ctx, filter_equalize_apply, "equalize");
+}
+
+/**
+ * Histogram > Stretch callback
+ */
+static void on_histogram_stretch(GtkWidget *widget, gpointer data)
+{
+    (void)widget;  /* Unused */
+
+    AppContext *ctx = (AppContext *)data;
+    ui_apply_layer_filter(ctx, filter_stretch_apply, "stretch");
+}
+
+/**
  * Setup Adjustments menu from Glade builder
  */
 void ui_filter_adjust_setup_menu(GtkBuilder *builder, AppContext *ctx)
@@ -267,6 +291,17 @@ void ui_filter_adjust_setup_menu(GtkBuilder *builder, AppContext *ctx)
     GtkWidget *adjust_menu_vibrance = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_vibrance"));
     if (adjust_menu_vibrance) {
         g_signal_connect(adjust_menu_vibrance, "activate", G_CALLBACK(on_adjust_vibrance), ctx);
+    }
+    
+    /* Connect Histogram menu signals */
+    GtkWidget *histogram_menu_equalize = GTK_WIDGET(gtk_builder_get_object(builder, "histogram_menu_equalize"));
+    if (histogram_menu_equalize) {
+        g_signal_connect(histogram_menu_equalize, "activate", G_CALLBACK(on_histogram_equalize), ctx);
+    }
+    
+    GtkWidget *histogram_menu_stretch = GTK_WIDGET(gtk_builder_get_object(builder, "histogram_menu_stretch"));
+    if (histogram_menu_stretch) {
+        g_signal_connect(histogram_menu_stretch, "activate", G_CALLBACK(on_histogram_stretch), ctx);
     }
 }
 
