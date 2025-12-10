@@ -8,6 +8,8 @@
 #include "ui/filters/filter_stretch.h"
 #include "ui/filters/filter_backlight.h"
 #include "ui/filters/filter_sepia.h"
+#include "ui/filters/filter_gamma.h"
+#include "ui/widgets/gamma_dialog.h"
 #include "filters.h"
 #include <glib.h>
 
@@ -386,6 +388,150 @@ static void on_adjust_backlight(GtkWidget *widget, gpointer data)
 }
 
 /**
+ * Gamma filter preview update callback
+ */
+static gboolean on_gamma_preview_update(void *dialog_ptr,
+                                       const gdouble *values,
+                                       gint num_values,
+                                       gpointer user_data)
+{
+    ImageLayer *temp_layer = (ImageLayer *)user_data;
+    ImageLayer *original_layer;
+    GammaDialog *gamma_dialog;
+    cairo_t *cr;
+    gfloat gamma_values[3];
+    GtkWindow *window;
+
+    if (!values || num_values < 3 || !temp_layer) {
+        return FALSE;
+    }
+
+    /* dialog_ptr is the GammaDialog* */
+    gamma_dialog = (GammaDialog *)dialog_ptr;
+    if (!gamma_dialog) {
+        return FALSE;
+    }
+
+    window = gamma_dialog_get_window(gamma_dialog);
+    if (!window) {
+        return FALSE;
+    }
+
+    /* Get the original layer from the dialog's stored data */
+    original_layer = (ImageLayer *)g_object_get_data(G_OBJECT(window), "original_layer");
+    
+    if (!original_layer) {
+        return FALSE;
+    }
+
+    /* Copy original layer to temp layer */
+    cr = cairo_create(temp_layer->surface);
+    cairo_set_source_surface(cr, original_layer->surface, 0, 0);
+    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+    cairo_paint(cr);
+    cairo_destroy(cr);
+
+    /* Apply gamma filter to temp layer */
+    gamma_values[0] = (gfloat)values[0];
+    gamma_values[1] = (gfloat)values[1];
+    gamma_values[2] = (gfloat)values[2];
+    if (!filter_gamma_apply(temp_layer, gamma_values, 3)) {
+        return FALSE;
+    }
+
+    /* Update preview */
+    gamma_dialog_update_after_layer(gamma_dialog, temp_layer);
+
+    return TRUE;
+}
+
+/**
+ * Adjustments > Gamma Correction callback
+ */
+static void on_adjust_gamma(GtkWidget *widget, gpointer data)
+{
+    (void)widget;  /* Unused */
+
+    AppContext *ctx = (AppContext *)data;
+    ImageDocument *doc;
+    ImageLayer *layer;
+    GammaDialog *dialog;
+    ImageLayer *temp_layer;
+    cairo_t *cr;
+    gint response;
+    gfloat gamma_values[3];
+
+    if (!ctx) {
+        return;
+    }
+
+    doc = ui_get_active_document(ctx);
+    if (!doc) {
+        g_warning("No document open");
+        return;
+    }
+
+    /* Get the currently selected layer */
+    layer = document_get_selected_layer(doc);
+    if (!layer) {
+        g_warning("No layer selected");
+        return;
+    }
+
+    /* Create gamma dialog */
+    dialog = gamma_dialog_new("Gamma Correction");
+    if (!dialog) {
+        g_warning("Failed to create gamma dialog");
+        return;
+    }
+
+    /* Create a copy of the layer for preview */
+    temp_layer = layer_new("Temp", layer->width, layer->height, TRUE);
+    if (!temp_layer) {
+        g_warning("Failed to create temporary layer for preview");
+        gamma_dialog_free(dialog);
+        return;
+    }
+
+    /* Copy layer surface to temp layer */
+    cr = cairo_create(temp_layer->surface);
+    cairo_set_source_surface(cr, layer->surface, 0, 0);
+    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+    cairo_paint(cr);
+    cairo_destroy(cr);
+
+    /* Set layers in dialog */
+    gamma_dialog_set_layers(dialog, layer, temp_layer);
+
+    /* Store original layer reference and dialog for preview callback */
+    g_object_set_data(G_OBJECT(gamma_dialog_get_window(dialog)), "original_layer", layer);
+    g_object_set_data(G_OBJECT(gamma_dialog_get_window(dialog)), "gamma_dialog", dialog);
+
+    /* Set up live preview callback */
+    gamma_dialog_set_preview_callback(dialog, on_gamma_preview_update, temp_layer);
+
+    /* Set dialog as transient for main window */
+    if (ctx->window) {
+        gtk_window_set_transient_for(gamma_dialog_get_window(dialog), GTK_WINDOW(ctx->window));
+    }
+
+    /* Run dialog */
+    response = gamma_dialog_run(dialog, GTK_WINDOW(ctx->window), gamma_values);
+
+    if (response == GTK_RESPONSE_OK) {
+        /* Apply gamma filter */
+        ui_apply_layer_filter_with_value(ctx, filter_gamma_apply, 
+                                        "gamma correction", gamma_values, 3);
+    }
+
+    /* Clean up */
+    g_object_set_data(G_OBJECT(gamma_dialog_get_window(dialog)), "original_layer", NULL);
+    g_object_set_data(G_OBJECT(gamma_dialog_get_window(dialog)), "gamma_dialog", NULL);
+    gamma_dialog_free(dialog);
+    layer_free(temp_layer);
+}
+
+/**
  * Setup Adjustments menu from Glade builder
  */
 void ui_filter_adjust_setup_menu(GtkBuilder *builder, AppContext *ctx)
@@ -433,6 +579,11 @@ void ui_filter_adjust_setup_menu(GtkBuilder *builder, AppContext *ctx)
     GtkWidget *adjust_menu_backlight = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_backlight"));
     if (adjust_menu_backlight) {
         g_signal_connect(adjust_menu_backlight, "activate", G_CALLBACK(on_adjust_backlight), ctx);
+    }
+    
+    GtkWidget *adjust_menu_gamma = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_gamma"));
+    if (adjust_menu_gamma) {
+        g_signal_connect(adjust_menu_gamma, "activate", G_CALLBACK(on_adjust_gamma), ctx);
     }
 }
 
