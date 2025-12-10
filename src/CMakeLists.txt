@@ -19,6 +19,7 @@ set(SOURCES
     main.c
     ui.c
     ui/ui_filter.c
+    ui/ui_filter_adjust.c
     document.c
     panels.c
     ui/widgets/accordion.c
