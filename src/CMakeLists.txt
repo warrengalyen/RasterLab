@@ -1,6 +1,25 @@
 # Find glib-compile-resources for gresources compilation
 find_program(GLIB_COMPILE_RESOURCES glib-compile-resources REQUIRED)
 
+# Parse gresources.xml to extract all file dependencies
+set(GRESOURCE_XML ${CMAKE_SOURCE_DIR}/resources/gresources.xml)
+file(READ ${GRESOURCE_XML} GRESOURCE_XML_CONTENT)
+set(GRESOURCE_DEPENDENCIES ${GRESOURCE_XML})
+
+# Extract all file paths from gresources.xml
+string(REGEX MATCHALL "<file[^>]*>([^<]+)</file>" FILE_MATCHES "${GRESOURCE_XML_CONTENT}")
+foreach(MATCH ${FILE_MATCHES})
+    string(REGEX REPLACE "<file[^>]*>([^<]+)</file>" "\\1" FILE_PATH "${MATCH}")
+    # Remove any preprocessing attributes (e.g., "preprocess="to-pixdata"")
+    string(REGEX REPLACE "^[^>]*>" "" FILE_PATH "${FILE_PATH}")
+    string(REGEX REPLACE "</file>$" "" FILE_PATH "${FILE_PATH}")
+    # Trim whitespace
+    string(STRIP "${FILE_PATH}" FILE_PATH)
+    if(FILE_PATH)
+        list(APPEND GRESOURCE_DEPENDENCIES ${CMAKE_SOURCE_DIR}/resources/${FILE_PATH})
+    endif()
+endforeach()
+
 # Compile gresources to C source
 set(GRESOURCE_FILE ${CMAKE_CURRENT_BINARY_DIR}/resources.c)
 add_custom_command(
@@ -9,8 +28,8 @@ add_custom_command(
     ARGS --sourcedir=${CMAKE_SOURCE_DIR}/resources
          --target=${GRESOURCE_FILE}
          --generate-source
-         ${CMAKE_SOURCE_DIR}/resources/gresources.xml
-    DEPENDS ${CMAKE_SOURCE_DIR}/resources/gresources.xml
+         ${GRESOURCE_XML}
+    DEPENDS ${GRESOURCE_DEPENDENCIES}
     COMMENT "Compiling gresources"
 )
 

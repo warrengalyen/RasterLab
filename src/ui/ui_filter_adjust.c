@@ -137,6 +137,8 @@ void ui_filter_adjust_setup_menu(GtkBuilder *builder, AppContext *ctx)
     if (adjust_menu_grayscale) {
         g_signal_connect(adjust_menu_grayscale, "activate", G_CALLBACK(on_adjust_grayscale), ctx);
     }
+
+    
     
     GtkWidget *adjust_menu_vibrance = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_vibrance"));
     if (adjust_menu_vibrance) {
