@@ -12,6 +12,8 @@
 #include "ui/widgets/gamma_dialog.h"
 #include "ui/filters/filter_colorbalance.h"
 #include "ui/widgets/color_balance_dialog.h"
+#include "ui/filters/filter_exposure.h"
+#include "ui/filters/filter_hsl.h"
 #include "filters.h"
 #include <glib.h>
 
@@ -64,6 +66,130 @@ static gboolean on_vibrance_preview_update(FilterDialog *dialog,
         );
         gfloat filter_values[1] = { (gfloat)scaled_vibrance };
         if (!filter_vibrance_apply(temp_layer, filter_values, 1)) {
+            return FALSE;
+        }
+    }
+
+    /* Update preview */
+    filter_dialog_update_after_layer(dialog, temp_layer);
+
+    return TRUE;
+}
+
+/**
+ * Exposure filter preview update callback
+ * Called when control values change to update the preview
+ */
+static gboolean on_exposure_preview_update(FilterDialog *dialog,
+                                          const gdouble *values,
+                                          gint num_values,
+                                          gpointer user_data)
+{
+    ImageLayer *temp_layer = (ImageLayer *)user_data;
+    ImageLayer *original_layer;
+    FilterControlParam *controls;
+    cairo_t *cr;
+
+    if (!dialog || !values || num_values < 1 || !temp_layer) {
+        return FALSE;
+    }
+
+    /* Get the original layer from the dialog's stored data */
+    original_layer = (ImageLayer *)g_object_get_data(
+        G_OBJECT(filter_dialog_get_window(dialog)), "original_layer");
+
+    if (!original_layer) {
+        return FALSE;
+    }
+
+    /* Get control parameters from dialog's stored data */
+    controls = (FilterControlParam *)g_object_get_data(
+        G_OBJECT(filter_dialog_get_window(dialog)), "control_params");
+    if (!controls) {
+        return FALSE;
+    }
+
+    /* Copy original layer to temp layer */
+    cr = cairo_create(temp_layer->surface);
+    cairo_set_source_surface(cr, original_layer->surface, 0, 0);
+    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+    cairo_paint(cr);
+    cairo_destroy(cr);
+
+    /* Scale UI value to filter range and apply exposure filter to temp layer */
+    {
+        gdouble scaled_exposure = adjustments_scale_value(
+            values[0], controls[0].min_value, controls[0].max_value,
+            controls[0].filter_min, controls[0].filter_max);
+        gfloat filter_values[1] = { (gfloat)scaled_exposure };
+        if (!filter_exposure_apply(temp_layer, filter_values, 1)) {
+            return FALSE;
+        }
+    }
+
+    /* Update preview */
+    filter_dialog_update_after_layer(dialog, temp_layer);
+
+    return TRUE;
+}
+
+/**
+ * HSL filter preview update callback
+ * Called when control values change to update the preview
+ */
+static gboolean on_hsl_preview_update(FilterDialog *dialog,
+                                      const gdouble *values,
+                                      gint num_values,
+                                      gpointer user_data)
+{
+    ImageLayer *temp_layer = (ImageLayer *)user_data;
+    ImageLayer *original_layer;
+    FilterControlParam *controls;
+    cairo_t *cr;
+
+    if (!dialog || !values || num_values < 3 || !temp_layer) {
+        return FALSE;
+    }
+
+    /* Get the original layer from the dialog's stored data */
+    original_layer = (ImageLayer *)g_object_get_data(
+        G_OBJECT(filter_dialog_get_window(dialog)), "original_layer");
+
+    if (!original_layer) {
+        return FALSE;
+    }
+
+    /* Get control parameters from dialog's stored data */
+    controls = (FilterControlParam *)g_object_get_data(
+        G_OBJECT(filter_dialog_get_window(dialog)), "control_params");
+    if (!controls) {
+        return FALSE;
+    }
+
+    /* Copy original layer to temp layer */
+    cr = cairo_create(temp_layer->surface);
+    cairo_set_source_surface(cr, original_layer->surface, 0, 0);
+    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+    cairo_paint(cr);
+    cairo_destroy(cr);
+
+    /* Scale UI values to filter range and apply HSL filter to temp layer */
+    {
+        gdouble scaled_hue = adjustments_scale_value(
+            values[0], controls[0].min_value, controls[0].max_value,
+            controls[0].filter_min, controls[0].filter_max);
+        gdouble scaled_saturation = adjustments_scale_value(
+            values[1], controls[1].min_value, controls[1].max_value,
+            controls[1].filter_min, controls[1].filter_max);
+        gdouble scaled_lightness = adjustments_scale_value(
+            values[2], controls[2].min_value, controls[2].max_value,
+            controls[2].filter_min, controls[2].filter_max);
+        gfloat filter_values[3] = { 
+            (gfloat)scaled_hue, 
+            (gfloat)scaled_saturation, 
+            (gfloat)scaled_lightness 
+        };
+        if (!filter_hsl_apply(temp_layer, filter_values, 3)) {
             return FALSE;
         }
     }
@@ -674,6 +800,138 @@ static void on_adjust_colorbalance(GtkWidget *widget, gpointer data)
 }
 
 /**
+ * Adjustments > Exposure callback
+ */
+static void on_adjust_exposure(GtkWidget *widget, gpointer data)
+{
+    (void)widget;  /* Unused */
+
+    AppContext *ctx = (AppContext *)data;
+    FilterControlParam controls[1];
+    gdouble values[1];
+    gint response;
+    gdouble scaled_exposure;
+
+    if (!ctx) {
+        return;
+    }
+
+    /* Define exposure control parameter */
+    controls[0].label = "exposure";
+    controls[0].min_value = -5.0;  
+    controls[0].max_value = 5.0;
+    controls[0].default_value = 0.0;
+    controls[0].step = 0.01;
+    controls[0].decimals = 2;
+    controls[0].filter_min = -5.0;   
+    controls[0].filter_max = 5.0;
+
+    /* Show filter dialog */
+    response = ui_show_filter_dialog(ctx, "Exposure", controls, 1, 
+                                     on_exposure_preview_update, values);
+
+    if (response == GTK_RESPONSE_OK) {
+        /* Scale UI value to filter range */
+        scaled_exposure = adjustments_scale_value(
+            values[0],
+            controls[0].min_value,
+            controls[0].max_value,
+            controls[0].filter_min,
+            controls[0].filter_max
+        );
+
+        /* Apply exposure filter */
+        gfloat filter_values[1] = { (gfloat)scaled_exposure };
+        ui_apply_layer_filter_with_value(ctx, filter_exposure_apply, 
+                                        "exposure", filter_values, 1);
+    }
+}
+
+/**
+ * Adjustments > HSL callback
+ */
+static void on_adjust_hsl(GtkWidget *widget, gpointer data)
+{
+    (void)widget;  /* Unused */
+
+    AppContext *ctx = (AppContext *)data;
+    FilterControlParam controls[3];
+    gdouble values[3];
+    gint response;
+    gdouble scaled_hue, scaled_saturation, scaled_lightness;
+
+    if (!ctx) {
+        return;
+    }
+
+    /* Define HSL control parameters */
+    controls[0].label = "hue";
+    controls[0].min_value = -180.0; 
+    controls[0].max_value = 180.0;
+    controls[0].default_value = 0.0;
+    controls[0].step = 1.0;
+    controls[0].decimals = 0;
+    controls[0].filter_min = 0.0;
+    controls[0].filter_max = 1.0;
+
+    controls[1].label = "saturation";
+    controls[1].min_value = -100.0; 
+    controls[1].max_value = 100.0;
+    controls[1].default_value = 0.0;
+    controls[1].step = 1.0;
+    controls[1].decimals = 0;
+    controls[1].filter_min = 0.0;
+    controls[1].filter_max = 1.0;
+
+    controls[2].label = "lightness";
+    controls[2].min_value = -100.0; 
+    controls[2].max_value = 100.0;
+    controls[2].default_value = 0.0;
+    controls[2].step = 1.0;
+    controls[2].decimals = 0;
+    controls[2].filter_min = 0.0; 
+    controls[2].filter_max = 1.0;
+
+    /* Show filter dialog */
+    response = ui_show_filter_dialog(ctx, "HSL", controls, 3, 
+                                    on_hsl_preview_update, values);
+
+    if (response == GTK_RESPONSE_OK) {
+        /* Scale UI values to filter range */
+        scaled_hue = adjustments_scale_value(
+            values[0],
+            controls[0].min_value,
+            controls[0].max_value,
+            controls[0].filter_min,
+            controls[0].filter_max
+        );
+        scaled_saturation = adjustments_scale_value(
+            values[1],
+            controls[1].min_value,
+            controls[1].max_value,
+            controls[1].filter_min,
+            controls[1].filter_max
+        );
+        scaled_lightness = adjustments_scale_value(
+            values[2],
+            controls[2].min_value,
+            controls[2].max_value,
+            controls[2].filter_min,
+            controls[2].filter_max
+        );
+
+        /* Apply HSL filter */
+        gfloat filter_values[3] = { 
+            (gfloat)scaled_hue, 
+            (gfloat)scaled_saturation, 
+            (gfloat)scaled_lightness 
+        };
+        ui_apply_layer_filter_with_value(ctx, filter_hsl_apply, 
+                                        "HSL", filter_values, 3);
+    }
+}
+
+/**
  * Setup Adjustments menu from Glade builder
  */
 void ui_filter_adjust_setup_menu(GtkBuilder *builder, AppContext *ctx)
@@ -731,6 +989,16 @@ void ui_filter_adjust_setup_menu(GtkBuilder *builder, AppContext *ctx)
     GtkWidget *adjust_menu_colorbalance = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_colorbalance"));
     if (adjust_menu_colorbalance) {
         g_signal_connect(adjust_menu_colorbalance, "activate", G_CALLBACK(on_adjust_colorbalance), ctx);
+    }
+
+    GtkWidget *adjust_menu_exposure = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_exposure"));
+    if (adjust_menu_exposure) {
+        g_signal_connect(adjust_menu_exposure, "activate", G_CALLBACK(on_adjust_exposure), ctx);
+    }
+
+    GtkWidget *adjust_menu_hsl = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_hsl"));
+    if (adjust_menu_hsl) {
+        g_signal_connect(adjust_menu_hsl, "activate", G_CALLBACK(on_adjust_hsl), ctx);
     }
 }
 

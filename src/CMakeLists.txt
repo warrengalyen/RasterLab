@@ -67,6 +67,8 @@ set(SOURCES
     ui/filters/filter_sepia.c
     ui/filters/filter_gamma.c
     ui/filters/filter_colorbalance.c
+    ui/filters/filter_exposure.c
+    ui/filters/filter_hsl.c
     render/render_utils.c
     render/layer.c
     render/compositor.c
