@@ -14,6 +14,8 @@
 #include "ui/widgets/color_balance_dialog.h"
 #include "ui/filters/filter_exposure.h"
 #include "ui/filters/filter_hsl.h"
+#include "ui/filters/filter_brightness_contrast.h"
+#include "ui/filters/filter_shadow_highlights.h"
 #include "filters.h"
 #include <glib.h>
 
@@ -190,6 +192,136 @@ static gboolean on_hsl_preview_update(FilterDialog *dialog,
             (gfloat)scaled_lightness 
         };
         if (!filter_hsl_apply(temp_layer, filter_values, 3)) {
+            return FALSE;
+        }
+    }
+
+    /* Update preview */
+    filter_dialog_update_after_layer(dialog, temp_layer);
+
+    return TRUE;
+}
+
+/**
+ * Brightness/Contrast filter preview update callback
+ * Called when control values change to update the preview
+ */
+static gboolean on_brightness_contrast_preview_update(FilterDialog *dialog,
+                                                     const gdouble *values,
+                                                     gint num_values,
+                                                     gpointer user_data)
+{
+    ImageLayer *temp_layer = (ImageLayer *)user_data;
+    ImageLayer *original_layer;
+    FilterControlParam *controls;
+    cairo_t *cr;
+
+    if (!dialog || !values || num_values < 2 || !temp_layer) {
+        return FALSE;
+    }
+
+    /* Get the original layer from the dialog's stored data */
+    original_layer = (ImageLayer *)g_object_get_data(
+        G_OBJECT(filter_dialog_get_window(dialog)), "original_layer");
+
+    if (!original_layer) {
+        return FALSE;
+    }
+
+    /* Get control parameters from dialog's stored data */
+    controls = (FilterControlParam *)g_object_get_data(
+        G_OBJECT(filter_dialog_get_window(dialog)), "control_params");
+    if (!controls) {
+        return FALSE;
+    }
+
+    /* Copy original layer to temp layer */
+    cr = cairo_create(temp_layer->surface);
+    cairo_set_source_surface(cr, original_layer->surface, 0, 0);
+    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+    cairo_paint(cr);
+    cairo_destroy(cr);
+
+    /* Scale UI values to filter range and apply brightness/contrast filter to temp layer */
+    {
+        gdouble scaled_brightness = adjustments_scale_value(
+            values[0], controls[0].min_value, controls[0].max_value,
+            controls[0].filter_min, controls[0].filter_max);
+        gdouble scaled_contrast = adjustments_scale_value(
+            values[1], controls[1].min_value, controls[1].max_value,
+            controls[1].filter_min, controls[1].filter_max);
+        gfloat filter_values[2] = { 
+            (gfloat)scaled_brightness, 
+            (gfloat)scaled_contrast 
+        };
+        if (!filter_brightness_contrast_apply(temp_layer, filter_values, 2)) {
+            return FALSE;
+        }
+    }
+
+    /* Update preview */
+    filter_dialog_update_after_layer(dialog, temp_layer);
+
+    return TRUE;
+}
+
+/**
+ * Shadow/Highlights filter preview update callback
+ * Called when control values change to update the preview
+ */
+static gboolean on_shadow_highlights_preview_update(FilterDialog *dialog,
+                                                    const gdouble *values,
+                                                    gint num_values,
+                                                    gpointer user_data)
+{
+    ImageLayer *temp_layer = (ImageLayer *)user_data;
+    ImageLayer *original_layer;
+    FilterControlParam *controls;
+    cairo_t *cr;
+
+    if (!dialog || !values || num_values < 3 || !temp_layer) {
+        return FALSE;
+    }
+
+    /* Get the original layer from the dialog's stored data */
+    original_layer = (ImageLayer *)g_object_get_data(
+        G_OBJECT(filter_dialog_get_window(dialog)), "original_layer");
+
+    if (!original_layer) {
+        return FALSE;
+    }
+
+    /* Get control parameters from dialog's stored data */
+    controls = (FilterControlParam *)g_object_get_data(
+        G_OBJECT(filter_dialog_get_window(dialog)), "control_params");
+    if (!controls) {
+        return FALSE;
+    }
+
+    /* Copy original layer to temp layer */
+    cr = cairo_create(temp_layer->surface);
+    cairo_set_source_surface(cr, original_layer->surface, 0, 0);
+    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+    cairo_paint(cr);
+    cairo_destroy(cr);
+
+    /* Scale UI values to filter range and apply shadow/highlights filter to temp layer */
+    {
+        gdouble scaled_shadows = adjustments_scale_value(
+            values[0], controls[0].min_value, controls[0].max_value,
+            controls[0].filter_min, controls[0].filter_max);
+        gdouble scaled_midtone_contrast = adjustments_scale_value(
+            values[1], controls[1].min_value, controls[1].max_value,
+            controls[1].filter_min, controls[1].filter_max);
+        gdouble scaled_highlights = adjustments_scale_value(
+            values[2], controls[2].min_value, controls[2].max_value,
+            controls[2].filter_min, controls[2].filter_max);
+        gfloat filter_values[3] = { 
+            (gfloat)scaled_shadows, 
+            (gfloat)scaled_midtone_contrast,
+            (gfloat)scaled_highlights
+        };
+        if (!filter_shadow_highlights_apply(temp_layer, filter_values, 3)) {
             return FALSE;
         }
     }
@@ -932,6 +1064,159 @@ static void on_adjust_hsl(GtkWidget *widget, gpointer data)
 }
 
 /**
+ * Adjustments > Brightness/Contrast callback
+ */
+static void on_adjust_brightness_contrast(GtkWidget *widget, gpointer data)
+{
+    (void)widget;  /* Unused */
+
+    AppContext *ctx = (AppContext *)data;
+    FilterControlParam controls[2];
+    gdouble values[2];
+    gint response;
+    gdouble scaled_brightness, scaled_contrast;
+
+    if (!ctx) {
+        return;
+    }
+
+    /* Define brightness/contrast control parameters */
+    controls[0].label = "brightness";
+    controls[0].min_value = -255.0;  /* UI range: -255 to 255 */
+    controls[0].max_value = 255.0;
+    controls[0].default_value = 0.0;
+    controls[0].step = 1.0;
+    controls[0].decimals = 0;
+    controls[0].filter_min = -1.0;  /* Filter range: -1.0 to 1.0 */
+    controls[0].filter_max = 1.0;
+
+    controls[1].label = "contrast";
+    controls[1].min_value = -100.0;  /* UI range: -100 to 100 */
+    controls[1].max_value = 100.0;
+    controls[1].default_value = 0.0;
+    controls[1].step = 1.0;
+    controls[1].decimals = 0;
+    controls[1].filter_min = -1.0;  /* Filter range: -1.0 to 1.0 */
+    controls[1].filter_max = 1.0;
+
+    /* Show filter dialog */
+    response = ui_show_filter_dialog(ctx, "Brightness and Contrast", controls, 2, 
+                                    on_brightness_contrast_preview_update, values);
+
+    if (response == GTK_RESPONSE_OK) {
+        /* Scale UI values to filter range */
+        scaled_brightness = adjustments_scale_value(
+            values[0],
+            controls[0].min_value,
+            controls[0].max_value,
+            controls[0].filter_min,
+            controls[0].filter_max
+        );
+        scaled_contrast = adjustments_scale_value(
+            values[1],
+            controls[1].min_value,
+            controls[1].max_value,
+            controls[1].filter_min,
+            controls[1].filter_max
+        );
+
+        /* Apply brightness/contrast filter */
+        gfloat filter_values[2] = { 
+            (gfloat)scaled_brightness, 
+            (gfloat)scaled_contrast 
+        };
+        ui_apply_layer_filter_with_value(ctx, filter_brightness_contrast_apply, 
+                                        "brightness and contrast", filter_values, 2);
+    }
+}
+
+/**
+ * Adjustments > Shadows/Highlights callback
+ */
+static void on_adjust_shadow_highlights(GtkWidget *widget, gpointer data)
+{
+    (void)widget;  /* Unused */
+
+    AppContext *ctx = (AppContext *)data;
+    FilterControlParam controls[3];
+    gdouble values[3];
+    gint response;
+    gdouble scaled_shadows, scaled_highlights, scaled_midtone_contrast;
+
+    if (!ctx) {
+        return;
+    }
+
+    /* Define shadow/highlights control parameters */
+    controls[0].label = "shadows";
+    controls[0].min_value = -100.0;  /* UI range: -100 to 100 */
+    controls[0].max_value = 100.0;
+    controls[0].default_value = 0.0;
+    controls[0].step = 1.0;
+    controls[0].decimals = 0;
+    controls[0].filter_min = -1.0;  /* Filter range: -1.0 to 1.0 */
+    controls[0].filter_max = 1.0;
+
+    controls[1].label = "midtone contrast";
+    controls[1].min_value = -100.0;  /* UI range: -100 to 100 */
+    controls[1].max_value = 100.0;
+    controls[1].default_value = 0.0;
+    controls[1].step = 1.0;
+    controls[1].decimals = 0;
+    controls[1].filter_min = -1.0;  /* Filter range: -1.0 to 1.0 */
+    controls[1].filter_max = 1.0;
+
+    controls[2].label = "highlights";
+    controls[2].min_value = -100.0;  /* UI range: -100 to 100 */
+    controls[2].max_value = 100.0;
+    controls[2].default_value = 0.0;
+    controls[2].step = 1.0;
+    controls[2].decimals = 0;
+    controls[2].filter_min = -1.0;  /* Filter range: -1.0 to 1.0 */
+    controls[2].filter_max = 1.0;
+
+    /* Show filter dialog */
+    response = ui_show_filter_dialog(ctx, "Shadows and Highlights", controls, 3, 
+                                    on_shadow_highlights_preview_update, values);
+
+    if (response == GTK_RESPONSE_OK) {
+        /* Scale UI values to filter range */
+        /* UI order: shadows (values[0]), midtone contrast (values[1]), highlights (values[2]) */
+        scaled_shadows = adjustments_scale_value(
+            values[0],
+            controls[0].min_value,
+            controls[0].max_value,
+            controls[0].filter_min,
+            controls[0].filter_max
+        );
+        scaled_midtone_contrast = adjustments_scale_value(
+            values[1],
+            controls[1].min_value,
+            controls[1].max_value,
+            controls[1].filter_min,
+            controls[1].filter_max
+        );
+        scaled_highlights = adjustments_scale_value(
+            values[2],
+            controls[2].min_value,
+            controls[2].max_value,
+            controls[2].filter_min,
+            controls[2].filter_max
+        );
+
+        /* Apply shadow/highlights filter */
+        /* Filter order: shadows, midtone contrast, highlights */
+        gfloat filter_values[3] = { 
+            (gfloat)scaled_shadows, 
+            (gfloat)scaled_midtone_contrast,
+            (gfloat)scaled_highlights
+        };
+        ui_apply_layer_filter_with_value(ctx, filter_shadow_highlights_apply, 
+                                        "shadows and highlights", filter_values, 3);
+    }
+}
+
+/**
  * Setup Adjustments menu from Glade builder
  */
 void ui_filter_adjust_setup_menu(GtkBuilder *builder, AppContext *ctx)
@@ -999,6 +1284,16 @@ void ui_filter_adjust_setup_menu(GtkBuilder *builder, AppContext *ctx)
     GtkWidget *adjust_menu_hsl = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_hsl"));
     if (adjust_menu_hsl) {
         g_signal_connect(adjust_menu_hsl, "activate", G_CALLBACK(on_adjust_hsl), ctx);
+    }
+
+    GtkWidget *adjust_menu_brightness_contrast = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_brightness_contrast"));
+    if (adjust_menu_brightness_contrast) {
+        g_signal_connect(adjust_menu_brightness_contrast, "activate", G_CALLBACK(on_adjust_brightness_contrast), ctx);
+    }
+
+    GtkWidget *adjust_menu_shadows_highlights = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_shadows_highlights"));
+    if (adjust_menu_shadows_highlights) {
+        g_signal_connect(adjust_menu_shadows_highlights, "activate", G_CALLBACK(on_adjust_shadow_highlights), ctx);
     }
 }
 

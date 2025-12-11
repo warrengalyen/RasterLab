@@ -208,6 +208,9 @@ typedef struct {
  * Color Adjustment Functions
  * ============================================================================ */
 
+OC_STATUS ocularBrightnessAndContrastFilter(unsigned char *Input, unsigned char *Output, int Width,
+                                            int Height, int Stride, float brightness, float contrast);
+
 OC_STATUS ocularGrayscaleFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride);
 
 OC_STATUS ocularRGBFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, float redAdjustment,
@@ -240,11 +243,7 @@ OC_STATUS ocularSaturationFilter(unsigned char* Input, unsigned char* Output, in
 
 OC_STATUS ocularGammaFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, float gamma[]);
 
-OC_STATUS ocularContrastFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, float contrast);
-
 OC_STATUS ocularExposureFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, float exposure);
-
-OC_STATUS ocularBrightnessFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, int brightness);
 
 OC_STATUS ocularFalseColorFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride,
                                 unsigned char firstColorR, unsigned char firstColorG, unsigned char firstColorB,
@@ -264,8 +263,8 @@ OC_STATUS ocularHighlightShadowTintFilter(unsigned char* Input, unsigned char* O
                                          float shadowTintG, float shadowTintB, float highlightTintR, float highlightTintG,
                                          float highlightTintB, float shadowTintIntensity, float highlightTintIntensity);
 
-OC_STATUS ocularHighlightShadowFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride,
-                                     float shadows, float highlights);
+OC_STATUS ocularHighlightShadowFilter(unsigned char *Input, unsigned char *Output, int Width, int Height, int Stride, float shadows,
+                                      float highlights, float midtoneContrast);
 
 OC_STATUS ocularMonochromeFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride,
                                 unsigned char filterColorR, unsigned char filterColorG, unsigned char filterColorB, int intensity);
