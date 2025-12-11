@@ -1,4 +1,4 @@
-#include "ui/widgets/color_balance_dialog.h"
+#include "ui/dialogs/color_balance_dialog.h"
 #include "ui/widgets/filter_preview.h"
 #include "render/layer.h"
 #include "render/compositor.h"

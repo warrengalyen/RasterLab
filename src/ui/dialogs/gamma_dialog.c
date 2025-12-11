@@ -1,4 +1,4 @@
-#include "ui/widgets/gamma_dialog.h"
+#include "ui/dialogs/gamma_dialog.h"
 #include "ui/widgets/filter_preview.h"
 #include "render/layer.h"
 #include "render/compositor.h"

@@ -44,8 +44,8 @@ set(SOURCES
     ui/widgets/accordion.c
     ui/widgets/filter_preview.c
     ui/widgets/filter_dialog.c
-    ui/widgets/gamma_dialog.c
-    ui/widgets/color_balance_dialog.c
+    ui/dialogs/gamma_dialog.c
+    ui/dialogs/color_balance_dialog.c
     tools.c
     tools/tool_manager.c
     tools/tool_move.c
