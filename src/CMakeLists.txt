@@ -71,6 +71,7 @@ set(SOURCES
     ui/filters/filter_hsl.c
     ui/filters/filter_brightness_contrast.c
     ui/filters/filter_shadow_highlights.c
+    ui/filters/filter_temperature.c
     render/render_utils.c
     render/layer.c
     render/compositor.c

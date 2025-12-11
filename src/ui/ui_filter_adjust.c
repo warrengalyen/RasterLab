@@ -16,6 +16,7 @@
 #include "ui/filters/filter_hsl.h"
 #include "ui/filters/filter_brightness_contrast.h"
 #include "ui/filters/filter_shadow_highlights.h"
+#include "ui/filters/filter_temperature.h"
 #include "filters.h"
 #include <glib.h>
 
@@ -381,6 +382,69 @@ static gboolean on_whitebalance_preview_update(FilterDialog *dialog,
             controls[1].filter_min, controls[1].filter_max);
         gfloat filter_values[2] = { (gfloat)scaled_temperature, (gfloat)scaled_tint };
         if (!filter_whitebalance_apply(temp_layer, filter_values, 2)) {
+            return FALSE;
+        }
+    }
+
+    /* Update preview */
+    filter_dialog_update_after_layer(dialog, temp_layer);
+
+    return TRUE;
+}
+
+/**
+ * Color temperature filter preview update callback
+ * Called when control values change to update the preview
+ */
+static gboolean on_temperature_preview_update(FilterDialog *dialog,
+                                              const gdouble *values,
+                                              gint num_values,
+                                              gpointer user_data)
+{
+    ImageLayer *temp_layer = (ImageLayer *)user_data;
+    ImageLayer *original_layer;
+    FilterControlParam *controls;
+    cairo_t *cr;
+
+    if (!dialog || !values || num_values < 2 || !temp_layer) {
+        return FALSE;
+    }
+
+    /* Get the original layer from the dialog's stored data */
+    original_layer = (ImageLayer *)g_object_get_data(
+        G_OBJECT(filter_dialog_get_window(dialog)), "original_layer");
+
+    if (!original_layer) {
+        return FALSE;
+    }
+
+    /* Get control parameters from dialog's stored data */
+    controls = (FilterControlParam *)g_object_get_data(
+        G_OBJECT(filter_dialog_get_window(dialog)), "control_params");
+    if (!controls) {
+        return FALSE;
+    }
+
+    /* Copy original layer to temp layer */
+    cr = cairo_create(temp_layer->surface);
+    cairo_set_source_surface(cr, original_layer->surface, 0, 0);
+    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+    cairo_paint(cr);
+    cairo_destroy(cr);
+
+    /* Scale UI values to filter range and apply color temperature filter to temp layer */
+    {
+        gdouble scaled_temperature = adjustments_scale_value(
+            values[0], controls[0].min_value, controls[0].max_value,
+            controls[0].filter_min, controls[0].filter_max);
+        gdouble scaled_strength = adjustments_scale_value(
+            values[1], controls[1].min_value, controls[1].max_value,
+            controls[1].filter_min, controls[1].filter_max);
+        gfloat filter_values[2] = { 
+            (gfloat)scaled_temperature, 
+            (gfloat)scaled_strength 
+        };
+        if (!filter_temperature_apply(temp_layer, filter_values, 2)) {
             return FALSE;
         }
     }
@@ -1217,6 +1281,73 @@ static void on_adjust_shadow_highlights(GtkWidget *widget, gpointer data)
 }
 
 /**
+ * Adjustments > Color Temperature callback
+ */
+static void on_adjust_temperature(GtkWidget *widget, gpointer data)
+{
+    (void)widget;  /* Unused */
+
+    AppContext *ctx = (AppContext *)data;
+    FilterControlParam controls[2];
+    gdouble values[2];
+    gint response;
+    gdouble scaled_temperature, scaled_strength;
+
+    if (!ctx) {
+        return;
+    }
+
+    /* Define color temperature control parameters */
+    controls[0].label = "temperature (K)";
+    controls[0].min_value = 1000.0;  /* UI range: 2000 to 15000 K */
+    controls[0].max_value = 15000.0;
+    controls[0].default_value = 6500.0;  /* Daylight */
+    controls[0].step = 100.0;
+    controls[0].decimals = 0;
+    controls[0].filter_min = 1000.0;
+    controls[0].filter_max = 15000.0;
+
+    controls[1].label = "strength";
+    controls[1].min_value = 1.0; 
+    controls[1].max_value = 100.0;
+    controls[1].default_value = 50.0;
+    controls[1].step = 1.0;
+    controls[1].decimals = 0;
+    controls[1].filter_min = 1.0; 
+    controls[1].filter_max = 100.0;
+
+    /* Show filter dialog */
+    response = ui_show_filter_dialog(ctx, "Color Temperature", controls, 2, 
+                                    on_temperature_preview_update, values);
+
+    if (response == GTK_RESPONSE_OK) {
+        /* Scale UI values to filter range */
+        scaled_temperature = adjustments_scale_value(
+            values[0],
+            controls[0].min_value,
+            controls[0].max_value,
+            controls[0].filter_min,
+            controls[0].filter_max
+        );
+        scaled_strength = adjustments_scale_value(
+            values[1],
+            controls[1].min_value,
+            controls[1].max_value,
+            controls[1].filter_min,
+            controls[1].filter_max
+        );
+
+        /* Apply color temperature filter */
+        gfloat filter_values[2] = { 
+            (gfloat)scaled_temperature, 
+            (gfloat)scaled_strength 
+        };
+        ui_apply_layer_filter_with_value(ctx, filter_temperature_apply, 
+                                        "color temperature", filter_values, 2);
+    }
+}
+
+/**
  * Setup Adjustments menu from Glade builder
  */
 void ui_filter_adjust_setup_menu(GtkBuilder *builder, AppContext *ctx)
@@ -1294,6 +1425,11 @@ void ui_filter_adjust_setup_menu(GtkBuilder *builder, AppContext *ctx)
     GtkWidget *adjust_menu_shadows_highlights = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_shadows_highlights"));
     if (adjust_menu_shadows_highlights) {
         g_signal_connect(adjust_menu_shadows_highlights, "activate", G_CALLBACK(on_adjust_shadow_highlights), ctx);
+    }
+
+    GtkWidget *adjust_menu_temperature = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_temperature"));
+    if (adjust_menu_temperature) {
+        g_signal_connect(adjust_menu_temperature, "activate", G_CALLBACK(on_adjust_temperature), ctx);
     }
 }
 
