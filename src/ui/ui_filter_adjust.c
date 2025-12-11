@@ -10,6 +10,8 @@
 #include "ui/filters/filter_sepia.h"
 #include "ui/filters/filter_gamma.h"
 #include "ui/widgets/gamma_dialog.h"
+#include "ui/filters/filter_colorbalance.h"
+#include "ui/widgets/color_balance_dialog.h"
 #include "filters.h"
 #include <glib.h>
 
@@ -532,6 +534,146 @@ static void on_adjust_gamma(GtkWidget *widget, gpointer data)
 }
 
 /**
+ * Color balance filter preview update callback
+ * Called when control values change to update the preview
+ */
+static gboolean on_colorbalance_preview_update(void *dialog_ptr,
+                                                const gint *values,
+                                                gint num_values,
+                                                OcToneBalanceMode mode,
+                                                gboolean preserve_luminosity,
+                                                gpointer user_data)
+{
+    ColorBalanceDialog *dialog = (ColorBalanceDialog *)dialog_ptr;
+    ImageLayer *temp_layer = (ImageLayer *)user_data;
+    ImageLayer *original_layer;
+    cairo_t *cr;
+
+    if (!dialog || !values || num_values < 3 || !temp_layer) {
+        return FALSE;
+    }
+
+    /* Get original layer from dialog window */
+    original_layer = (ImageLayer *)g_object_get_data(G_OBJECT(color_balance_dialog_get_window(dialog)), "original_layer");
+    if (!original_layer) {
+        return FALSE;
+    }
+
+    /* Copy original layer to temp layer */
+    cr = cairo_create(temp_layer->surface);
+    cairo_set_source_surface(cr, original_layer->surface, 0, 0);
+    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+    cairo_paint(cr);
+    cairo_destroy(cr);
+
+    /* Apply color balance filter to temp layer */
+    if (!filter_colorbalance_apply(temp_layer, values[0], values[1], values[2], mode, preserve_luminosity)) {
+        return FALSE;
+    }
+
+    /* Update preview */
+    color_balance_dialog_update_after_layer(dialog, temp_layer);
+
+    return TRUE;
+}
+
+/**
+ * Adjustments > Color Balance callback
+ */
+static void on_adjust_colorbalance(GtkWidget *widget, gpointer data)
+{
+    (void)widget;  /* Unused */
+
+    AppContext *ctx = (AppContext *)data;
+    ImageDocument *doc;
+    ImageLayer *layer;
+    ColorBalanceDialog *dialog;
+    ImageLayer *temp_layer;
+    cairo_t *cr;
+    gint response;
+    gint red_balance, green_balance, blue_balance;
+    OcToneBalanceMode mode;
+    gboolean preserve_luminosity;
+    gfloat filter_values[5];
+
+    if (!ctx) {
+        return;
+    }
+
+    doc = ui_get_active_document(ctx);
+    if (!doc) {
+        g_warning("No document open");
+        return;
+    }
+
+    /* Get the currently selected layer */
+    layer = document_get_selected_layer(doc);
+    if (!layer) {
+        g_warning("No layer selected");
+        return;
+    }
+
+    /* Create color balance dialog */
+    dialog = color_balance_dialog_new("Color Balance");
+    if (!dialog) {
+        g_warning("Failed to create color balance dialog");
+        return;
+    }
+
+    /* Create a copy of the layer for preview */
+    temp_layer = layer_new("Temp", layer->width, layer->height, TRUE);
+    if (!temp_layer) {
+        g_warning("Failed to create temporary layer for preview");
+        color_balance_dialog_free(dialog);
+        return;
+    }
+
+    /* Copy layer surface to temp layer */
+    cr = cairo_create(temp_layer->surface);
+    cairo_set_source_surface(cr, layer->surface, 0, 0);
+    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+    cairo_paint(cr);
+    cairo_destroy(cr);
+
+    /* Set layers in dialog */
+    color_balance_dialog_set_layers(dialog, layer, temp_layer);
+
+    /* Store original layer reference for preview callback */
+    g_object_set_data(G_OBJECT(color_balance_dialog_get_window(dialog)), "original_layer", layer);
+
+    /* Set up live preview callback */
+    color_balance_dialog_set_preview_callback(dialog, on_colorbalance_preview_update, temp_layer);
+
+    /* Set dialog as transient for main window */
+    if (ctx->window) {
+        gtk_window_set_transient_for(color_balance_dialog_get_window(dialog), GTK_WINDOW(ctx->window));
+    }
+
+    /* Run dialog */
+    response = color_balance_dialog_run(dialog, GTK_WINDOW(ctx->window), 
+                                         &red_balance, &green_balance, &blue_balance,
+                                         &mode, &preserve_luminosity);
+
+    if (response == GTK_RESPONSE_OK) {
+        /* Prepare filter values array */
+        filter_values[0] = (gfloat)red_balance;
+        filter_values[1] = (gfloat)green_balance;
+        filter_values[2] = (gfloat)blue_balance;
+        filter_values[3] = (gfloat)mode;
+        filter_values[4] = (gfloat)preserve_luminosity;
+
+        /* Apply color balance filter */
+        ui_apply_layer_filter_with_value(ctx, filter_colorbalance_apply_values, 
+                                        "color balance", filter_values, 5);
+    }
+
+    /* Clean up */
+    g_object_set_data(G_OBJECT(color_balance_dialog_get_window(dialog)), "original_layer", NULL);
+    color_balance_dialog_free(dialog);
+    layer_free(temp_layer);
+}
+
+/**
  * Setup Adjustments menu from Glade builder
  */
 void ui_filter_adjust_setup_menu(GtkBuilder *builder, AppContext *ctx)
@@ -584,6 +726,11 @@ void ui_filter_adjust_setup_menu(GtkBuilder *builder, AppContext *ctx)
     GtkWidget *adjust_menu_gamma = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_gamma"));
     if (adjust_menu_gamma) {
         g_signal_connect(adjust_menu_gamma, "activate", G_CALLBACK(on_adjust_gamma), ctx);
+    }
+
+    GtkWidget *adjust_menu_colorbalance = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_colorbalance"));
+    if (adjust_menu_colorbalance) {
+        g_signal_connect(adjust_menu_colorbalance, "activate", G_CALLBACK(on_adjust_colorbalance), ctx);
     }
 }
 

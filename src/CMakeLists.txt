@@ -45,6 +45,7 @@ set(SOURCES
     ui/widgets/filter_preview.c
     ui/widgets/filter_dialog.c
     ui/widgets/gamma_dialog.c
+    ui/widgets/color_balance_dialog.c
     tools.c
     tools/tool_manager.c
     tools/tool_move.c
@@ -65,6 +66,7 @@ set(SOURCES
     ui/filters/filter_backlight.c
     ui/filters/filter_sepia.c
     ui/filters/filter_gamma.c
+    ui/filters/filter_colorbalance.c
     render/render_utils.c
     render/layer.c
     render/compositor.c

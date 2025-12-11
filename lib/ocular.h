@@ -273,7 +273,7 @@ OC_STATUS ocularMonochromeFilter(unsigned char* Input, unsigned char* Output, in
 OC_STATUS ocularColorInvertFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride);
 
 OC_STATUS ocularSolidColorGenerator(unsigned char* Output, int Width, int Height, int Stride, unsigned char colorR,
-                                   unsigned char colorG, unsigned char colorB, unsigned char colorAlpha);
+                                unsigned char colorG, unsigned char colorB, unsigned char colorAlpha);
 
 OC_STATUS ocularLuminanceThresholdFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, unsigned char threshold);
 
