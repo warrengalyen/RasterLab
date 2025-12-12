@@ -255,6 +255,17 @@ gint ui_show_filter_dialog(AppContext *ctx,
     /* Set up live preview callback if provided */
     if (preview_callback) {
         filter_dialog_set_preview_callback(dialog, preview_callback, temp_layer);
+        
+        /* Trigger initial preview update with default values */
+        gdouble *default_values = (gdouble *)g_malloc(sizeof(gdouble) * num_controls);
+        if (default_values) {
+            gint i;
+            for (i = 0; i < num_controls; i++) {
+                default_values[i] = controls[i].default_value;
+            }
+            preview_callback(dialog, default_values, num_controls, temp_layer);
+            g_free(default_values);
+        }
     }
 
     /* Set dialog as transient for main window */
