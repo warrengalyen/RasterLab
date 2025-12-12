@@ -79,6 +79,7 @@ set(SOURCES
     ui/filters/filter_auto_level.c
     ui/filters/filter_auto_threshold.c
     ui/filters/filter_average_blur.c
+    ui/filters/filter_gaussian_blur.c
     render/render_utils.c
     render/layer.c
     render/compositor.c

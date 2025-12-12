@@ -301,7 +301,7 @@
               </object>
             </child>
             <child>
-              <object class="GtkMenuItem" id="effects_blur_gaussian_blur">
+              <object class="GtkMenuItem" id="blur_menu_gaussian_blur">
                 <property name="visible">True</property>
                 <property name="can-focus">False</property>
                 <property name="label" translatable="yes">Gaussian Blur</property>
@@ -317,7 +317,7 @@
               </object>
             </child>
             <child>
-              <object class="GtkMenuItem" id="effects_blur_motion_blur">
+              <object class="GtkMenuItem" id="blur_menu_motion_blur">
                 <property name="visible">True</property>
                 <property name="can-focus">False</property>
                 <property name="label" translatable="yes">Motion Blur</property>
