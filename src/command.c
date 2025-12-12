@@ -206,14 +206,78 @@ void command_stack_free(CommandStack *stack)
 
 /**
  * Draw command apply callback
- * Does nothing (draw already happened in real-time)
+ * Restore layer from after_snapshot (for redo)
  */
 static void draw_command_apply(Command *cmd, struct ImageDocument *doc)
 {
-    (void)cmd;
-    (void)doc;
-    /* Drawing was already applied in real-time */
-    //printf("Draw command applied (no-op)\n");
+    DrawCommandData *data;
+    cairo_t *cr;
+    gboolean layer_found = FALSE;
+
+    if (!cmd || !cmd->user_data || !doc) {
+        return;
+    }
+
+    data = (DrawCommandData *)cmd->user_data;
+
+    if (!data->layer || !data->after_snapshot) {
+        //printf("Draw command apply: missing data\n");
+        return;
+    }
+
+    /* Verify that the layer still exists in the document */
+    if (doc->layers) {
+        for (GList *iter = doc->layers; iter; iter = iter->next) {
+            if (iter->data == data->layer) {
+                layer_found = TRUE;
+                break;
+            }
+        }
+    }
+
+    if (!layer_found) {
+        //printf("Draw command apply: layer has been deleted, cannot redo\n");
+        return;
+    }
+
+    /* Verify layer surface still exists */
+    if (!data->layer->surface) {
+        //printf("Draw command apply: layer surface is NULL, cannot redo\n");
+        return;
+    }
+
+    /* Restore after_snapshot to layer (state after drawing) */
+    cr = cairo_create(data->layer->surface);
+    cairo_set_source_surface(cr, data->after_snapshot, 0, 0);
+    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+    cairo_paint(cr);
+    cairo_destroy(cr);
+
+    /* Mark layer cache as dirty since pixels changed */
+    layer_invalidate_cache(data->layer);
+
+    /* Mark composite as dirty and invalidate tiles */
+    if (doc) {
+        doc->composite_dirty = TRUE;
+        
+        /* Mark tiles as dirty for tile-based rendering */
+        if (doc->tile_grid && data->layer) {
+            /* Mark the entire layer region as dirty */
+            DirtyRect dirty_rect;
+            dirty_rect_set(&dirty_rect, 
+                          data->layer->offset_x, 
+                          data->layer->offset_y,
+                          data->layer->width, 
+                          data->layer->height);
+            dirty_rect_clamp(&dirty_rect, doc->width, doc->height);
+            if (!dirty_rect_is_empty(&dirty_rect)) {
+                tile_grid_mark_rect_dirty(doc->tile_grid,
+                                          dirty_rect.x, dirty_rect.y,
+                                          dirty_rect.width, dirty_rect.height);
+            }
+        }
+    }
+
 }
 
 /**
@@ -232,7 +296,7 @@ static void draw_command_revert(Command *cmd, struct ImageDocument *doc)
 
     data = (DrawCommandData *)cmd->user_data;
 
-    if (!data->layer || !data->snapshot) {
+    if (!data->layer || !data->before_snapshot) {
         //printf("Draw command revert: missing data\n");
         return;
     }
@@ -258,9 +322,9 @@ static void draw_command_revert(Command *cmd, struct ImageDocument *doc)
         return;
     }
 
-    /* Restore snapshot to layer */
+    /* Restore before_snapshot to layer (state before drawing) */
     cr = cairo_create(data->layer->surface);
-    cairo_set_source_surface(cr, data->snapshot, 0, 0);
+    cairo_set_source_surface(cr, data->before_snapshot, 0, 0);
     cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
     cairo_paint(cr);
     cairo_destroy(cr);
@@ -307,8 +371,11 @@ static void draw_command_destroy(Command *cmd)
 
     data = (DrawCommandData *)cmd->user_data;
 
-    if (data->snapshot) {
-        cairo_surface_destroy(data->snapshot);
+    if (data->before_snapshot) {
+        cairo_surface_destroy(data->before_snapshot);
+    }
+    if (data->after_snapshot) {
+        cairo_surface_destroy(data->after_snapshot);
     }
 
     g_free(data);
@@ -360,7 +427,7 @@ Command* command_create_draw(struct ImageLayer *layer)
         return NULL;
     }
 
-    /* Create snapshot of current state */
+    /* Create snapshot of current state (before drawing) */
     snapshot = cairo_surface_snapshot(layer->surface);
     if (!snapshot) {
         return NULL;
@@ -369,7 +436,8 @@ Command* command_create_draw(struct ImageLayer *layer)
     /* Create command data */
     data = (DrawCommandData *)g_malloc(sizeof(DrawCommandData));
     data->layer = layer;
-    data->snapshot = snapshot;
+    data->before_snapshot = snapshot;
+    data->after_snapshot = NULL;  /* Will be set when finalized */
 
     /* Create command */
     cmd = command_new("Draw Brush Stroke",
@@ -387,6 +455,40 @@ Command* command_create_draw(struct ImageLayer *layer)
     cmd->user_data = data;
 
     return cmd;
+}
+
+/**
+ * Finalize a draw command by taking snapshot of state after drawing
+ */
+gboolean command_finalize_draw(Command *cmd)
+{
+    DrawCommandData *data;
+    cairo_surface_t *after_snapshot;
+
+    if (!cmd || !cmd->user_data) {
+        return FALSE;
+    }
+
+    data = (DrawCommandData *)cmd->user_data;
+
+    if (!data->layer || !data->layer->surface) {
+        return FALSE;
+    }
+
+    /* If after_snapshot already exists, destroy it first */
+    if (data->after_snapshot) {
+        cairo_surface_destroy(data->after_snapshot);
+    }
+
+    /* Create snapshot of current state (after drawing) */
+    after_snapshot = cairo_surface_snapshot(data->layer->surface);
+    if (!after_snapshot) {
+        return FALSE;
+    }
+
+    data->after_snapshot = after_snapshot;
+
+    return TRUE;
 }
 
 /**

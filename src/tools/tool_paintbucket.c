@@ -369,6 +369,11 @@ static void paint_bucket_tool_mouse_down(Tool *tool, struct ImageDocument *doc, 
 
     paint_bucket_flood_fill(active_layer->surface, layer_x, layer_y, tolerance, contiguous, antialiased);
 
+    /* Finalize draw command by taking snapshot of state after fill */
+    if (state->current_command) {
+        command_finalize_draw(state->current_command);
+    }
+
     /* Push fill command to undo stack */
     if (state->current_command && doc->undo_stack) {
         command_stack_push(doc->undo_stack, state->current_command);

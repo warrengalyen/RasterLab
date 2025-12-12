@@ -72,6 +72,9 @@ gboolean ui_apply_layer_filter(AppContext *ctx,
         return FALSE;
     }
 
+    /* Finalize draw command by taking snapshot of state after filter */
+    command_finalize_draw(cmd);
+
     /* Get processing time */
     processing_time = stop_processing_timer(start_time);
 
@@ -154,6 +157,9 @@ gboolean ui_apply_layer_filter_with_value(AppContext *ctx,
         command_free(cmd);
         return FALSE;
     }
+
+    /* Finalize draw command by taking snapshot of state after filter */
+    command_finalize_draw(cmd);
 
     /* Get processing time */
     processing_time = stop_processing_timer(start_time);

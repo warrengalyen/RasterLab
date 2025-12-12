@@ -317,6 +317,11 @@ static void eraser_tool_mouse_up(Tool *tool, struct ImageDocument *doc, MouseEve
         return;
     }
 
+    /* Finalize draw command by taking snapshot of state after erasing */
+    if (state->current_command) {
+        command_finalize_draw(state->current_command);
+    }
+
     /* Push erase command to undo stack */
     if (state->current_command && doc->undo_stack) {
         command_stack_push(doc->undo_stack, state->current_command);

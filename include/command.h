@@ -145,11 +145,12 @@ void command_stack_free(CommandStack *stack);
 
 /**
  * Draw command data structure
- * Stores layer snapshot for undo
+ * Stores layer snapshots for undo/redo
  */
 typedef struct {
     struct ImageLayer *layer;           /* Layer being drawn on */
-    cairo_surface_t *snapshot;          /* Surface snapshot before draw */
+    cairo_surface_t *before_snapshot;   /* Surface snapshot before draw (for undo) */
+    cairo_surface_t *after_snapshot;    /* Surface snapshot after draw (for redo) */
 } DrawCommandData;
 
 /**
@@ -158,6 +159,14 @@ typedef struct {
  * @return Newly created Command for drawing, or NULL on failure
  */
 Command* command_create_draw(struct ImageLayer *layer);
+
+/**
+ * Finalize a draw command by taking snapshot of state after drawing
+ * This must be called after drawing is complete and before pushing to undo stack
+ * @param cmd The draw command to finalize
+ * @return TRUE on success, FALSE on failure
+ */
+gboolean command_finalize_draw(Command *cmd);
 
 /**
  * Move command data structure
