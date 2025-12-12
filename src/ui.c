@@ -1158,8 +1158,14 @@ static void on_edit_undo(GtkWidget *widget, gpointer data)
     /* Perform undo */
     document_undo(doc);
 
-    /* Invalidate document for redraw (marks tiles dirty, updates layers panel) */
+    /* Invalidate document for redraw (marks tiles dirty) */
     document_invalidate_composite(doc);
+
+    /* Update layers panel */
+    LayersPanel *layers_panel = (LayersPanel *)g_object_get_data(G_OBJECT(ctx->window), "layers_panel");
+    if (layers_panel) {
+        layers_panel_update(layers_panel, doc);
+    }
 
     /* Update menu state and window title */
     ui_update_menu_and_button_states(ctx);
@@ -1189,8 +1195,14 @@ static void on_edit_redo(GtkWidget *widget, gpointer data)
     /* Perform redo */
     document_redo(doc);
 
-    /* Invalidate document for redraw (marks tiles dirty, updates layers panel) */
+    /* Invalidate document for redraw (marks tiles dirty) */
     document_invalidate_composite(doc);
+
+    /* Update layers panel */
+    LayersPanel *layers_panel = (LayersPanel *)g_object_get_data(G_OBJECT(ctx->window), "layers_panel");
+    if (layers_panel) {
+        layers_panel_update(layers_panel, doc);
+    }
 
     /* Update menu state and window title */
     ui_update_menu_and_button_states(ctx);
@@ -1335,6 +1347,7 @@ static void on_layer_new(GtkWidget *widget, gpointer data)
     ImageDocument *doc = ui_get_active_document(ctx);
     LayersPanel *layers_panel = (LayersPanel *)g_object_get_data(G_OBJECT(ctx->window), 
                                                                   "layers_panel");
+    Command *cmd;
     
     if (!doc) {
         g_warning("No document open");
@@ -1349,12 +1362,28 @@ static void on_layer_new(GtkWidget *widget, gpointer data)
     g_free(layer_name);
     
     if (new_layer) {
-        // printf("New layer created\n");
+        /* Create undo command */
+        cmd = command_create_layer_add(doc, new_layer);
+        if (cmd && doc->undo_stack) {
+            command_stack_push(doc->undo_stack, cmd);
+            
+            /* Clear redo stack */
+            if (doc->redo_stack) {
+                command_stack_clear(doc->redo_stack);
+            }
+        } else if (cmd) {
+            command_free(cmd);
+        }
 
         /* Update layers panel */
         if (layers_panel) {
             layers_panel_update(layers_panel, doc);
         }
+        
+        /* Update UI state */
+        ui_update_menu_and_button_states(ctx);
+        ui_update_window_title(ctx);
+        doc->modified = TRUE;
     }
 }
 
@@ -1369,6 +1398,7 @@ static void on_layer_delete(GtkWidget *widget, gpointer data)
     ImageDocument *doc = ui_get_active_document(ctx);
     LayersPanel *layers_panel = (LayersPanel *)g_object_get_data(G_OBJECT(ctx->window), 
                                                                   "layers_panel");
+    Command *cmd;
     
     if (!doc || !doc->layers) {
         g_warning("No document or layers");
@@ -1386,14 +1416,37 @@ static void on_layer_delete(GtkWidget *widget, gpointer data)
         return;
     }
     
-    if (document_delete_layer(doc, selected_layer)) {
-        // printf("Layer deleted\n");
-
-        /* Update layers panel */
-        if (layers_panel) {
-            layers_panel_update(layers_panel, doc);
-        }
+    /* Create undo command before deleting */
+    cmd = command_create_layer_delete(doc, selected_layer);
+    if (!cmd) {
+        g_warning("Failed to create delete layer command");
+        return;
     }
+    
+    /* Execute the delete (apply the command) */
+    command_execute(cmd, doc);
+    
+    /* Push to undo stack */
+    if (doc->undo_stack) {
+        command_stack_push(doc->undo_stack, cmd);
+        
+        /* Clear redo stack */
+        if (doc->redo_stack) {
+            command_stack_clear(doc->redo_stack);
+        }
+    } else {
+        command_free(cmd);
+    }
+
+    /* Update layers panel */
+    if (layers_panel) {
+        layers_panel_update(layers_panel, doc);
+    }
+    
+    /* Update UI state */
+    ui_update_menu_and_button_states(ctx);
+    ui_update_window_title(ctx);
+    doc->modified = TRUE;
 }
 
 /**
@@ -1407,6 +1460,7 @@ static void on_layer_duplicate(GtkWidget *widget, gpointer data)
     ImageDocument *doc = ui_get_active_document(ctx);
     LayersPanel *layers_panel = (LayersPanel *)g_object_get_data(G_OBJECT(ctx->window), 
                                                                   "layers_panel");
+    Command *cmd;
     
     if (!doc || !doc->layers) {
         g_warning("No document or layers");
@@ -1431,12 +1485,28 @@ static void on_layer_duplicate(GtkWidget *widget, gpointer data)
     g_free(layer_name);
     
     if (dup_layer) {
-        // printf("Layer duplicated\n");
+        /* Create undo command */
+        cmd = command_create_layer_duplicate(doc, selected_layer, dup_layer);
+        if (cmd && doc->undo_stack) {
+            command_stack_push(doc->undo_stack, cmd);
+            
+            /* Clear redo stack */
+            if (doc->redo_stack) {
+                command_stack_clear(doc->redo_stack);
+            }
+        } else if (cmd) {
+            command_free(cmd);
+        }
 
         /* Update layers panel */
         if (layers_panel) {
             layers_panel_update(layers_panel, doc);
         }
+        
+        /* Update UI state */
+        ui_update_menu_and_button_states(ctx);
+        ui_update_window_title(ctx);
+        doc->modified = TRUE;
     }
 }
 
@@ -1451,6 +1521,7 @@ static void on_layer_move_up(GtkWidget *widget, gpointer data)
     ImageDocument *doc = ui_get_active_document(ctx);
     LayersPanel *layers_panel = (LayersPanel *)g_object_get_data(G_OBJECT(ctx->window), 
                                                                   "layers_panel");
+    Command *cmd;
     
     if (!doc || !doc->layers) {
         g_warning("No document or layers");
@@ -1468,17 +1539,36 @@ static void on_layer_move_up(GtkWidget *widget, gpointer data)
         return;
     }
     
-    if (document_layer_move_up(doc, selected_layer)) {
-        // printf("Layer moved up\n");
-
-        /* Update layers panel */
-        if (layers_panel) {
-            layers_panel_update(layers_panel, doc);
-        }
-        
-        /* Update UI state */
-        ui_update_menu_and_button_states(ctx);
+    /* Create undo command before moving */
+    cmd = command_create_layer_move_up(doc, selected_layer);
+    if (!cmd) {
+        return;  /* Can't move up */
     }
+    
+    /* Execute the move (apply the command) */
+    command_execute(cmd, doc);
+    
+    /* Push to undo stack */
+    if (doc->undo_stack) {
+        command_stack_push(doc->undo_stack, cmd);
+        
+        /* Clear redo stack */
+        if (doc->redo_stack) {
+            command_stack_clear(doc->redo_stack);
+        }
+    } else {
+        command_free(cmd);
+    }
+
+    /* Update layers panel */
+    if (layers_panel) {
+        layers_panel_update(layers_panel, doc);
+    }
+    
+    /* Update UI state */
+    ui_update_menu_and_button_states(ctx);
+    ui_update_window_title(ctx);
+    doc->modified = TRUE;
 }
 
 /**
@@ -1492,6 +1582,7 @@ static void on_layer_move_down(GtkWidget *widget, gpointer data)
     ImageDocument *doc = ui_get_active_document(ctx);
     LayersPanel *layers_panel = (LayersPanel *)g_object_get_data(G_OBJECT(ctx->window), 
                                                                   "layers_panel");
+    Command *cmd;
     
     if (!doc || !doc->layers) {
         g_warning("No document or layers");
@@ -1509,17 +1600,36 @@ static void on_layer_move_down(GtkWidget *widget, gpointer data)
         return;
     }
     
-    if (document_layer_move_down(doc, selected_layer)) {
-        //printf("Layer moved down\n");
-
-        /* Update layers panel */
-        if (layers_panel) {
-            layers_panel_update(layers_panel, doc);
-        }
-        
-        /* Update UI state */
-        ui_update_menu_and_button_states(ctx);
+    /* Create undo command before moving */
+    cmd = command_create_layer_move_down(doc, selected_layer);
+    if (!cmd) {
+        return;  /* Can't move down */
     }
+    
+    /* Execute the move (apply the command) */
+    command_execute(cmd, doc);
+    
+    /* Push to undo stack */
+    if (doc->undo_stack) {
+        command_stack_push(doc->undo_stack, cmd);
+        
+        /* Clear redo stack */
+        if (doc->redo_stack) {
+            command_stack_clear(doc->redo_stack);
+        }
+    } else {
+        command_free(cmd);
+    }
+
+    /* Update layers panel */
+    if (layers_panel) {
+        layers_panel_update(layers_panel, doc);
+    }
+    
+    /* Update UI state */
+    ui_update_menu_and_button_states(ctx);
+    ui_update_window_title(ctx);
+    doc->modified = TRUE;
 }
 
 /**
