@@ -240,7 +240,8 @@ static void brush_tool_mouse_down(Tool *tool, struct ImageDocument *doc,
     }
 
     /* Create a draw command for undo/redo */
-    state->current_command = command_create_draw(active_layer);
+    state->current_command = command_create_draw(active_layer, 
+                                                  command_get_name_string(CMD_NAME_DRAW_BRUSH_STROKE));
     if (state->current_command && doc->undo_stack) {
         // printf("Brush tool: draw command created\n");
     }

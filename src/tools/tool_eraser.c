@@ -216,7 +216,8 @@ static void eraser_tool_mouse_down(Tool *tool, struct ImageDocument *doc, MouseE
     }
 
     /* Create a draw command for undo/redo */
-    state->current_command = command_create_draw(active_layer);
+    state->current_command = command_create_draw(active_layer,
+                                                 command_get_name_string(CMD_NAME_ERASE));
     if (state->current_command && doc->undo_stack) {
         //printf("Eraser tool: erase command created\n");
     }

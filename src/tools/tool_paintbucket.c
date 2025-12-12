@@ -354,7 +354,8 @@ static void paint_bucket_tool_mouse_down(Tool *tool, struct ImageDocument *doc, 
     }
 
     /* Create a draw command for undo/redo */
-    state->current_command = command_create_draw(active_layer);
+    state->current_command = command_create_draw(active_layer,
+                                                 command_get_name_string(CMD_NAME_FILL));
 
     /* Perform the fill at the clicked position,
        adjusted for layer offset */

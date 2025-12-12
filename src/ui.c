@@ -1667,12 +1667,40 @@ void ui_update_menu_and_button_states(AppContext *ctx)
 
     /* Update Edit menu item states (undo/redo) */
     if (ctx->edit_menu_undo && GTK_IS_WIDGET(ctx->edit_menu_undo)) {
-        gtk_widget_set_sensitive(ctx->edit_menu_undo, 
-                                has_document && document_can_undo(doc));
+        gboolean can_undo = has_document && document_can_undo(doc);
+        gtk_widget_set_sensitive(ctx->edit_menu_undo, can_undo);
+        
+        /* Update label with command name if available */
+        if (can_undo && doc && doc->undo_stack) {
+            Command *cmd = command_stack_peek(doc->undo_stack);
+            if (cmd && cmd->name) {
+                gchar *label = g_strdup_printf("_Undo: %s", cmd->name);
+                gtk_menu_item_set_label(GTK_MENU_ITEM(ctx->edit_menu_undo), label);
+                g_free(label);
+            } else {
+                gtk_menu_item_set_label(GTK_MENU_ITEM(ctx->edit_menu_undo), "_Undo");
+            }
+        } else {
+            gtk_menu_item_set_label(GTK_MENU_ITEM(ctx->edit_menu_undo), "_Undo");
+        }
     }
     if (ctx->edit_menu_redo && GTK_IS_WIDGET(ctx->edit_menu_redo)) {
-        gtk_widget_set_sensitive(ctx->edit_menu_redo, 
-                                has_document && document_can_redo(doc));
+        gboolean can_redo = has_document && document_can_redo(doc);
+        gtk_widget_set_sensitive(ctx->edit_menu_redo, can_redo);
+        
+        /* Update label with command name if available */
+        if (can_redo && doc && doc->redo_stack) {
+            Command *cmd = command_stack_peek(doc->redo_stack);
+            if (cmd && cmd->name) {
+                gchar *label = g_strdup_printf("_Redo: %s", cmd->name);
+                gtk_menu_item_set_label(GTK_MENU_ITEM(ctx->edit_menu_redo), label);
+                g_free(label);
+            } else {
+                gtk_menu_item_set_label(GTK_MENU_ITEM(ctx->edit_menu_redo), "_Redo");
+            }
+        } else {
+            gtk_menu_item_set_label(GTK_MENU_ITEM(ctx->edit_menu_redo), "_Redo");
+        }
     }
 
     /* Update Layer menu item states */

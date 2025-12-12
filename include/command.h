@@ -24,6 +24,25 @@ typedef enum {
 } CommandType;
 
 /**
+ * Command name enumeration
+ * Used to centralize command name strings
+ */
+typedef enum {
+    CMD_NAME_DRAW_BRUSH_STROKE = 0,
+    CMD_NAME_ERASE,
+    CMD_NAME_FILL,
+    CMD_NAME_MOVE_LAYER,
+    CMD_NAME_COUNT  /* Total number of predefined command names */
+} CommandName;
+
+/**
+ * Get command name string from enum
+ * @param name The command name enum value
+ * @return String representation of the command name, or NULL if invalid
+ */
+const gchar* command_get_name_string(CommandName name);
+
+/**
  * Command callbacks
  */
 typedef void (*CommandApplyFunc)(Command *cmd, struct ImageDocument *doc);
@@ -156,9 +175,10 @@ typedef struct {
 /**
  * Create a draw command
  * @param layer The layer being drawn on
+ * @param name The command name (can be NULL for default, or use command_get_name_string for predefined names)
  * @return Newly created Command for drawing, or NULL on failure
  */
-Command* command_create_draw(struct ImageLayer *layer);
+Command* command_create_draw(struct ImageLayer *layer, const gchar *name);
 
 /**
  * Finalize a draw command by taking snapshot of state after drawing

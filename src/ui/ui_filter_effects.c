@@ -177,7 +177,7 @@ static void on_effects_average_blur(GtkWidget *widget, gpointer data)
         /* Apply average blur filter */
         filter_values[0] = (gfloat)scaled_radius;
         ui_apply_layer_filter_with_value(ctx, filter_average_blur_apply,
-                                        "average blur", filter_values, 1);
+                                        "Average Blur", filter_values, 1);
     }
 }
 
@@ -226,7 +226,7 @@ static void on_effects_gaussian_blur(GtkWidget *widget, gpointer data)
         /* Apply Gaussian blur filter */
         filter_values[0] = (gfloat)scaled_sigma;
         ui_apply_layer_filter_with_value(ctx, filter_gaussian_blur_apply,
-                                        "gaussian blur", filter_values, 1);
+                                        "Gaussian Blur", filter_values, 1);
     }
 }
 
@@ -309,7 +309,7 @@ static void on_effects_exponential_blur(GtkWidget *widget, gpointer data)
             controls[0].filter_min, controls[0].filter_max);
         filter_values[0] = (gfloat)scaled_radius;
         ui_apply_layer_filter_with_value(ctx, filter_exponential_blur_apply,
-                                        "exponential blur", filter_values, 1);
+                                        "Exponential Blur", filter_values, 1);
     }
 }
 
@@ -392,7 +392,7 @@ static void on_effects_box_blur(GtkWidget *widget, gpointer data)
             controls[0].filter_min, controls[0].filter_max);
         filter_values[0] = (gfloat)scaled_radius;
         ui_apply_layer_filter_with_value(ctx, filter_box_blur_apply,
-                                        "box blur", filter_values, 1);
+                                        "Box Blur", filter_values, 1);
     }
 }
 
@@ -475,7 +475,7 @@ static void on_effects_median_blur(GtkWidget *widget, gpointer data)
             controls[0].filter_min, controls[0].filter_max);
         filter_values[0] = (gfloat)scaled_radius;
         ui_apply_layer_filter_with_value(ctx, filter_median_blur_apply,
-                                        "median blur", filter_values, 1);
+                                        "Median Blur", filter_values, 1);
     }
 }
 
@@ -574,7 +574,7 @@ static void on_effects_motion_blur(GtkWidget *widget, gpointer data)
         filter_values[0] = (gfloat)scaled_distance;
         filter_values[1] = (gfloat)scaled_angle;
         ui_apply_layer_filter_with_value(ctx, filter_motion_blur_apply,
-                                        "motion blur", filter_values, 2);
+                                        "Motion Blur", filter_values, 2);
     }
 }
 
@@ -693,7 +693,7 @@ static void on_effects_radial_blur(GtkWidget *widget, gpointer data)
         filter_values[1] = (gfloat)center_y;
         filter_values[2] = (gfloat)scaled_intensity;
         ui_apply_layer_filter_with_value(ctx, filter_radial_blur_apply,
-                                        "radial blur", filter_values, 3);
+                                        "Radial Blur", filter_values, 3);
     }
 }
 
@@ -792,7 +792,7 @@ static void on_effects_surface_blur(GtkWidget *widget, gpointer data)
         filter_values[0] = (gfloat)scaled_radius;
         filter_values[1] = (gfloat)scaled_threshold;
         ui_apply_layer_filter_with_value(ctx, filter_surface_blur_apply,
-                                        "surface blur", filter_values, 2);
+                                        "Surface Blur", filter_values, 2);
     }
 }
 
@@ -934,7 +934,7 @@ static void on_effects_zoom_blur(GtkWidget *widget, gpointer data)
         filter_values[2] = (gfloat)center_x;
         filter_values[3] = (gfloat)center_y;
         ui_apply_layer_filter_with_value(ctx, filter_zoom_blur_apply,
-                                        "zoom blur", filter_values, 4);
+                                        "Zoom Blur", filter_values, 4);
     }
 }
 

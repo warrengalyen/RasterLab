@@ -468,7 +468,7 @@ static void on_adjust_grayscale(GtkWidget *widget, gpointer data)
     (void)widget;  /* Unused */
 
     AppContext *ctx = (AppContext *)data;
-    ui_apply_layer_filter(ctx, filter_grayscale_apply, "grayscale");
+    ui_apply_layer_filter(ctx, filter_grayscale_apply, "Grayscale");
 }
 
 /**
@@ -524,7 +524,7 @@ static void on_adjust_whitebalance(GtkWidget *widget, gpointer data)
       /* Apply white balance filter */
       gfloat filter_values[2] = { (gfloat)scaled_temperature, (gfloat)scaled_tint };
       ui_apply_layer_filter_with_value(ctx, filter_whitebalance_apply,
-                                       "whitebalance", filter_values, 2);
+                                       "White Balance", filter_values, 2);
     }
 }
 
@@ -572,7 +572,7 @@ static void on_adjust_vibrance(GtkWidget *widget, gpointer data)
         /* Apply vibrance filter */
         gfloat filter_values[1] = { (gfloat)scaled_vibrance };
         ui_apply_layer_filter_with_value(ctx, filter_vibrance_apply, 
-                                        "vibrance", filter_values, 1);
+                                        "Vibrance", filter_values, 1);
     }
 }
 
@@ -584,7 +584,7 @@ static void on_histogram_equalize(GtkWidget *widget, gpointer data)
     (void)widget;  /* Unused */
 
     AppContext *ctx = (AppContext *)data;
-    ui_apply_layer_filter(ctx, filter_equalize_apply, "equalize");
+    ui_apply_layer_filter(ctx, filter_equalize_apply, "Equalize");
 }
 
 /**
@@ -595,7 +595,7 @@ static void on_histogram_stretch(GtkWidget *widget, gpointer data)
     (void)widget;  /* Unused */
 
     AppContext *ctx = (AppContext *)data;
-    ui_apply_layer_filter(ctx, filter_stretch_apply, "stretch");
+    ui_apply_layer_filter(ctx, filter_stretch_apply, "Histogram Stretch");
 }
 
 /**
@@ -701,7 +701,7 @@ static void on_adjust_sepia(GtkWidget *widget, gpointer data)
         /* Apply sepia filter */
         gfloat filter_values[1] = { (gfloat)scaled_intensity };
         ui_apply_layer_filter_with_value(ctx, filter_sepia_apply, 
-                                        "sepia", filter_values, 1);
+                                        "Sepia", filter_values, 1);
     }
 }
 
@@ -713,7 +713,7 @@ static void on_adjust_backlight(GtkWidget *widget, gpointer data)
     (void)widget;  /* Unused */
 
     AppContext *ctx = (AppContext *)data;
-    ui_apply_layer_filter(ctx, filter_backlight_apply, "backlight repair");
+    ui_apply_layer_filter(ctx, filter_backlight_apply, "Backlight Repair");
 }
 
 /**
@@ -724,7 +724,7 @@ static void on_adjust_auto_whitebalance(GtkWidget *widget, gpointer data)
     (void)widget;  /* Unused */
 
     AppContext *ctx = (AppContext *)data;
-    ui_apply_layer_filter(ctx, filter_auto_whitebalance_apply, "auto white balance");
+    ui_apply_layer_filter(ctx, filter_auto_whitebalance_apply, "Auto White Balance");
 }
 
 /**
@@ -735,7 +735,7 @@ static void on_adjust_auto_contrast(GtkWidget *widget, gpointer data)
     (void)widget;  /* Unused */
 
     AppContext *ctx = (AppContext *)data;
-    ui_apply_layer_filter(ctx, filter_auto_contrast_apply, "auto contrast");
+    ui_apply_layer_filter(ctx, filter_auto_contrast_apply, "Auto Contrast");
 }
 
 /**
@@ -746,7 +746,7 @@ static void on_adjust_auto_gamma(GtkWidget *widget, gpointer data)
     (void)widget;  /* Unused */
 
     AppContext *ctx = (AppContext *)data;
-    ui_apply_layer_filter(ctx, filter_auto_gamma_apply, "auto gamma");
+    ui_apply_layer_filter(ctx, filter_auto_gamma_apply, "Auto Gamma");
 }
 
 /**
@@ -757,7 +757,7 @@ static void on_adjust_auto_level(GtkWidget *widget, gpointer data)
     (void)widget;  /* Unused */
 
     AppContext *ctx = (AppContext *)data;
-    ui_apply_layer_filter(ctx, filter_auto_level_apply, "auto level");
+    ui_apply_layer_filter(ctx, filter_auto_level_apply, "Auto Level");
 }
 
 /**
@@ -768,7 +768,7 @@ static void on_adjust_auto_threshold(GtkWidget *widget, gpointer data)
     (void)widget;  /* Unused */
 
     AppContext *ctx = (AppContext *)data;
-    ui_apply_layer_filter(ctx, filter_auto_threshold_apply, "auto threshold");
+    ui_apply_layer_filter(ctx, filter_auto_threshold_apply, "Auto Threshold");
 }
 
 /**
@@ -905,7 +905,7 @@ static void on_adjust_gamma(GtkWidget *widget, gpointer data)
     if (response == GTK_RESPONSE_OK) {
         /* Apply gamma filter */
         ui_apply_layer_filter_with_value(ctx, filter_gamma_apply, 
-                                        "gamma correction", gamma_values, 3);
+                                        "Gamma Correction", gamma_values, 3);
     }
 
     /* Clean up */
@@ -1046,7 +1046,7 @@ static void on_adjust_colorbalance(GtkWidget *widget, gpointer data)
 
         /* Apply color balance filter */
         ui_apply_layer_filter_with_value(ctx, filter_colorbalance_apply_values, 
-                                        "color balance", filter_values, 5);
+                                        "Color Balance", filter_values, 5);
     }
 
     /* Clean up */
@@ -1099,7 +1099,7 @@ static void on_adjust_exposure(GtkWidget *widget, gpointer data)
         /* Apply exposure filter */
         gfloat filter_values[1] = { (gfloat)scaled_exposure };
         ui_apply_layer_filter_with_value(ctx, filter_exposure_apply, 
-                                        "exposure", filter_values, 1);
+                                        "Exposure", filter_values, 1);
     }
 }
 
@@ -1250,7 +1250,7 @@ static void on_adjust_brightness_contrast(GtkWidget *widget, gpointer data)
             (gfloat)scaled_contrast 
         };
         ui_apply_layer_filter_with_value(ctx, filter_brightness_contrast_apply, 
-                                        "brightness and contrast", filter_values, 2);
+                                        "Brightness And Contrast", filter_values, 2);
     }
 }
 
@@ -1336,7 +1336,7 @@ static void on_adjust_shadow_highlights(GtkWidget *widget, gpointer data)
             (gfloat)scaled_highlights
         };
         ui_apply_layer_filter_with_value(ctx, filter_shadow_highlights_apply, 
-                                        "shadows and highlights", filter_values, 3);
+                                        "Shadows And Highlights", filter_values, 3);
     }
 }
 
@@ -1403,7 +1403,7 @@ static void on_adjust_temperature(GtkWidget *widget, gpointer data)
             (gfloat)scaled_strength 
         };
         ui_apply_layer_filter_with_value(ctx, filter_temperature_apply, 
-                                        "color temperature", filter_values, 2);
+                                        "Color Temperature", filter_values, 2);
     }
 }
 

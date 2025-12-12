@@ -56,7 +56,7 @@ gboolean ui_apply_layer_filter(AppContext *ctx,
     }
 
     /* Create a draw command for undo/redo (saves layer snapshot) */
-    cmd = command_create_draw(layer);
+    cmd = command_create_draw(layer, filter_name);
     if (!cmd) {
         g_warning("Failed to create undo command for %s filter", filter_name);
         return FALSE;
@@ -142,7 +142,7 @@ gboolean ui_apply_layer_filter_with_value(AppContext *ctx,
     }
 
     /* Create a draw command for undo/redo (saves layer snapshot) */
-    cmd = command_create_draw(layer);
+    cmd = command_create_draw(layer, filter_name);
     if (!cmd) {
         g_warning("Failed to create undo command for %s filter", filter_name);
         return FALSE;

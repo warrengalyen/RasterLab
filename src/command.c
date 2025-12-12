@@ -415,17 +415,40 @@ static cairo_surface_t* cairo_surface_snapshot(cairo_surface_t *source)
 }
 
 /**
+ * Get command name string from enum
+ */
+const gchar* command_get_name_string(CommandName name)
+{
+    static const gchar *names[] = {
+        "Paintbrush",
+        "Eraser",
+        "Paintbucket",
+        "Move Layer"
+    };
+
+    if (name < 0 || name >= CMD_NAME_COUNT) {
+        return NULL;
+    }
+
+    return names[name];
+}
+
+/**
  * Create a draw command
  */
-Command* command_create_draw(struct ImageLayer *layer)
+Command* command_create_draw(struct ImageLayer *layer, const gchar *name)
 {
     Command *cmd;
     DrawCommandData *data;
     cairo_surface_t *snapshot;
+    const gchar *cmd_name;
 
     if (!layer || !layer->surface) {
         return NULL;
     }
+
+    /* Use provided name or default to "Draw Brush Stroke" */
+    cmd_name = name ? name : command_get_name_string(CMD_NAME_DRAW_BRUSH_STROKE);
 
     /* Create snapshot of current state (before drawing) */
     snapshot = cairo_surface_snapshot(layer->surface);
@@ -440,7 +463,7 @@ Command* command_create_draw(struct ImageLayer *layer)
     data->after_snapshot = NULL;  /* Will be set when finalized */
 
     /* Create command */
-    cmd = command_new("Draw Brush Stroke",
+    cmd = command_new(cmd_name,
                       COMMAND_DRAW,
                       draw_command_apply,
                       draw_command_revert,
