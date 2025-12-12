@@ -142,7 +142,7 @@ GtkWidget* tools_panel_initialize_from_builder(GtkBuilder *builder, ToolRegistry
         TOOL_MOVE,
         TOOL_BRUSH,
         TOOL_ERASER,
-        TOOL_FILL,
+        TOOL_PAINT_BUCKET,
     };
     
     /* Set up tool buttons with callbacks */

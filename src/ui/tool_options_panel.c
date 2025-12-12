@@ -69,6 +69,56 @@ static void on_tool_spacing_changed(GtkScale *scale, gpointer user_data)
 }
 
 /**
+ * Tool options panel callback for tolerance slider
+ */
+static void on_tool_tolerance_changed(GtkScale *scale, gpointer user_data)
+{
+    (void)user_data;  /* Unused */
+    gfloat tolerance = gtk_range_get_value(GTK_RANGE(scale));
+    ToolOptions *opts = tool_options_get_global();
+    if (opts) {
+        tool_options_set_tolerance(opts, tolerance);
+    }
+}
+
+/**
+ * Tool options panel callback for fill area radio buttons
+ */
+static void on_fill_area_changed(GtkToggleButton *button, gpointer user_data)
+{
+    (void)user_data;  /* Unused */
+    if (!gtk_toggle_button_get_active(button)) {
+        return; /* Only handle activation, not deactivation */
+    }
+    
+    ToolOptions *opts = tool_options_get_global();
+    if (!opts) {
+        return;
+    }
+    
+    /* Determine which button was activated by checking the button's label or name */
+    const gchar *label = gtk_button_get_label(GTK_BUTTON(button));
+    if (label && g_strcmp0(label, "Contiguous") == 0) {
+        tool_options_set_fill_contiguous(opts, TRUE);
+    } else if (label && g_strcmp0(label, "Global") == 0) {
+        tool_options_set_fill_contiguous(opts, FALSE);
+    }
+}
+
+/**
+ * Tool options panel callback for antialiased checkbox
+ */
+static void on_fill_antialiased_toggled(GtkToggleButton *button, gpointer user_data)
+{
+    (void)user_data;  /* Unused */
+    ToolOptions *opts = tool_options_get_global();
+    if (opts) {
+        gboolean active = gtk_toggle_button_get_active(button);
+        tool_options_set_fill_antialiased(opts, active);
+    }
+}
+
+/**
  * Set scale widget value
  */
 static void set_scale_value(GtkWidget *scale, gdouble value)
@@ -234,12 +284,16 @@ ToolOptionsPanel* create_tool_options_panel(void)
     tool_opts_panel->panel = NULL;
     tool_opts_panel->brush_panel = NULL;
     tool_opts_panel->eraser_panel = NULL;
+    tool_opts_panel->paintbucket_panel = NULL;
     tool_opts_panel->title_label = NULL;
     tool_opts_panel->size_scale = NULL;
     tool_opts_panel->opacity_scale = NULL;
     tool_opts_panel->hardness_scale = NULL;
     tool_opts_panel->flow_scale = NULL;
     tool_opts_panel->spacing_scale = NULL;
+    tool_opts_panel->tolerance_scale = NULL;
+    tool_opts_panel->contiguous_radio = NULL;
+    tool_opts_panel->global_radio = NULL;
     tool_opts_panel->current_tool_type = TOOL_MOVE;  /* Start with no tool selected */
 
     /* Create container to hold the current panel */
@@ -325,6 +379,79 @@ ToolOptionsPanel* create_tool_options_panel(void)
         gtk_widget_set_no_show_all(tool_opts_panel->eraser_panel, TRUE);
     }
 
+    /* Load paint bucket panel from Glade */
+    GtkBuilder *paintbucket_builder = gtk_builder_new();
+    GError *paintbucket_error = NULL;
+    GtkWidget *paintbucket_title = NULL, *paintbucket_tolerance = NULL;
+    GtkWidget *paintbucket_contiguous = NULL, *paintbucket_global = NULL;
+    GtkWidget *paintbucket_antialiased = NULL;
+    ToolOptions *paintbucket_opts = tool_options_get_global();
+    
+    if (gtk_builder_add_from_resource(paintbucket_builder, "/ui/paintbucket_options.glade", &paintbucket_error)) {
+        tool_opts_panel->paintbucket_panel = GTK_WIDGET(gtk_builder_get_object(paintbucket_builder, "paintbucket_options_panel"));
+        if (tool_opts_panel->paintbucket_panel) {
+            gtk_container_add(GTK_CONTAINER(container), tool_opts_panel->paintbucket_panel);
+            
+            /* Get widgets */
+            paintbucket_title = GTK_WIDGET(gtk_builder_get_object(paintbucket_builder, "paintbucket_title_label"));
+            paintbucket_tolerance = GTK_WIDGET(gtk_builder_get_object(paintbucket_builder, "paintbucket_tolerance_scale"));
+            paintbucket_contiguous = GTK_WIDGET(gtk_builder_get_object(paintbucket_builder, "paintbucket_contiguous_radio"));
+            paintbucket_global = GTK_WIDGET(gtk_builder_get_object(paintbucket_builder, "paintbucket_global_radio"));
+            paintbucket_antialiased = GTK_WIDGET(gtk_builder_get_object(paintbucket_builder, "paintbucket_antialiased_checkbox"));
+            
+            /* Store references */
+            if (paintbucket_title) {
+                g_object_set_data(G_OBJECT(tool_opts_panel->paintbucket_panel), "title_label", paintbucket_title);
+            }
+            if (paintbucket_tolerance) {
+                g_object_set_data(G_OBJECT(tool_opts_panel->paintbucket_panel), "tolerance_scale", paintbucket_tolerance);
+                if (paintbucket_opts) {
+                    set_scale_value(paintbucket_tolerance, paintbucket_opts->tolerance);
+                    g_signal_connect(paintbucket_tolerance, "value-changed", G_CALLBACK(on_tool_tolerance_changed), NULL);
+                }
+            }
+            if (paintbucket_contiguous && paintbucket_global) {
+                /* Group radio buttons together */
+                gtk_radio_button_join_group(GTK_RADIO_BUTTON(paintbucket_global), 
+                                          GTK_RADIO_BUTTON(paintbucket_contiguous));
+            }
+            if (paintbucket_contiguous) {
+                g_object_set_data(G_OBJECT(tool_opts_panel->paintbucket_panel), "contiguous_radio", paintbucket_contiguous);
+                if (paintbucket_opts) {
+                    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(paintbucket_contiguous), paintbucket_opts->fill_contiguous);
+                    g_signal_connect(paintbucket_contiguous, "toggled", G_CALLBACK(on_fill_area_changed), NULL);
+                }
+            }
+            if (paintbucket_global) {
+                g_object_set_data(G_OBJECT(tool_opts_panel->paintbucket_panel), "global_radio", paintbucket_global);
+                if (paintbucket_opts) {
+                    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(paintbucket_global), !paintbucket_opts->fill_contiguous);
+                    g_signal_connect(paintbucket_global, "toggled", G_CALLBACK(on_fill_area_changed), NULL);
+                }
+            }
+            if (paintbucket_antialiased) {
+                g_object_set_data(G_OBJECT(tool_opts_panel->paintbucket_panel), "antialiased_checkbox", paintbucket_antialiased);
+                if (paintbucket_opts) {
+                    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(paintbucket_antialiased), paintbucket_opts->fill_antialiased);
+                    g_signal_connect(paintbucket_antialiased, "toggled", G_CALLBACK(on_fill_antialiased_toggled), NULL);
+                }
+            }
+            
+            /* Hide paint bucket panel initially */
+            gtk_widget_set_visible(tool_opts_panel->paintbucket_panel, FALSE);
+            gtk_widget_set_no_show_all(tool_opts_panel->paintbucket_panel, TRUE);
+        }
+        g_object_unref(paintbucket_builder);
+    } else {
+        g_warning("Failed to load paint bucket options panel: %s", paintbucket_error ? paintbucket_error->message : "Unknown error");
+        if (paintbucket_error) {
+            g_error_free(paintbucket_error);
+        }
+        if (paintbucket_builder) {
+            g_object_unref(paintbucket_builder);
+        }
+    }
+
     /* Hide the container initially - will be shown when a tool with options is selected */
     gtk_widget_set_visible(container, FALSE);
 
@@ -346,6 +473,8 @@ void tool_options_panel_switch_tool(ToolOptionsPanel *panel, const gchar *tool_n
         new_tool_type = TOOL_ERASER;
     } else if (g_strcmp0(tool_name, "Brush") == 0) {
         new_tool_type = TOOL_BRUSH;
+    } else if (g_strcmp0(tool_name, "Paint Bucket") == 0) {
+        new_tool_type = TOOL_PAINT_BUCKET;
     }
 
     /* Hide all panels first */
@@ -354,6 +483,9 @@ void tool_options_panel_switch_tool(ToolOptionsPanel *panel, const gchar *tool_n
     }
     if (panel->eraser_panel) {
         gtk_widget_set_visible(panel->eraser_panel, FALSE);
+    }
+    if (panel->paintbucket_panel) {
+        gtk_widget_set_visible(panel->paintbucket_panel, FALSE);
     }
 
     /* Show appropriate panel if tool has options */
@@ -479,8 +611,69 @@ void tool_options_panel_switch_tool(ToolOptionsPanel *panel, const gchar *tool_n
                 g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_spacing_changed), NULL);
             }
         }
+    } else if (new_tool_type == TOOL_PAINT_BUCKET && panel->paintbucket_panel) {
+        /* Show main panel container */
+        if (panel->panel) {
+            gtk_widget_set_visible(panel->panel, TRUE);
+        }
+        /* Show paint bucket panel */
+        gtk_widget_set_no_show_all(panel->paintbucket_panel, FALSE);
+        gtk_widget_set_visible(panel->paintbucket_panel, TRUE);
+        gtk_widget_show_all(panel->paintbucket_panel);
+        
+        /* Get paint bucket panel widgets and initialize them */
+        GtkWidget *widget;
+        ToolOptions *opts = tool_options_get_global();
+        
+        widget = GTK_WIDGET(g_object_get_data(G_OBJECT(panel->paintbucket_panel), "title_label"));
+        if (widget) panel->title_label = widget;
+        
+        widget = GTK_WIDGET(g_object_get_data(G_OBJECT(panel->paintbucket_panel), "tolerance_scale"));
+        if (widget) {
+            panel->tolerance_scale = widget;
+            if (opts) {
+                set_scale_value(widget, opts->tolerance);
+                g_signal_handlers_disconnect_by_func(widget, G_CALLBACK(on_tool_tolerance_changed), NULL);
+                g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_tolerance_changed), NULL);
+            }
+        }
+        
+        widget = GTK_WIDGET(g_object_get_data(G_OBJECT(panel->paintbucket_panel), "contiguous_radio"));
+        if (widget) {
+            panel->contiguous_radio = widget;
+            if (opts) {
+                gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widget), opts->fill_contiguous);
+                g_signal_handlers_disconnect_by_func(widget, G_CALLBACK(on_fill_area_changed), NULL);
+                g_signal_connect(widget, "toggled", G_CALLBACK(on_fill_area_changed), NULL);
+            }
+        }
+        
+        widget = GTK_WIDGET(g_object_get_data(G_OBJECT(panel->paintbucket_panel), "global_radio"));
+        if (widget) {
+            panel->global_radio = widget;
+            if (opts && panel->contiguous_radio) {
+                /* Ensure radio buttons are grouped */
+                gtk_radio_button_join_group(GTK_RADIO_BUTTON(widget), 
+                                          GTK_RADIO_BUTTON(panel->contiguous_radio));
+            }
+            if (opts) {
+                gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widget), !opts->fill_contiguous);
+                g_signal_handlers_disconnect_by_func(widget, G_CALLBACK(on_fill_area_changed), NULL);
+                g_signal_connect(widget, "toggled", G_CALLBACK(on_fill_area_changed), NULL);
+            }
+        }
+        
+        widget = GTK_WIDGET(g_object_get_data(G_OBJECT(panel->paintbucket_panel), "antialiased_checkbox"));
+        if (widget) {
+            panel->antialiased_checkbox = widget;
+            if (opts) {
+                gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widget), opts->fill_antialiased);
+                g_signal_handlers_disconnect_by_func(widget, G_CALLBACK(on_fill_antialiased_toggled), NULL);
+                g_signal_connect(widget, "toggled", G_CALLBACK(on_fill_antialiased_toggled), NULL);
+            }
+        }
     } else {
-        /* For tools without options (Move, Fill, etc.), hide main panel container */
+        /* For tools without options (Move, etc.), hide main panel container */
         if (panel->panel) {
             gtk_widget_set_visible(panel->panel, FALSE);
         }
@@ -491,6 +684,10 @@ void tool_options_panel_switch_tool(ToolOptionsPanel *panel, const gchar *tool_n
         panel->hardness_scale = NULL;
         panel->flow_scale = NULL;
         panel->spacing_scale = NULL;
+        panel->tolerance_scale = NULL;
+        panel->contiguous_radio = NULL;
+        panel->global_radio = NULL;
+        panel->antialiased_checkbox = NULL;
     }
 
     panel->current_tool_type = new_tool_type;

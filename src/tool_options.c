@@ -19,6 +19,9 @@ ToolOptions* tool_options_new(void)
     opts->hardness = 1.0f;      /* Hard edge */
     opts->flow = 1.0f;          /* Full flow */
     opts->spacing = 0.25f;      /* 25% spacing (default) */
+    opts->tolerance = 15.0f;    /* 10% tolerance (default) */
+    opts->fill_contiguous = TRUE; /* Contiguous fill by default */
+    opts->fill_antialiased = FALSE; /* Hard edges by default */
     
     return opts;
 }
@@ -112,5 +115,42 @@ void tool_options_set_spacing(ToolOptions *opts, gfloat spacing)
     /* Clamp spacing to 0-1 */
     opts->spacing = fmaxf(0.0f, fminf(1.0f, spacing));
     //printf("Tool spacing set to: %.2f\n", opts->spacing);
+}
+
+/**
+ * Set tolerance
+ */
+void tool_options_set_tolerance(ToolOptions *opts, gfloat tolerance)
+{
+    if (!opts) {
+        return;
+    }
+    
+    /* Clamp tolerance to 0-100 */
+    opts->tolerance = fmaxf(0.0f, fminf(100.0f, tolerance));
+}
+
+/**
+ * Set fill area mode
+ */
+void tool_options_set_fill_contiguous(ToolOptions *opts, gboolean contiguous)
+{
+    if (!opts) {
+        return;
+    }
+    
+    opts->fill_contiguous = contiguous ? TRUE : FALSE;
+}
+
+/**
+ * Set fill antialiasing
+ */
+void tool_options_set_fill_antialiased(ToolOptions *opts, gboolean antialiased)
+{
+    if (!opts) {
+        return;
+    }
+    
+    opts->fill_antialiased = antialiased ? TRUE : FALSE;
 }
 

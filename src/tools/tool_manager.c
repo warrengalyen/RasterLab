@@ -60,7 +60,7 @@ gboolean tool_manager_init_defaults(ToolRegistry *registry)
     if (!tool) {
         return FALSE;
     }
-    tool_manager_register(registry, tool, TOOL_FILL);
+    tool_manager_register(registry, tool, TOOL_PAINT_BUCKET);
 
     /* Activate Move tool by default */
     tool_manager_activate(registry, TOOL_MOVE);

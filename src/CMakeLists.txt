@@ -51,7 +51,7 @@ set(SOURCES
     tools/tool_move.c
     tools/tool_brush.c
     tools/tool_eraser.c
-    tools/tool_fill.c
+    tools/tool_paintbucket.c
     tool_options.c
     command.c
     ui/tools_panel.c
