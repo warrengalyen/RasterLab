@@ -1,6 +1,7 @@
 #include "ui.h"
 #include "ui/ui_filter.h"
 #include "ui/ui_filter_adjust.h"
+#include "ui/ui_filter_effects.h"
 #include "document.h"
 #include "panels.h"
 #include "ui/tools_panel.h"
@@ -61,6 +62,7 @@ static void setup_edit_menu(GtkBuilder *builder, AppContext *ctx, GtkAccelGroup 
 static void setup_view_menu(GtkBuilder *builder, AppContext *ctx, GtkAccelGroup *accel_group);
 static void setup_layer_menu(GtkBuilder *builder, AppContext *ctx);
 static void setup_adjust_menu(GtkBuilder *builder, AppContext *ctx);
+static void setup_effects_menu(GtkBuilder *builder, AppContext *ctx);
 
 /**
  * Layer selection changed callback - proper signal handler signature
@@ -395,6 +397,7 @@ AppContext* ui_create_main_window(void)
     setup_view_menu(builder, ctx, accel_group);
     setup_layer_menu(builder, ctx);
     setup_adjust_menu(builder, ctx);
+    setup_effects_menu(builder, ctx);
 
     /* ==== TOP PANEL: Tool Options ==== */
     ctx->tool_options_panel = create_tool_options_panel();
@@ -886,6 +889,14 @@ static void setup_layer_menu(GtkBuilder *builder, AppContext *ctx)
 static void setup_adjust_menu(GtkBuilder *builder, AppContext *ctx)
 {
     ui_filter_adjust_setup_menu(builder, ctx);
+}
+
+/**
+ * Setup Effects menu from Glade builder
+ */
+static void setup_effects_menu(GtkBuilder *builder, AppContext *ctx)
+{
+    ui_filter_effects_setup_menu(builder, ctx);
 }
 
 /**

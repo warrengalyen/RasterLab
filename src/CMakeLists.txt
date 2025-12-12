@@ -39,6 +39,7 @@ set(SOURCES
     ui.c
     ui/ui_filter.c
     ui/ui_filter_adjust.c
+    ui/ui_filter_effects.c
     document.c
     panels.c
     ui/widgets/accordion.c
@@ -77,6 +78,7 @@ set(SOURCES
     ui/filters/filter_auto_gamma.c
     ui/filters/filter_auto_level.c
     ui/filters/filter_auto_threshold.c
+    ui/filters/filter_average_blur.c
     render/render_utils.c
     render/layer.c
     render/compositor.c
