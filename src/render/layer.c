@@ -53,10 +53,12 @@ void layer_free(ImageLayer *layer)
     }
 
     if (layer->surface) {
+        cairo_surface_flush(layer->surface);
         cairo_surface_destroy(layer->surface);
     }
     
     if (layer->cache_surface) {
+        cairo_surface_flush(layer->cache_surface);
         cairo_surface_destroy(layer->cache_surface);
     }
 

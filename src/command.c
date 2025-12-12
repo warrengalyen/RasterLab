@@ -730,8 +730,14 @@ static void layer_add_command_destroy(Command *cmd)
 
     data = (LayerAddCommandData *)cmd->user_data;
     
-    /* Only free layer if it's not in the document (undo case) */
-    if (data->doc && !g_list_find(data->doc->layers, data->layer)) {
+    /* Only free layer if it's not in the document (undo case)
+     * Check if doc and layers list are valid before accessing */
+    if (data->doc && data->doc->layers && data->layer) {
+        if (!g_list_find(data->doc->layers, data->layer)) {
+            layer_free(data->layer);
+        }
+    } else if (data->layer) {
+        /* If document is being freed (layers list is NULL), free the layer */
         layer_free(data->layer);
     }
     
@@ -757,6 +763,11 @@ static void layer_delete_command_apply(Command *cmd, struct ImageDocument *doc)
 
     /* Delete layer from document */
     if (g_list_find(doc->layers, data->layer)) {
+        /* Flush layer surface to ensure all operations are complete */
+        if (data->layer && data->layer->surface) {
+            cairo_surface_flush(data->layer->surface);
+        }
+        
         doc->layers = g_list_remove(doc->layers, data->layer);
         
         if (doc->selected_layer == data->layer) {
@@ -813,6 +824,11 @@ static void layer_delete_command_revert(Command *cmd, struct ImageDocument *doc)
     cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
     cairo_paint(cr);
     cairo_destroy(cr);
+    
+    /* Flush the restored layer surface to ensure all operations are complete */
+    if (restored_layer->surface) {
+        cairo_surface_flush(restored_layer->surface);
+    }
 
     /* Restore properties */
     restored_layer->opacity = data->opacity;
@@ -846,6 +862,8 @@ static void layer_delete_command_destroy(Command *cmd)
     data = (LayerDeleteCommandData *)cmd->user_data;
 
     if (data->snapshot) {
+        /* Flush snapshot before destroying to ensure all operations are complete */
+        cairo_surface_flush(data->snapshot);
         cairo_surface_destroy(data->snapshot);
     }
     
@@ -853,9 +871,17 @@ static void layer_delete_command_destroy(Command *cmd)
         g_free(data->layer_name);
     }
     
-    /* Free layer if it still exists (redo case where layer was deleted) */
-    if (data->layer && data->doc && !g_list_find(data->doc->layers, data->layer)) {
-        layer_free(data->layer);
+    /* Free layer if it still exists (redo case where layer was deleted)
+     * Check if doc and layers list are valid before accessing */
+    if (data->layer) {
+        if (data->doc && data->doc->layers) {
+            if (!g_list_find(data->doc->layers, data->layer)) {
+                layer_free(data->layer);
+            }
+        } else {
+            /* If document is being freed (layers list is NULL), free the layer */
+            layer_free(data->layer);
+        }
     }
     
     g_free(data);
@@ -933,8 +959,14 @@ static void layer_duplicate_command_destroy(Command *cmd)
 
     data = (LayerDuplicateCommandData *)cmd->user_data;
     
-    /* Only free duplicated layer if it's not in the document (undo case) */
-    if (data->doc && !g_list_find(data->doc->layers, data->new_layer)) {
+    /* Only free duplicated layer if it's not in the document (undo case)
+     * Check if doc and layers list are valid before accessing */
+    if (data->doc && data->doc->layers && data->new_layer) {
+        if (!g_list_find(data->doc->layers, data->new_layer)) {
+            layer_free(data->new_layer);
+        }
+    } else if (data->new_layer) {
+        /* If document is being freed (layers list is NULL), free the layer */
         layer_free(data->new_layer);
     }
     

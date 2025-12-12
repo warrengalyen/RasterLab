@@ -43,7 +43,19 @@ static gboolean on_drawing_area_draw(GtkWidget *widget, cairo_t *cr, gpointer us
     gint start_tile_x, start_tile_y, end_tile_x, end_tile_y;
     gint tx, ty;
     Tile *tile;
-    gdouble zoom = doc->zoom_factor;
+    gdouble zoom;
+
+    /* Safety check: if document is NULL or drawing_area is NULL,
+     * the document is being closed, so just draw empty background */
+    if (!doc || !doc->drawing_area) {
+        cairo_clip_extents(cr, &x1, &y1, &x2, &y2);
+        clip_width = (gint)(x2 - x1);
+        clip_height = (gint)(y2 - y1);
+        draw_checkered_background(cr, clip_width, clip_height);
+        return FALSE;
+    }
+
+    zoom = doc->zoom_factor;
 
     /* Get the clip region to determine what needs to be drawn */
     cairo_clip_extents(cr, &x1, &y1, &x2, &y2);
@@ -133,7 +145,9 @@ static gboolean on_drawing_area_button_press(GtkWidget *widget, GdkEventButton *
 
     (void)widget;  /* Unused */
 
-    if (!doc) {
+    /* Safety check: if document is NULL or drawing_area is NULL,
+     * the document is being closed, so ignore the event */
+    if (!doc || !doc->drawing_area) {
         return FALSE;
     }
 
@@ -184,7 +198,9 @@ static gboolean on_drawing_area_button_release(GtkWidget *widget, GdkEventButton
 
     (void)widget;  /* Unused */
 
-    if (!doc) {
+    /* Safety check: if document is NULL or drawing_area is NULL,
+     * the document is being closed, so ignore the event */
+    if (!doc || !doc->drawing_area) {
         return FALSE;
     }
 
@@ -226,7 +242,9 @@ static gboolean on_drawing_area_motion_notify(GtkWidget *widget, GdkEventMotion 
 
     (void)widget;  /* Unused */
 
-    if (!doc) {
+    /* Safety check: if document is NULL or drawing_area is NULL,
+     * the document is being closed, so ignore the event */
+    if (!doc || !doc->drawing_area) {
         return FALSE;
     }
 
@@ -310,28 +328,36 @@ void document_free(ImageDocument *doc)
         g_free(doc->file_path);
     }
 
+    /* Free undo/redo stacks BEFORE freeing layers
+     * This ensures command destroy callbacks can safely check layer ownership
+     * and free any layers they own (e.g., layers in undo state) */
+    if (doc->undo_stack) {
+        command_stack_free(doc->undo_stack);
+        doc->undo_stack = NULL;
+    }
+    if (doc->redo_stack) {
+        command_stack_free(doc->redo_stack);
+        doc->redo_stack = NULL;
+    }
+
     /* Free all layers */
     for (GList *iter = doc->layers; iter; iter = iter->next) {
         layer_free((ImageLayer *)iter->data);
     }
     g_list_free(doc->layers);
+    doc->layers = NULL;
 
     /* Free composite surface */
     if (doc->composite_surface) {
+        cairo_surface_flush(doc->composite_surface);
         cairo_surface_destroy(doc->composite_surface);
+        doc->composite_surface = NULL;
     }
     
     /* Free tile grid */
     if (doc->tile_grid) {
         tile_grid_free(doc->tile_grid);
-    }
-
-    /* Free undo/redo stacks */
-    if (doc->undo_stack) {
-        command_stack_free(doc->undo_stack);
-    }
-    if (doc->redo_stack) {
-        command_stack_free(doc->redo_stack);
+        doc->tile_grid = NULL;
     }
 
     g_free(doc);

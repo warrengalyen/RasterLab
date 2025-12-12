@@ -545,7 +545,7 @@ static gboolean on_overview_draw(GtkWidget *widget, cairo_t *cr, gpointer user_d
     g_object_unref(scaled_thumb);
     
     /* Get viewport information from scrolled window */
-    if (doc->scrolled_window) {
+    if (doc->scrolled_window && GTK_IS_SCROLLED_WINDOW(doc->scrolled_window)) {
         hadj = gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(doc->scrolled_window));
         vadj = gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(doc->scrolled_window));
         zoom_factor = document_get_zoom(doc);
@@ -966,11 +966,35 @@ LayersPanel* create_layers_panel(void)
  */
 void layers_panel_update(LayersPanel *layers_panel, ImageDocument *doc)
 {
-    if (!layers_panel || !doc) {
+    if (!layers_panel) {
         return;
     }
 
+    /* Always set current_doc, even if doc is NULL (when closing document) */
     layers_panel->current_doc = doc;
+    
+    if (!doc) {
+        /* Clear existing layers */
+        gtk_list_store_clear(layers_panel->store);
+        
+        /* Disable opacity controls */
+        if (layers_panel->scale_opacity) {
+            gtk_widget_set_sensitive(layers_panel->scale_opacity, FALSE);
+        }
+        if (layers_panel->spin_opacity) {
+            gtk_widget_set_sensitive(layers_panel->spin_opacity, FALSE);
+        }
+        if (layers_panel->btn_opacity_reset) {
+            gtk_widget_set_sensitive(layers_panel->btn_opacity_reset, FALSE);
+        }
+        
+        /* Update overview widget */
+        if (layers_panel->overview_widget) {
+            gtk_widget_queue_draw(layers_panel->overview_widget);
+        }
+        
+        return;
+    }
 
     /* Clear existing layers */
     gtk_list_store_clear(layers_panel->store);

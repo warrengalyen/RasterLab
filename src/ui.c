@@ -549,44 +549,63 @@ ImageDocument* ui_create_document_tab(AppContext *ctx, const gchar *filename)
 static void ui_close_document_tab_internal(AppContext *ctx, ImageDocument *doc)
 {
     gint page_num;
-    gint n_pages;
+    GtkWidget *scrolled_window;
 
     if (!doc || !ctx) {
         return;
     }
 
-    /* Get number of pages before removal */
-    n_pages = gtk_notebook_get_n_pages(GTK_NOTEBOOK(ctx->notebook));
+    /* Store scrolled window pointer before we modify anything */
+    scrolled_window = doc->scrolled_window;
 
     /* Find the page containing this document */
-    page_num = gtk_notebook_page_num(GTK_NOTEBOOK(ctx->notebook), 
-                                     doc->scrolled_window);
+    if (!scrolled_window) {
+        /* Document already has no scrolled window, just free it */
+        ctx->documents = g_list_remove(ctx->documents, doc);
+        document_free(doc);
+        return;
+    }
+
+    page_num = gtk_notebook_page_num(GTK_NOTEBOOK(ctx->notebook), scrolled_window);
 
     if (page_num >= 0) {
-        // printf("Closing document: %s (page %d of %d)\n", 
-        //        document_get_filename(doc), page_num + 1, n_pages);
+        /* Disconnect all signals from drawing area to prevent callbacks
+         * from accessing the document after it's freed */
+        if (doc->drawing_area) {
+            g_signal_handlers_disconnect_by_data(doc->drawing_area, doc);
+        }
 
-        /* Remove from document list first */
+        /* NULL out widget pointers BEFORE removing page to prevent
+         * access to destroyed widgets during cleanup and signal handlers */
+        doc->scrolled_window = NULL;
+        doc->drawing_area = NULL;
+
+        /* Remove from document list BEFORE removing page to prevent
+         * switch-page callback from accessing the document */
         ctx->documents = g_list_remove(ctx->documents, doc);
 
-        /* Remove the notebook page */
+        /* Remove the notebook page (this destroys the scrolled window
+         * and may trigger switch-page signal, but doc is already removed) */
         gtk_notebook_remove_page(GTK_NOTEBOOK(ctx->notebook), page_num);
 
         /* Free the document */
         document_free(doc);
-
-        /* Check if any pages left */
-        gint remaining = gtk_notebook_get_n_pages(GTK_NOTEBOOK(ctx->notebook));
-        //printf("Remaining pages after close: %d\n", remaining);
+        doc = NULL;  /* Ensure doc pointer is NULL after freeing */
 
          /* Update window title (handles empty notebook) */
          ui_update_window_title(ctx);
 
          /* Update status bar and menu/button states */
          ui_update_status_bar(ctx, NULL);
+         
+         /* Clear layers panel if no documents remain */
+         LayersPanel *layers_panel = (LayersPanel *)g_object_get_data(G_OBJECT(ctx->window), 
+                                                                      "layers_panel");
+         if (layers_panel) {
+             layers_panel_update(layers_panel, NULL);
+         }
+         
          ui_update_menu_and_button_states(ctx);
-
-         //printf("Document closed successfully\n");
      }
 }
 
@@ -689,7 +708,7 @@ ImageDocument* ui_get_active_document(AppContext *ctx)
     /* Find the document by scrolled window */
     for (GList *iter = ctx->documents; iter; iter = iter->next) {
         ImageDocument *doc = (ImageDocument *)iter->data;
-        if (doc->scrolled_window == page) {
+        if (doc && doc->scrolled_window == page) {
             return doc;
         }
     }
@@ -1291,7 +1310,7 @@ static void on_notebook_switch_page(GtkNotebook *notebook, GtkWidget *page,
     if (page) {
         for (GList *iter = ctx->documents; iter; iter = iter->next) {
             ImageDocument *d = (ImageDocument *)iter->data;
-            if (d->scrolled_window == page) {
+            if (d && d->scrolled_window == page) {
                 doc = d;
                 break;
             }
@@ -1324,12 +1343,7 @@ static void on_tab_close_button_clicked(GtkButton *button, gpointer user_data)
     AppContext *ctx = (AppContext *)g_object_get_data(G_OBJECT(button), 
                                                        "app_context");
 
-    // printf("Tab close button clicked for document: %s\n", 
-    //        doc ? document_get_filename(doc) : "unknown");
-    // printf("  button=%p, ctx=%p, doc=%p\n", button, ctx, doc);
-
     if (ctx && doc) {
-        // printf("  Calling ui_close_document_tab...\n");
         ui_close_document_tab(ctx, doc);
     } else {
         printf("  ERROR: ctx=%p or doc=%p is NULL\n", ctx, doc);
@@ -1812,7 +1826,7 @@ void ui_update_menu_and_button_states(AppContext *ctx)
             gtk_menu_item_set_label(GTK_MENU_ITEM(ctx->edit_menu_redo), "_Redo");
         }
     }
-
+    
     /* Update Layer menu item states */
     if (ctx->layer_menu_new && GTK_IS_WIDGET(ctx->layer_menu_new)) {
         gtk_widget_set_sensitive(ctx->layer_menu_new, has_document);
