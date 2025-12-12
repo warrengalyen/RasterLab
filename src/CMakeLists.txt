@@ -72,6 +72,11 @@ set(SOURCES
     ui/filters/filter_brightness_contrast.c
     ui/filters/filter_shadow_highlights.c
     ui/filters/filter_temperature.c
+    ui/filters/filter_auto_whitebalance.c
+    ui/filters/filter_auto_contrast.c
+    ui/filters/filter_auto_gamma.c
+    ui/filters/filter_auto_level.c
+    ui/filters/filter_auto_threshold.c
     render/render_utils.c
     render/layer.c
     render/compositor.c

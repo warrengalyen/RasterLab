@@ -204,6 +204,23 @@ typedef struct {
     float offsetY;
 } CloudParams;
 
+/* Auto threshold method */
+typedef enum {
+    OC_AUTO_THRESHOLD_MEAN,
+    OC_AUTO_THRESHOLD_HUANG,
+    OC_AUTO_THRESHOLD_MIN,
+    OC_AUTO_THRESHOLD_INTERMODES,
+    OC_AUTO_THRESHOLD_PTILE,
+    OC_AUTO_THRESHOLD_ITERBEST,
+    OC_AUTO_THRESHOLD_OTSU,
+    OC_AUTO_THRESHOLD_1DMAX,
+    OC_AUTO_THRESHOLD_MOMENT,
+    OC_AUTO_THRESHOLD_KITTLER,
+    OC_AUTO_THRESHOLD_ISODATA,
+    OC_AUTO_THRESHOLD_SHANBHAG,
+    OC_AUTO_THRESHOLD_YEN,
+} OcAutoThresholdMethod;
+
 /* ============================================================================
  * Color Adjustment Functions
  * ============================================================================ */
@@ -276,8 +293,8 @@ OC_STATUS ocularSolidColorGenerator(unsigned char* Output, int Width, int Height
 
 OC_STATUS ocularLuminanceThresholdFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, unsigned char threshold);
 
-bool ocularAutoWhiteBalance(unsigned char* input, unsigned char* output, int Width, int height, int channels, int stride,
-                           int colorCoeff, float cutLimit, float contrast);
+bool ocularAutoWhiteBalance(unsigned char* input, unsigned char* output, int Width, int height, int stride,
+                           int colorCoeff, float cutLimit, float contrast, bool* hasColorCast);
 
 OC_STATUS ocularWhiteBalanceFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, float temperature, float tint);
 
@@ -286,7 +303,8 @@ OC_STATUS ocularVibranceFilter(unsigned char* Input, unsigned char* Output, int 
 OC_STATUS ocularSkinToneFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, float skinToneAdjust,
                                float skinHue, float skinHueThreshold, float maxHueShift, float maxSaturationShift, int upperSkinToneColor);
 
-OC_STATUS ocularAutoLevel(const unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, float fraction);
+OC_STATUS ocularAutoLevel(const unsigned char *Input, unsigned char *Output,
+                          int Width, int Height, int Stride, float fraction);
 
 OC_STATUS ocularAutoContrast(unsigned char* Input, unsigned char* Output, int Width, int Height, int Channels);
 
@@ -296,7 +314,7 @@ OC_STATUS ocularEqualizeFilter(unsigned char* Input, unsigned char* Output, int 
 
 OC_STATUS ocularHistogramStretch(uint8_t* input, uint8_t* output, int width, int height, int channels);
 
-OC_STATUS ocularAutoThreshold(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride);
+OC_STATUS ocularAutoThreshold(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, OcAutoThresholdMethod method);
 
 OC_STATUS ocularBacklightRepair(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride);
 

@@ -17,6 +17,11 @@
 #include "ui/filters/filter_brightness_contrast.h"
 #include "ui/filters/filter_shadow_highlights.h"
 #include "ui/filters/filter_temperature.h"
+#include "ui/filters/filter_auto_whitebalance.h"
+#include "ui/filters/filter_auto_contrast.h"
+#include "ui/filters/filter_auto_gamma.h"
+#include "ui/filters/filter_auto_level.h"
+#include "ui/filters/filter_auto_threshold.h"
 #include "filters.h"
 #include <glib.h>
 
@@ -709,6 +714,61 @@ static void on_adjust_backlight(GtkWidget *widget, gpointer data)
 
     AppContext *ctx = (AppContext *)data;
     ui_apply_layer_filter(ctx, filter_backlight_apply, "backlight repair");
+}
+
+/**
+ * Auto white balance filter callback
+ */
+static void on_adjust_auto_whitebalance(GtkWidget *widget, gpointer data)
+{
+    (void)widget;  /* Unused */
+
+    AppContext *ctx = (AppContext *)data;
+    ui_apply_layer_filter(ctx, filter_auto_whitebalance_apply, "auto white balance");
+}
+
+/**
+ * Auto contrast filter callback
+ */
+static void on_adjust_auto_contrast(GtkWidget *widget, gpointer data)
+{
+    (void)widget;  /* Unused */
+
+    AppContext *ctx = (AppContext *)data;
+    ui_apply_layer_filter(ctx, filter_auto_contrast_apply, "auto contrast");
+}
+
+/**
+ * Auto gamma filter callback
+ */
+static void on_adjust_auto_gamma(GtkWidget *widget, gpointer data)
+{
+    (void)widget;  /* Unused */
+
+    AppContext *ctx = (AppContext *)data;
+    ui_apply_layer_filter(ctx, filter_auto_gamma_apply, "auto gamma");
+}
+
+/**
+ * Auto level filter callback
+ */
+static void on_adjust_auto_level(GtkWidget *widget, gpointer data)
+{
+    (void)widget;  /* Unused */
+
+    AppContext *ctx = (AppContext *)data;
+    ui_apply_layer_filter(ctx, filter_auto_level_apply, "auto level");
+}
+
+/**
+ * Auto threshold filter callback
+ */
+static void on_adjust_auto_threshold(GtkWidget *widget, gpointer data)
+{
+    (void)widget;  /* Unused */
+
+    AppContext *ctx = (AppContext *)data;
+    ui_apply_layer_filter(ctx, filter_auto_threshold_apply, "auto threshold");
 }
 
 /**
@@ -1430,6 +1490,32 @@ void ui_filter_adjust_setup_menu(GtkBuilder *builder, AppContext *ctx)
     GtkWidget *adjust_menu_temperature = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_temperature"));
     if (adjust_menu_temperature) {
         g_signal_connect(adjust_menu_temperature, "activate", G_CALLBACK(on_adjust_temperature), ctx);
+    }
+
+    /* Connect auto filter menu signals */
+    GtkWidget *adjust_menu_auto_wb = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_auto_wb"));
+    if (adjust_menu_auto_wb) {
+        g_signal_connect(adjust_menu_auto_wb, "activate", G_CALLBACK(on_adjust_auto_whitebalance), ctx);
+    }
+
+    GtkWidget *adjust_menu_auto_contrast = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_auto_contrast"));
+    if (adjust_menu_auto_contrast) {
+        g_signal_connect(adjust_menu_auto_contrast, "activate", G_CALLBACK(on_adjust_auto_contrast), ctx);
+    }
+
+    GtkWidget *adjust_menu_auto_gamma = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_auto_gamma"));
+    if (adjust_menu_auto_gamma) {
+        g_signal_connect(adjust_menu_auto_gamma, "activate", G_CALLBACK(on_adjust_auto_gamma), ctx);
+    }
+
+    GtkWidget *adjust_menu_auto_levels = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_auto_levels"));
+    if (adjust_menu_auto_levels) {
+        g_signal_connect(adjust_menu_auto_levels, "activate", G_CALLBACK(on_adjust_auto_level), ctx);
+    }
+
+    GtkWidget *adjust_menu_auto_threshold = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_auto_threshold"));
+    if (adjust_menu_auto_threshold) {
+        g_signal_connect(adjust_menu_auto_threshold, "activate", G_CALLBACK(on_adjust_auto_threshold), ctx);
     }
 }
 
