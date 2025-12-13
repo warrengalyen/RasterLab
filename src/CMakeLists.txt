@@ -78,6 +78,7 @@ set(SOURCES
     ui/filters/filter_auto_gamma.c
     ui/filters/filter_auto_level.c
     ui/filters/filter_auto_threshold.c
+    ui/filters/filter_dehaze.c
     ui/filters/filter_average_blur.c
     ui/filters/filter_gaussian_blur.c
     ui/filters/filter_box_blur.c
