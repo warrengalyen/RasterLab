@@ -92,6 +92,11 @@ typedef struct {
     guint sequence; /* Sequence number for this update */
 } FilterThreadData;
 
+/* For 1:1 mode -  Render extra pixels around the viewport.
+   Helps reduce visible updates when panning.
+ */
+const gint VIEWPORT_CACHE_PADDING = 50;
+
 static ViewportRect calculate_viewport(FilterPreview* preview) {
     ViewportRect viewport = {0, 0, 0, 0};
 
@@ -110,12 +115,10 @@ static ViewportRect calculate_viewport(FilterPreview* preview) {
         viewport.height = preview->original_height;
     } else {
         /* In 1:1 mode, calculate visible rectangle with some padding */
-        gint padding = 100; /* Render extra pixels around the viewport */
-
-        viewport.x = (gint)preview->pan_x - padding;
-        viewport.y = (gint)preview->pan_y - padding;
-        viewport.width = widget_width + (padding * 2);
-        viewport.height = widget_height + (padding * 2);
+        viewport.x = (gint)preview->pan_x - VIEWPORT_CACHE_PADDING;
+        viewport.y = (gint)preview->pan_y - VIEWPORT_CACHE_PADDING;
+        viewport.width = widget_width + (VIEWPORT_CACHE_PADDING * 2);
+        viewport.height = widget_height + (VIEWPORT_CACHE_PADDING * 2);
 
         /* Clamp to image bounds */
         if (viewport.x < 0) {
