@@ -1,6 +1,6 @@
 #include "ui/widgets/filter_dialog.h"
-#include "render/layer.h"
 #include "render/compositor.h"
+#include "render/layer.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -8,26 +8,25 @@
  * Filter dialog structure
  */
 struct _FilterDialog {
-    GtkWidget *dialog;
-    FilterPreview *preview;
-    GtkWidget *controls_box;
-    GtkWidget **scale_widgets;      /* Array of scale widgets */
-    GtkWidget **spin_widgets;        /* Array of spin button widgets */
-    FilterControlParam *params;      /* Copy of control parameters */
+    GtkWidget* dialog;
+    FilterPreview* preview;
+    GtkWidget* controls_box;
+    GtkWidget** scale_widgets;  /* Array of scale widgets */
+    GtkWidget** spin_widgets;   /* Array of spin button widgets */
+    FilterControlParam* params; /* Copy of control parameters */
     gint num_controls;
-    FilterDialogPreviewCallback preview_callback;  /* Callback for live preview */
-    gpointer preview_user_data;      /* User data for preview callback */
+    FilterDialogPreviewCallback preview_callback; /* Callback for live preview */
+    gpointer preview_user_data;                   /* User data for preview callback */
 };
 
 /**
  * Scale value changed callback - updates spin button and triggers preview
  */
-static void on_scale_value_changed(GtkRange *range, gpointer user_data)
-{
-    FilterDialog *dialog = (FilterDialog *)user_data;
-    GtkWidget *spin_button;
+static void on_scale_value_changed(GtkRange* range, gpointer user_data) {
+    FilterDialog* dialog = (FilterDialog*)user_data;
+    GtkWidget* spin_button;
     gdouble value;
-    gdouble *values;
+    gdouble* values;
     gint i;
 
     if (!dialog) {
@@ -45,7 +44,7 @@ static void on_scale_value_changed(GtkRange *range, gpointer user_data)
 
             /* Trigger preview update if callback is set */
             if (dialog->preview_callback) {
-                values = (gdouble *)g_malloc(sizeof(gdouble) * dialog->num_controls);
+                values = (gdouble*)g_malloc(sizeof(gdouble) * dialog->num_controls);
                 if (values) {
                     filter_dialog_get_values(dialog, values, dialog->num_controls);
                     dialog->preview_callback(dialog, values, dialog->num_controls, dialog->preview_user_data);
@@ -60,12 +59,11 @@ static void on_scale_value_changed(GtkRange *range, gpointer user_data)
 /**
  * Spin button value changed callback - updates scale and triggers preview
  */
-static void on_spin_value_changed(GtkSpinButton *spin, gpointer user_data)
-{
-    FilterDialog *dialog = (FilterDialog *)user_data;
-    GtkWidget *scale;
+static void on_spin_value_changed(GtkSpinButton* spin, gpointer user_data) {
+    FilterDialog* dialog = (FilterDialog*)user_data;
+    GtkWidget* scale;
     gdouble value;
-    gdouble *values;
+    gdouble* values;
     gint i;
 
     if (!dialog) {
@@ -83,7 +81,7 @@ static void on_spin_value_changed(GtkSpinButton *spin, gpointer user_data)
 
             /* Trigger preview update if callback is set */
             if (dialog->preview_callback) {
-                values = (gdouble *)g_malloc(sizeof(gdouble) * dialog->num_controls);
+                values = (gdouble*)g_malloc(sizeof(gdouble) * dialog->num_controls);
                 if (values) {
                     filter_dialog_get_values(dialog, values, dialog->num_controls);
                     dialog->preview_callback(dialog, values, dialog->num_controls, dialog->preview_user_data);
@@ -98,9 +96,8 @@ static void on_spin_value_changed(GtkSpinButton *spin, gpointer user_data)
 /**
  * Reset button clicked callback
  */
-static void on_reset_clicked(GtkWidget *widget, gpointer user_data)
-{
-    FilterDialog *dialog = (FilterDialog *)user_data;
+static void on_reset_clicked(GtkWidget* widget, gpointer user_data) {
+    FilterDialog* dialog = (FilterDialog*)user_data;
     (void)widget;
     filter_dialog_reset(dialog);
 }
@@ -108,31 +105,30 @@ static void on_reset_clicked(GtkWidget *widget, gpointer user_data)
 /**
  * Create a new filter dialog
  */
-FilterDialog* filter_dialog_new(const gchar *title,
-                                 const FilterControlParam *controls,
-                                 gint num_controls)
-{
-    FilterDialog *dialog;
-    GtkWidget *content_area;
-    GtkWidget *main_hbox;
-    GtkWidget *controls_vbox;
-    GtkWidget *reset_button;
-    GtkWidget *button_box;
+FilterDialog* filter_dialog_new(const gchar* title,
+                                const FilterControlParam* controls,
+                                gint num_controls) {
+    FilterDialog* dialog;
+    GtkWidget* content_area;
+    GtkWidget* main_hbox;
+    GtkWidget* controls_vbox;
+    GtkWidget* reset_button;
+    GtkWidget* button_box;
     gint i;
 
     if (!title || !controls || num_controls <= 0) {
         return NULL;
     }
 
-    dialog = (FilterDialog *)g_malloc(sizeof(FilterDialog));
+    dialog = (FilterDialog*)g_malloc(sizeof(FilterDialog));
     if (!dialog) {
         return NULL;
     }
 
     /* Allocate arrays for widgets */
-    dialog->scale_widgets = (GtkWidget **)g_malloc(sizeof(GtkWidget *) * num_controls);
-    dialog->spin_widgets = (GtkWidget **)g_malloc(sizeof(GtkWidget *) * num_controls);
-    dialog->params = (FilterControlParam *)g_malloc(sizeof(FilterControlParam) * num_controls);
+    dialog->scale_widgets = (GtkWidget**)g_malloc(sizeof(GtkWidget*) * num_controls);
+    dialog->spin_widgets = (GtkWidget**)g_malloc(sizeof(GtkWidget*) * num_controls);
+    dialog->params = (FilterControlParam*)g_malloc(sizeof(FilterControlParam) * num_controls);
 
     if (!dialog->scale_widgets || !dialog->spin_widgets || !dialog->params) {
         g_free(dialog->scale_widgets);
@@ -154,14 +150,14 @@ FilterDialog* filter_dialog_new(const gchar *title,
 
     /* Create dialog window */
     dialog->dialog = gtk_dialog_new_with_buttons(title,
-                                                  NULL,
-                                                  GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
-                                                  "_OK",
-                                                  GTK_RESPONSE_OK,
-                                                  "_Cancel",
-                                                  GTK_RESPONSE_CANCEL,
-                                                  NULL);
-    
+                                                 NULL,
+                                                 GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+                                                 "_OK",
+                                                 GTK_RESPONSE_OK,
+                                                 "_Cancel",
+                                                 GTK_RESPONSE_CANCEL,
+                                                 NULL);
+
     /* Don't set a fixed default size - let dialog size to content */
     gtk_window_set_resizable(GTK_WINDOW(dialog->dialog), TRUE);
 
@@ -191,12 +187,12 @@ FilterDialog* filter_dialog_new(const gchar *title,
 
     /* Create control groups dynamically */
     for (i = 0; i < num_controls; i++) {
-        GtkWidget *control_vbox;
-        GtkWidget *label;
-        GtkWidget *scale_hbox;
-        GtkWidget *scale;
-        GtkWidget *spin;
-        GtkAdjustment *adjustment;
+        GtkWidget* control_vbox;
+        GtkWidget* label;
+        GtkWidget* scale_hbox;
+        GtkWidget* scale;
+        GtkWidget* spin;
+        GtkAdjustment* adjustment;
         gdouble step;
 
         /* Initialize filter range to UI range if not specified */
@@ -226,7 +222,8 @@ FilterDialog* filter_dialog_new(const gchar *title,
         if (step == 0.0) {
             /* Default step based on range */
             gdouble range = controls[i].max_value - controls[i].min_value;
-            step = (range > 100.0) ? 1.0 : (range > 10.0) ? 0.1 : 0.01;
+            step = (range > 100.0) ? 1.0 : (range > 10.0) ? 0.1
+                                                          : 0.01;
         }
 
         /* Create adjustment */
@@ -234,7 +231,7 @@ FilterDialog* filter_dialog_new(const gchar *title,
                                         controls[i].min_value,
                                         controls[i].max_value,
                                         step,
-                                        step * 10.0,  /* Page step */
+                                        step * 10.0, /* Page step */
                                         0.0);
 
         /* Create scale (slider) */
@@ -256,43 +253,43 @@ FilterDialog* filter_dialog_new(const gchar *title,
 
         /* Connect signals for synchronization and preview updates */
         g_signal_connect(scale, "value-changed",
-                        G_CALLBACK(on_scale_value_changed), dialog);
+                         G_CALLBACK(on_scale_value_changed), dialog);
         g_signal_connect(spin, "value-changed",
-                        G_CALLBACK(on_spin_value_changed), dialog);
+                         G_CALLBACK(on_spin_value_changed), dialog);
     }
 
-    /* Get button box from dialog (for OK/Cancel) */
-    /* Note: OK/Cancel buttons are already added by gtk_dialog_new_with_buttons */
-    /* gtk_dialog_get_action_area is deprecated but still works in GTK3 */
-    #ifdef __GNUC__
-    #pragma GCC diagnostic push
-    #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-    #endif
+/* Get button box from dialog (for OK/Cancel) */
+/* Note: OK/Cancel buttons are already added by gtk_dialog_new_with_buttons */
+/* gtk_dialog_get_action_area is deprecated but still works in GTK3 */
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
     button_box = gtk_dialog_get_action_area(GTK_DIALOG(dialog->dialog));
-    #ifdef __GNUC__
-    #pragma GCC diagnostic pop
-    #endif
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif
     if (button_box) {
         gtk_widget_set_margin_top(button_box, 5);
         gtk_widget_set_margin_bottom(button_box, 5);
         gtk_widget_set_margin_start(button_box, 5);
         gtk_widget_set_margin_end(button_box, 5);
-        
+
         /* Make action area expand horizontally to fill width */
         gtk_widget_set_hexpand(button_box, TRUE);
-        
+
         /* Create reset button with reset.svg icon and add it to the left side of action area */
         reset_button = gtk_button_new();
-        GtkWidget *reset_icon = gtk_image_new_from_resource("/icons/reset.svg");
+        GtkWidget* reset_icon = gtk_image_new_from_resource("/icons/reset.svg");
         if (reset_icon) {
             gtk_button_set_image(GTK_BUTTON(reset_button), reset_icon);
             gtk_button_set_always_show_image(GTK_BUTTON(reset_button), TRUE);
         }
         gtk_widget_set_halign(reset_button, GTK_ALIGN_START);
         gtk_box_pack_start(GTK_BOX(button_box), reset_button, FALSE, FALSE, 0);
-        gtk_box_reorder_child(GTK_BOX(button_box), reset_button, 0);  /* Move to start */
+        gtk_box_reorder_child(GTK_BOX(button_box), reset_button, 0); /* Move to start */
         g_signal_connect(reset_button, "clicked",
-                        G_CALLBACK(on_reset_clicked), dialog);
+                         G_CALLBACK(on_reset_clicked), dialog);
     }
 
     /* Show all widgets */
@@ -304,12 +301,11 @@ FilterDialog* filter_dialog_new(const gchar *title,
 /**
  * Set the image layers for the preview widget
  */
-void filter_dialog_set_layers(FilterDialog *dialog,
-                               ImageLayer *before_layer,
-                               ImageLayer *after_layer)
-{
-    cairo_surface_t *before_surface = NULL;
-    cairo_surface_t *after_surface = NULL;
+void filter_dialog_set_layers(FilterDialog* dialog,
+                              ImageLayer* before_layer,
+                              ImageLayer* after_layer) {
+    cairo_surface_t* before_surface = NULL;
+    cairo_surface_t* after_surface = NULL;
 
     if (!dialog || !dialog->preview) {
         return;
@@ -339,9 +335,8 @@ void filter_dialog_set_layers(FilterDialog *dialog,
 /**
  * Update the after layer preview
  */
-void filter_dialog_update_after_layer(FilterDialog *dialog, ImageLayer *after_layer)
-{
-    cairo_surface_t *after_surface = NULL;
+void filter_dialog_update_after_layer(FilterDialog* dialog, ImageLayer* after_layer) {
+    cairo_surface_t* after_surface = NULL;
 
     if (!dialog || !dialog->preview) {
         return;
@@ -361,8 +356,7 @@ void filter_dialog_update_after_layer(FilterDialog *dialog, ImageLayer *after_la
 /**
  * Get the dialog window widget
  */
-GtkWindow* filter_dialog_get_window(FilterDialog *dialog)
-{
+GtkWindow* filter_dialog_get_window(FilterDialog* dialog) {
     if (!dialog || !dialog->dialog) {
         return NULL;
     }
@@ -371,13 +365,23 @@ GtkWindow* filter_dialog_get_window(FilterDialog *dialog)
 }
 
 /**
+ * Get the preview widget from the dialog
+ */
+FilterPreview* filter_dialog_get_preview(FilterDialog* dialog) {
+    if (!dialog) {
+        return NULL;
+    }
+
+    return dialog->preview;
+}
+
+/**
  * Run the dialog and get control values
  */
-gint filter_dialog_run(FilterDialog *dialog,
-                       GtkWindow *parent,
-                       gdouble *values,
-                       gint num_values)
-{
+gint filter_dialog_run(FilterDialog* dialog,
+                       GtkWindow* parent,
+                       gdouble* values,
+                       gint num_values) {
     gint response;
 
     if (!dialog || !values || num_values <= 0) {
@@ -400,10 +404,9 @@ gint filter_dialog_run(FilterDialog *dialog,
 /**
  * Get current control values
  */
-void filter_dialog_get_values(FilterDialog *dialog,
-                              gdouble *values,
-                              gint num_values)
-{
+void filter_dialog_get_values(FilterDialog* dialog,
+                              gdouble* values,
+                              gint num_values) {
     gint i;
     gint count;
 
@@ -425,10 +428,9 @@ void filter_dialog_get_values(FilterDialog *dialog,
 /**
  * Set callback function for live preview updates
  */
-void filter_dialog_set_preview_callback(FilterDialog *dialog,
+void filter_dialog_set_preview_callback(FilterDialog* dialog,
                                         FilterDialogPreviewCallback callback,
-                                        gpointer user_data)
-{
+                                        gpointer user_data) {
     if (!dialog) {
         return;
     }
@@ -440,8 +442,7 @@ void filter_dialog_set_preview_callback(FilterDialog *dialog,
 /**
  * Reset all controls to default values
  */
-void filter_dialog_reset(FilterDialog *dialog)
-{
+void filter_dialog_reset(FilterDialog* dialog) {
     gint i;
 
     if (!dialog) {
@@ -451,7 +452,7 @@ void filter_dialog_reset(FilterDialog *dialog)
     for (i = 0; i < dialog->num_controls; i++) {
         if (dialog->spin_widgets[i]) {
             gtk_spin_button_set_value(GTK_SPIN_BUTTON(dialog->spin_widgets[i]),
-                                     dialog->params[i].default_value);
+                                      dialog->params[i].default_value);
         }
     }
 }
@@ -459,8 +460,7 @@ void filter_dialog_reset(FilterDialog *dialog)
 /**
  * Free the filter dialog
  */
-void filter_dialog_free(FilterDialog *dialog)
-{
+void filter_dialog_free(FilterDialog* dialog) {
     gint i;
 
     if (!dialog) {
@@ -485,4 +485,3 @@ void filter_dialog_free(FilterDialog *dialog)
 
     g_free(dialog);
 }
-

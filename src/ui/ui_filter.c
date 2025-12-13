@@ -1,16 +1,15 @@
 #include "ui/ui_filter.h"
-#include "ui.h"
-#include "filters.h"
 #include "command.h"
+#include "filters.h"
 #include "render/layer.h"
+#include "ui.h"
 #include <glib.h>
 
 /**
  * Start processing timer
  * @return Start time in microseconds
  */
-static gint64 start_processing_timer(void)
-{
+static gint64 start_processing_timer(void) {
     return g_get_monotonic_time();
 }
 
@@ -19,8 +18,7 @@ static gint64 start_processing_timer(void)
  * @param start_time Start time from start_processing_timer()
  * @return Elapsed time in seconds
  */
-static gdouble stop_processing_timer(gint64 start_time)
-{
+static gdouble stop_processing_timer(gint64 start_time) {
     gint64 current_time = g_get_monotonic_time();
     return (gdouble)(current_time - start_time) / 1000000.0;
 }
@@ -28,13 +26,12 @@ static gdouble stop_processing_timer(gint64 start_time)
 /**
  * Apply a filter adjustment to the active layer with undo/redo support
  */
-gboolean ui_apply_layer_filter(AppContext *ctx, 
-                                gboolean (*filter_func)(ImageLayer *layer),
-                                const gchar *filter_name)
-{
-    ImageDocument *doc;
-    ImageLayer *layer;
-    Command *cmd;
+gboolean ui_apply_layer_filter(AppContext* ctx,
+                               gboolean (*filter_func)(ImageLayer* layer),
+                               const gchar* filter_name) {
+    ImageDocument* doc;
+    ImageLayer* layer;
+    Command* cmd;
     gint64 start_time;
     gdouble processing_time;
 
@@ -64,7 +61,7 @@ gboolean ui_apply_layer_filter(AppContext *ctx,
 
     /* Start timing */
     start_time = start_processing_timer();
-    
+
     /* Apply filter */
     if (!filter_func(layer)) {
         g_warning("Failed to apply %s filter", filter_name);
@@ -112,15 +109,14 @@ gboolean ui_apply_layer_filter(AppContext *ctx,
 /**
  * Apply a filter with parameter values to the currently selected layer
  */
-gboolean ui_apply_layer_filter_with_value(AppContext *ctx,
-                                          gboolean (*filter_func)(ImageLayer *layer, const gfloat *values, gint num_values),
-                                          const gchar *filter_name,
-                                          const gfloat *values,
-                                          gint num_values)
-{
-    ImageDocument *doc;
-    ImageLayer *layer;
-    Command *cmd;
+gboolean ui_apply_layer_filter_with_value(AppContext* ctx,
+                                          gboolean (*filter_func)(ImageLayer* layer, const gfloat* values, gint num_values),
+                                          const gchar* filter_name,
+                                          const gfloat* values,
+                                          gint num_values) {
+    ImageDocument* doc;
+    ImageLayer* layer;
+    Command* cmd;
     gint64 start_time;
     gdouble processing_time;
 
@@ -198,18 +194,17 @@ gboolean ui_apply_layer_filter_with_value(AppContext *ctx,
 /**
  * Show a filter dialog and get user values
  */
-gint ui_show_filter_dialog(AppContext *ctx,
-                           const gchar *title,
-                           FilterControlParam *controls,
+gint ui_show_filter_dialog(AppContext* ctx,
+                           const gchar* title,
+                           FilterControlParam* controls,
                            gint num_controls,
                            FilterDialogPreviewCallback preview_callback,
-                           gdouble *values)
-{
-    ImageDocument *doc;
-    ImageLayer *layer;
-    FilterDialog *dialog;
-    ImageLayer *temp_layer;
-    cairo_t *cr;
+                           gdouble* values) {
+    ImageDocument* doc;
+    ImageLayer* layer;
+    FilterDialog* dialog;
+    ImageLayer* temp_layer;
+    cairo_t* cr;
     gint response;
 
     if (!ctx || !controls || num_controls <= 0 || !values) {
@@ -261,9 +256,9 @@ gint ui_show_filter_dialog(AppContext *ctx,
     /* Set up live preview callback if provided */
     if (preview_callback) {
         filter_dialog_set_preview_callback(dialog, preview_callback, temp_layer);
-        
+
         /* Trigger initial preview update with default values */
-        gdouble *default_values = (gdouble *)g_malloc(sizeof(gdouble) * num_controls);
+        gdouble* default_values = (gdouble*)g_malloc(sizeof(gdouble) * num_controls);
         if (default_values) {
             gint i;
             for (i = 0; i < num_controls; i++) {
@@ -285,9 +280,9 @@ gint ui_show_filter_dialog(AppContext *ctx,
     /* Clean up */
     g_object_set_data(G_OBJECT(filter_dialog_get_window(dialog)), "original_layer", NULL);
     g_object_set_data(G_OBJECT(filter_dialog_get_window(dialog)), "control_params", NULL);
+    g_object_set_data(G_OBJECT(filter_dialog_get_window(dialog)), "filter_wrapper_data", NULL);
     filter_dialog_free(dialog);
     layer_free(temp_layer);
 
     return response;
 }
-
