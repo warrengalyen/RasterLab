@@ -1,4 +1,5 @@
 #include "ui/widgets/filter_preview.h"
+#include "render/render_utils.h"
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -147,23 +148,7 @@ static gboolean on_preview_draw(GtkWidget *widget, cairo_t *cr, gpointer user_da
     surface = get_current_surface(preview);
     if (!surface) {
         /* Draw checkered background if no image */
-        /* Simple checkered pattern */
-        gint checker_size = 20;
-        gboolean dark = FALSE;
-        
-        for (gint y = 0; y < widget_height; y += checker_size) {
-            for (gint x = 0; x < widget_width; x += checker_size) {
-                if (dark) {
-                    cairo_set_source_rgb(cr, 0.8, 0.8, 0.8);
-                } else {
-                    cairo_set_source_rgb(cr, 0.9, 0.9, 0.9);
-                }
-                cairo_rectangle(cr, x, y, checker_size, checker_size);
-                cairo_fill(cr);
-                dark = !dark;
-            }
-            dark = !dark;
-        }
+        draw_checkered_background(cr, widget_width, widget_height);
         return FALSE;
     }
 
@@ -180,21 +165,7 @@ static gboolean on_preview_draw(GtkWidget *widget, cairo_t *cr, gpointer user_da
         draw_y = (widget_height - scaled_height) / 2.0;
 
         /* Draw checkered background */
-        gint checker_size = 20;
-        gboolean dark = FALSE;
-        for (gint y = 0; y < widget_height; y += checker_size) {
-            for (gint x = 0; x < widget_width; x += checker_size) {
-                if (dark) {
-                    cairo_set_source_rgb(cr, 0.8, 0.8, 0.8);
-                } else {
-                    cairo_set_source_rgb(cr, 0.9, 0.9, 0.9);
-                }
-                cairo_rectangle(cr, x, y, checker_size, checker_size);
-                cairo_fill(cr);
-                dark = !dark;
-            }
-            dark = !dark;
-        }
+        draw_checkered_background(cr, widget_width, widget_height);
 
         /* Draw image */
         cairo_save(cr);
@@ -209,21 +180,7 @@ static gboolean on_preview_draw(GtkWidget *widget, cairo_t *cr, gpointer user_da
         draw_y = -preview->pan_y;
 
         /* Draw checkered background */
-        gint checker_size = 20;
-        gboolean dark = FALSE;
-        for (gint y = 0; y < widget_height; y += checker_size) {
-            for (gint x = 0; x < widget_width; x += checker_size) {
-                if (dark) {
-                    cairo_set_source_rgb(cr, 0.8, 0.8, 0.8);
-                } else {
-                    cairo_set_source_rgb(cr, 0.9, 0.9, 0.9);
-                }
-                cairo_rectangle(cr, x, y, checker_size, checker_size);
-                cairo_fill(cr);
-                dark = !dark;
-            }
-            dark = !dark;
-        }
+        draw_checkered_background(cr, widget_width, widget_height);
 
         /* Draw image at 1:1 scale */
         cairo_set_source_surface(cr, surface, draw_x, draw_y);
@@ -550,18 +507,18 @@ static void filter_preview_init(FilterPreview *preview)
     /* Initialize as a vertical box - set orientation during construction */
     gtk_orientable_set_orientation(GTK_ORIENTABLE(preview), GTK_ORIENTATION_VERTICAL);
     gtk_box_set_spacing(GTK_BOX(preview), 0);
-    gtk_widget_set_hexpand(GTK_WIDGET(preview), TRUE);
-    gtk_widget_set_vexpand(GTK_WIDGET(preview), TRUE);
+    gtk_widget_set_hexpand(GTK_WIDGET(preview), FALSE);
+    gtk_widget_set_vexpand(GTK_WIDGET(preview), FALSE);
 
     /* Store reference to self as main_box for compatibility */
     preview->main_box = GTK_WIDGET(preview);
 
     /* Create preview drawing area directly (no scrolled window for manual panning control) */
     preview->preview_area = gtk_drawing_area_new();
-    gtk_widget_set_size_request(preview->preview_area, 400, 300);
-    gtk_widget_set_hexpand(preview->preview_area, TRUE);
-    gtk_widget_set_vexpand(preview->preview_area, TRUE);
-    gtk_box_pack_start(GTK_BOX(preview), preview->preview_area, TRUE, TRUE, 0);
+    gtk_widget_set_size_request(preview->preview_area, 375, 338);
+    gtk_widget_set_hexpand(preview->preview_area, FALSE);
+    gtk_widget_set_vexpand(preview->preview_area, FALSE);
+    gtk_box_pack_start(GTK_BOX(preview), preview->preview_area, FALSE, FALSE, 0);
 
     /* Enable mouse events */
     gtk_widget_set_events(preview->preview_area,

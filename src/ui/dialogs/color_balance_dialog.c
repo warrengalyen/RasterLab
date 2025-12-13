@@ -272,7 +272,7 @@ ColorBalanceDialog* color_balance_dialog_new(const gchar *title)
                                                   GTK_RESPONSE_CANCEL,
                                                   NULL);
     
-    gtk_window_set_default_size(GTK_WINDOW(dialog->dialog), 750, 550);
+    /* Don't set a fixed default size - let dialog size to content */
     gtk_window_set_resizable(GTK_WINDOW(dialog->dialog), TRUE);
 
     /* Get content area */
@@ -285,12 +285,14 @@ ColorBalanceDialog* color_balance_dialog_new(const gchar *title)
 
     /* Create filter preview widget (left side) */
     dialog->preview = FILTER_PREVIEW(filter_preview_new());
-    gtk_widget_set_size_request(GTK_WIDGET(dialog->preview), 400, -1);
-    gtk_box_pack_start(GTK_BOX(main_hbox), GTK_WIDGET(dialog->preview), TRUE, TRUE, 0);
+    gtk_widget_set_size_request(GTK_WIDGET(dialog->preview), 375, 338);
+    gtk_widget_set_hexpand(GTK_WIDGET(dialog->preview), FALSE);
+    gtk_widget_set_vexpand(GTK_WIDGET(dialog->preview), FALSE);
+    gtk_box_pack_start(GTK_BOX(main_hbox), GTK_WIDGET(dialog->preview), FALSE, FALSE, 0);
 
     /* Create right side vertical box */
     right_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
-    gtk_widget_set_size_request(right_vbox, 280, -1);
+    gtk_widget_set_size_request(right_vbox, 320, -1);
     gtk_widget_set_margin_start(right_vbox, 0);
     gtk_widget_set_margin_end(right_vbox, 0);
     gtk_box_pack_start(GTK_BOX(main_hbox), right_vbox, FALSE, FALSE, 0);
@@ -429,9 +431,13 @@ ColorBalanceDialog* color_balance_dialog_new(const gchar *title)
         /* Make action area expand horizontally to fill width */
         gtk_widget_set_hexpand(button_box, TRUE);
         
-        /* Create reset button and add it to the left side of action area */
-        reset_button = gtk_button_new_from_icon_name("view-refresh", GTK_ICON_SIZE_BUTTON);
-        gtk_button_set_label(GTK_BUTTON(reset_button), "Reset");
+        /* Create reset button with reset.svg icon and add it to the left side of action area */
+        reset_button = gtk_button_new();
+        GtkWidget *reset_icon = gtk_image_new_from_resource("/icons/reset.svg");
+        if (reset_icon) {
+            gtk_button_set_image(GTK_BUTTON(reset_button), reset_icon);
+            gtk_button_set_always_show_image(GTK_BUTTON(reset_button), TRUE);
+        }
         gtk_widget_set_halign(reset_button, GTK_ALIGN_START);
         gtk_box_pack_start(GTK_BOX(button_box), reset_button, FALSE, FALSE, 0);
         gtk_box_reorder_child(GTK_BOX(button_box), reset_button, 0);  /* Move to start */
