@@ -10,6 +10,9 @@
 #include "ui/filters/filter_surface_blur.h"
 #include "ui/filters/filter_zoom_blur.h"
 #include "ui/filters/filter_exponential_blur.h"
+#include "ui/filters/filter_film_grain.h"
+#include "ui/filters/filter_frosted_glass.h"
+#include "ui/filters/filter_oil_paint.h"
 #include "document.h"
 #include "filters.h"
 #include <glib.h>
@@ -939,6 +942,303 @@ static void on_effects_zoom_blur(GtkWidget *widget, gpointer data)
 }
 
 /**
+ * Film grain filter preview update callback
+ */
+static gboolean on_film_grain_preview_update(FilterDialog *dialog,
+                                            const gdouble *values,
+                                            gint num_values,
+                                            gpointer user_data)
+{
+    ImageLayer *temp_layer = (ImageLayer *)user_data;
+    ImageLayer *original_layer;
+    FilterControlParam *controls;
+    cairo_t *cr;
+
+    if (!dialog || !values || num_values < 2 || !temp_layer) {
+        return FALSE;
+    }
+
+    original_layer = (ImageLayer *)g_object_get_data(G_OBJECT(filter_dialog_get_window(dialog)), "original_layer");
+    if (!original_layer) {
+        return FALSE;
+    }
+
+    controls = (FilterControlParam *)g_object_get_data(G_OBJECT(filter_dialog_get_window(dialog)), "control_params");
+    if (!controls) {
+        return FALSE;
+    }
+
+    cr = cairo_create(temp_layer->surface);
+    cairo_set_source_surface(cr, original_layer->surface, 0, 0);
+    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+    cairo_paint(cr);
+    cairo_destroy(cr);
+
+    {
+        gdouble scaled_strength = adjustments_scale_value(
+            values[0], controls[0].min_value, controls[0].max_value,
+            controls[0].filter_min, controls[0].filter_max);
+        gdouble scaled_softness = adjustments_scale_value(
+            values[1], controls[1].min_value, controls[1].max_value,
+            controls[1].filter_min, controls[1].filter_max);
+        gfloat filter_values[2] = { (gfloat)scaled_strength, (gfloat)scaled_softness };
+        if (!filter_film_grain_apply(temp_layer, filter_values, 2)) {
+            return FALSE;
+        }
+    }
+
+    filter_dialog_update_after_layer(dialog, temp_layer);
+    return TRUE;
+}
+
+/**
+ * Effects > Artistic > Film Grain callback
+ */
+static void on_artistic_film_grain(GtkWidget *widget, gpointer data)
+{
+    (void)widget;
+    AppContext *ctx = (AppContext *)data;
+    FilterControlParam controls[2];
+    gdouble values[2];
+    gint response;
+    gfloat filter_values[2];
+
+    if (!ctx) return;
+
+    controls[0].label = "strength";
+    controls[0].min_value = 1.0;
+    controls[0].max_value = 100.0;
+    controls[0].default_value = 10.0;
+    controls[0].step = 1.0;
+    controls[0].decimals = 0;
+    controls[0].filter_min = 0.0;
+    controls[0].filter_max = 1.0;
+
+    controls[1].label = "softness";
+    controls[1].min_value = 0.0;
+    controls[1].max_value = 25.0;
+    controls[1].default_value = 5.0;
+    controls[1].step = 0.1;
+    controls[1].decimals = 0;
+    controls[1].filter_min = 0.0;
+    controls[1].filter_max = 25.0;
+
+    response = ui_show_filter_dialog(ctx, "Film Grain", controls, 2,
+                                     on_film_grain_preview_update, values);
+
+    if (response == GTK_RESPONSE_OK) {
+        gdouble scaled_strength = adjustments_scale_value(
+            values[0], controls[0].min_value, controls[0].max_value,
+            controls[0].filter_min, controls[0].filter_max);
+        gdouble scaled_softness = adjustments_scale_value(
+            values[1], controls[1].min_value, controls[1].max_value,
+            controls[1].filter_min, controls[1].filter_max);
+        filter_values[0] = (gfloat)scaled_strength;
+        filter_values[1] = (gfloat)scaled_softness;
+        ui_apply_layer_filter_with_value(ctx, filter_film_grain_apply,
+                                        "Film Grain", filter_values, 2);
+    }
+}
+
+/**
+ * Frosted glass filter preview update callback
+ */
+static gboolean on_frosted_glass_preview_update(FilterDialog *dialog,
+                                                const gdouble *values,
+                                                gint num_values,
+                                                gpointer user_data)
+{
+    ImageLayer *temp_layer = (ImageLayer *)user_data;
+    ImageLayer *original_layer;
+    FilterControlParam *controls;
+    cairo_t *cr;
+
+    if (!dialog || !values || num_values < 2 || !temp_layer) {
+        return FALSE;
+    }
+
+    original_layer = (ImageLayer *)g_object_get_data(G_OBJECT(filter_dialog_get_window(dialog)), "original_layer");
+    if (!original_layer) {
+        return FALSE;
+    }
+
+    controls = (FilterControlParam *)g_object_get_data(G_OBJECT(filter_dialog_get_window(dialog)), "control_params");
+    if (!controls) {
+        return FALSE;
+    }
+
+    cr = cairo_create(temp_layer->surface);
+    cairo_set_source_surface(cr, original_layer->surface, 0, 0);
+    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+    cairo_paint(cr);
+    cairo_destroy(cr);
+
+    {
+        gdouble scaled_radius = adjustments_scale_value(
+            values[0], controls[0].min_value, controls[0].max_value,
+            controls[0].filter_min, controls[0].filter_max);
+        gdouble scaled_range = adjustments_scale_value(
+            values[1], controls[1].min_value, controls[1].max_value,
+            controls[1].filter_min, controls[1].filter_max);
+        gfloat filter_values[2] = { (gfloat)scaled_radius, (gfloat)scaled_range };
+        if (!filter_frosted_glass_apply(temp_layer, filter_values, 2)) {
+            return FALSE;
+        }
+    }
+
+    filter_dialog_update_after_layer(dialog, temp_layer);
+    return TRUE;
+}
+
+/**
+ * Effects > Artistic > Frosted Glass callback
+ */
+static void on_artistic_frosted_glass(GtkWidget *widget, gpointer data)
+{
+    (void)widget;
+    AppContext *ctx = (AppContext *)data;
+    FilterControlParam controls[2];
+    gdouble values[2];
+    gint response;
+    gfloat filter_values[2];
+
+    if (!ctx) return;
+
+    controls[0].label = "radius";
+    controls[0].min_value = 1.0;
+    controls[0].max_value = 100.0;
+    controls[0].default_value = 2.0;
+    controls[0].step = 1.0;
+    controls[0].decimals = 0;
+    controls[0].filter_min = 1.0;
+    controls[0].filter_max = 100.0;
+
+    controls[1].label = "range";
+    controls[1].min_value = 1.0;
+    controls[1].max_value = 20.0;
+    controls[1].default_value = 3.0;
+    controls[1].step = 1.0;
+    controls[1].decimals = 0;
+    controls[1].filter_min = 1.0;
+    controls[1].filter_max = 20.0;
+
+    response = ui_show_filter_dialog(ctx, "Frosted Glass", controls, 2,
+                                     on_frosted_glass_preview_update, values);
+
+    if (response == GTK_RESPONSE_OK) {
+        gdouble scaled_radius = adjustments_scale_value(
+            values[0], controls[0].min_value, controls[0].max_value,
+            controls[0].filter_min, controls[0].filter_max);
+        gdouble scaled_range = adjustments_scale_value(
+            values[1], controls[1].min_value, controls[1].max_value,
+            controls[1].filter_min, controls[1].filter_max);
+        filter_values[0] = (gfloat)scaled_radius;
+        filter_values[1] = (gfloat)scaled_range;
+        ui_apply_layer_filter_with_value(ctx, filter_frosted_glass_apply,
+                                        "Frosted Glass", filter_values, 2);
+    }
+}
+
+/**
+ * Oil paint filter preview update callback
+ */
+static gboolean on_oil_paint_preview_update(FilterDialog *dialog,
+                                           const gdouble *values,
+                                           gint num_values,
+                                           gpointer user_data)
+{
+    ImageLayer *temp_layer = (ImageLayer *)user_data;
+    ImageLayer *original_layer;
+    FilterControlParam *controls;
+    cairo_t *cr;
+
+    if (!dialog || !values || num_values < 2 || !temp_layer) {
+        return FALSE;
+    }
+
+    original_layer = (ImageLayer *)g_object_get_data(G_OBJECT(filter_dialog_get_window(dialog)), "original_layer");
+    if (!original_layer) {
+        return FALSE;
+    }
+
+    controls = (FilterControlParam *)g_object_get_data(G_OBJECT(filter_dialog_get_window(dialog)), "control_params");
+    if (!controls) {
+        return FALSE;
+    }
+
+    cr = cairo_create(temp_layer->surface);
+    cairo_set_source_surface(cr, original_layer->surface, 0, 0);
+    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+    cairo_paint(cr);
+    cairo_destroy(cr);
+
+    {
+        gdouble scaled_radius = adjustments_scale_value(
+            values[0], controls[0].min_value, controls[0].max_value,
+            controls[0].filter_min, controls[0].filter_max);
+        gdouble scaled_intensity = adjustments_scale_value(
+            values[1], controls[1].min_value, controls[1].max_value,
+            controls[1].filter_min, controls[1].filter_max);
+        gfloat filter_values[2] = { (gfloat)scaled_radius, (gfloat)scaled_intensity };
+        if (!filter_oil_paint_apply(temp_layer, filter_values, 2)) {
+            return FALSE;
+        }
+    }
+
+    filter_dialog_update_after_layer(dialog, temp_layer);
+    return TRUE;
+}
+
+/**
+ * Effects > Artistic > Oil Paint callback
+ */
+static void on_artistic_oil_paint(GtkWidget *widget, gpointer data)
+{
+    (void)widget;
+    AppContext *ctx = (AppContext *)data;
+    FilterControlParam controls[2];
+    gdouble values[2];
+    gint response;
+    gfloat filter_values[2];
+
+    if (!ctx) return;
+
+    controls[0].label = "brush size";
+    controls[0].min_value = 1.0;
+    controls[0].max_value = 200.0;
+    controls[0].default_value = 5.0;
+    controls[0].step = 1.0;
+    controls[0].decimals = 0;
+    controls[0].filter_min = 1.0;
+    controls[0].filter_max = 200.0;
+
+    controls[1].label = "detail";
+    controls[1].min_value = 1.0;
+    controls[1].max_value = 100.0;
+    controls[1].default_value = 15.0;
+    controls[1].step = 1.0;
+    controls[1].decimals = 0;
+    controls[1].filter_min = 1.0;
+    controls[1].filter_max = 100.0;
+
+    response = ui_show_filter_dialog(ctx, "Oil Painting", controls, 2,
+                                     on_oil_paint_preview_update, values);
+
+    if (response == GTK_RESPONSE_OK) {
+        gdouble scaled_radius = adjustments_scale_value(
+            values[0], controls[0].min_value, controls[0].max_value,
+            controls[0].filter_min, controls[0].filter_max);
+        gdouble scaled_intensity = adjustments_scale_value(
+            values[1], controls[1].min_value, controls[1].max_value,
+            controls[1].filter_min, controls[1].filter_max);
+        filter_values[0] = (gfloat)scaled_radius;
+        filter_values[1] = (gfloat)scaled_intensity;
+        ui_apply_layer_filter_with_value(ctx, filter_oil_paint_apply,
+                                        "Oil Painting", filter_values, 2);
+    }
+}
+
+/**
  * Setup Effects menu from Glade builder
  */
 void ui_filter_effects_setup_menu(GtkBuilder *builder, AppContext *ctx)
@@ -994,6 +1294,22 @@ void ui_filter_effects_setup_menu(GtkBuilder *builder, AppContext *ctx)
     GtkWidget *blur_menu_zoom_blur = GTK_WIDGET(gtk_builder_get_object(builder, "blur_menu_zoom_blur"));
     if (blur_menu_zoom_blur) {
         g_signal_connect(blur_menu_zoom_blur, "activate", G_CALLBACK(on_effects_zoom_blur), ctx);
+    }
+
+    /* Connect Artistic submenu signals */
+    GtkWidget *artistic_menu_film_grain = GTK_WIDGET(gtk_builder_get_object(builder, "artistic_menu_film_grain"));
+    if (artistic_menu_film_grain) {
+        g_signal_connect(artistic_menu_film_grain, "activate", G_CALLBACK(on_artistic_film_grain), ctx);
+    }
+
+    GtkWidget *artistic_menu_frosted_glass = GTK_WIDGET(gtk_builder_get_object(builder, "artistic_menu_frosted_glass"));
+    if (artistic_menu_frosted_glass) {
+        g_signal_connect(artistic_menu_frosted_glass, "activate", G_CALLBACK(on_artistic_frosted_glass), ctx);
+    }
+
+    GtkWidget *artistic_menu_oil_paint = GTK_WIDGET(gtk_builder_get_object(builder, "artistic_menu_oil_paint"));
+    if (artistic_menu_oil_paint) {
+        g_signal_connect(artistic_menu_oil_paint, "activate", G_CALLBACK(on_artistic_oil_paint), ctx);
     }
 }
 

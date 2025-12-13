@@ -30,20 +30,20 @@
       </object>
     </child>
     <child>
-        <object class="GtkMenuItem" id="adjust_menu_auto_threshold">
-            <property name="visible">True</property>
-            <property name="can-focus">False</property>
-            <property name="label" translatable="yes">Auto Threshold</property>
-            <property name="use-underline">True</property>
-        </object>
+      <object class="GtkMenuItem" id="adjust_menu_auto_threshold">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Auto Threshold</property>
+        <property name="use-underline">True</property>
+      </object>
     </child>
     <child>
-        <object class="GtkMenuItem" id="adjust_menu_auto_wb">
-            <property name="visible">True</property>
-            <property name="can-focus">False</property>
-            <property name="label" translatable="yes">Auto White Balance</property>
-            <property name="use-underline">True</property>
-        </object>
+      <object class="GtkMenuItem" id="adjust_menu_auto_wb">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Auto White Balance</property>
+        <property name="use-underline">True</property>
+      </object>
     </child>
     <child>
       <object class="GtkSeparatorMenuItem" id="adjust_separator1">
@@ -962,14 +962,16 @@
       <object class="GtkMenuItem" id="view_menu_zoom_in">
         <property name="visible">True</property>
         <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Zoom _In</property>
         <accelerator key="plus" signal="activate" modifiers="GDK_CONTROL_MASK"/>
-        <accelerator key="equal" signal="activate" modifiers="GDK_CONTROL_MASK"/>
       </object>
     </child>
     <child>
-      <object class="GtkMenuItem" id="view_menu_zoom_out">
+      <object class="GtkCheckMenuItem" id="view_menu_zoom_out">
         <property name="visible">True</property>
         <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Zoom _Out</property>
+        <property name="use-underline">True</property>
         <accelerator key="minus" signal="activate" modifiers="GDK_CONTROL_MASK"/>
       </object>
     </child>
@@ -977,6 +979,7 @@
       <object class="GtkMenuItem" id="view_menu_zoom_reset">
         <property name="visible">True</property>
         <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Actual Pixel Size</property>
         <accelerator key="0" signal="activate" modifiers="GDK_CONTROL_MASK"/>
       </object>
     </child>
@@ -984,6 +987,7 @@
       <object class="GtkMenuItem" id="view_menu_zoom_fit">
         <property name="visible">True</property>
         <property name="can-focus">False</property>
+        <property name="label" translatable="yes">_Fit on Screen</property>
         <accelerator key="1" signal="activate" modifiers="GDK_CONTROL_MASK"/>
       </object>
     </child>

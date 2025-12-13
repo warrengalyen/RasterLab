@@ -87,6 +87,9 @@ set(SOURCES
     ui/filters/filter_surface_blur.c
     ui/filters/filter_zoom_blur.c
     ui/filters/filter_exponential_blur.c
+    ui/filters/filter_film_grain.c
+    ui/filters/filter_frosted_glass.c
+    ui/filters/filter_oil_paint.c
     render/render_utils.c
     render/layer.c
     render/compositor.c
