@@ -5,13 +5,17 @@
 #include "ui/filters/filter_average_blur.h"
 #include "ui/filters/filter_box_blur.h"
 #include "ui/filters/filter_canny_edge.h"
+#include "ui/filters/filter_color_halftone.h"
+#include "ui/filters/filter_crystallize.h"
 #include "ui/filters/filter_exponential_blur.h"
 #include "ui/filters/filter_film_grain.h"
+#include "ui/filters/filter_fragment.h"
 #include "ui/filters/filter_frosted_glass.h"
 #include "ui/filters/filter_gaussian_blur.h"
 #include "ui/filters/filter_gradient_edge.h"
 #include "ui/filters/filter_laplacian_edge.h"
 #include "ui/filters/filter_median_blur.h"
+#include "ui/filters/filter_mosaic.h"
 #include "ui/filters/filter_motion_blur.h"
 #include "ui/filters/filter_oil_paint.h"
 #include "ui/filters/filter_pointillize.h"
@@ -1270,6 +1274,284 @@ static gboolean on_pointillize_preview_update(FilterDialog* dialog,
 }
 
 /**
+ * Crystallize filter preview update callback
+ */
+static gboolean on_crystallize_preview_update(FilterDialog* dialog,
+                                              const gdouble* values,
+                                              gint num_values,
+                                              gpointer user_data) {
+    gfloat filter_values[1];
+
+    if (!dialog || !values || num_values < 1) {
+        return FALSE;
+    }
+
+    filter_values[0] = (gfloat)values[0]; /* cellSize */
+
+    /* Set up viewport-based filter */
+    setup_viewport_filter(dialog, (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_crystallize_apply,
+                          filter_values, 1);
+
+    return TRUE;
+}
+
+/**
+ * Mosaic filter preview update callback
+ */
+static gboolean on_mosaic_preview_update(FilterDialog* dialog,
+                                         const gdouble* values,
+                                         gint num_values,
+                                         gpointer user_data) {
+    gfloat filter_values[1];
+
+    if (!dialog || !values || num_values < 1) {
+        return FALSE;
+    }
+
+    filter_values[0] = (gfloat)values[0]; /* blockSize */
+
+    /* Set up viewport-based filter */
+    setup_viewport_filter(dialog, (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_mosaic_apply,
+                          filter_values, 1);
+
+    return TRUE;
+}
+
+/**
+ * Effects > Pixelate > Mosaic callback
+ */
+static void on_pixelate_mosaic(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    FilterControlParam controls[1];
+    gdouble values[1];
+    gint response;
+    gfloat filter_values[1];
+
+    if (!ctx) {
+        return;
+    }
+
+    /* Control 0: Block Size (double) */
+    controls[0].type = FILTER_CONTROL_DOUBLE;
+    controls[0].label = "Block Size";
+    controls[0].min_value = 3.0;
+    controls[0].max_value = 100.0;
+    controls[0].default_value = 10.0;
+    controls[0].step = 1.0;
+    controls[0].decimals = 0;
+    controls[0].filter_min = 3.0;
+    controls[0].filter_max = 100.0;
+
+    response = ui_show_filter_dialog(ctx, "Mosaic", controls, 1,
+                                     on_mosaic_preview_update, values);
+
+    if (response == GTK_RESPONSE_OK) {
+        filter_values[0] = (gfloat)values[0]; /* blockSize */
+
+        ui_apply_layer_filter_with_value(ctx, filter_mosaic_apply,
+                                         "Mosaic", filter_values, 1);
+    }
+}
+
+/**
+ * Effects > Pixelate > Crystallize callback
+ */
+static void on_pixelate_crystallize(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    FilterControlParam controls[1];
+    gdouble values[1];
+    gint response;
+    gfloat filter_values[1];
+
+    if (!ctx) {
+        return;
+    }
+
+    /* Control 0: Cell Size (double) */
+    controls[0].type = FILTER_CONTROL_DOUBLE;
+    controls[0].label = "Cell Size";
+    controls[0].min_value = 3.0;
+    controls[0].max_value = 100.0;
+    controls[0].default_value = 10.0;
+    controls[0].step = 1.0;
+    controls[0].decimals = 0;
+    controls[0].filter_min = 3.0;
+    controls[0].filter_max = 100.0;
+
+    response = ui_show_filter_dialog(ctx, "Crystallize", controls, 1,
+                                     on_crystallize_preview_update, values);
+
+    if (response == GTK_RESPONSE_OK) {
+        filter_values[0] = (gfloat)values[0]; /* cellSize */
+
+        ui_apply_layer_filter_with_value(ctx, filter_crystallize_apply,
+                                         "Crystallize", filter_values, 1);
+    }
+}
+
+/**
+ * Effects > Pixelate > Fragment callback
+ */
+static void on_pixelate_fragment(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    ui_apply_layer_filter(ctx, filter_fragment_apply, "Fragment");
+}
+
+/**
+ * Color halftone filter preview update callback
+ */
+static gboolean on_color_halftone_preview_update(FilterDialog* dialog,
+                                                 const gdouble* values,
+                                                 gint num_values,
+                                                 gpointer user_data) {
+    FilterControlParam* controls;
+    gdouble scaled_radius, scaled_dot_density;
+    gdouble scaled_cyan_angle, scaled_magenta_angle, scaled_yellow_angle;
+    gfloat filter_values[5];
+
+    if (!dialog || !values || num_values < 5) {
+        return FALSE;
+    }
+
+    controls = (FilterControlParam*)g_object_get_data(G_OBJECT(filter_dialog_get_window(dialog)), "control_params");
+    if (!controls) {
+        return FALSE;
+    }
+
+    scaled_radius = adjustments_scale_value(
+        values[0], controls[0].min_value, controls[0].max_value,
+        controls[0].filter_min, controls[0].filter_max);
+    scaled_dot_density = adjustments_scale_value(
+        values[1], controls[1].min_value, controls[1].max_value,
+        controls[1].filter_min, controls[1].filter_max);
+    scaled_cyan_angle = adjustments_scale_value(
+        values[2], controls[2].min_value, controls[2].max_value,
+        controls[2].filter_min, controls[2].filter_max);
+    scaled_magenta_angle = adjustments_scale_value(
+        values[3], controls[3].min_value, controls[3].max_value,
+        controls[3].filter_min, controls[3].filter_max);
+    scaled_yellow_angle = adjustments_scale_value(
+        values[4], controls[4].min_value, controls[4].max_value,
+        controls[4].filter_min, controls[4].filter_max);
+
+    filter_values[0] = (gfloat)scaled_radius;
+    filter_values[1] = (gfloat)scaled_dot_density;
+    filter_values[2] = (gfloat)scaled_cyan_angle;
+    filter_values[3] = (gfloat)scaled_magenta_angle;
+    filter_values[4] = (gfloat)scaled_yellow_angle;
+
+    /* Set up viewport-based filter */
+    setup_viewport_filter(dialog, (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_color_halftone_apply,
+                          filter_values, 5);
+
+    return TRUE;
+}
+
+/**
+ * Effects > Pixelate > Color Halftone callback
+ */
+static void on_pixelate_halftone(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    FilterControlParam controls[5];
+    gdouble values[5];
+    gint response;
+    gfloat filter_values[5];
+
+    if (!ctx) {
+        return;
+    }
+
+    /* Control 0: Radius (double) */
+    controls[0].type = FILTER_CONTROL_DOUBLE;
+    controls[0].label = "Radius";
+    controls[0].min_value = 4.0;
+    controls[0].max_value = 100.0;
+    controls[0].default_value = 5.0;
+    controls[0].step = 1.0;
+    controls[0].decimals = 0;
+    controls[0].filter_min = 4.0;
+    controls[0].filter_max = 100.0;
+
+    /* Control 1: Dot Density (double) */
+    controls[1].type = FILTER_CONTROL_DOUBLE;
+    controls[1].label = "Dot Density";
+    controls[1].min_value = 0.0;
+    controls[1].max_value = 100.0;
+    controls[1].default_value = 100.0;
+    controls[1].step = 1.0;
+    controls[1].decimals = 0;
+    controls[1].filter_min = 0.0;
+    controls[1].filter_max = 100.0;
+
+    /* Control 2: Cyan Angle (double) */
+    controls[2].type = FILTER_CONTROL_DOUBLE;
+    controls[2].label = "Cyan Angle";
+    controls[2].min_value = 0.0;
+    controls[2].max_value = 360.0;
+    controls[2].default_value = 0.0;
+    controls[2].step = 1.0;
+    controls[2].decimals = 0;
+    controls[2].filter_min = 0.0;
+    controls[2].filter_max = 360.0;
+
+    /* Control 3: Magenta Angle (double) */
+    controls[3].type = FILTER_CONTROL_DOUBLE;
+    controls[3].label = "Magenta Angle";
+    controls[3].min_value = 0.0;
+    controls[3].max_value = 360.0;
+    controls[3].default_value = 33.3;
+    controls[3].step = 1.0;
+    controls[3].decimals = 0;
+    controls[3].filter_min = 0.0;
+    controls[3].filter_max = 360.0;
+
+    /* Control 4: Yellow Angle (double) */
+    controls[4].type = FILTER_CONTROL_DOUBLE;
+    controls[4].label = "Yellow Angle";
+    controls[4].min_value = 0.0;
+    controls[4].max_value = 360.0;
+    controls[4].default_value = 66.7;
+    controls[4].step = 1.0;
+    controls[4].decimals = 0;
+    controls[4].filter_min = 0.0;
+    controls[4].filter_max = 360.0;
+
+    response = ui_show_filter_dialog(ctx, "Color Halftone", controls, 5,
+                                     on_color_halftone_preview_update, values);
+
+    if (response == GTK_RESPONSE_OK) {
+        gdouble scaled_radius = adjustments_scale_value(
+            values[0], controls[0].min_value, controls[0].max_value,
+            controls[0].filter_min, controls[0].filter_max);
+        gdouble scaled_dot_density = adjustments_scale_value(
+            values[1], controls[1].min_value, controls[1].max_value,
+            controls[1].filter_min, controls[1].filter_max);
+        gdouble scaled_cyan_angle = adjustments_scale_value(
+            values[2], controls[2].min_value, controls[2].max_value,
+            controls[2].filter_min, controls[2].filter_max);
+        gdouble scaled_magenta_angle = adjustments_scale_value(
+            values[3], controls[3].min_value, controls[3].max_value,
+            controls[3].filter_min, controls[3].filter_max);
+        gdouble scaled_yellow_angle = adjustments_scale_value(
+            values[4], controls[4].min_value, controls[4].max_value,
+            controls[4].filter_min, controls[4].filter_max);
+
+        filter_values[0] = (gfloat)scaled_radius;
+        filter_values[1] = (gfloat)scaled_dot_density;
+        filter_values[2] = (gfloat)scaled_cyan_angle;
+        filter_values[3] = (gfloat)scaled_magenta_angle;
+        filter_values[4] = (gfloat)scaled_yellow_angle;
+
+        ui_apply_layer_filter_with_value(ctx, filter_color_halftone_apply,
+                                         "Color Halftone", filter_values, 5);
+    }
+}
+
+/**
  * Effects > Pixelate > Pointillize callback
  */
 static void on_pixelate_pointillize(GtkWidget* widget, gpointer data) {
@@ -1422,6 +1704,26 @@ void ui_filter_effects_setup_menu(GtkBuilder* builder, AppContext* ctx) {
     }
 
     /* Connect Pixelate submenu signals */
+    GtkWidget* pixelate_menu_crystallize = GTK_WIDGET(gtk_builder_get_object(builder, "pixelate_menu_crystallize"));
+    if (pixelate_menu_crystallize) {
+        g_signal_connect(pixelate_menu_crystallize, "activate", G_CALLBACK(on_pixelate_crystallize), ctx);
+    }
+
+    GtkWidget* pixelate_menu_fragment = GTK_WIDGET(gtk_builder_get_object(builder, "pixelate_menu_fragment"));
+    if (pixelate_menu_fragment) {
+        g_signal_connect(pixelate_menu_fragment, "activate", G_CALLBACK(on_pixelate_fragment), ctx);
+    }
+
+    GtkWidget* pixelate_menu_halftone = GTK_WIDGET(gtk_builder_get_object(builder, "pixelate_menu_halftone"));
+    if (pixelate_menu_halftone) {
+        g_signal_connect(pixelate_menu_halftone, "activate", G_CALLBACK(on_pixelate_halftone), ctx);
+    }
+
+    GtkWidget* pixelate_menu_mosaic = GTK_WIDGET(gtk_builder_get_object(builder, "pixelate_menu_mosaic"));
+    if (pixelate_menu_mosaic) {
+        g_signal_connect(pixelate_menu_mosaic, "activate", G_CALLBACK(on_pixelate_mosaic), ctx);
+    }
+
     GtkWidget* pixelate_menu_pointillize = GTK_WIDGET(gtk_builder_get_object(builder, "pixelate_menu_pointillize"));
     if (pixelate_menu_pointillize) {
         g_signal_connect(pixelate_menu_pointillize, "activate", G_CALLBACK(on_pixelate_pointillize), ctx);
