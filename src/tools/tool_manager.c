@@ -1,18 +1,18 @@
 #include "tool_manager.h"
-#include "tool_move.h"
 #include "tool_brush.h"
 #include "tool_eraser.h"
 #include "tool_fill.h"
-#include <stdlib.h>
+#include "tool_move.h"
+#include "tool_options.h"
 #include <stdio.h>
+#include <stdlib.h>
 
 /**
  * Create a new tool manager instance
  */
-ToolRegistry* tool_manager_new(void)
-{
-    ToolRegistry *registry = (ToolRegistry *)g_malloc(sizeof(ToolRegistry));
-    
+ToolRegistry* tool_manager_new(void) {
+    ToolRegistry* registry = (ToolRegistry*)g_malloc(sizeof(ToolRegistry));
+
     for (int i = 0; i < TOOL_COUNT; i++) {
         registry->tools[i] = NULL;
     }
@@ -26,9 +26,8 @@ ToolRegistry* tool_manager_new(void)
 /**
  * Initialize default tools
  */
-gboolean tool_manager_init_defaults(ToolRegistry *registry)
-{
-    Tool *tool;
+gboolean tool_manager_init_defaults(ToolRegistry* registry) {
+    Tool* tool;
 
     if (!registry) {
         return FALSE;
@@ -65,7 +64,7 @@ gboolean tool_manager_init_defaults(ToolRegistry *registry)
     /* Activate Move tool by default */
     tool_manager_activate(registry, TOOL_MOVE);
 
-    //printf("Tool manager initialized with %d default tools\n", TOOL_COUNT);
+    // printf("Tool manager initialized with %d default tools\n", TOOL_COUNT);
 
     return TRUE;
 }
@@ -73,14 +72,13 @@ gboolean tool_manager_init_defaults(ToolRegistry *registry)
 /**
  * Register a tool with the manager
  */
-gboolean tool_manager_register(ToolRegistry *registry, Tool *tool, ToolType type)
-{
+gboolean tool_manager_register(ToolRegistry* registry, Tool* tool, ToolType type) {
     if (!registry || !tool || type < 0 || type >= TOOL_COUNT) {
         return FALSE;
     }
 
     registry->tools[type] = tool;
-    //printf("Tool registered: %s (type=%d)\n", tool->name, type);
+    // printf("Tool registered: %s (type=%d)\n", tool->name, type);
 
     return TRUE;
 }
@@ -88,9 +86,8 @@ gboolean tool_manager_register(ToolRegistry *registry, Tool *tool, ToolType type
 /**
  * Activate a tool by type
  */
-gboolean tool_manager_activate(ToolRegistry *registry, ToolType type)
-{
-    Tool *tool;
+gboolean tool_manager_activate(ToolRegistry* registry, ToolType type) {
+    Tool* tool;
 
     if (!registry || type < 0 || type >= TOOL_COUNT) {
         return FALSE;
@@ -102,7 +99,16 @@ gboolean tool_manager_activate(ToolRegistry *registry, ToolType type)
     }
 
     registry->active_tool = tool;
-    //printf("Tool activated: %s\n", tool->name);
+
+    /* Update cursor for brush/eraser tools based on current size */
+    if (tool->type == TOOL_BRUSH || tool->type == TOOL_ERASER) {
+        ToolOptions* opts = tool_options_get_global();
+        if (opts) {
+            tool_update_cursor(tool, opts->size);
+        }
+    }
+
+    // printf("Tool activated: %s\n", tool->name);
 
     return TRUE;
 }
@@ -110,8 +116,7 @@ gboolean tool_manager_activate(ToolRegistry *registry, ToolType type)
 /**
  * Get the currently active tool
  */
-Tool* tool_manager_get_active(ToolRegistry *registry)
-{
+Tool* tool_manager_get_active(ToolRegistry* registry) {
     if (!registry) {
         return NULL;
     }
@@ -122,8 +127,7 @@ Tool* tool_manager_get_active(ToolRegistry *registry)
 /**
  * Get a tool by type
  */
-Tool* tool_manager_get(ToolRegistry *registry, ToolType type)
-{
+Tool* tool_manager_get(ToolRegistry* registry, ToolType type) {
     if (!registry || type < 0 || type >= TOOL_COUNT) {
         return NULL;
     }
@@ -134,8 +138,7 @@ Tool* tool_manager_get(ToolRegistry *registry, ToolType type)
 /**
  * Free the tool manager and all tools
  */
-void tool_manager_free(ToolRegistry *registry)
-{
+void tool_manager_free(ToolRegistry* registry) {
     if (!registry) {
         return;
     }
@@ -148,4 +151,3 @@ void tool_manager_free(ToolRegistry *registry)
 
     g_free(registry);
 }
-

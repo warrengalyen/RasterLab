@@ -19,6 +19,7 @@ typedef struct AppContext AppContext;
 static gboolean on_drawing_area_button_press(GtkWidget* widget, GdkEventButton* event, gpointer user_data);
 static gboolean on_drawing_area_button_release(GtkWidget* widget, GdkEventButton* event, gpointer user_data);
 static gboolean on_drawing_area_motion_notify(GtkWidget* widget, GdkEventMotion* event, gpointer user_data);
+static gboolean on_drawing_area_enter_notify(GtkWidget* widget, GdkEventCrossing* event, gpointer user_data);
 
 /**
  * Drawing area draw callback
@@ -283,6 +284,42 @@ static gboolean on_drawing_area_motion_notify(GtkWidget* widget, GdkEventMotion*
 }
 
 /**
+ * Drawing area enter notify callback - set cursor for active tool
+ */
+static gboolean on_drawing_area_enter_notify(GtkWidget* widget, GdkEventCrossing* event, gpointer user_data) {
+    ImageDocument* doc = (ImageDocument*)user_data;
+    ToolRegistry* tool_registry = NULL;
+    Tool* active_tool = NULL;
+    GdkWindow* window;
+
+    (void)event; /* Unused */
+
+    if (!doc || !doc->drawing_area) {
+        return FALSE;
+    }
+
+    /* Get tool registry from drawing area data */
+    tool_registry = (ToolRegistry*)g_object_get_data(G_OBJECT(doc->drawing_area), "tool_registry");
+    if (!tool_registry) {
+        return FALSE;
+    }
+
+    /* Get active tool */
+    active_tool = tool_manager_get_active(tool_registry);
+    if (!active_tool || !active_tool->cursor) {
+        return FALSE;
+    }
+
+    /* Set cursor on drawing area window */
+    window = gtk_widget_get_window(doc->drawing_area);
+    if (window) {
+        gdk_window_set_cursor(window, active_tool->cursor);
+    }
+
+    return FALSE;
+}
+
+/**
  * Create a new image document
  */
 ImageDocument* document_new(const gchar* filename) {
@@ -411,7 +448,8 @@ GtkWidget* document_create_drawing_area(ImageDocument* doc) {
                           gtk_widget_get_events(drawing_area) |
                               GDK_BUTTON_PRESS_MASK |
                               GDK_BUTTON_RELEASE_MASK |
-                              GDK_POINTER_MOTION_MASK);
+                              GDK_POINTER_MOTION_MASK |
+                              GDK_ENTER_NOTIFY_MASK);
 
     /* Connect draw signal */
     g_signal_connect(drawing_area, "draw", G_CALLBACK(on_drawing_area_draw), doc);
@@ -423,6 +461,8 @@ GtkWidget* document_create_drawing_area(ImageDocument* doc) {
                      G_CALLBACK(on_drawing_area_button_release), doc);
     g_signal_connect(drawing_area, "motion-notify-event",
                      G_CALLBACK(on_drawing_area_motion_notify), doc);
+    g_signal_connect(drawing_area, "enter-notify-event",
+                     G_CALLBACK(on_drawing_area_enter_notify), doc);
 
     /* Store references in document */
     doc->drawing_area = drawing_area;

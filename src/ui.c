@@ -399,6 +399,10 @@ AppContext* ui_create_main_window(void) {
         g_free(ctx);
         return NULL;
     }
+    /* Set tool registry in panel for cursor updates */
+    tool_options_panel_set_tool_registry(ctx->tool_options_panel, ctx->tool_registry);
+    /* Store panel reference in panel widget */
+    g_object_set_data(G_OBJECT(ctx->tool_options_panel->panel), "tool_options_panel", ctx->tool_options_panel);
     gtk_container_add(GTK_CONTAINER(tool_options_container), ctx->tool_options_panel->panel);
 
     /* ==== LEFT PANEL: Tools (fixed width) ==== */
