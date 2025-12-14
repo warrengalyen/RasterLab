@@ -1274,6 +1274,7 @@ static void on_adjust_temperature(GtkWidget* widget, gpointer data) {
     }
 
     /* Define color temperature control parameters */
+    controls[0].type = FILTER_CONTROL_DOUBLE;
     controls[0].label = "temperature (K)";
     controls[0].min_value = 1000.0; /* UI range: 2000 to 15000 K */
     controls[0].max_value = 15000.0;
@@ -1283,6 +1284,7 @@ static void on_adjust_temperature(GtkWidget* widget, gpointer data) {
     controls[0].filter_min = 1000.0;
     controls[0].filter_max = 15000.0;
 
+    controls[1].type = FILTER_CONTROL_DOUBLE;
     controls[1].label = "strength";
     controls[1].min_value = 1.0;
     controls[1].max_value = 100.0;
