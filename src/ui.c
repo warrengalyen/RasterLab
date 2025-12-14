@@ -1,96 +1,94 @@
 #include "ui.h"
+#include "command.h"
+#include "document.h"
+#include "panels.h"
+#include "render/compositor.h"
+#include "render/layer.h"
+#include "tool_manager.h"
+#include "ui/layers_panel.h"
+#include "ui/tool_options_panel.h"
+#include "ui/tools_panel.h"
 #include "ui/ui_filter.h"
 #include "ui/ui_filter_adjust.h"
 #include "ui/ui_filter_effects.h"
-#include "document.h"
-#include "panels.h"
-#include "ui/tools_panel.h"
-#include "ui/tool_options_panel.h"
-#include "ui/layers_panel.h"
-#include "tool_manager.h"
-#include "render/layer.h"
-#include "render/compositor.h"
-#include "command.h"
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
 #include <glib.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 /* Log handler to suppress harmless GTK Builder menu warnings */
-static gboolean gtk_builder_menu_warning_handler(const gchar *log_domain,
+static gboolean gtk_builder_menu_warning_handler(const gchar* log_domain,
                                                  GLogLevelFlags log_level,
-                                                 const gchar *message,
-                                                 gpointer user_data)
-{
+                                                 const gchar* message,
+                                                 gpointer user_data) {
     (void)log_domain;
     (void)log_level;
     (void)user_data;
-    
+
     /* Suppress warnings about adding GtkMenu to GtkMenuItem */
     if (message && strstr(message, "Cannot add an object of type GtkMenu")) {
-        return TRUE;  /* Suppress this warning */
+        return TRUE; /* Suppress this warning */
     }
-    
-    return FALSE;  /* Let other warnings through */
+
+    return FALSE; /* Let other warnings through */
 }
 
 /* Forward declarations */
-static void on_file_open(GtkWidget *widget, gpointer data);
-static void on_file_open_response(GtkDialog *dialog, gint response_id, gpointer user_data);
-static void on_file_save_as(GtkWidget *widget, gpointer data);
-static void on_file_save_as_response(GtkDialog *dialog, gint response_id, gpointer user_data);
-static void on_file_close(GtkWidget *widget, gpointer data);
-static void on_file_exit(GtkWidget *widget, gpointer data);
-static void on_edit_undo(GtkWidget *widget, gpointer data);
-static void on_edit_redo(GtkWidget *widget, gpointer data);
-static void on_view_zoom_in(GtkWidget *widget, gpointer data);
-static void on_view_zoom_out(GtkWidget *widget, gpointer data);
-static void on_view_zoom_reset(GtkWidget *widget, gpointer data);
-static void on_view_zoom_fit(GtkWidget *widget, gpointer data);
-static gboolean on_window_delete(GtkWidget *widget, GdkEvent *event, gpointer data);
-static void on_layer_new(GtkWidget *widget, gpointer data);
-static void on_layer_delete(GtkWidget *widget, gpointer data);
-static void on_layer_duplicate(GtkWidget *widget, gpointer data);
-static void on_layer_move_up(GtkWidget *widget, gpointer data);
-static void on_layer_move_down(GtkWidget *widget, gpointer data);
-static void on_notebook_switch_page(GtkNotebook *notebook, GtkWidget *page,
-                                     guint page_num, gpointer user_data);
-static void on_tab_close_button_clicked(GtkButton *button, gpointer user_data);
-static void on_layer_selection_changed(GtkTreeSelection *selection, gpointer user_data);
-static void setup_file_menu(GtkBuilder *builder, AppContext *ctx, GtkAccelGroup *accel_group);
-static void setup_edit_menu(GtkBuilder *builder, AppContext *ctx, GtkAccelGroup *accel_group);
-static void setup_view_menu(GtkBuilder *builder, AppContext *ctx, GtkAccelGroup *accel_group);
-static void setup_layer_menu(GtkBuilder *builder, AppContext *ctx);
-static void setup_adjust_menu(GtkBuilder *builder, AppContext *ctx);
-static void setup_effects_menu(GtkBuilder *builder, AppContext *ctx);
+static void on_file_open(GtkWidget* widget, gpointer data);
+static void on_file_open_response(GtkDialog* dialog, gint response_id, gpointer user_data);
+static void on_file_save_as(GtkWidget* widget, gpointer data);
+static void on_file_save_as_response(GtkDialog* dialog, gint response_id, gpointer user_data);
+static void on_file_close(GtkWidget* widget, gpointer data);
+static void on_file_exit(GtkWidget* widget, gpointer data);
+static void on_edit_undo(GtkWidget* widget, gpointer data);
+static void on_edit_redo(GtkWidget* widget, gpointer data);
+static void on_view_zoom_in(GtkWidget* widget, gpointer data);
+static void on_view_zoom_out(GtkWidget* widget, gpointer data);
+static void on_view_zoom_reset(GtkWidget* widget, gpointer data);
+static void on_view_zoom_fit(GtkWidget* widget, gpointer data);
+static gboolean on_window_delete(GtkWidget* widget, GdkEvent* event, gpointer data);
+static void on_layer_new(GtkWidget* widget, gpointer data);
+static void on_layer_delete(GtkWidget* widget, gpointer data);
+static void on_layer_duplicate(GtkWidget* widget, gpointer data);
+static void on_layer_move_up(GtkWidget* widget, gpointer data);
+static void on_layer_move_down(GtkWidget* widget, gpointer data);
+static void on_notebook_switch_page(GtkNotebook* notebook, GtkWidget* page,
+                                    guint page_num, gpointer user_data);
+static void on_tab_close_button_clicked(GtkButton* button, gpointer user_data);
+static void on_layer_selection_changed(GtkTreeSelection* selection, gpointer user_data);
+static void setup_file_menu(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* accel_group);
+static void setup_edit_menu(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* accel_group);
+static void setup_view_menu(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* accel_group);
+static void setup_layer_menu(GtkBuilder* builder, AppContext* ctx);
+static void setup_adjust_menu(GtkBuilder* builder, AppContext* ctx);
+static void setup_effects_menu(GtkBuilder* builder, AppContext* ctx);
 
 /**
  * Layer selection changed callback - proper signal handler signature
  */
-static void on_layer_selection_changed(GtkTreeSelection *selection, gpointer user_data)
-{
-    (void)selection;  /* Unused - we get it from the tree view */
+static void on_layer_selection_changed(GtkTreeSelection* selection, gpointer user_data) {
+    (void)selection; /* Unused - we get it from the tree view */
 
-    AppContext *ctx = (AppContext *)user_data;
+    AppContext* ctx = (AppContext*)user_data;
 
     if (!ctx) {
-        //printf("ERROR: on_layer_selection_changed called with NULL ctx\n");
+        // printf("ERROR: on_layer_selection_changed called with NULL ctx\n");
         return;
     }
 
-    //printf("Layer selection changed in tree view\n");
-    
+    // printf("Layer selection changed in tree view\n");
+
     /* Get the currently active document */
-    ImageDocument *active_doc = ui_get_active_document(ctx);
+    ImageDocument* active_doc = ui_get_active_document(ctx);
     if (active_doc && ctx->layers_panel) {
         /* Set the selected layer in the document so tools use the right layer */
-        ImageLayer *selected_layer = layers_panel_get_selected_layer(ctx->layers_panel);
+        ImageLayer* selected_layer = layers_panel_get_selected_layer(ctx->layers_panel);
         document_set_selected_layer(active_doc, selected_layer);
-        
+
         /* Update opacity controls to reflect selected layer */
         layers_panel_update_opacity_controls(ctx->layers_panel);
     }
-    
+
     /* Update menu and button states */
     ui_update_menu_and_button_states(ctx);
 }
@@ -98,11 +96,10 @@ static void on_layer_selection_changed(GtkTreeSelection *selection, gpointer use
 /**
  * Create the File menu
  */
-static GtkWidget* create_file_menu(AppContext *ctx)
-{
-    GtkWidget *menu = gtk_menu_new();
-    GtkWidget *menu_item;
-    GtkAccelGroup *accel_group;
+static GtkWidget* create_file_menu(AppContext* ctx) {
+    GtkWidget* menu = gtk_menu_new();
+    GtkWidget* menu_item;
+    GtkAccelGroup* accel_group;
 
     accel_group = gtk_accel_group_new();
 
@@ -146,11 +143,10 @@ static GtkWidget* create_file_menu(AppContext *ctx)
 /**
  * Create the Edit menu
  */
-static GtkWidget* create_edit_menu(AppContext *ctx)
-{
-    GtkWidget *menu = gtk_menu_new();
-    GtkWidget *menu_item;
-    GtkAccelGroup *accel_group = gtk_accel_group_new();
+static GtkWidget* create_edit_menu(AppContext* ctx) {
+    GtkWidget* menu = gtk_menu_new();
+    GtkWidget* menu_item;
+    GtkAccelGroup* accel_group = gtk_accel_group_new();
 
     /* Edit > Undo */
     menu_item = gtk_menu_item_new_with_mnemonic("_Undo");
@@ -178,11 +174,10 @@ static GtkWidget* create_edit_menu(AppContext *ctx)
 /**
  * Create the View menu
  */
-static GtkWidget* create_view_menu(AppContext *ctx)
-{
-    GtkWidget *menu = gtk_menu_new();
-    GtkWidget *menu_item;
-    GtkAccelGroup *accel_group = gtk_accel_group_new();
+static GtkWidget* create_view_menu(AppContext* ctx) {
+    GtkWidget* menu = gtk_menu_new();
+    GtkWidget* menu_item;
+    GtkAccelGroup* accel_group = gtk_accel_group_new();
 
     /* View > Zoom In */
     menu_item = gtk_menu_item_new_with_mnemonic("Zoom _In");
@@ -222,10 +217,9 @@ static GtkWidget* create_view_menu(AppContext *ctx)
 /**
  * Create the Layer menu
  */
-static GtkWidget* create_layer_menu(AppContext *ctx)
-{
-    GtkWidget *menu = gtk_menu_new();
-    GtkWidget *menu_item;
+static GtkWidget* create_layer_menu(AppContext* ctx) {
+    GtkWidget* menu = gtk_menu_new();
+    GtkWidget* menu_item;
 
     /* Layer > New Layer */
     menu_item = gtk_menu_item_new_with_mnemonic("_New Layer");
@@ -256,17 +250,16 @@ static GtkWidget* create_layer_menu(AppContext *ctx)
 /**
  * Create the menu bar
  */
-static GtkWidget* create_menu_bar(AppContext *ctx)
-{
-    GtkWidget *menu_bar = gtk_menu_bar_new();
-    GtkWidget *file_menu_item;
-    GtkWidget *file_menu;
-    GtkWidget *edit_menu_item;
-    GtkWidget *edit_menu;
-    GtkWidget *view_menu_item;
-    GtkWidget *view_menu;
-    GtkWidget *layer_menu_item;
-    GtkWidget *layer_menu;
+static GtkWidget* create_menu_bar(AppContext* ctx) {
+    GtkWidget* menu_bar = gtk_menu_bar_new();
+    GtkWidget* file_menu_item;
+    GtkWidget* file_menu;
+    GtkWidget* edit_menu_item;
+    GtkWidget* edit_menu;
+    GtkWidget* view_menu_item;
+    GtkWidget* view_menu;
+    GtkWidget* layer_menu_item;
+    GtkWidget* layer_menu;
 
     /* File menu */
     file_menu_item = gtk_menu_item_new_with_mnemonic("_File");
@@ -300,11 +293,10 @@ static GtkWidget* create_menu_bar(AppContext *ctx)
 /**
  * Create the main application UI
  */
-AppContext* ui_create_main_window(void)
-{
-    AppContext *ctx = (AppContext *)g_malloc(sizeof(AppContext));
-    GtkWidget *tools_panel;
-    GtkWidget *layers_panel_widget;
+AppContext* ui_create_main_window(void) {
+    AppContext* ctx = (AppContext*)g_malloc(sizeof(AppContext));
+    GtkWidget* tools_panel;
+    GtkWidget* layers_panel_widget;
 
     ctx->documents = NULL;
     ctx->layer_menu_new = NULL;
@@ -312,7 +304,7 @@ AppContext* ui_create_main_window(void)
     ctx->layer_menu_duplicate = NULL;
     ctx->edit_menu_undo = NULL;
     ctx->edit_menu_redo = NULL;
-    ctx->layers_panel = NULL;  /* Initialize layers_panel early */
+    ctx->layers_panel = NULL; /* Initialize layers_panel early */
 
     /* Create and initialize tool manager */
     ctx->tool_registry = tool_manager_new();
@@ -325,7 +317,7 @@ AppContext* ui_create_main_window(void)
     /* Set AppContext reference on all tools */
     if (ctx->tool_registry) {
         for (int i = 0; i < TOOL_COUNT; i++) {
-            Tool *tool = tool_manager_get(ctx->tool_registry, i);
+            Tool* tool = tool_manager_get(ctx->tool_registry, i);
             if (tool) {
                 tool->app_context = (gpointer)ctx;
             }
@@ -335,13 +327,13 @@ AppContext* ui_create_main_window(void)
     /* Suppress GTK Builder warnings about menus (these are harmless when using standalone menus) */
     static gboolean menu_warning_suppressed = FALSE;
     if (!menu_warning_suppressed) {
-        g_log_set_handler("Gtk", G_LOG_LEVEL_WARNING, 
-                         (GLogFunc)gtk_builder_menu_warning_handler, NULL);
+        g_log_set_handler("Gtk", G_LOG_LEVEL_WARNING,
+                          (GLogFunc)gtk_builder_menu_warning_handler, NULL);
         menu_warning_suppressed = TRUE;
     }
-    
+
     /* Load main window from Glade */
-    GtkBuilder *builder = gtk_builder_new_from_resource("/ui/main_window.glade");
+    GtkBuilder* builder = gtk_builder_new_from_resource("/ui/main_window.glade");
     if (!builder) {
         g_warning("Failed to load main window from Glade");
         g_free(ctx);
@@ -359,12 +351,12 @@ AppContext* ui_create_main_window(void)
     gtk_window_set_icon_name(GTK_WINDOW(ctx->window), "image-editor");
 
     /* Get main containers */
-    GtkWidget *main_vbox = GTK_WIDGET(gtk_builder_get_object(builder, "main_vbox"));
-    GtkWidget *tool_options_container = GTK_WIDGET(gtk_builder_get_object(builder, "tool_options_container"));
-    GtkWidget *main_hbox = GTK_WIDGET(gtk_builder_get_object(builder, "main_hbox"));
-    GtkWidget *center_right_hpaned = GTK_WIDGET(gtk_builder_get_object(builder, "center_right_hpaned"));
+    GtkWidget* main_vbox = GTK_WIDGET(gtk_builder_get_object(builder, "main_vbox"));
+    GtkWidget* tool_options_container = GTK_WIDGET(gtk_builder_get_object(builder, "tool_options_container"));
+    GtkWidget* main_hbox = GTK_WIDGET(gtk_builder_get_object(builder, "main_hbox"));
+    GtkWidget* center_right_hpaned = GTK_WIDGET(gtk_builder_get_object(builder, "center_right_hpaned"));
     ctx->notebook = GTK_WIDGET(gtk_builder_get_object(builder, "notebook"));
-    GtkWidget *layers_panel_container = GTK_WIDGET(gtk_builder_get_object(builder, "layers_panel_container"));
+    GtkWidget* layers_panel_container = GTK_WIDGET(gtk_builder_get_object(builder, "layers_panel_container"));
     ctx->status_bar = GTK_WIDGET(gtk_builder_get_object(builder, "status_bar"));
 
     if (!main_vbox || !tool_options_container || !main_hbox ||
@@ -381,16 +373,16 @@ AppContext* ui_create_main_window(void)
     g_object_set_data_full(G_OBJECT(ctx->window), "main_builder", builder, g_object_unref);
 
     /* Connect notebook signal */
-    g_signal_connect(ctx->notebook, "switch-page", 
+    g_signal_connect(ctx->notebook, "switch-page",
                      G_CALLBACK(on_notebook_switch_page), ctx);
 
     /* Get menu bar and menu items from Glade */
     ctx->menu_bar = GTK_WIDGET(gtk_builder_get_object(builder, "menu_bar"));
-    
+
     /* Create accelerator group for keyboard shortcuts */
-    GtkAccelGroup *accel_group = gtk_accel_group_new();
+    GtkAccelGroup* accel_group = gtk_accel_group_new();
     gtk_window_add_accel_group(GTK_WINDOW(ctx->window), accel_group);
-    
+
     /* Setup each menu separately */
     setup_file_menu(builder, ctx, accel_group);
     setup_edit_menu(builder, ctx, accel_group);
@@ -412,7 +404,7 @@ AppContext* ui_create_main_window(void)
     /* ==== LEFT PANEL: Tools (fixed width) ==== */
     /* Tool panel is now loaded from main window Glade file */
     tools_panel = tools_panel_initialize_from_builder(builder, ctx->tool_registry);
-    
+
     /* Connect tools panel to tool options panel for title updates */
     tools_panel_set_options_panel(ctx->tool_options_panel);
 
@@ -426,23 +418,23 @@ AppContext* ui_create_main_window(void)
 
     /* Connect layers panel buttons to callbacks */
     layers_panel_connect_buttons(ctx->layers_panel,
-                                G_CALLBACK(on_layer_new),
-                                G_CALLBACK(on_layer_delete),
-                                G_CALLBACK(on_layer_duplicate),
-                                ctx);
+                                 G_CALLBACK(on_layer_new),
+                                 G_CALLBACK(on_layer_delete),
+                                 G_CALLBACK(on_layer_duplicate),
+                                 ctx);
 
     /* Connect move layer buttons */
     if (ctx->layers_panel->btn_up) {
         g_signal_connect(ctx->layers_panel->btn_up, "clicked",
-                        G_CALLBACK(on_layer_move_up), ctx);
+                         G_CALLBACK(on_layer_move_up), ctx);
     }
     if (ctx->layers_panel->btn_down) {
         g_signal_connect(ctx->layers_panel->btn_down, "clicked",
-                        G_CALLBACK(on_layer_move_down), ctx);
+                         G_CALLBACK(on_layer_move_down), ctx);
     }
 
     /* Connect layer tree view selection changes to update UI state */
-    GtkTreeSelection *layer_selection = gtk_tree_view_get_selection(
+    GtkTreeSelection* layer_selection = gtk_tree_view_get_selection(
         GTK_TREE_VIEW(ctx->layers_panel->tree_view));
     g_signal_connect(layer_selection, "changed",
                      G_CALLBACK(on_layer_selection_changed), ctx);
@@ -450,7 +442,7 @@ AppContext* ui_create_main_window(void)
     /* Status bar is already in Glade file, no need to add it */
 
     /* Connect window signals */
-    g_signal_connect(ctx->window, "delete-event", 
+    g_signal_connect(ctx->window, "delete-event",
                      G_CALLBACK(on_window_delete), ctx);
 
     /* Clean up builder - widgets are now owned by their containers */
@@ -464,7 +456,7 @@ AppContext* ui_create_main_window(void)
     /* Initialize menu and button states */
     ui_update_menu_and_button_states(ctx);
 
-    //printf("Main window created with dockable panels and status bar\n");
+    // printf("Main window created with dockable panels and status bar\n");
 
     return ctx;
 }
@@ -472,13 +464,12 @@ AppContext* ui_create_main_window(void)
 /**
  * Create and attach a new document tab
  */
-ImageDocument* ui_create_document_tab(AppContext *ctx, const gchar *filename)
-{
-    ImageDocument *doc;
-    GtkWidget *page_content;
-    GtkWidget *tab_hbox;
-    GtkWidget *tab_label;
-    GtkWidget *close_button;
+ImageDocument* ui_create_document_tab(AppContext* ctx, const gchar* filename) {
+    ImageDocument* doc;
+    GtkWidget* page_content;
+    GtkWidget* tab_hbox;
+    GtkWidget* tab_label;
+    GtkWidget* close_button;
     gint page_num;
 
     /* Create the document */
@@ -498,10 +489,10 @@ ImageDocument* ui_create_document_tab(AppContext *ctx, const gchar *filename)
     gtk_button_set_relief(GTK_BUTTON(close_button), GTK_RELIEF_NONE);
     gtk_widget_set_focus_on_click(close_button, FALSE);
     gtk_widget_set_size_request(close_button, 20, 20);
-    GtkWidget *close_image = gtk_image_new_from_icon_name("window-close-symbolic",
+    GtkWidget* close_image = gtk_image_new_from_icon_name("window-close-symbolic",
                                                           GTK_ICON_SIZE_BUTTON);
     gtk_button_set_image(GTK_BUTTON(close_button), close_image);
-    g_signal_connect(close_button, "clicked", 
+    g_signal_connect(close_button, "clicked",
                      G_CALLBACK(on_tab_close_button_clicked), doc);
     gtk_box_pack_start(GTK_BOX(tab_hbox), close_button, FALSE, FALSE, 0);
 
@@ -509,7 +500,7 @@ ImageDocument* ui_create_document_tab(AppContext *ctx, const gchar *filename)
     gtk_widget_show_all(page_content);
 
     /* Add page to notebook */
-    page_num = gtk_notebook_append_page(GTK_NOTEBOOK(ctx->notebook), 
+    page_num = gtk_notebook_append_page(GTK_NOTEBOOK(ctx->notebook),
                                         page_content, tab_hbox);
     gtk_notebook_set_current_page(GTK_NOTEBOOK(ctx->notebook), page_num);
 
@@ -535,7 +526,7 @@ ImageDocument* ui_create_document_tab(AppContext *ctx, const gchar *filename)
     /* Update window title */
     ui_update_window_title(ctx);
 
-    //printf("Opened document: %s\n", filename);
+    // printf("Opened document: %s\n", filename);
 
     return doc;
 }
@@ -546,10 +537,9 @@ ImageDocument* ui_create_document_tab(AppContext *ctx, const gchar *filename)
 /**
  * Internal: Actually close the document without prompting
  */
-static void ui_close_document_tab_internal(AppContext *ctx, ImageDocument *doc)
-{
+static void ui_close_document_tab_internal(AppContext* ctx, ImageDocument* doc) {
     gint page_num;
-    GtkWidget *scrolled_window;
+    GtkWidget* scrolled_window;
 
     if (!doc || !ctx) {
         return;
@@ -590,39 +580,38 @@ static void ui_close_document_tab_internal(AppContext *ctx, ImageDocument *doc)
 
         /* Free the document */
         document_free(doc);
-        doc = NULL;  /* Ensure doc pointer is NULL after freeing */
+        doc = NULL; /* Ensure doc pointer is NULL after freeing */
 
-         /* Update window title (handles empty notebook) */
-         ui_update_window_title(ctx);
+        /* Update window title (handles empty notebook) */
+        ui_update_window_title(ctx);
 
-         /* Update status bar and menu/button states */
-         ui_update_status_bar(ctx, NULL);
-         
-         /* Clear layers panel if no documents remain */
-         LayersPanel *layers_panel = (LayersPanel *)g_object_get_data(G_OBJECT(ctx->window), 
-                                                                      "layers_panel");
-         if (layers_panel) {
-             layers_panel_update(layers_panel, NULL);
-         }
-         
-         ui_update_menu_and_button_states(ctx);
-     }
+        /* Update status bar and menu/button states */
+        ui_update_status_bar(ctx, NULL);
+
+        /* Clear layers panel if no documents remain */
+        LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window),
+                                                                    "layers_panel");
+        if (layers_panel) {
+            layers_panel_update(layers_panel, NULL);
+        }
+
+        ui_update_menu_and_button_states(ctx);
+    }
 }
 
 /**
  * Public: Close document with unsaved changes prompt
  */
-void ui_close_document_tab(AppContext *ctx, ImageDocument *doc)
-{
+void ui_close_document_tab(AppContext* ctx, ImageDocument* doc) {
     if (!doc || !ctx) {
         return;
     }
 
     /* Check if document has unsaved changes */
     if (document_is_dirty(doc)) {
-        GtkWidget *dialog;
+        GtkWidget* dialog;
         gint response;
-        const gchar *filename = document_get_filename(doc);
+        const gchar* filename = document_get_filename(doc);
 
         /* Create confirmation dialog */
         dialog = gtk_message_dialog_new(
@@ -639,10 +628,10 @@ void ui_close_document_tab(AppContext *ctx, ImageDocument *doc)
 
         /* Add buttons */
         gtk_dialog_add_buttons(GTK_DIALOG(dialog),
-                              "_Discard", GTK_RESPONSE_REJECT,
-                              "_Cancel", GTK_RESPONSE_CANCEL,
-                              "_Save", GTK_RESPONSE_ACCEPT,
-                              NULL);
+                               "_Discard", GTK_RESPONSE_REJECT,
+                               "_Cancel", GTK_RESPONSE_CANCEL,
+                               "_Save", GTK_RESPONSE_ACCEPT,
+                               NULL);
 
         /* Set default button to Save */
         gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_ACCEPT);
@@ -654,7 +643,7 @@ void ui_close_document_tab(AppContext *ctx, ImageDocument *doc)
         switch (response) {
             case GTK_RESPONSE_ACCEPT:
                 /* User clicked Save */
-                //printf("User wants to save before closing\n");
+                // printf("User wants to save before closing\n");
                 ui_save_document_as(ctx);
                 /* Note: We don't actually close here - let user complete save */
                 /* In a full implementation, we'd detect when save completes */
@@ -662,14 +651,14 @@ void ui_close_document_tab(AppContext *ctx, ImageDocument *doc)
 
             case GTK_RESPONSE_REJECT:
                 /* User clicked Discard */
-                //printf("User discarding changes\n");
+                // printf("User discarding changes\n");
                 ui_close_document_tab_internal(ctx, doc);
                 break;
 
             case GTK_RESPONSE_CANCEL:
             case GTK_RESPONSE_DELETE_EVENT:
                 /* User clicked Cancel or closed dialog */
-                //printf("User cancelled close operation\n");
+                // printf("User cancelled close operation\n");
                 break;
 
             default:
@@ -684,10 +673,9 @@ void ui_close_document_tab(AppContext *ctx, ImageDocument *doc)
 /**
  * Get the current active document
  */
-ImageDocument* ui_get_active_document(AppContext *ctx)
-{
+ImageDocument* ui_get_active_document(AppContext* ctx) {
     gint page_num;
-    GtkWidget *page;
+    GtkWidget* page;
 
     if (!ctx) {
         return NULL;
@@ -706,8 +694,8 @@ ImageDocument* ui_get_active_document(AppContext *ctx)
     }
 
     /* Find the document by scrolled window */
-    for (GList *iter = ctx->documents; iter; iter = iter->next) {
-        ImageDocument *doc = (ImageDocument *)iter->data;
+    for (GList* iter = ctx->documents; iter; iter = iter->next) {
+        ImageDocument* doc = (ImageDocument*)iter->data;
         if (doc && doc->scrolled_window == page) {
             return doc;
         }
@@ -719,10 +707,9 @@ ImageDocument* ui_get_active_document(AppContext *ctx)
 /**
  * Update the window title based on active document
  */
-void ui_update_window_title(AppContext *ctx)
-{
-    ImageDocument *active_doc;
-    gchar *title;
+void ui_update_window_title(AppContext* ctx) {
+    ImageDocument* active_doc;
+    gchar* title;
 
     if (!ctx) {
         return;
@@ -731,8 +718,8 @@ void ui_update_window_title(AppContext *ctx)
     active_doc = ui_get_active_document(ctx);
 
     if (active_doc) {
-        const gchar *filename = document_get_filename(active_doc);
-        const gchar *modified = active_doc->modified ? "*" : "";
+        const gchar* filename = document_get_filename(active_doc);
+        const gchar* modified = active_doc->modified ? "*" : "";
         title = g_strdup_printf("Image Editor - %s%s", filename, modified);
     } else {
         title = g_strdup("Image Editor");
@@ -745,15 +732,14 @@ void ui_update_window_title(AppContext *ctx)
 /**
  * Free the application context
  */
-void ui_context_free(AppContext *ctx)
-{
+void ui_context_free(AppContext* ctx) {
     if (!ctx) {
         return;
     }
 
     /* Free all documents */
-    for (GList *iter = ctx->documents; iter; iter = iter->next) {
-        document_free((ImageDocument *)iter->data);
+    for (GList* iter = ctx->documents; iter; iter = iter->next) {
+        document_free((ImageDocument*)iter->data);
     }
 
     g_list_free(ctx->documents);
@@ -769,21 +755,20 @@ void ui_context_free(AppContext *ctx)
 /**
  * Setup File menu from Glade builder
  */
-static void setup_file_menu(GtkBuilder *builder, AppContext *ctx, GtkAccelGroup *accel_group)
-{
-    GtkWidget *file_menu = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu"));
-    GtkWidget *file_menu_item = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_item"));
-    
+static void setup_file_menu(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* accel_group) {
+    GtkWidget* file_menu = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu"));
+    GtkWidget* file_menu_item = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_item"));
+
     if (file_menu && file_menu_item) {
         gtk_menu_item_set_submenu(GTK_MENU_ITEM(file_menu_item), file_menu);
     }
-    
+
     /* Connect File menu signals */
-    GtkWidget *file_menu_open = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_open"));
-    GtkWidget *file_menu_save_as = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_save_as"));
-    GtkWidget *file_menu_close = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_close"));
-    GtkWidget *file_menu_exit = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_exit"));
-    
+    GtkWidget* file_menu_open = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_open"));
+    GtkWidget* file_menu_save_as = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_save_as"));
+    GtkWidget* file_menu_close = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_close"));
+    GtkWidget* file_menu_exit = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_exit"));
+
     if (file_menu_open) {
         g_signal_connect(file_menu_open, "activate", G_CALLBACK(on_file_open), ctx);
         gtk_widget_add_accelerator(file_menu_open, "activate", accel_group,
@@ -805,19 +790,18 @@ static void setup_file_menu(GtkBuilder *builder, AppContext *ctx, GtkAccelGroup 
 /**
  * Setup Edit menu from Glade builder
  */
-static void setup_edit_menu(GtkBuilder *builder, AppContext *ctx, GtkAccelGroup *accel_group)
-{
-    GtkWidget *edit_menu = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu"));
-    GtkWidget *edit_menu_item = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu_item"));
-    
+static void setup_edit_menu(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* accel_group) {
+    GtkWidget* edit_menu = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu"));
+    GtkWidget* edit_menu_item = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu_item"));
+
     if (edit_menu && edit_menu_item) {
         gtk_menu_item_set_submenu(GTK_MENU_ITEM(edit_menu_item), edit_menu);
     }
-    
+
     /* Get menu items that need to be updated programmatically */
     ctx->edit_menu_undo = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu_undo"));
     ctx->edit_menu_redo = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu_redo"));
-    
+
     /* Connect Edit menu signals */
     if (ctx->edit_menu_undo) {
         /* Connect signal handler */
@@ -842,23 +826,22 @@ static void setup_edit_menu(GtkBuilder *builder, AppContext *ctx, GtkAccelGroup 
 /**
  * Setup View menu from Glade builder
  */
-static void setup_view_menu(GtkBuilder *builder, AppContext *ctx, GtkAccelGroup *accel_group)
-{
-    (void)accel_group;  /* Not used for View menu yet */
-    
-    GtkWidget *view_menu = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu"));
-    GtkWidget *view_menu_item = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_item"));
-    
+static void setup_view_menu(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* accel_group) {
+    (void)accel_group; /* Not used for View menu yet */
+
+    GtkWidget* view_menu = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu"));
+    GtkWidget* view_menu_item = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_item"));
+
     if (view_menu && view_menu_item) {
         gtk_menu_item_set_submenu(GTK_MENU_ITEM(view_menu_item), view_menu);
     }
-    
+
     /* Connect View menu signals */
-    GtkWidget *view_menu_zoom_in = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_in"));
-    GtkWidget *view_menu_zoom_out = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_out"));
-    GtkWidget *view_menu_zoom_reset = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_reset"));
-    GtkWidget *view_menu_zoom_fit = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_fit"));
-    
+    GtkWidget* view_menu_zoom_in = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_in"));
+    GtkWidget* view_menu_zoom_out = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_out"));
+    GtkWidget* view_menu_zoom_reset = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_reset"));
+    GtkWidget* view_menu_zoom_fit = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_fit"));
+
     if (view_menu_zoom_in) {
         g_signal_connect(view_menu_zoom_in, "activate", G_CALLBACK(on_view_zoom_in), ctx);
     }
@@ -876,20 +859,19 @@ static void setup_view_menu(GtkBuilder *builder, AppContext *ctx, GtkAccelGroup 
 /**
  * Setup Layer menu from Glade builder
  */
-static void setup_layer_menu(GtkBuilder *builder, AppContext *ctx)
-{
-    GtkWidget *layer_menu = GTK_WIDGET(gtk_builder_get_object(builder, "layer_menu"));
-    GtkWidget *layer_menu_item = GTK_WIDGET(gtk_builder_get_object(builder, "layer_menu_item"));
-    
+static void setup_layer_menu(GtkBuilder* builder, AppContext* ctx) {
+    GtkWidget* layer_menu = GTK_WIDGET(gtk_builder_get_object(builder, "layer_menu"));
+    GtkWidget* layer_menu_item = GTK_WIDGET(gtk_builder_get_object(builder, "layer_menu_item"));
+
     if (layer_menu && layer_menu_item) {
         gtk_menu_item_set_submenu(GTK_MENU_ITEM(layer_menu_item), layer_menu);
     }
-    
+
     /* Get menu items that need to be updated programmatically */
     ctx->layer_menu_new = GTK_WIDGET(gtk_builder_get_object(builder, "layer_menu_new"));
     ctx->layer_menu_duplicate = GTK_WIDGET(gtk_builder_get_object(builder, "layer_menu_duplicate"));
     ctx->layer_menu_delete = GTK_WIDGET(gtk_builder_get_object(builder, "layer_menu_delete"));
-    
+
     /* Connect Layer menu signals */
     if (ctx->layer_menu_new) {
         g_signal_connect(ctx->layer_menu_new, "activate", G_CALLBACK(on_layer_new), ctx);
@@ -905,33 +887,30 @@ static void setup_layer_menu(GtkBuilder *builder, AppContext *ctx)
 /**
  * Setup Adjustments menu from Glade builder
  */
-static void setup_adjust_menu(GtkBuilder *builder, AppContext *ctx)
-{
+static void setup_adjust_menu(GtkBuilder* builder, AppContext* ctx) {
     ui_filter_adjust_setup_menu(builder, ctx);
 }
 
 /**
  * Setup Effects menu from Glade builder
  */
-static void setup_effects_menu(GtkBuilder *builder, AppContext *ctx)
-{
+static void setup_effects_menu(GtkBuilder* builder, AppContext* ctx) {
     ui_filter_effects_setup_menu(builder, ctx);
 }
 
 /**
  * File Open dialog response callback
  */
-static void on_file_open_response(GtkDialog *dialog, gint response_id, gpointer user_data)
-{
-    AppContext *ctx = (AppContext *)user_data;
+static void on_file_open_response(GtkDialog* dialog, gint response_id, gpointer user_data) {
+    AppContext* ctx = (AppContext*)user_data;
 
     if (response_id == GTK_RESPONSE_ACCEPT) {
-        gchar *file_path = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));
+        gchar* file_path = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));
 
         if (file_path) {
             /* Create new document with filename */
-            gchar *basename = g_path_get_basename(file_path);
-            ImageDocument *doc = ui_create_document_tab(ctx, basename);
+            gchar* basename = g_path_get_basename(file_path);
+            ImageDocument* doc = ui_create_document_tab(ctx, basename);
 
             if (doc) {
                 /* Load the image into the document */
@@ -942,7 +921,7 @@ static void on_file_open_response(GtkDialog *dialog, gint response_id, gpointer 
                     ui_update_status_bar(ctx, NULL);
 
                     /* Update layers panel with loaded document */
-                    LayersPanel *layers_panel = (LayersPanel *)g_object_get_data(
+                    LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(
                         G_OBJECT(ctx->window), "layers_panel");
                     if (layers_panel) {
                         layers_panel_update(layers_panel, doc);
@@ -964,13 +943,12 @@ static void on_file_open_response(GtkDialog *dialog, gint response_id, gpointer 
 /**
  * File > Open callback
  */
-static void on_file_open(GtkWidget *widget, gpointer data)
-{
-    (void)widget;  /* Unused */
+static void on_file_open(GtkWidget* widget, gpointer data) {
+    (void)widget; /* Unused */
 
-    AppContext *ctx = (AppContext *)data;
-    GtkWidget *dialog;
-    GtkFileFilter *filter;
+    AppContext* ctx = (AppContext*)data;
+    GtkWidget* dialog;
+    GtkFileFilter* filter;
 
     /* Create file chooser dialog */
     dialog = gtk_file_chooser_dialog_new(
@@ -1011,15 +989,14 @@ static void on_file_open(GtkWidget *widget, gpointer data)
 /**
  * File > Save As response callback
  */
-static void on_file_save_as_response(GtkDialog *dialog, gint response_id, gpointer user_data)
-{
-    AppContext *ctx = (AppContext *)user_data;
+static void on_file_save_as_response(GtkDialog* dialog, gint response_id, gpointer user_data) {
+    AppContext* ctx = (AppContext*)user_data;
 
     if (response_id == GTK_RESPONSE_ACCEPT) {
-        gchar *file_path = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));
+        gchar* file_path = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));
 
         if (file_path) {
-            ImageDocument *doc = ui_get_active_document(ctx);
+            ImageDocument* doc = ui_get_active_document(ctx);
 
             if (doc) {
                 /* Save the document */
@@ -1027,7 +1004,7 @@ static void on_file_save_as_response(GtkDialog *dialog, gint response_id, gpoint
                     /* Update window title to reflect new filename */
                     ui_update_window_title(ctx);
                     ui_update_status_bar(ctx, NULL);
-                    //printf("Document saved: %s\n", file_path);
+                    // printf("Document saved: %s\n", file_path);
                 } else {
                     g_warning("Failed to save document");
                 }
@@ -1043,14 +1020,13 @@ static void on_file_save_as_response(GtkDialog *dialog, gint response_id, gpoint
 /**
  * File > Save As callback
  */
-static void on_file_save_as(GtkWidget *widget, gpointer data)
-{
-    (void)widget;  /* Unused */
+static void on_file_save_as(GtkWidget* widget, gpointer data) {
+    (void)widget; /* Unused */
 
-    AppContext *ctx = (AppContext *)data;
-    ImageDocument *doc = ui_get_active_document(ctx);
-    GtkWidget *dialog;
-    GtkFileFilter *filter;
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc = ui_get_active_document(ctx);
+    GtkWidget* dialog;
+    GtkFileFilter* filter;
 
     if (!doc) {
         g_warning("No document open");
@@ -1093,7 +1069,7 @@ static void on_file_save_as(GtkWidget *widget, gpointer data)
         gtk_file_chooser_set_filename(GTK_FILE_CHOOSER(dialog), doc->file_path);
     } else if (doc->filename) {
         /* Suggest a filename based on document name */
-        gchar *suggested = g_strdup_printf("%s.png", doc->filename);
+        gchar* suggested = g_strdup_printf("%s.png", doc->filename);
         gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(dialog), suggested);
         g_free(suggested);
     }
@@ -1108,12 +1084,11 @@ static void on_file_save_as(GtkWidget *widget, gpointer data)
 /**
  * File > Close callback
  */
-static void on_file_close(GtkWidget *widget, gpointer data)
-{
-    (void)widget;  /* Unused */
+static void on_file_close(GtkWidget* widget, gpointer data) {
+    (void)widget; /* Unused */
 
-    AppContext *ctx = (AppContext *)data;
-    ImageDocument *active_doc = ui_get_active_document(ctx);
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* active_doc = ui_get_active_document(ctx);
 
     if (active_doc) {
         ui_close_document_tab(ctx, active_doc);
@@ -1123,14 +1098,13 @@ static void on_file_close(GtkWidget *widget, gpointer data)
 /**
  * Window delete event callback
  */
-static gboolean on_window_delete(GtkWidget *widget, GdkEvent *event, gpointer data)
-{
-    (void)widget;  /* Unused */
-    (void)event;   /* Unused */
+static gboolean on_window_delete(GtkWidget* widget, GdkEvent* event, gpointer data) {
+    (void)widget; /* Unused */
+    (void)event;  /* Unused */
 
-    AppContext *ctx = (AppContext *)data;
+    AppContext* ctx = (AppContext*)data;
 
-    //printf("Window delete event triggered - shutting down\n");
+    // printf("Window delete event triggered - shutting down\n");
 
     /* Free the context (which frees all documents) */
     ui_context_free(ctx);
@@ -1138,31 +1112,32 @@ static gboolean on_window_delete(GtkWidget *widget, GdkEvent *event, gpointer da
     /* Exit GTK main loop */
     gtk_main_quit();
 
-    return FALSE;  /* Allow window to close */
+    return FALSE; /* Allow window to close */
 }
 
 /**
  * File > Exit callback
  */
-static void on_file_exit(GtkWidget *widget, gpointer data)
-{
-    (void)widget;  /* Unused */
+static void on_file_exit(GtkWidget* widget, gpointer data) {
+    (void)widget; /* Unused */
 
-    AppContext *ctx = (AppContext *)data;
+    AppContext* ctx = (AppContext*)data;
 
-    /* Destroy the main window, which triggers delete-event */
-    gtk_widget_destroy(ctx->window);
+    /* Free the context (which frees all documents) */
+    ui_context_free(ctx);
+
+    /* Exit GTK main loop */
+    gtk_main_quit();
 }
 
 /**
  * Edit > Undo callback
  */
-static void on_edit_undo(GtkWidget *widget, gpointer data)
-{
-    (void)widget;  /* Unused */
+static void on_edit_undo(GtkWidget* widget, gpointer data) {
+    (void)widget; /* Unused */
 
-    AppContext *ctx = (AppContext *)data;
-    ImageDocument *doc;
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc;
 
     if (!ctx) {
         return;
@@ -1181,7 +1156,7 @@ static void on_edit_undo(GtkWidget *widget, gpointer data)
     document_invalidate_composite(doc);
 
     /* Update layers panel */
-    LayersPanel *layers_panel = (LayersPanel *)g_object_get_data(G_OBJECT(ctx->window), "layers_panel");
+    LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window), "layers_panel");
     if (layers_panel) {
         layers_panel_update(layers_panel, doc);
     }
@@ -1194,12 +1169,11 @@ static void on_edit_undo(GtkWidget *widget, gpointer data)
 /**
  * Edit > Redo callback
  */
-static void on_edit_redo(GtkWidget *widget, gpointer data)
-{
-    (void)widget;  /* Unused */
+static void on_edit_redo(GtkWidget* widget, gpointer data) {
+    (void)widget; /* Unused */
 
-    AppContext *ctx = (AppContext *)data;
-    ImageDocument *doc;
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc;
 
     if (!ctx) {
         return;
@@ -1218,7 +1192,7 @@ static void on_edit_redo(GtkWidget *widget, gpointer data)
     document_invalidate_composite(doc);
 
     /* Update layers panel */
-    LayersPanel *layers_panel = (LayersPanel *)g_object_get_data(G_OBJECT(ctx->window), "layers_panel");
+    LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window), "layers_panel");
     if (layers_panel) {
         layers_panel_update(layers_panel, doc);
     }
@@ -1231,12 +1205,11 @@ static void on_edit_redo(GtkWidget *widget, gpointer data)
 /**
  * View > Zoom In callback
  */
-static void on_view_zoom_in(GtkWidget *widget, gpointer data)
-{
-    (void)widget;  /* Unused */
+static void on_view_zoom_in(GtkWidget* widget, gpointer data) {
+    (void)widget; /* Unused */
 
-    AppContext *ctx = (AppContext *)data;
-    ImageDocument *doc = ui_get_active_document(ctx);
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc = ui_get_active_document(ctx);
 
     if (doc) {
         document_zoom_in(doc);
@@ -1247,12 +1220,11 @@ static void on_view_zoom_in(GtkWidget *widget, gpointer data)
 /**
  * View > Zoom Out callback
  */
-static void on_view_zoom_out(GtkWidget *widget, gpointer data)
-{
-    (void)widget;  /* Unused */
+static void on_view_zoom_out(GtkWidget* widget, gpointer data) {
+    (void)widget; /* Unused */
 
-    AppContext *ctx = (AppContext *)data;
-    ImageDocument *doc = ui_get_active_document(ctx);
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc = ui_get_active_document(ctx);
 
     if (doc) {
         document_zoom_out(doc);
@@ -1263,12 +1235,11 @@ static void on_view_zoom_out(GtkWidget *widget, gpointer data)
 /**
  * View > Reset Zoom callback
  */
-static void on_view_zoom_reset(GtkWidget *widget, gpointer data)
-{
-    (void)widget;  /* Unused */
+static void on_view_zoom_reset(GtkWidget* widget, gpointer data) {
+    (void)widget; /* Unused */
 
-    AppContext *ctx = (AppContext *)data;
-    ImageDocument *doc = ui_get_active_document(ctx);
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc = ui_get_active_document(ctx);
 
     if (doc) {
         document_zoom_reset(doc);
@@ -1279,12 +1250,11 @@ static void on_view_zoom_reset(GtkWidget *widget, gpointer data)
 /**
  * View > Zoom Fit callback
  */
-static void on_view_zoom_fit(GtkWidget *widget, gpointer data)
-{
-    (void)widget;  /* Unused */
+static void on_view_zoom_fit(GtkWidget* widget, gpointer data) {
+    (void)widget; /* Unused */
 
-    AppContext *ctx = (AppContext *)data;
-    ImageDocument *doc = ui_get_active_document(ctx);
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc = ui_get_active_document(ctx);
 
     if (doc) {
         document_zoom_fit(doc);
@@ -1295,21 +1265,20 @@ static void on_view_zoom_fit(GtkWidget *widget, gpointer data)
 /**
  * Notebook page switch callback
  */
-static void on_notebook_switch_page(GtkNotebook *notebook, GtkWidget *page,
-                                     guint page_num, gpointer user_data)
-{
-    (void)notebook;   /* Unused */
-    (void)page_num;   /* Unused */
+static void on_notebook_switch_page(GtkNotebook* notebook, GtkWidget* page,
+                                    guint page_num, gpointer user_data) {
+    (void)notebook; /* Unused */
+    (void)page_num; /* Unused */
 
-    AppContext *ctx = (AppContext *)user_data;
-    ImageDocument *doc = NULL;
-    LayersPanel *layers_panel = (LayersPanel *)g_object_get_data(G_OBJECT(ctx->window), 
-                                                                  "layers_panel");
+    AppContext* ctx = (AppContext*)user_data;
+    ImageDocument* doc = NULL;
+    LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window),
+                                                                "layers_panel");
 
     /* Find the document that matches the page widget (scrolled window) */
     if (page) {
-        for (GList *iter = ctx->documents; iter; iter = iter->next) {
-            ImageDocument *d = (ImageDocument *)iter->data;
+        for (GList* iter = ctx->documents; iter; iter = iter->next) {
+            ImageDocument* d = (ImageDocument*)iter->data;
             if (d && d->scrolled_window == page) {
                 doc = d;
                 break;
@@ -1337,11 +1306,10 @@ static void on_notebook_switch_page(GtkNotebook *notebook, GtkWidget *page,
 /**
  * Tab close button clicked callback
  */
-static void on_tab_close_button_clicked(GtkButton *button, gpointer user_data)
-{
-    ImageDocument *doc = (ImageDocument *)user_data;
-    AppContext *ctx = (AppContext *)g_object_get_data(G_OBJECT(button), 
-                                                       "app_context");
+static void on_tab_close_button_clicked(GtkButton* button, gpointer user_data) {
+    ImageDocument* doc = (ImageDocument*)user_data;
+    AppContext* ctx = (AppContext*)g_object_get_data(G_OBJECT(button),
+                                                     "app_context");
 
     if (ctx && doc) {
         ui_close_document_tab(ctx, doc);
@@ -1353,16 +1321,15 @@ static void on_tab_close_button_clicked(GtkButton *button, gpointer user_data)
 /**
  * Layer > New Layer callback
  */
-static void on_layer_new(GtkWidget *widget, gpointer data)
-{
-    (void)widget;  /* Unused */
+static void on_layer_new(GtkWidget* widget, gpointer data) {
+    (void)widget; /* Unused */
 
-    AppContext *ctx = (AppContext *)data;
-    ImageDocument *doc = ui_get_active_document(ctx);
-    LayersPanel *layers_panel = (LayersPanel *)g_object_get_data(G_OBJECT(ctx->window), 
-                                                                  "layers_panel");
-    Command *cmd;
-    
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc = ui_get_active_document(ctx);
+    LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window),
+                                                                "layers_panel");
+    Command* cmd;
+
     if (!doc) {
         g_warning("No document open");
         return;
@@ -1370,17 +1337,17 @@ static void on_layer_new(GtkWidget *widget, gpointer data)
 
     /* Create new layer with auto-generated name */
     static int layer_count = 1;
-    gchar *layer_name = g_strdup_printf("Layer %d", layer_count++);
-    
-    ImageLayer *new_layer = document_add_layer(doc, layer_name);
+    gchar* layer_name = g_strdup_printf("Layer %d", layer_count++);
+
+    ImageLayer* new_layer = document_add_layer(doc, layer_name);
     g_free(layer_name);
-    
+
     if (new_layer) {
         /* Create undo command */
         cmd = command_create_layer_add(doc, new_layer);
         if (cmd && doc->undo_stack) {
             command_stack_push(doc->undo_stack, cmd);
-            
+
             /* Clear redo stack */
             if (doc->redo_stack) {
                 command_stack_clear(doc->redo_stack);
@@ -1393,7 +1360,7 @@ static void on_layer_new(GtkWidget *widget, gpointer data)
         if (layers_panel) {
             layers_panel_update(layers_panel, doc);
         }
-        
+
         /* Update UI state */
         ui_update_menu_and_button_states(ctx);
         ui_update_window_title(ctx);
@@ -1404,23 +1371,22 @@ static void on_layer_new(GtkWidget *widget, gpointer data)
 /**
  * Layer > Delete Layer callback
  */
-static void on_layer_delete(GtkWidget *widget, gpointer data)
-{
-    (void)widget;  /* Unused */
+static void on_layer_delete(GtkWidget* widget, gpointer data) {
+    (void)widget; /* Unused */
 
-    AppContext *ctx = (AppContext *)data;
-    ImageDocument *doc = ui_get_active_document(ctx);
-    LayersPanel *layers_panel = (LayersPanel *)g_object_get_data(G_OBJECT(ctx->window), 
-                                                                  "layers_panel");
-    Command *cmd;
-    
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc = ui_get_active_document(ctx);
+    LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window),
+                                                                "layers_panel");
+    Command* cmd;
+
     if (!doc || !doc->layers) {
         g_warning("No document or layers");
         return;
     }
 
     /* Delete the currently selected layer */
-    ImageLayer *selected_layer = NULL;
+    ImageLayer* selected_layer = NULL;
     if (layers_panel) {
         selected_layer = layers_panel_get_selected_layer(layers_panel);
     }
@@ -1429,21 +1395,21 @@ static void on_layer_delete(GtkWidget *widget, gpointer data)
         g_warning("No layer selected");
         return;
     }
-    
+
     /* Create undo command before deleting */
     cmd = command_create_layer_delete(doc, selected_layer);
     if (!cmd) {
         g_warning("Failed to create delete layer command");
         return;
     }
-    
+
     /* Execute the delete (apply the command) */
     command_execute(cmd, doc);
-    
+
     /* Push to undo stack */
     if (doc->undo_stack) {
         command_stack_push(doc->undo_stack, cmd);
-        
+
         /* Clear redo stack */
         if (doc->redo_stack) {
             command_stack_clear(doc->redo_stack);
@@ -1456,7 +1422,7 @@ static void on_layer_delete(GtkWidget *widget, gpointer data)
     if (layers_panel) {
         layers_panel_update(layers_panel, doc);
     }
-    
+
     /* Update UI state */
     ui_update_menu_and_button_states(ctx);
     ui_update_window_title(ctx);
@@ -1466,23 +1432,22 @@ static void on_layer_delete(GtkWidget *widget, gpointer data)
 /**
  * Layer > Duplicate Layer callback
  */
-static void on_layer_duplicate(GtkWidget *widget, gpointer data)
-{
-    (void)widget;  /* Unused */
+static void on_layer_duplicate(GtkWidget* widget, gpointer data) {
+    (void)widget; /* Unused */
 
-    AppContext *ctx = (AppContext *)data;
-    ImageDocument *doc = ui_get_active_document(ctx);
-    LayersPanel *layers_panel = (LayersPanel *)g_object_get_data(G_OBJECT(ctx->window), 
-                                                                  "layers_panel");
-    Command *cmd;
-    
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc = ui_get_active_document(ctx);
+    LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window),
+                                                                "layers_panel");
+    Command* cmd;
+
     if (!doc || !doc->layers) {
         g_warning("No document or layers");
         return;
     }
 
     /* Duplicate the currently selected layer */
-    ImageLayer *selected_layer = NULL;
+    ImageLayer* selected_layer = NULL;
     if (layers_panel) {
         selected_layer = layers_panel_get_selected_layer(layers_panel);
     }
@@ -1491,19 +1456,19 @@ static void on_layer_duplicate(GtkWidget *widget, gpointer data)
         g_warning("No layer selected");
         return;
     }
-    
+
     static int dup_count = 1;
-    gchar *layer_name = g_strdup_printf("%s copy %d", selected_layer->name, dup_count++);
-    
-    ImageLayer *dup_layer = document_duplicate_layer(doc, selected_layer, layer_name);
+    gchar* layer_name = g_strdup_printf("%s copy %d", selected_layer->name, dup_count++);
+
+    ImageLayer* dup_layer = document_duplicate_layer(doc, selected_layer, layer_name);
     g_free(layer_name);
-    
+
     if (dup_layer) {
         /* Create undo command */
         cmd = command_create_layer_duplicate(doc, selected_layer, dup_layer);
         if (cmd && doc->undo_stack) {
             command_stack_push(doc->undo_stack, cmd);
-            
+
             /* Clear redo stack */
             if (doc->redo_stack) {
                 command_stack_clear(doc->redo_stack);
@@ -1516,7 +1481,7 @@ static void on_layer_duplicate(GtkWidget *widget, gpointer data)
         if (layers_panel) {
             layers_panel_update(layers_panel, doc);
         }
-        
+
         /* Update UI state */
         ui_update_menu_and_button_states(ctx);
         ui_update_window_title(ctx);
@@ -1527,23 +1492,22 @@ static void on_layer_duplicate(GtkWidget *widget, gpointer data)
 /**
  * Layer > Move Up callback
  */
-static void on_layer_move_up(GtkWidget *widget, gpointer data)
-{
-    (void)widget;  /* Unused */
+static void on_layer_move_up(GtkWidget* widget, gpointer data) {
+    (void)widget; /* Unused */
 
-    AppContext *ctx = (AppContext *)data;
-    ImageDocument *doc = ui_get_active_document(ctx);
-    LayersPanel *layers_panel = (LayersPanel *)g_object_get_data(G_OBJECT(ctx->window), 
-                                                                  "layers_panel");
-    Command *cmd;
-    
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc = ui_get_active_document(ctx);
+    LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window),
+                                                                "layers_panel");
+    Command* cmd;
+
     if (!doc || !doc->layers) {
         g_warning("No document or layers");
         return;
     }
 
     /* Get the currently selected layer */
-    ImageLayer *selected_layer = NULL;
+    ImageLayer* selected_layer = NULL;
     if (layers_panel) {
         selected_layer = layers_panel_get_selected_layer(layers_panel);
     }
@@ -1552,20 +1516,20 @@ static void on_layer_move_up(GtkWidget *widget, gpointer data)
         g_warning("No layer selected");
         return;
     }
-    
+
     /* Create undo command before moving */
     cmd = command_create_layer_move_up(doc, selected_layer);
     if (!cmd) {
-        return;  /* Can't move up */
+        return; /* Can't move up */
     }
-    
+
     /* Execute the move (apply the command) */
     command_execute(cmd, doc);
-    
+
     /* Push to undo stack */
     if (doc->undo_stack) {
         command_stack_push(doc->undo_stack, cmd);
-        
+
         /* Clear redo stack */
         if (doc->redo_stack) {
             command_stack_clear(doc->redo_stack);
@@ -1578,7 +1542,7 @@ static void on_layer_move_up(GtkWidget *widget, gpointer data)
     if (layers_panel) {
         layers_panel_update(layers_panel, doc);
     }
-    
+
     /* Update UI state */
     ui_update_menu_and_button_states(ctx);
     ui_update_window_title(ctx);
@@ -1588,23 +1552,22 @@ static void on_layer_move_up(GtkWidget *widget, gpointer data)
 /**
  * Layer > Move Down callback
  */
-static void on_layer_move_down(GtkWidget *widget, gpointer data)
-{
-    (void)widget;  /* Unused */
+static void on_layer_move_down(GtkWidget* widget, gpointer data) {
+    (void)widget; /* Unused */
 
-    AppContext *ctx = (AppContext *)data;
-    ImageDocument *doc = ui_get_active_document(ctx);
-    LayersPanel *layers_panel = (LayersPanel *)g_object_get_data(G_OBJECT(ctx->window), 
-                                                                  "layers_panel");
-    Command *cmd;
-    
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc = ui_get_active_document(ctx);
+    LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window),
+                                                                "layers_panel");
+    Command* cmd;
+
     if (!doc || !doc->layers) {
         g_warning("No document or layers");
         return;
     }
 
     /* Get the currently selected layer */
-    ImageLayer *selected_layer = NULL;
+    ImageLayer* selected_layer = NULL;
     if (layers_panel) {
         selected_layer = layers_panel_get_selected_layer(layers_panel);
     }
@@ -1613,20 +1576,20 @@ static void on_layer_move_down(GtkWidget *widget, gpointer data)
         g_warning("No layer selected");
         return;
     }
-    
+
     /* Create undo command before moving */
     cmd = command_create_layer_move_down(doc, selected_layer);
     if (!cmd) {
-        return;  /* Can't move down */
+        return; /* Can't move down */
     }
-    
+
     /* Execute the move (apply the command) */
     command_execute(cmd, doc);
-    
+
     /* Push to undo stack */
     if (doc->undo_stack) {
         command_stack_push(doc->undo_stack, cmd);
-        
+
         /* Clear redo stack */
         if (doc->redo_stack) {
             command_stack_clear(doc->redo_stack);
@@ -1639,7 +1602,7 @@ static void on_layer_move_down(GtkWidget *widget, gpointer data)
     if (layers_panel) {
         layers_panel_update(layers_panel, doc);
     }
-    
+
     /* Update UI state */
     ui_update_menu_and_button_states(ctx);
     ui_update_window_title(ctx);
@@ -1649,10 +1612,9 @@ static void on_layer_move_down(GtkWidget *widget, gpointer data)
 /**
  * Update the status bar with document information
  */
-void ui_update_status_bar(AppContext *ctx, ImageDocument *doc)
-{
+void ui_update_status_bar(AppContext* ctx, ImageDocument* doc) {
     GtkWidget *size_label, *bitdepth_label, *zoom_label;
-    GtkBuilder *builder;
+    GtkBuilder* builder;
     gchar *size_text, *bitdepth_text, *zoom_text;
 
     if (!ctx || !ctx->status_bar) {
@@ -1718,11 +1680,10 @@ void ui_update_status_bar(AppContext *ctx, ImageDocument *doc)
  * @param ctx The application context
  * @param time_seconds Processing time in seconds
  */
-void ui_update_status_bar_time(AppContext *ctx, gdouble time_seconds)
-{
-    GtkWidget *time_label;
-    GtkBuilder *builder;
-    gchar *time_text;
+void ui_update_status_bar_time(AppContext* ctx, gdouble time_seconds) {
+    GtkWidget* time_label;
+    GtkBuilder* builder;
+    gchar* time_text;
 
     if (!ctx || !ctx->status_bar) {
         return;
@@ -1757,10 +1718,9 @@ void ui_update_status_bar_time(AppContext *ctx, gdouble time_seconds)
 /**
  * Update menu and button sensitivity based on document and layer state
  */
-void ui_update_menu_and_button_states(AppContext *ctx)
-{
-    ImageDocument *doc;
-    LayersPanel *layers_panel;
+void ui_update_menu_and_button_states(AppContext* ctx) {
+    ImageDocument* doc;
+    LayersPanel* layers_panel;
     gboolean has_document;
     gboolean has_selection;
 
@@ -1773,11 +1733,11 @@ void ui_update_menu_and_button_states(AppContext *ctx)
     has_document = (doc != NULL);
 
     /* Get layers panel and check for selection */
-    layers_panel = (LayersPanel *)g_object_get_data(G_OBJECT(ctx->window), 
-                                                    "layers_panel");
-    
+    layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window),
+                                                   "layers_panel");
+
     has_selection = FALSE;
-    ImageLayer *selected_layer = NULL;
+    ImageLayer* selected_layer = NULL;
     if (layers_panel && doc && layers_panel->tree_view) {
         selected_layer = layers_panel_get_selected_layer(layers_panel);
         has_selection = (selected_layer != NULL);
@@ -1793,12 +1753,12 @@ void ui_update_menu_and_button_states(AppContext *ctx)
     if (ctx->edit_menu_undo && GTK_IS_WIDGET(ctx->edit_menu_undo)) {
         gboolean can_undo = has_document && document_can_undo(doc);
         gtk_widget_set_sensitive(ctx->edit_menu_undo, can_undo);
-        
+
         /* Update label with command name if available */
         if (can_undo && doc && doc->undo_stack) {
-            Command *cmd = command_stack_peek(doc->undo_stack);
+            Command* cmd = command_stack_peek(doc->undo_stack);
             if (cmd && cmd->name) {
-                gchar *label = g_strdup_printf("_Undo: %s", cmd->name);
+                gchar* label = g_strdup_printf("_Undo: %s", cmd->name);
                 gtk_menu_item_set_label(GTK_MENU_ITEM(ctx->edit_menu_undo), label);
                 g_free(label);
             } else {
@@ -1811,12 +1771,12 @@ void ui_update_menu_and_button_states(AppContext *ctx)
     if (ctx->edit_menu_redo && GTK_IS_WIDGET(ctx->edit_menu_redo)) {
         gboolean can_redo = has_document && document_can_redo(doc);
         gtk_widget_set_sensitive(ctx->edit_menu_redo, can_redo);
-        
+
         /* Update label with command name if available */
         if (can_redo && doc && doc->redo_stack) {
-            Command *cmd = command_stack_peek(doc->redo_stack);
+            Command* cmd = command_stack_peek(doc->redo_stack);
             if (cmd && cmd->name) {
-                gchar *label = g_strdup_printf("_Redo: %s", cmd->name);
+                gchar* label = g_strdup_printf("_Redo: %s", cmd->name);
                 gtk_menu_item_set_label(GTK_MENU_ITEM(ctx->edit_menu_redo), label);
                 g_free(label);
             } else {
@@ -1826,7 +1786,7 @@ void ui_update_menu_and_button_states(AppContext *ctx)
             gtk_menu_item_set_label(GTK_MENU_ITEM(ctx->edit_menu_redo), "_Redo");
         }
     }
-    
+
     /* Update Layer menu item states */
     if (ctx->layer_menu_new && GTK_IS_WIDGET(ctx->layer_menu_new)) {
         gtk_widget_set_sensitive(ctx->layer_menu_new, has_document);
@@ -1842,12 +1802,10 @@ void ui_update_menu_and_button_states(AppContext *ctx)
 /**
  * Save active document with file dialog
  */
-void ui_save_document_as(AppContext *ctx)
-{
+void ui_save_document_as(AppContext* ctx) {
     if (!ctx) {
         return;
     }
 
     on_file_save_as(NULL, ctx);
 }
-
