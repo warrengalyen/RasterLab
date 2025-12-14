@@ -138,8 +138,9 @@ static void widget_to_image_coords(ImageDocument* doc, gdouble widget_x, gdouble
     scaled_x = widget_x / doc->zoom_factor;
     scaled_y = widget_y / doc->zoom_factor;
 
-    *image_x = (gint)scaled_x;
-    *image_y = (gint)scaled_y;
+    /* Round to nearest integer to prevent pixel shifting */
+    *image_x = (gint)(scaled_x + 0.5);
+    *image_y = (gint)(scaled_y + 0.5);
 }
 
 /**
