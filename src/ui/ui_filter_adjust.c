@@ -1,8 +1,12 @@
 #include "ui/ui_filter_adjust.h"
+#include "command.h"
+#include "document.h"
 #include "filters.h"
 #include "render/layer.h"
+#include "ui.h"
 #include "ui/dialogs/color_balance_dialog.h"
 #include "ui/dialogs/gamma_dialog.h"
+#include "ui/dialogs/retinex_dialog.h"
 #include "ui/filters/filter_auto_contrast.h"
 #include "ui/filters/filter_auto_gamma.h"
 #include "ui/filters/filter_auto_level.h"
@@ -22,6 +26,7 @@
 #include "ui/filters/filter_luminance_threshold.h"
 #include "ui/filters/filter_monochrome.h"
 #include "ui/filters/filter_posterize.h"
+#include "ui/filters/filter_retinex.h"
 #include "ui/filters/filter_sepia.h"
 #include "ui/filters/filter_shadow_highlights.h"
 #include "ui/filters/filter_stretch.h"
@@ -1818,6 +1823,117 @@ static void on_adjust_shadows_highlights_tint(GtkWidget* widget, gpointer data) 
 }
 
 /**
+ * Adjustments > Retinex callback
+ */
+static void on_adjust_retinex(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc;
+    ImageLayer* layer;
+    RetinexDialog* dialog;
+    ImageLayer* temp_layer;
+    cairo_t* cr;
+    gint response;
+    OcRetinexMode mode;
+    gint scale;
+    gfloat num_scales;
+    gfloat dynamic;
+
+    if (!ctx) {
+        return;
+    }
+
+    doc = ui_get_active_document(ctx);
+    if (!doc) {
+        g_warning("No document open");
+        return;
+    }
+
+    layer = document_get_selected_layer(doc);
+    if (!layer) {
+        g_warning("No layer selected");
+        return;
+    }
+
+    /* Create retinex dialog */
+    dialog = retinex_dialog_new("Retinex");
+    if (!dialog) {
+        g_warning("Failed to create retinex dialog");
+        return;
+    }
+
+    /* Create a copy of the layer for preview */
+    temp_layer = layer_new("Temp", layer->width, layer->height, TRUE);
+    if (!temp_layer) {
+        g_warning("Failed to create temporary layer for preview");
+        retinex_dialog_free(dialog);
+        return;
+    }
+
+    /* Copy layer surface to temp layer */
+    cr = cairo_create(temp_layer->surface);
+    cairo_set_source_surface(cr, layer->surface, 0, 0);
+    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+    cairo_paint(cr);
+    cairo_destroy(cr);
+
+    /* Set layers in dialog */
+    retinex_dialog_set_layers(dialog, layer, temp_layer);
+
+    /* Store original layer reference for preview callback */
+    g_object_set_data(G_OBJECT(retinex_dialog_get_window(dialog)), "original_layer", layer);
+
+    /* Set dialog as transient for main window */
+    if (ctx->window) {
+        gtk_window_set_transient_for(retinex_dialog_get_window(dialog), GTK_WINDOW(ctx->window));
+    }
+
+    /* Run dialog */
+    response = retinex_dialog_run(dialog, GTK_WINDOW(ctx->window), &mode, &scale, &num_scales, &dynamic);
+
+    if (response == GTK_RESPONSE_OK) {
+        /* Apply retinex filter directly */
+        Command* cmd = command_create_draw(layer, "Retinex");
+        if (cmd) {
+            /* Start timing */
+            gint64 start_time = g_get_monotonic_time();
+
+            gboolean success = filter_retinex_apply(layer, mode, scale, num_scales, dynamic);
+
+            if (success) {
+                /* Get processing time */
+                gint64 current_time = g_get_monotonic_time();
+                gdouble processing_time = (gdouble)(current_time - start_time) / 1000000.0;
+
+                command_finalize_draw(cmd);
+                if (doc->undo_stack) {
+                    command_stack_push(doc->undo_stack, cmd);
+                    if (doc->redo_stack) {
+                        command_stack_clear(doc->redo_stack);
+                    }
+                } else {
+                    command_free(cmd);
+                }
+                layer_invalidate_cache(layer);
+                doc->modified = TRUE;
+                document_invalidate_composite(doc);
+                ui_update_status_bar_time(ctx, processing_time);
+                ui_update_window_title(ctx);
+                ui_update_menu_and_button_states(ctx);
+            } else {
+                command_free(cmd);
+            }
+        }
+    }
+
+    /* Clean up */
+    g_object_set_data(G_OBJECT(retinex_dialog_get_window(dialog)), "original_layer", NULL);
+    g_object_set_data(G_OBJECT(retinex_dialog_get_window(dialog)), "retinex_params", NULL);
+    retinex_dialog_free(dialog);
+    layer_free(temp_layer);
+}
+
+/**
  * Setup Adjustments menu from Glade builder
  */
 void ui_filter_adjust_setup_menu(GtkBuilder* builder, AppContext* ctx) {
@@ -1955,5 +2071,10 @@ void ui_filter_adjust_setup_menu(GtkBuilder* builder, AppContext* ctx) {
     GtkWidget* adjust_menu_shadows_highlights_tint = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_shadows_highlights_tint"));
     if (adjust_menu_shadows_highlights_tint) {
         g_signal_connect(adjust_menu_shadows_highlights_tint, "activate", G_CALLBACK(on_adjust_shadows_highlights_tint), ctx);
+    }
+
+    GtkWidget* adjust_menu_retinex = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_retinex"));
+    if (adjust_menu_retinex) {
+        g_signal_connect(adjust_menu_retinex, "activate", G_CALLBACK(on_adjust_retinex), ctx);
     }
 }

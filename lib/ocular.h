@@ -338,7 +338,7 @@ OC_STATUS ocularColorTemperature(unsigned char* Input, unsigned char* Output, in
                                  float Temperature, float Strength);
 
 OC_STATUS ocularMultiscaleRetinex(unsigned char* input, unsigned char* output, int width, int height, int channels,
-                                  OcRetinexMode mode, int scale, int numScales, float dynamic);
+                                  OcRetinexMode mode, int scale, float numScales, float dynamic);
 
 OC_STATUS ocularDarkChannelPriorHazeRemoval(unsigned char* Input, unsigned char* Output,
                                             int Width, int Height, int Stride,

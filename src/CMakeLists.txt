@@ -48,6 +48,7 @@ set(SOURCES
     ui/dialogs/clouds_dialog.c
     ui/dialogs/color_balance_dialog.c
     ui/dialogs/gamma_dialog.c
+    ui/dialogs/retinex_dialog.c
     tools.c
     tools/tool_manager.c
     tools/tool_move.c
@@ -109,6 +110,7 @@ set(SOURCES
     ui/filters/filter_radial_blur.c
     ui/filters/filter_relief.c
     ui/filters/filter_render_clouds.c
+    ui/filters/filter_retinex.c
     ui/filters/filter_roberts_edge.c
     ui/filters/filter_sobel_edge.c
     render/render_utils.c
