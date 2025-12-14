@@ -14,6 +14,7 @@
 #include "ui/filters/filter_median_blur.h"
 #include "ui/filters/filter_motion_blur.h"
 #include "ui/filters/filter_oil_paint.h"
+#include "ui/filters/filter_pointillize.h"
 #include "ui/filters/filter_prewitt_edge.h"
 #include "ui/filters/filter_radial_blur.h"
 #include "ui/filters/filter_roberts_edge.h"
@@ -1241,6 +1242,82 @@ static void on_edge_sobel(GtkWidget* widget, gpointer data) {
 }
 
 /**
+ * Pointillize filter preview update callback
+ */
+static gboolean on_pointillize_preview_update(FilterDialog* dialog,
+                                              const gdouble* values,
+                                              gint num_values,
+                                              gpointer user_data) {
+    gfloat filter_values[4];
+
+    if (!dialog || !values || num_values < 4) {
+        return FALSE;
+    }
+
+    /* Values: [cellSize, r, g, b]
+       cellSize is already an integer value
+       r, g, b are in 0.0-1.0 range, will be converted to 0-255 in filter */
+    filter_values[0] = (gfloat)values[0]; /* cellSize */
+    filter_values[1] = (gfloat)values[1]; /* r */
+    filter_values[2] = (gfloat)values[2]; /* g */
+    filter_values[3] = (gfloat)values[3]; /* b */
+
+    /* Set up viewport-based filter */
+    setup_viewport_filter(dialog, (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_pointillize_apply,
+                          filter_values, 4);
+
+    return TRUE;
+}
+
+/**
+ * Effects > Pixelate > Pointillize callback
+ */
+static void on_pixelate_pointillize(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    FilterControlParam controls[2];
+    gdouble values[4]; /* cellSize + RGB (3 values) = 4 total */
+    gint response;
+    gfloat filter_values[4];
+
+    if (!ctx) {
+        return;
+    }
+
+    /* Control 0: Cell Size (double) */
+    controls[0].type = FILTER_CONTROL_DOUBLE;
+    controls[0].label = "Cell Size";
+    controls[0].min_value = 3.0;
+    controls[0].max_value = 100.0;
+    controls[0].default_value = 10.0;
+    controls[0].step = 1.0;
+    controls[0].decimals = 0;
+    controls[0].filter_min = 3.0;
+    controls[0].filter_max = 100.0;
+
+    /* Control 1: Background Color (RGB) */
+    controls[1].type = FILTER_CONTROL_RGB;
+    controls[1].label = "Background Color";
+    controls[1].default_r = 1.0; /* White by default */
+    controls[1].default_g = 1.0;
+    controls[1].default_b = 1.0;
+
+    response = ui_show_filter_dialog(ctx, "Pointillize", controls, 2,
+                                     on_pointillize_preview_update, values);
+
+    if (response == GTK_RESPONSE_OK) {
+        /* Values: [cellSize, r, g, b] */
+        filter_values[0] = (gfloat)values[0]; /* cellSize */
+        filter_values[1] = (gfloat)values[1]; /* r */
+        filter_values[2] = (gfloat)values[2]; /* g */
+        filter_values[3] = (gfloat)values[3]; /* b */
+
+        ui_apply_layer_filter_with_value(ctx, filter_pointillize_apply,
+                                         "Pointillize", filter_values, 4);
+    }
+}
+
+/**
  * Setup Effects menu from Glade builder
  */
 void ui_filter_effects_setup_menu(GtkBuilder* builder, AppContext* ctx) {
@@ -1342,5 +1419,11 @@ void ui_filter_effects_setup_menu(GtkBuilder* builder, AppContext* ctx) {
     GtkWidget* edge_menu_sobel = GTK_WIDGET(gtk_builder_get_object(builder, "edge_menu_sobel"));
     if (edge_menu_sobel) {
         g_signal_connect(edge_menu_sobel, "activate", G_CALLBACK(on_edge_sobel), ctx);
+    }
+
+    /* Connect Pixelate submenu signals */
+    GtkWidget* pixelate_menu_pointillize = GTK_WIDGET(gtk_builder_get_object(builder, "pixelate_menu_pointillize"));
+    if (pixelate_menu_pointillize) {
+        g_signal_connect(pixelate_menu_pointillize, "activate", G_CALLBACK(on_pixelate_pointillize), ctx);
     }
 }

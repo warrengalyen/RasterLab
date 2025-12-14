@@ -91,6 +91,7 @@ set(SOURCES
     ui/filters/filter_film_grain.c
     ui/filters/filter_frosted_glass.c
     ui/filters/filter_oil_paint.c
+    ui/filters/filter_pointillize.c
     ui/filters/filter_canny_edge.c
     ui/filters/filter_gradient_edge.c
     ui/filters/filter_laplacian_edge.c

@@ -6,13 +6,12 @@
 /**
  * Apply auto white balance filter to a layer using Ocular library
  */
-gboolean filter_auto_whitebalance_apply(ImageLayer *layer)
-{
-    cairo_surface_t *surface;
+gboolean filter_auto_whitebalance_apply(ImageLayer* layer) {
+    cairo_surface_t* surface;
     gint width, height;
     guchar *rgb_input, *rgb_output;
     gint stride;
-    bool result;
+    OC_STATUS status;
 
     if (!layer || !layer->surface) {
         return FALSE;
@@ -28,9 +27,9 @@ gboolean filter_auto_whitebalance_apply(ImageLayer *layer)
     stride = width * 3; /* RGB stride */
 
     /* Allocate buffers for RGB input and output */
-    rgb_input = (guchar *)g_malloc(width * height * 3);
-    rgb_output = (guchar *)g_malloc(width * height * 3);
-    
+    rgb_input = (guchar*)g_malloc(width * height * 3);
+    rgb_output = (guchar*)g_malloc(width * height * 3);
+
     if (!rgb_input || !rgb_output) {
         g_warning("Auto white balance filter: Failed to allocate memory");
         g_free(rgb_input);
@@ -47,11 +46,11 @@ gboolean filter_auto_whitebalance_apply(ImageLayer *layer)
     }
 
     bool colorCast = false;
-    result = ocularAutoWhiteBalance(rgb_input, rgb_output, width, height, stride,
+    status = ocularAutoWhiteBalance(rgb_input, rgb_output, width, height, stride,
                                     15, 0.01f, 0.9f, &colorCast);
-    
-    if (result != OC_STATUS_OK) {
-        g_warning("Auto white balance filter: Ocular filter returned error %d", result);
+
+    if (status != OC_STATUS_OK) {
+        g_warning("Auto white balance filter: Ocular filter returned error %d", status);
         g_free(rgb_input);
         g_free(rgb_output);
         return FALSE;
@@ -71,4 +70,3 @@ gboolean filter_auto_whitebalance_apply(ImageLayer *layer)
 
     return TRUE;
 }
-

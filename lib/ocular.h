@@ -293,8 +293,8 @@ OC_STATUS ocularSolidColorGenerator(unsigned char* Output, int Width, int Height
 
 OC_STATUS ocularLuminanceThresholdFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, unsigned char threshold);
 
-bool ocularAutoWhiteBalance(unsigned char* input, unsigned char* output, int Width, int height, int stride,
-                            int colorCoeff, float cutLimit, float contrast, bool* hasColorCast);
+OC_STATUS ocularAutoWhiteBalance(unsigned char* input, unsigned char* output, int Width, int height, int stride,
+                                 int colorCoeff, float cutLimit, float contrast, bool* hasColorCast);
 
 OC_STATUS ocularWhiteBalanceFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, float temperature, float tint);
 
@@ -407,8 +407,6 @@ OC_STATUS ocularDespeckle(unsigned char* Input, unsigned char* Output, int Width
 
 bool ocularDocumentDeskew(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride);
 
-OC_STATUS ocularMosaicFilter(const unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, int blockSize);
-
 OC_STATUS ocularOilPaintFilter(const unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, int radius, int intensity);
 
 OC_STATUS ocularFrostedGlassEffect(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, int Radius, int Range);
@@ -446,9 +444,25 @@ int ocularHoughLineDetection(unsigned char* Input, int Width, int Height, int li
 OC_STATUS ocularDrawLine(unsigned char* canvas, int width, int height, int stride, int x1, int y1, int x2, int y2,
                          unsigned char R, unsigned char G, unsigned char B);
 
-/* ==================================================================================
-   Edge Detection Functions
-================================================================================== */
+/* ============================================================================
+ * Pixelate Functions
+ * ============================================================================ */
+
+OC_STATUS ocularColorHalftoneFilter(unsigned char* input, unsigned char* output, int width, int height, int stride, int radius,
+                                    float dotDensity, float cyanAngle, float magentaAngle, float yellowAngle);
+
+OC_STATUS ocularCrystallizeFilter(unsigned char* input, unsigned char* output, int width, int height, int stride, int cellSize);
+
+OC_STATUS ocularFragmentFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride);
+
+OC_STATUS ocularMosaicFilter(const unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, int blockSize);
+
+OC_STATUS ocularPointillizeFilter(unsigned char* input, unsigned char* output, int width, int height, int stride, int cellSize,
+                                  unsigned char bgR, unsigned char bgG, unsigned char bgB);
+
+/* ============================================================================
+ * Edge Detection Functions
+ * ============================================================================ */
 
 OC_STATUS ocularCannyEdgeDetect(unsigned char* Input, unsigned char* Output, int Width, int Height, int Channels,
                                 CannyNoiseFilter kernel_size, int weak_threshold, int strong_threshold);
