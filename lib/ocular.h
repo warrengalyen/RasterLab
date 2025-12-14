@@ -7,9 +7,9 @@ extern "C" {
 
 #include <math.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdint.h>
 
 /* ============================================================================
  * Type Definitions
@@ -19,9 +19,9 @@ extern "C" {
 typedef enum {
     OC_STATUS_OK = 0,                   /* Normal, no errors */
     OC_STATUS_ERR_OUTOFMEMORY = 1,      /* Out of memory */
-    OC_STATUS_ERR_STACKOVERFLOW = 2,     /* Stack overflow */
-    OC_STATUS_ERR_NULLREFERENCE = 3,     /* Empty reference */
-    OC_STATUS_ERR_INVALIDPARAMETER = 4,  /* The parameters are not within the normal range */
+    OC_STATUS_ERR_STACKOVERFLOW = 2,    /* Stack overflow */
+    OC_STATUS_ERR_NULLREFERENCE = 3,    /* Empty reference */
+    OC_STATUS_ERR_INVALIDPARAMETER = 4, /* The parameters are not within the normal range */
     OC_STATUS_ERR_PARAMISMATCH = 5,     /* Parameter mismatch */
     OC_STATUS_ERR_INDEXOUTOFRANGE = 6,
     OC_STATUS_ERR_NOTSUPPORTED = 7,
@@ -50,9 +50,9 @@ typedef struct {
 
 /* Edge handling mode */
 typedef enum {
-    OC_EDGE_WRAP = 0,    /* repeat edge pixel */
-    OC_EDGE_MIRROR = 1,  /* mirror edge pixel */
-    OC_EDGE_CLAMP = 2,   /* clamp edge pixel */
+    OC_EDGE_WRAP = 0,   /* repeat edge pixel */
+    OC_EDGE_MIRROR = 1, /* mirror edge pixel */
+    OC_EDGE_CLAMP = 2,  /* clamp edge pixel */
 } OcEdgeMode;
 
 /* Blend modes */
@@ -160,12 +160,12 @@ typedef enum {
 
 /* Parameters for Levels filter */
 typedef struct {
-    int levelMinimum;    /* color level minimum */
-    int levelMiddle;     /* color scale median */
-    int levelMaximum;    /* maximum value of color scale */
-    int minOutput;       /* minimum output value */
-    int maxOutput;       /* maximum output value */
-    bool Enable;         /* whether to apply */
+    int levelMinimum; /* color level minimum */
+    int levelMiddle;  /* color scale median */
+    int levelMaximum; /* maximum value of color scale */
+    int minOutput;    /* minimum output value */
+    int maxOutput;    /* maximum output value */
+    bool Enable;      /* whether to apply */
 } ocularLevelParams;
 
 /* Palette structures */
@@ -225,36 +225,36 @@ typedef enum {
  * Color Adjustment Functions
  * ============================================================================ */
 
-OC_STATUS ocularBrightnessAndContrastFilter(unsigned char *Input, unsigned char *Output, int Width,
+OC_STATUS ocularBrightnessAndContrastFilter(unsigned char* Input, unsigned char* Output, int Width,
                                             int Height, int Stride, float brightness, float contrast);
 
 OC_STATUS ocularGrayscaleFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride);
 
 OC_STATUS ocularRGBFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, float redAdjustment,
-                         float greenAdjustment, float blueAdjustment);
+                          float greenAdjustment, float blueAdjustment);
 
 OC_STATUS ocularHSLFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, float hueAdjustment,
-                         float satAdjustment, float lightAdjustment);
+                          float satAdjustment, float lightAdjustment);
 
 OC_STATUS ocularAverageLuminanceThresholdFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride,
-                                               float thresholdMultiplier);
+                                                float thresholdMultiplier);
 
 OC_STATUS ocularAverageColor(unsigned char* Input, int Width, int Height, int Stride, unsigned char* AverageR,
-                            unsigned char* AverageG, unsigned char* AverageB, unsigned char* AverageA);
+                             unsigned char* AverageG, unsigned char* AverageB, unsigned char* AverageA);
 
 OC_STATUS ocularLuminosity(unsigned char* Input, int Width, int Height, int Stride, unsigned char* Luminance);
 
 OC_STATUS ocularColorMatrixFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride,
-                                 float* colorMatrix, float intensity);
+                                  float* colorMatrix, float intensity);
 
 OC_STATUS ocularSepiaFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, int intensity);
 
 OC_STATUS ocularChromaKeyFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride,
-                               unsigned char colorToReplaceR, unsigned char colorToReplaceG, unsigned char colorToReplaceB,
-                               float thresholdSensitivity, float smoothing);
+                                unsigned char colorToReplaceR, unsigned char colorToReplaceG, unsigned char colorToReplaceB,
+                                float thresholdSensitivity, float smoothing);
 
 OC_STATUS ocularLookupFilter(unsigned char* Input, unsigned char* Output, unsigned char* lookupTable, int Width, int Height,
-                            int Stride, int intensity);
+                             int Stride, int intensity);
 
 OC_STATUS ocularSaturationFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, float saturation);
 
@@ -263,38 +263,38 @@ OC_STATUS ocularGammaFilter(unsigned char* Input, unsigned char* Output, int Wid
 OC_STATUS ocularExposureFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, float exposure);
 
 OC_STATUS ocularFalseColorFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride,
-                                unsigned char firstColorR, unsigned char firstColorG, unsigned char firstColorB,
-                                unsigned char secondColorR, unsigned char secondColorG, unsigned char secondColorB, int intensity);
+                                 unsigned char firstColorR, unsigned char firstColorG, unsigned char firstColorB,
+                                 unsigned char secondColorR, unsigned char secondColorG, unsigned char secondColorB, int intensity);
 
 OC_STATUS ocularHazeFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, float distance,
-                          float slope, int intensity);
+                           float slope, int intensity);
 
 OC_STATUS ocularOpacityFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, float opacity);
 
 OC_STATUS ocularLevelsFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride,
-                            ocularLevelParams* redLevelParams, ocularLevelParams* greenLevelParams, ocularLevelParams* blueLevelParams);
+                             ocularLevelParams* redLevelParams, ocularLevelParams* greenLevelParams, ocularLevelParams* blueLevelParams);
 
 OC_STATUS ocularHueFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, float hueAdjust);
 
 OC_STATUS ocularHighlightShadowTintFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, float shadowTintR,
-                                         float shadowTintG, float shadowTintB, float highlightTintR, float highlightTintG,
-                                         float highlightTintB, float shadowTintIntensity, float highlightTintIntensity);
+                                          float shadowTintG, float shadowTintB, float highlightTintR, float highlightTintG,
+                                          float highlightTintB, float shadowTintIntensity, float highlightTintIntensity);
 
-OC_STATUS ocularHighlightShadowFilter(unsigned char *Input, unsigned char *Output, int Width, int Height, int Stride, float shadows,
+OC_STATUS ocularHighlightShadowFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, float shadows,
                                       float highlights, float midtoneContrast);
 
 OC_STATUS ocularMonochromeFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride,
-                                unsigned char filterColorR, unsigned char filterColorG, unsigned char filterColorB, int intensity);
+                                 unsigned char filterColorR, unsigned char filterColorG, unsigned char filterColorB, int intensity);
 
 OC_STATUS ocularColorInvertFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride);
 
 OC_STATUS ocularSolidColorGenerator(unsigned char* Output, int Width, int Height, int Stride, unsigned char colorR,
-                                unsigned char colorG, unsigned char colorB, unsigned char colorAlpha);
+                                    unsigned char colorG, unsigned char colorB, unsigned char colorAlpha);
 
 OC_STATUS ocularLuminanceThresholdFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, unsigned char threshold);
 
 bool ocularAutoWhiteBalance(unsigned char* input, unsigned char* output, int Width, int height, int stride,
-                           int colorCoeff, float cutLimit, float contrast, bool* hasColorCast);
+                            int colorCoeff, float cutLimit, float contrast, bool* hasColorCast);
 
 OC_STATUS ocularWhiteBalanceFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, float temperature, float tint);
 
@@ -303,7 +303,7 @@ OC_STATUS ocularVibranceFilter(unsigned char* Input, unsigned char* Output, int 
 OC_STATUS ocularSkinToneFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, float skinToneAdjust,
                                float skinHue, float skinHueThreshold, float maxHueShift, float maxSaturationShift, int upperSkinToneColor);
 
-OC_STATUS ocularAutoLevel(const unsigned char *Input, unsigned char *Output,
+OC_STATUS ocularAutoLevel(const unsigned char* Input, unsigned char* Output,
                           int Width, int Height, int Stride, float fraction);
 
 OC_STATUS ocularAutoContrast(unsigned char* Input, unsigned char* Output, int Width, int Height, int Channels);
@@ -321,16 +321,16 @@ OC_STATUS ocularBacklightRepair(unsigned char* Input, unsigned char* Output, int
 OC_STATUS ocularLayerBlend(unsigned char* baseInput, int bWidth, int bHeight, int bStride, unsigned char* mixInput, int mWidth,
                            int mHeight, int mStride, OcBlendMode blendMode, int alpha);
 
-OC_STATUS ocularColorBalance(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, 
-                            int redBalance, int greenBalance, int blueBalance, OcToneBalanceMode Mode, bool preserveLuminosity);
+OC_STATUS ocularColorBalance(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride,
+                             int redBalance, int greenBalance, int blueBalance, OcToneBalanceMode Mode, bool preserveLuminosity);
 
 OC_STATUS ocularColorTemperature(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride,
                                  float Temperature, float Strength);
 
 OC_STATUS ocularMultiscaleRetinex(unsigned char* input, unsigned char* output, int width, int height, int channels,
-                                 OcRetinexMode mode, int scale, int numScales, float dynamic);
+                                  OcRetinexMode mode, int scale, int numScales, float dynamic);
 
-OC_STATUS ocularDarkChannelPriorHazeRemoval(unsigned char* Input, unsigned char* Output, 
+OC_STATUS ocularDarkChannelPriorHazeRemoval(unsigned char* Input, unsigned char* Output,
                                             int Width, int Height, int Stride,
                                             int radius, int guideRadius, float maxAtm, float omega, float epsilon, float t0);
 
@@ -339,7 +339,7 @@ OC_STATUS ocularDarkChannelPriorHazeRemoval(unsigned char* Input, unsigned char*
  * ============================================================================ */
 
 OC_STATUS ocularConvolution2DFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Channels,
-                                   float* kernel, unsigned char filterW, unsigned char cfactor, unsigned char bias);
+                                    float* kernel, unsigned char filterW, unsigned char cfactor, unsigned char bias);
 
 OC_STATUS ocularMotionBlurFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, int Distance, int Angle);
 
@@ -366,38 +366,38 @@ OC_STATUS ocularMaxFilter(unsigned char* Input, unsigned char* Output, int Width
 OC_STATUS ocularHighPassFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, int Radius);
 
 OC_STATUS ocularBilateralFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride,
-                               float sigmaSpatial, float sigmaRange);
+                                float sigmaSpatial, float sigmaRange);
 
 OC_STATUS ocularGaussianBlurFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, float GaussianSigma);
 
 OC_STATUS ocularUnsharpMaskFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride,
-                                 float GaussianSigma, float intensity, float threshold);
+                                  float GaussianSigma, float intensity, float threshold);
 
 OC_STATUS ocularBoxBlurFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, int Radius);
 
 OC_STATUS ocularSurfaceBlurFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, int Radius, int Threshold);
 
 OC_STATUS ocularBEEPSFilter(const unsigned char* Input, unsigned char* Output, int width, int height, int Stride,
-                          float PhotometricStandardDeviation, float SpatialDecay, int RangeFilter);
+                            float PhotometricStandardDeviation, float SpatialDecay, int RangeFilter);
 
-OC_STATUS ocularGuidedFilter(unsigned char* Input, unsigned char* Guide, unsigned char* Output, int Width, int Height, 
-                            int Stride, int Radius, float Epsilon);
+OC_STATUS ocularGuidedFilter(unsigned char* Input, unsigned char* Guide, unsigned char* Output, int Width, int Height,
+                             int Stride, int Radius, float Epsilon);
 
 OC_STATUS ocularSkinSmoothingFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride,
-                                   int smoothingLevel, bool applySkinFilter);
+                                    int smoothingLevel, bool applySkinFilter);
 
 OC_STATUS ocularSharpenFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, float Strength);
 
 OC_STATUS ocularResamplingFilter(unsigned char* Input, int Width, int Height, int Stride, unsigned char* Output,
-                                int newWidth, int newHeight, int dstStride, OcInterpolationMode InterpolationMode);
+                                 int newWidth, int newHeight, int dstStride, OcInterpolationMode InterpolationMode);
 
-OC_STATUS ocularRotateImage(unsigned char* Input, int Width, int Height, int Stride, unsigned char* Output, 
+OC_STATUS ocularRotateImage(unsigned char* Input, int Width, int Height, int Stride, unsigned char* Output,
                             unsigned char newWidth, unsigned char newHeight, float angle, bool useTransparency,
-                            OcInterpolationMode InterpolationMode, unsigned char fillColorR, unsigned char fillColorG, 
+                            OcInterpolationMode InterpolationMode, unsigned char fillColorR, unsigned char fillColorG,
                             unsigned char fillColorB);
 
 OC_STATUS ocularCropImage(const unsigned char* Input, int Width, int Height, int srcStride, unsigned char* Output, int cropX,
-                         int cropY, int dstWidth, int dstHeight, int dstStride);
+                          int cropY, int dstWidth, int dstHeight, int dstStride);
 
 OC_STATUS ocularFlipImage(unsigned char* Input, unsigned char* Output, int Width, int Height, int Channels, int type);
 
@@ -406,13 +406,6 @@ OC_STATUS ocularTransposeImage(unsigned char* Input, unsigned char* Output, int 
 OC_STATUS ocularDespeckle(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, int maxWindowSize, int Threshold);
 
 bool ocularDocumentDeskew(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride);
-
-OC_STATUS ocularCannyEdgeDetect(const unsigned char* Input, unsigned char* Output, int Width, int Height, int Channels,
-                               CannyNoiseFilter kernel_size, int weak_threshold, int strong_threshold);
-
-OC_STATUS ocularSobelEdgeFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Channels);
-
-OC_STATUS ocularGradientEdgeDetect(unsigned char* Input, unsigned char* Output, int Width, int Height, int Channels);
 
 OC_STATUS ocularMosaicFilter(const unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, int blockSize);
 
@@ -430,35 +423,53 @@ OC_STATUS ocularFragmentFilter(unsigned char* Input, unsigned char* Output, int 
 
 OC_STATUS ocularCrystallizeFilter(unsigned char* input, unsigned char* output, int width, int height, int stride, int cellSize);
 
-OC_STATUS ocularPointillizeFilter(unsigned char* input, unsigned char* output, int width, int height, int stride, int cellSize, 
+OC_STATUS ocularPointillizeFilter(unsigned char* input, unsigned char* output, int width, int height, int stride, int cellSize,
                                   unsigned char bgR, unsigned char bgG, unsigned char bgB);
 
 OC_STATUS ocularColorHalftoneFilter(unsigned char* input, unsigned char* output, int width, int height, int stride,
-                                     int radius, float dotDensity,
-                                     float cyanAngle, float magentaAngle, float yellowAngle);
+                                    int radius, float dotDensity,
+                                    float cyanAngle, float magentaAngle, float yellowAngle);
 
 OC_STATUS ocularPalettetizeFromFile(unsigned char* input, unsigned char* output, int width, int height, int channels,
                                     const char* filename, OcDitherMethod method, int amount);
 
 OC_STATUS ocularPalettetizeFromImage(unsigned char* input, unsigned char* output, int width, int height, int channels,
-                                    OcQuantizeMethod method, int maxColors, int amount);
+                                     OcQuantizeMethod method, int maxColors, int amount);
 
 OC_STATUS ocularFFTFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, OcFFTFilterParams* params);
 
 OC_STATUS ocularFFTVisualize(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, bool logScale);
 
 int ocularHoughLineDetection(unsigned char* Input, int Width, int Height, int lineIntensity, int Threshold, float resTheta,
-                            int numLine, float* Radius, float* Theta);
+                             int numLine, float* Radius, float* Theta);
 
 OC_STATUS ocularDrawLine(unsigned char* canvas, int width, int height, int stride, int x1, int y1, int x2, int y2,
                          unsigned char R, unsigned char G, unsigned char B);
+
+/* ==================================================================================
+   Edge Detection Functions
+================================================================================== */
+
+OC_STATUS ocularCannyEdgeDetect(unsigned char* Input, unsigned char* Output, int Width, int Height, int Channels,
+                                CannyNoiseFilter kernel_size, int weak_threshold, int strong_threshold);
+
+OC_STATUS ocularSobelEdgeDetect(unsigned char* Input, unsigned char* Output, int Width, int Height, int Channels);
+
+OC_STATUS ocularGradientEdgeDetect(unsigned char* Input, unsigned char* Output, int Width, int Height, int Channels);
+
+OC_STATUS ocularPrewittEdgeDetect(unsigned char* Input, unsigned char* Output, int Width, int Height, int Channels);
+
+OC_STATUS ocularRobertsEdgeDetect(unsigned char* Input, unsigned char* Output, int Width, int Height, int Channels);
+
+OC_STATUS ocularLaplacianEdgeDetect(unsigned char* Input, unsigned char* Output, int Width, int Height, int Channels,
+                                    float sigma);
 
 /* ============================================================================
  * Distortion Functions
  * ============================================================================ */
 
-OC_STATUS ocularPinchDistortionFilter(unsigned char* input, unsigned char* output, 
-                                      int width, int height, int stride, 
+OC_STATUS ocularPinchDistortionFilter(unsigned char* input, unsigned char* output,
+                                      int width, int height, int stride,
                                       float amount);
 
 OC_STATUS ocularTwirlDistortionFilter(unsigned char* input, unsigned char* output,
@@ -548,5 +559,4 @@ void ocularCloneImage(OcImage* Input, OcImage** Output);
 }
 #endif
 
-#endif  /* OCULAR_H */
-
+#endif /* OCULAR_H */

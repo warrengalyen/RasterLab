@@ -30,4 +30,3 @@ message(STATUS "GTK3 library dirs: ${GTK3_LIBRARY_DIRS}")
 message(STATUS "GTK3 CFLAGS: ${GTK3_CFLAGS}")
 message(STATUS "GTK3 LDFLAGS: ${GTK3_LDFLAGS}")
 message(STATUS "GdkPixbuf found: Yes")
-

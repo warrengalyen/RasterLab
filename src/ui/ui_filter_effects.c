@@ -4,14 +4,20 @@
 #include "render/layer.h"
 #include "ui/filters/filter_average_blur.h"
 #include "ui/filters/filter_box_blur.h"
+#include "ui/filters/filter_canny_edge.h"
 #include "ui/filters/filter_exponential_blur.h"
 #include "ui/filters/filter_film_grain.h"
 #include "ui/filters/filter_frosted_glass.h"
 #include "ui/filters/filter_gaussian_blur.h"
+#include "ui/filters/filter_gradient_edge.h"
+#include "ui/filters/filter_laplacian_edge.h"
 #include "ui/filters/filter_median_blur.h"
 #include "ui/filters/filter_motion_blur.h"
 #include "ui/filters/filter_oil_paint.h"
+#include "ui/filters/filter_prewitt_edge.h"
 #include "ui/filters/filter_radial_blur.h"
+#include "ui/filters/filter_roberts_edge.h"
+#include "ui/filters/filter_sobel_edge.h"
 #include "ui/filters/filter_surface_blur.h"
 #include "ui/filters/filter_zoom_blur.h"
 #include "ui/ui_filter.h"
@@ -1181,6 +1187,60 @@ static void on_artistic_oil_paint(GtkWidget* widget, gpointer data) {
 }
 
 /**
+ * Edge Detect > Canny callback
+ */
+static void on_edge_canny(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    ui_apply_layer_filter(ctx, filter_canny_edge_apply, "Canny Edge");
+}
+
+/**
+ * Edge Detect > Gradient callback
+ */
+static void on_edge_gradient(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    ui_apply_layer_filter(ctx, filter_gradient_edge_apply, "Gradient Edge");
+}
+
+/**
+ * Edge Detect > Laplacian callback
+ */
+static void on_edge_laplacian(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    ui_apply_layer_filter(ctx, filter_laplacian_edge_apply, "Laplacian Edge");
+}
+
+/**
+ * Edge Detect > Prewitt callback
+ */
+static void on_edge_prewitt(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    ui_apply_layer_filter(ctx, filter_prewitt_edge_apply, "Prewitt Edge");
+}
+
+/**
+ * Edge Detect > Roberts callback
+ */
+static void on_edge_roberts(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    ui_apply_layer_filter(ctx, filter_roberts_edge_apply, "Roberts Edge");
+}
+
+/**
+ * Edge Detect > Sobel callback
+ */
+static void on_edge_sobel(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    ui_apply_layer_filter(ctx, filter_sobel_edge_apply, "Sobel Edge");
+}
+
+/**
  * Setup Effects menu from Glade builder
  */
 void ui_filter_effects_setup_menu(GtkBuilder* builder, AppContext* ctx) {
@@ -1251,5 +1311,36 @@ void ui_filter_effects_setup_menu(GtkBuilder* builder, AppContext* ctx) {
     GtkWidget* artistic_menu_oil_paint = GTK_WIDGET(gtk_builder_get_object(builder, "artistic_menu_oil_paint"));
     if (artistic_menu_oil_paint) {
         g_signal_connect(artistic_menu_oil_paint, "activate", G_CALLBACK(on_artistic_oil_paint), ctx);
+    }
+
+    /* Connect Edge Detect submenu signals */
+    GtkWidget* edge_menu_canny = GTK_WIDGET(gtk_builder_get_object(builder, "edge_menu_canny"));
+    if (edge_menu_canny) {
+        g_signal_connect(edge_menu_canny, "activate", G_CALLBACK(on_edge_canny), ctx);
+    }
+
+    GtkWidget* edge_menu_gradient = GTK_WIDGET(gtk_builder_get_object(builder, "edge_menu_gradient"));
+    if (edge_menu_gradient) {
+        g_signal_connect(edge_menu_gradient, "activate", G_CALLBACK(on_edge_gradient), ctx);
+    }
+
+    GtkWidget* edge_menu_laplacian = GTK_WIDGET(gtk_builder_get_object(builder, "edge_menu_laplacian"));
+    if (edge_menu_laplacian) {
+        g_signal_connect(edge_menu_laplacian, "activate", G_CALLBACK(on_edge_laplacian), ctx);
+    }
+
+    GtkWidget* edge_menu_prewiitt = GTK_WIDGET(gtk_builder_get_object(builder, "edge_menu_prewiitt"));
+    if (edge_menu_prewiitt) {
+        g_signal_connect(edge_menu_prewiitt, "activate", G_CALLBACK(on_edge_prewitt), ctx);
+    }
+
+    GtkWidget* edge_menu_roberts = GTK_WIDGET(gtk_builder_get_object(builder, "edge_menu_roberts"));
+    if (edge_menu_roberts) {
+        g_signal_connect(edge_menu_roberts, "activate", G_CALLBACK(on_edge_roberts), ctx);
+    }
+
+    GtkWidget* edge_menu_sobel = GTK_WIDGET(gtk_builder_get_object(builder, "edge_menu_sobel"));
+    if (edge_menu_sobel) {
+        g_signal_connect(edge_menu_sobel, "activate", G_CALLBACK(on_edge_sobel), ctx);
     }
 }

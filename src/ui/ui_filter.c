@@ -182,7 +182,7 @@ gboolean ui_apply_layer_filter(AppContext* ctx,
 
     /* Start timing */
     start_time = start_processing_timer();
-
+    
     /* Apply filter (this is blocking, but progress bar will pulse via timeout) */
     gboolean success = filter_func(layer);
 
@@ -417,7 +417,7 @@ gint ui_show_filter_dialog(AppContext* ctx,
     /* Set up live preview callback if provided */
     if (preview_callback) {
         filter_dialog_set_preview_callback(dialog, preview_callback, temp_layer);
-
+        
         /* Trigger initial preview update with default values */
         gdouble* default_values = (gdouble*)g_malloc(sizeof(gdouble) * num_controls);
         if (default_values) {

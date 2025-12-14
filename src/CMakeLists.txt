@@ -91,6 +91,12 @@ set(SOURCES
     ui/filters/filter_film_grain.c
     ui/filters/filter_frosted_glass.c
     ui/filters/filter_oil_paint.c
+    ui/filters/filter_canny_edge.c
+    ui/filters/filter_gradient_edge.c
+    ui/filters/filter_laplacian_edge.c
+    ui/filters/filter_prewitt_edge.c
+    ui/filters/filter_roberts_edge.c
+    ui/filters/filter_sobel_edge.c
     render/render_utils.c
     render/layer.c
     render/compositor.c
