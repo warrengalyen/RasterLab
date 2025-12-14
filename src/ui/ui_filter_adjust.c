@@ -10,13 +10,18 @@
 #include "ui/filters/filter_auto_whitebalance.h"
 #include "ui/filters/filter_backlight.h"
 #include "ui/filters/filter_brightness_contrast.h"
+#include "ui/filters/filter_color_invert.h"
 #include "ui/filters/filter_colorbalance.h"
 #include "ui/filters/filter_dehaze.h"
 #include "ui/filters/filter_equalize.h"
 #include "ui/filters/filter_exposure.h"
 #include "ui/filters/filter_gamma.h"
 #include "ui/filters/filter_grayscale.h"
+#include "ui/filters/filter_highlight_shadow_tint.h"
 #include "ui/filters/filter_hsl.h"
+#include "ui/filters/filter_luminance_threshold.h"
+#include "ui/filters/filter_monochrome.h"
+#include "ui/filters/filter_posterize.h"
 #include "ui/filters/filter_sepia.h"
 #include "ui/filters/filter_shadow_highlights.h"
 #include "ui/filters/filter_stretch.h"
@@ -1480,6 +1485,337 @@ static void on_adjust_dehaze(GtkWidget* widget, gpointer data) {
 }
 
 /**
+ * Color Invert filter preview update callback
+ */
+static gboolean on_invert_preview_update(FilterDialog* dialog,
+                                         const gdouble* values,
+                                         gint num_values,
+                                         gpointer user_data) {
+    (void)dialog;
+    (void)values;
+    (void)num_values;
+    (void)user_data;
+    /* Invert filter has no parameters, so preview is handled directly */
+    return TRUE;
+}
+
+/**
+ * Adjustments > Invert callback
+ */
+static void on_adjust_invert(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    ui_apply_layer_filter(ctx, filter_color_invert_apply, "Invert");
+}
+
+/**
+ * Monochrome filter preview update callback
+ */
+static gboolean on_monochrome_preview_update(FilterDialog* dialog,
+                                             const gdouble* values,
+                                             gint num_values,
+                                             gpointer user_data) {
+    gfloat filter_values[4];
+
+    if (!dialog || !values || num_values < 4) {
+        return FALSE;
+    }
+
+    /* Values: [r, g, b, intensity] */
+    filter_values[0] = (gfloat)values[0]; /* r (0.0-1.0) */
+    filter_values[1] = (gfloat)values[1]; /* g (0.0-1.0) */
+    filter_values[2] = (gfloat)values[2]; /* b (0.0-1.0) */
+    filter_values[3] = (gfloat)values[3]; /* intensity (0-100) */
+
+    /* Set up viewport-based filter */
+    setup_viewport_filter(dialog, (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_monochrome_apply,
+                          filter_values, 4);
+
+    return TRUE;
+}
+
+/**
+ * Adjustments > Monochrome callback
+ */
+static void on_adjust_monochrome(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    FilterControlParam controls[4];
+    gdouble values[4];
+    gint response;
+    gfloat filter_values[4];
+
+    if (!ctx) {
+        return;
+    }
+
+    /* Control 0: Color (RGB) */
+    controls[0].type = FILTER_CONTROL_RGB;
+    controls[0].label = "Color";
+    controls[0].default_r = 0.5; /* Default to gray */
+    controls[0].default_g = 0.5;
+    controls[0].default_b = 0.5;
+
+    /* Control 1: Intensity (double) */
+    controls[1].type = FILTER_CONTROL_DOUBLE;
+    controls[1].label = "Intensity";
+    controls[1].min_value = 0.0;
+    controls[1].max_value = 100.0;
+    controls[1].default_value = 100.0;
+    controls[1].step = 1.0;
+    controls[1].decimals = 0;
+    controls[1].filter_min = 0.0;
+    controls[1].filter_max = 1.0;
+
+    response = ui_show_filter_dialog(ctx, "Monochrome", controls, 2,
+                                     on_monochrome_preview_update, values);
+
+    if (response == GTK_RESPONSE_OK) {
+        /* Values: [r, g, b, intensity] = 4 values total */
+        filter_values[0] = (gfloat)values[0]; /* r */
+        filter_values[1] = (gfloat)values[1]; /* g */
+        filter_values[2] = (gfloat)values[2]; /* b */
+        filter_values[3] = (gfloat)values[3]; /* intensity */
+
+        ui_apply_layer_filter_with_value(ctx, filter_monochrome_apply,
+                                         "Monochrome", filter_values, 4);
+    }
+}
+
+/**
+ * Posterize filter preview update callback
+ */
+static gboolean on_posterize_preview_update(FilterDialog* dialog,
+                                            const gdouble* values,
+                                            gint num_values,
+                                            gpointer user_data) {
+    gfloat filter_values[1];
+
+    if (!dialog || !values || num_values < 1) {
+        return FALSE;
+    }
+
+    filter_values[0] = (gfloat)values[0]; /* levels */
+
+    /* Set up viewport-based filter */
+    setup_viewport_filter(dialog, (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_posterize_apply,
+                          filter_values, 1);
+
+    return TRUE;
+}
+
+/**
+ * Adjustments > Posterize callback
+ */
+static void on_adjust_posterize(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    FilterControlParam controls[1];
+    gdouble values[1];
+    gint response;
+    gfloat filter_values[1];
+
+    if (!ctx) {
+        return;
+    }
+
+    /* Control 0: Levels (double) */
+    controls[0].type = FILTER_CONTROL_DOUBLE;
+    controls[0].label = "Levels";
+    controls[0].min_value = 2.0;
+    controls[0].max_value = 255.0;
+    controls[0].default_value = 8.0;
+    controls[0].step = 1.0;
+    controls[0].decimals = 0;
+    controls[0].filter_min = 2.0;
+    controls[0].filter_max = 255.0;
+
+    response = ui_show_filter_dialog(ctx, "Posterize", controls, 1,
+                                     on_posterize_preview_update, values);
+
+    if (response == GTK_RESPONSE_OK) {
+        filter_values[0] = (gfloat)values[0]; /* levels */
+
+        ui_apply_layer_filter_with_value(ctx, filter_posterize_apply,
+                                         "Posterize", filter_values, 1);
+    }
+}
+
+/**
+ * Luminance Threshold filter preview update callback
+ */
+static gboolean on_threshold_preview_update(FilterDialog* dialog,
+                                            const gdouble* values,
+                                            gint num_values,
+                                            gpointer user_data) {
+    gfloat filter_values[1];
+
+    if (!dialog || !values || num_values < 1) {
+        return FALSE;
+    }
+
+    filter_values[0] = (gfloat)values[0]; /* threshold (0.0-1.0) */
+
+    /* Set up viewport-based filter */
+    setup_viewport_filter(dialog, (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_luminance_threshold_apply,
+                          filter_values, 1);
+
+    return TRUE;
+}
+
+/**
+ * Adjustments > Threshold callback
+ */
+static void on_adjust_threshold(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    FilterControlParam controls[1];
+    gdouble values[1];
+    gint response;
+    gfloat filter_values[1];
+
+    if (!ctx) {
+        return;
+    }
+
+    /* Control 0: Threshold (double) */
+    controls[0].type = FILTER_CONTROL_DOUBLE;
+    controls[0].label = "Threshold";
+    controls[0].min_value = 0.0;
+    controls[0].max_value = 255.0;
+    controls[0].default_value = 50.0;
+    controls[0].step = 1.0;
+    controls[0].decimals = 0;
+    controls[0].filter_min = 0.0;
+    controls[0].filter_max = 255.0;
+
+    response = ui_show_filter_dialog(ctx, "Threshold", controls, 1,
+                                     on_threshold_preview_update, values);
+
+    if (response == GTK_RESPONSE_OK) {
+        /* Scale UI value (0-100) to filter range (0.0-1.0) */
+        gdouble scaled_threshold = adjustments_scale_value(
+            values[0], controls[0].min_value, controls[0].max_value,
+            controls[0].filter_min, controls[0].filter_max);
+
+        filter_values[0] = (gfloat)scaled_threshold;
+
+        ui_apply_layer_filter_with_value(ctx, filter_luminance_threshold_apply,
+                                         "Threshold", filter_values, 1);
+    }
+}
+
+/**
+ * Highlight/Shadow Tint filter preview update callback
+ */
+static gboolean on_shadows_highlights_tint_preview_update(FilterDialog* dialog,
+                                                          const gdouble* values,
+                                                          gint num_values,
+                                                          gpointer user_data) {
+    gfloat filter_values[8];
+
+    if (!dialog || !values || num_values < 8) {
+        return FALSE;
+    }
+
+    /* Values: [shadowR, shadowG, shadowB, highlightR, highlightG, highlightB, shadowIntensity, highlightIntensity] */
+    filter_values[0] = (gfloat)values[0]; /* shadowR */
+    filter_values[1] = (gfloat)values[1]; /* shadowG */
+    filter_values[2] = (gfloat)values[2]; /* shadowB */
+    filter_values[3] = (gfloat)values[3]; /* highlightR */
+    filter_values[4] = (gfloat)values[4]; /* highlightG */
+    filter_values[5] = (gfloat)values[5]; /* highlightB */
+    filter_values[6] = (gfloat)values[6]; /* shadowIntensity */
+    filter_values[7] = (gfloat)values[7]; /* highlightIntensity */
+
+    /* Set up viewport-based filter */
+    setup_viewport_filter(dialog, (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_highlight_shadow_tint_apply,
+                          filter_values, 8);
+
+    return TRUE;
+}
+
+/**
+ * Adjustments > Shadows/Highlights Tint callback
+ */
+static void on_adjust_shadows_highlights_tint(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    FilterControlParam controls[8];
+    gdouble values[8];
+    gint response;
+    gfloat filter_values[8];
+
+    if (!ctx) {
+        return;
+    }
+
+    /* Control 0: Shadow Tint Color (RGB) */
+    controls[0].type = FILTER_CONTROL_RGB;
+    controls[0].label = "Shadow Tint";
+    controls[0].default_r = 0.0;
+    controls[0].default_g = 0.0;
+    controls[0].default_b = 0.0;
+
+    /* Control 1: Highlight Tint Color (RGB) */
+    controls[1].type = FILTER_CONTROL_RGB;
+    controls[1].label = "Highlight Tint";
+    controls[1].default_r = 1.0;
+    controls[1].default_g = 1.0;
+    controls[1].default_b = 1.0;
+
+    /* Control 2: Shadow Intensity (double) */
+    controls[2].type = FILTER_CONTROL_DOUBLE;
+    controls[2].label = "Shadow Intensity";
+    controls[2].min_value = 0.0;
+    controls[2].max_value = 100.0;
+    controls[2].default_value = 0.0;
+    controls[2].step = 1.0;
+    controls[2].decimals = 0;
+    controls[2].filter_min = 0.0;
+    controls[2].filter_max = 1.0;
+
+    /* Control 3: Highlight Intensity (double) */
+    controls[3].type = FILTER_CONTROL_DOUBLE;
+    controls[3].label = "Highlight Intensity";
+    controls[3].min_value = 0.0;
+    controls[3].max_value = 100.0;
+    controls[3].default_value = 0.0;
+    controls[3].step = 1.0;
+    controls[3].decimals = 0;
+    controls[3].filter_min = 0.0;
+    controls[3].filter_max = 1.0;
+
+    response = ui_show_filter_dialog(ctx, "Shadows/Highlights Tint", controls, 4,
+                                     on_shadows_highlights_tint_preview_update, values);
+
+    if (response == GTK_RESPONSE_OK) {
+        /* Values array will have: [shadowR, shadowG, shadowB, highlightR, highlightG, highlightB, shadowIntensity, highlightIntensity] */
+        /* Total: 3 (shadow RGB) + 3 (highlight RGB) + 1 (shadow intensity) + 1 (highlight intensity) = 8 values */
+        filter_values[0] = (gfloat)values[0]; /* shadowR */
+        filter_values[1] = (gfloat)values[1]; /* shadowG */
+        filter_values[2] = (gfloat)values[2]; /* shadowB */
+        filter_values[3] = (gfloat)values[3]; /* highlightR */
+        filter_values[4] = (gfloat)values[4]; /* highlightG */
+        filter_values[5] = (gfloat)values[5]; /* highlightB */
+
+        /* Scale intensity values from 0-100 to 0.0-1.0 */
+        gdouble scaled_shadow_intensity = adjustments_scale_value(
+            values[6], controls[2].min_value, controls[2].max_value,
+            controls[2].filter_min, controls[2].filter_max);
+        gdouble scaled_highlight_intensity = adjustments_scale_value(
+            values[7], controls[3].min_value, controls[3].max_value,
+            controls[3].filter_min, controls[3].filter_max);
+
+        filter_values[6] = (gfloat)scaled_shadow_intensity;
+        filter_values[7] = (gfloat)scaled_highlight_intensity;
+
+        ui_apply_layer_filter_with_value(ctx, filter_highlight_shadow_tint_apply,
+                                         "Shadows/Highlights Tint", filter_values, 8);
+    }
+}
+
+/**
  * Setup Adjustments menu from Glade builder
  */
 void ui_filter_adjust_setup_menu(GtkBuilder* builder, AppContext* ctx) {
@@ -1592,5 +1928,30 @@ void ui_filter_adjust_setup_menu(GtkBuilder* builder, AppContext* ctx) {
     GtkWidget* adjust_menu_dehaze = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_dehaze"));
     if (adjust_menu_dehaze) {
         g_signal_connect(adjust_menu_dehaze, "activate", G_CALLBACK(on_adjust_dehaze), ctx);
+    }
+
+    GtkWidget* adjust_menu_invert = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_invert"));
+    if (adjust_menu_invert) {
+        g_signal_connect(adjust_menu_invert, "activate", G_CALLBACK(on_adjust_invert), ctx);
+    }
+
+    GtkWidget* adjust_menu_monochrome = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_monochrome"));
+    if (adjust_menu_monochrome) {
+        g_signal_connect(adjust_menu_monochrome, "activate", G_CALLBACK(on_adjust_monochrome), ctx);
+    }
+
+    GtkWidget* adjust_menu_posterize = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_posterize"));
+    if (adjust_menu_posterize) {
+        g_signal_connect(adjust_menu_posterize, "activate", G_CALLBACK(on_adjust_posterize), ctx);
+    }
+
+    GtkWidget* adjust_menu_threshold = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_threshold"));
+    if (adjust_menu_threshold) {
+        g_signal_connect(adjust_menu_threshold, "activate", G_CALLBACK(on_adjust_threshold), ctx);
+    }
+
+    GtkWidget* adjust_menu_shadows_highlights_tint = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_shadows_highlights_tint"));
+    if (adjust_menu_shadows_highlights_tint) {
+        g_signal_connect(adjust_menu_shadows_highlights_tint, "activate", G_CALLBACK(on_adjust_shadows_highlights_tint), ctx);
     }
 }

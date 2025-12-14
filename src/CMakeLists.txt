@@ -69,7 +69,12 @@ set(SOURCES
     ui/filters/filter_gamma.c
     ui/filters/filter_colorbalance.c
     ui/filters/filter_exposure.c
+    ui/filters/filter_color_invert.c
+    ui/filters/filter_highlight_shadow_tint.c
     ui/filters/filter_hsl.c
+    ui/filters/filter_luminance_threshold.c
+    ui/filters/filter_monochrome.c
+    ui/filters/filter_posterize.c
     ui/filters/filter_brightness_contrast.c
     ui/filters/filter_shadow_highlights.c
     ui/filters/filter_temperature.c
