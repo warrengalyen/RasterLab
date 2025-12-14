@@ -1,7 +1,10 @@
 #include "ui/ui_filter_effects.h"
+#include "command.h"
 #include "document.h"
 #include "filters.h"
 #include "render/layer.h"
+#include "ui.h"
+#include "ui/dialogs/clouds_dialog.h"
 #include "ui/filters/filter_average_blur.h"
 #include "ui/filters/filter_box_blur.h"
 #include "ui/filters/filter_canny_edge.h"
@@ -21,6 +24,7 @@
 #include "ui/filters/filter_pointillize.h"
 #include "ui/filters/filter_prewitt_edge.h"
 #include "ui/filters/filter_radial_blur.h"
+#include "ui/filters/filter_render_clouds.h"
 #include "ui/filters/filter_roberts_edge.h"
 #include "ui/filters/filter_sobel_edge.h"
 #include "ui/filters/filter_surface_blur.h"
@@ -1600,6 +1604,116 @@ static void on_pixelate_pointillize(GtkWidget* widget, gpointer data) {
 }
 
 /**
+ * Effects > Render > Clouds callback
+ */
+static void on_render_clouds(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc;
+    ImageLayer* layer;
+    CloudsDialog* dialog;
+    ImageLayer* temp_layer;
+    cairo_t* cr;
+    gint response;
+    CloudParams params;
+
+    if (!ctx) {
+        return;
+    }
+
+    doc = ui_get_active_document(ctx);
+    if (!doc) {
+        g_warning("No document open");
+        return;
+    }
+
+    layer = document_get_selected_layer(doc);
+    if (!layer) {
+        g_warning("No layer selected");
+        return;
+    }
+
+    /* Create clouds dialog */
+    dialog = clouds_dialog_new("Render Clouds");
+    if (!dialog) {
+        g_warning("Failed to create clouds dialog");
+        return;
+    }
+
+    /* Create a copy of the layer for preview */
+    temp_layer = layer_new("Temp", layer->width, layer->height, TRUE);
+    if (!temp_layer) {
+        g_warning("Failed to create temporary layer for preview");
+        clouds_dialog_free(dialog);
+        return;
+    }
+
+    /* Copy layer surface to temp layer */
+    cr = cairo_create(temp_layer->surface);
+    cairo_set_source_surface(cr, layer->surface, 0, 0);
+    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+    cairo_paint(cr);
+    cairo_destroy(cr);
+
+    /* Set layers in dialog */
+    clouds_dialog_set_layers(dialog, layer, temp_layer);
+
+    /* Store original layer reference for preview callback */
+    g_object_set_data(G_OBJECT(clouds_dialog_get_window(dialog)), "original_layer", layer);
+
+    /* Dialog handles preview internally via update_preview */
+
+    /* Set dialog as transient for main window */
+    if (ctx->window) {
+        gtk_window_set_transient_for(clouds_dialog_get_window(dialog), GTK_WINDOW(ctx->window));
+    }
+
+    /* Run dialog */
+    response = clouds_dialog_run(dialog, GTK_WINDOW(ctx->window), &params);
+
+    if (response == GTK_RESPONSE_OK) {
+        /* Apply clouds filter directly */
+        Command* cmd = command_create_draw(layer, "Render Clouds");
+        if (cmd) {
+            /* Start timing */
+            gint64 start_time = g_get_monotonic_time();
+
+            gboolean success = filter_render_clouds_apply(layer, &params);
+
+            if (success) {
+                /* Get processing time */
+                gint64 current_time = g_get_monotonic_time();
+                gdouble processing_time = (gdouble)(current_time - start_time) / 1000000.0;
+
+                command_finalize_draw(cmd);
+                if (doc->undo_stack) {
+                    command_stack_push(doc->undo_stack, cmd);
+                    if (doc->redo_stack) {
+                        command_stack_clear(doc->redo_stack);
+                    }
+                } else {
+                    command_free(cmd);
+                }
+                layer_invalidate_cache(layer);
+                doc->modified = TRUE;
+                document_invalidate_composite(doc);
+                ui_update_status_bar_time(ctx, processing_time);
+                ui_update_window_title(ctx);
+                ui_update_menu_and_button_states(ctx);
+            } else {
+                command_free(cmd);
+            }
+        }
+    }
+
+    /* Clean up */
+    g_object_set_data(G_OBJECT(clouds_dialog_get_window(dialog)), "original_layer", NULL);
+    g_object_set_data(G_OBJECT(clouds_dialog_get_window(dialog)), "clouds_params", NULL);
+    clouds_dialog_free(dialog);
+    layer_free(temp_layer);
+}
+
+/**
  * Setup Effects menu from Glade builder
  */
 void ui_filter_effects_setup_menu(GtkBuilder* builder, AppContext* ctx) {
@@ -1727,5 +1841,11 @@ void ui_filter_effects_setup_menu(GtkBuilder* builder, AppContext* ctx) {
     GtkWidget* pixelate_menu_pointillize = GTK_WIDGET(gtk_builder_get_object(builder, "pixelate_menu_pointillize"));
     if (pixelate_menu_pointillize) {
         g_signal_connect(pixelate_menu_pointillize, "activate", G_CALLBACK(on_pixelate_pointillize), ctx);
+    }
+
+    /* Connect Render submenu signals */
+    GtkWidget* render_menu_clouds = GTK_WIDGET(gtk_builder_get_object(builder, "render_menu_clouds"));
+    if (render_menu_clouds) {
+        g_signal_connect(render_menu_clouds, "activate", G_CALLBACK(on_render_clouds), ctx);
     }
 }

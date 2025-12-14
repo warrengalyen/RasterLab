@@ -193,15 +193,25 @@ typedef struct {
     float bandwidth;
 } OcFFTFilterParams;
 
+/* Noise generator types */
+typedef enum {
+    OC_NOISE_PERLIN = 0, // Classic Perlin noise
+    OC_NOISE_SIMPLEX = 1 // Simplex noise (faster, less artifacts)
+} OC_NoiseGenerator;
+
 /* Cloud Parameters */
 typedef struct {
-    int seed;
-    float scale;
-    int octaves;
-    float persistence;
-    float lacunarity;
-    float offsetX;
-    float offsetY;
+    float scale;                   // Scale of the noise (1.0-100.0, larger = smoother, smaller = more detail)
+    int quality;                   // Quality/detail level (1-8, higher = more detail)
+    unsigned char shadowColorR;    // Red component of shadow/sky color
+    unsigned char shadowColorG;    // Green component of shadow/sky color
+    unsigned char shadowColorB;    // Blue component of shadow/sky color
+    unsigned char highlightColorR; // Red component of highlight/cloud color
+    unsigned char highlightColorG; // Green component of highlight/cloud color
+    unsigned char highlightColorB; // Blue component of highlight/cloud color
+    float opacity;                 // Opacity of the cloud effect (0.0-100.0)
+    int seed;                      // Random seed for noise generation (0 = auto-generate random seed)
+    OC_NoiseGenerator generator;   // Noise generator type (OC_NOISE_PERLIN or OC_NOISE_SIMPLEX)
 } CloudParams;
 
 /* Auto threshold method */
@@ -334,12 +344,24 @@ OC_STATUS ocularDarkChannelPriorHazeRemoval(unsigned char* Input, unsigned char*
                                             int Width, int Height, int Stride,
                                             int radius, int guideRadius, float maxAtm, float omega, float epsilon, float t0);
 
+OC_STATUS ocularPosterizeFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Channels, int Levels);
+
+OC_STATUS ocularPalettetizeFromFile(unsigned char* input, unsigned char* output, int width, int height, int channels,
+                                    const char* filename, OcDitherMethod method, int amount);
+
+OC_STATUS ocularPalettetizeFromImage(unsigned char* input, unsigned char* output, int width, int height, int channels,
+                                     OcQuantizeMethod method, int maxColors, int amount);
+
 /* ============================================================================
  * Image Processing Functions
  * ============================================================================ */
 
 OC_STATUS ocularConvolution2DFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Channels,
                                     float* kernel, unsigned char filterW, unsigned char cfactor, unsigned char bias);
+
+/* ============================================================================
+ * Blur Functions
+ * ============================================================================ */
 
 OC_STATUS ocularMotionBlurFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, int Distance, int Angle);
 
@@ -355,6 +377,16 @@ OC_STATUS ocularMedianBlur(unsigned char* Input, unsigned char* Output, int Widt
 
 OC_STATUS ocularExponentialBlur(unsigned char* Input, unsigned char* Output, int Width, int Height, int Channels, float Radius);
 
+OC_STATUS ocularGaussianBlurFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, float GaussianSigma);
+
+OC_STATUS ocularBoxBlurFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, int Radius);
+
+OC_STATUS ocularSurfaceBlurFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, int Radius, int Threshold);
+
+/* ============================================================================
+ * Morphological Functions
+ * ============================================================================ */
+
 OC_STATUS ocularErodeFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, int Radius);
 
 OC_STATUS ocularDilateFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, int Radius);
@@ -365,17 +397,12 @@ OC_STATUS ocularMaxFilter(unsigned char* Input, unsigned char* Output, int Width
 
 OC_STATUS ocularHighPassFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, int Radius);
 
+/* ============================================================================
+ * Denoise Functions
+ * ============================================================================ */
+
 OC_STATUS ocularBilateralFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride,
                                 float sigmaSpatial, float sigmaRange);
-
-OC_STATUS ocularGaussianBlurFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, float GaussianSigma);
-
-OC_STATUS ocularUnsharpMaskFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride,
-                                  float GaussianSigma, float intensity, float threshold);
-
-OC_STATUS ocularBoxBlurFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, int Radius);
-
-OC_STATUS ocularSurfaceBlurFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, int Radius, int Threshold);
 
 OC_STATUS ocularBEEPSFilter(const unsigned char* Input, unsigned char* Output, int width, int height, int Stride,
                             float PhotometricStandardDeviation, float SpatialDecay, int RangeFilter);
@@ -386,7 +413,14 @@ OC_STATUS ocularGuidedFilter(unsigned char* Input, unsigned char* Guide, unsigne
 OC_STATUS ocularSkinSmoothingFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride,
                                     int smoothingLevel, bool applySkinFilter);
 
+/* ============================================================================
+ * Sharpen Functions
+ * ============================================================================ */
+
 OC_STATUS ocularSharpenFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, float Strength);
+
+OC_STATUS ocularUnsharpMaskFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride,
+                                  float GaussianSigma, float intensity, float threshold);
 
 OC_STATUS ocularResamplingFilter(unsigned char* Input, int Width, int Height, int Stride, unsigned char* Output,
                                  int newWidth, int newHeight, int dstStride, OcInterpolationMode InterpolationMode);
@@ -407,42 +441,21 @@ OC_STATUS ocularDespeckle(unsigned char* Input, unsigned char* Output, int Width
 
 bool ocularDocumentDeskew(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride);
 
+/* ============================================================================
+ * Artistic Functions
+ * ============================================================================ */
+
 OC_STATUS ocularOilPaintFilter(const unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, int radius, int intensity);
 
 OC_STATUS ocularFrostedGlassEffect(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, int Radius, int Range);
 
 OC_STATUS ocularFilmGrainEffect(unsigned char* Input, unsigned char* Output, int Width, int Height, int Channels, float Strength, float Softness);
 
-OC_STATUS ocularPosterizeFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Channels, int Levels);
-
 OC_STATUS ocularReliefFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, float Angle, int Offset);
-
-OC_STATUS ocularFragmentFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride);
-
-OC_STATUS ocularCrystallizeFilter(unsigned char* input, unsigned char* output, int width, int height, int stride, int cellSize);
-
-OC_STATUS ocularPointillizeFilter(unsigned char* input, unsigned char* output, int width, int height, int stride, int cellSize,
-                                  unsigned char bgR, unsigned char bgG, unsigned char bgB);
-
-OC_STATUS ocularColorHalftoneFilter(unsigned char* input, unsigned char* output, int width, int height, int stride,
-                                    int radius, float dotDensity,
-                                    float cyanAngle, float magentaAngle, float yellowAngle);
-
-OC_STATUS ocularPalettetizeFromFile(unsigned char* input, unsigned char* output, int width, int height, int channels,
-                                    const char* filename, OcDitherMethod method, int amount);
-
-OC_STATUS ocularPalettetizeFromImage(unsigned char* input, unsigned char* output, int width, int height, int channels,
-                                     OcQuantizeMethod method, int maxColors, int amount);
 
 OC_STATUS ocularFFTFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, OcFFTFilterParams* params);
 
 OC_STATUS ocularFFTVisualize(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, bool logScale);
-
-int ocularHoughLineDetection(unsigned char* Input, int Width, int Height, int lineIntensity, int Threshold, float resTheta,
-                             int numLine, float* Radius, float* Theta);
-
-OC_STATUS ocularDrawLine(unsigned char* canvas, int width, int height, int stride, int x1, int y1, int x2, int y2,
-                         unsigned char R, unsigned char G, unsigned char B);
 
 /* ============================================================================
  * Pixelate Functions
@@ -530,7 +543,7 @@ OC_STATUS ocularRenderClouds(unsigned char* Input, unsigned char* Output, int Wi
 bool ocularGetImageSize(const char* file_path, int* width, int* height, int* file_size);
 
 /* ============================================================================
- * File Processing Functions
+ * Palette Functions
  * ============================================================================ */
 
 OC_STATUS ocularLoadPalette(const char* filename, OcPalette* palette);
@@ -562,6 +575,12 @@ void read_ase_palette(const char* filename, OcPalette* palette);
 /* ============================================================================
  * General Functions
  * ============================================================================ */
+
+int ocularHoughLineDetection(unsigned char* Input, int Width, int Height, int lineIntensity, int Threshold, float resTheta,
+                             int numLine, float* Radius, float* Theta);
+
+OC_STATUS ocularDrawLine(unsigned char* canvas, int width, int height, int stride, int x1, int y1, int x2, int y2,
+                         unsigned char R, unsigned char G, unsigned char B);
 
 OcImage* ocularCreateImage(int width, int height, int channels);
 
