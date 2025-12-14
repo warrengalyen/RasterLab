@@ -107,6 +107,7 @@ set(SOURCES
     ui/filters/filter_mosaic.c
     ui/filters/filter_prewitt_edge.c
     ui/filters/filter_radial_blur.c
+    ui/filters/filter_relief.c
     ui/filters/filter_render_clouds.c
     ui/filters/filter_roberts_edge.c
     ui/filters/filter_sobel_edge.c

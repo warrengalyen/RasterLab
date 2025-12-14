@@ -24,6 +24,7 @@
 #include "ui/filters/filter_pointillize.h"
 #include "ui/filters/filter_prewitt_edge.h"
 #include "ui/filters/filter_radial_blur.h"
+#include "ui/filters/filter_relief.h"
 #include "ui/filters/filter_render_clouds.h"
 #include "ui/filters/filter_roberts_edge.h"
 #include "ui/filters/filter_sobel_edge.h"
@@ -1147,6 +1148,91 @@ static gboolean on_oil_paint_preview_update(FilterDialog* dialog,
 }
 
 /**
+ * Relief filter preview update callback
+ */
+static gboolean on_relief_preview_update(FilterDialog* dialog,
+                                         const gdouble* values,
+                                         gint num_values,
+                                         gpointer user_data) {
+    FilterControlParam* controls;
+    gdouble scaled_angle;
+    gfloat filter_values[2];
+
+    if (!dialog || !values || num_values < 2) {
+        return FALSE;
+    }
+
+    controls = (FilterControlParam*)g_object_get_data(G_OBJECT(filter_dialog_get_window(dialog)), "control_params");
+    if (!controls) {
+        return FALSE;
+    }
+
+    scaled_angle = adjustments_scale_value(
+        values[0], controls[0].min_value, controls[0].max_value,
+        controls[0].filter_min, controls[0].filter_max);
+    filter_values[0] = (gfloat)scaled_angle;
+    filter_values[1] = (gfloat)values[1]; /* offset doesn't need scaling */
+
+    /* Set up viewport-based filter */
+    setup_viewport_filter(dialog, (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_relief_apply,
+                          filter_values, 2);
+
+    return TRUE;
+}
+
+/**
+ * Effects > Artistic > Relief callback
+ */
+static void on_artistic_relief(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    FilterControlParam controls[2];
+    gdouble values[2];
+    gint response;
+    gfloat filter_values[2];
+
+    if (!ctx) {
+        return;
+    }
+
+    /* Control 0: Angle (double) */
+    controls[0].type = FILTER_CONTROL_DOUBLE;
+    controls[0].label = "Angle";
+    controls[0].min_value = 0.0;
+    controls[0].max_value = 360.0;
+    controls[0].default_value = 135.0;
+    controls[0].step = 1.0;
+    controls[0].decimals = 0;
+    controls[0].filter_min = 0.0;
+    controls[0].filter_max = 360.0;
+
+    /* Control 1: Offset (double) */
+    controls[1].type = FILTER_CONTROL_DOUBLE;
+    controls[1].label = "Offset";
+    controls[1].min_value = 0.0;
+    controls[1].max_value = 255.0;
+    controls[1].default_value = 127.0;
+    controls[1].step = 1.0;
+    controls[1].decimals = 0;
+    controls[1].filter_min = 0.0;
+    controls[1].filter_max = 255.0;
+
+    response = ui_show_filter_dialog(ctx, "Relief", controls, 2,
+                                     on_relief_preview_update, values);
+
+    if (response == GTK_RESPONSE_OK) {
+        gdouble scaled_angle = adjustments_scale_value(
+            values[0], controls[0].min_value, controls[0].max_value,
+            controls[0].filter_min, controls[0].filter_max);
+        filter_values[0] = (gfloat)scaled_angle;
+        filter_values[1] = (gfloat)values[1]; /* offset */
+
+        ui_apply_layer_filter_with_value(ctx, filter_relief_apply,
+                                         "Relief", filter_values, 2);
+    }
+}
+
+/**
  * Effects > Artistic > Oil Paint callback
  */
 static void on_artistic_oil_paint(GtkWidget* widget, gpointer data) {
@@ -1784,6 +1870,11 @@ void ui_filter_effects_setup_menu(GtkBuilder* builder, AppContext* ctx) {
     GtkWidget* artistic_menu_oil_paint = GTK_WIDGET(gtk_builder_get_object(builder, "artistic_menu_oil_paint"));
     if (artistic_menu_oil_paint) {
         g_signal_connect(artistic_menu_oil_paint, "activate", G_CALLBACK(on_artistic_oil_paint), ctx);
+    }
+
+    GtkWidget* artistic_menu_relief = GTK_WIDGET(gtk_builder_get_object(builder, "artistic_menu_relief"));
+    if (artistic_menu_relief) {
+        g_signal_connect(artistic_menu_relief, "activate", G_CALLBACK(on_artistic_relief), ctx);
     }
 
     /* Connect Edge Detect submenu signals */
