@@ -6,11 +6,23 @@
 #include <gtk/gtk.h>
 
 /**
+ * Filter control type enumeration
+ */
+typedef enum {
+    FILTER_CONTROL_DOUBLE,  /* Double value with scale and spin button */
+    FILTER_CONTROL_BOOLEAN, /* Boolean value with checkbox */
+    FILTER_CONTROL_RGB      /* RGB color with color picker (takes 3 values: R, G, B in 0.0-1.0 range) */
+} FilterControlType;
+
+/**
  * Filter control parameter structure
- * Defines a single control (slider + value entry) in the filter dialog
+ * Defines a single control in the filter dialog
  */
 typedef struct {
-    const gchar* label;    /* Label text for the control */
+    FilterControlType type; /* Type of control */
+    const gchar* label;     /* Label text for the control */
+
+    /* For FILTER_CONTROL_DOUBLE: */
     gdouble min_value;     /* Minimum value (UI range) */
     gdouble max_value;     /* Maximum value (UI range) */
     gdouble default_value; /* Default value (UI range) */
@@ -18,6 +30,14 @@ typedef struct {
     gint decimals;         /* Number of decimal places to display */
     gdouble filter_min;    /* Minimum value for filter function (defaults to min_value) */
     gdouble filter_max;    /* Maximum value for filter function (defaults to max_value) */
+
+    /* For FILTER_CONTROL_BOOLEAN: */
+    gboolean default_bool; /* Default boolean value */
+
+    /* For FILTER_CONTROL_RGB: */
+    gdouble default_r; /* Default red component (0.0-1.0) */
+    gdouble default_g; /* Default green component (0.0-1.0) */
+    gdouble default_b; /* Default blue component (0.0-1.0) */
 } FilterControlParam;
 
 /**
@@ -96,10 +116,19 @@ gint filter_dialog_run(FilterDialog* dialog,
                        gint num_values);
 
 /**
+ * Get total number of values needed (accounts for RGB controls taking 3 values)
+ * @param dialog The filter dialog
+ * @return Total number of values needed
+ */
+gint filter_dialog_get_total_values_count(FilterDialog* dialog);
+
+/**
  * Get current control values without running the dialog
+ * Note: RGB controls take 3 consecutive values (R, G, B in 0.0-1.0 range)
+ * Boolean controls return 0.0 (false) or 1.0 (true)
  * @param dialog The filter dialog
  * @param values Output array to store control values (must be allocated by caller)
- * @param num_values Number of values to retrieve
+ * @param num_values Number of values to retrieve (should match get_total_values_count)
  */
 void filter_dialog_get_values(FilterDialog* dialog,
                               gdouble* values,

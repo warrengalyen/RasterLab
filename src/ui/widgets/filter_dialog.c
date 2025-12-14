@@ -11,9 +11,11 @@ struct _FilterDialog {
     GtkWidget* dialog;
     FilterPreview* preview;
     GtkWidget* controls_box;
-    GtkWidget** scale_widgets;  /* Array of scale widgets */
-    GtkWidget** spin_widgets;   /* Array of spin button widgets */
-    FilterControlParam* params; /* Copy of control parameters */
+    GtkWidget** scale_widgets;    /* Array of scale widgets (for double controls) */
+    GtkWidget** spin_widgets;     /* Array of spin button widgets (for double controls) */
+    GtkWidget** checkbox_widgets; /* Array of checkbox widgets (for boolean controls) */
+    GtkWidget** color_widgets;    /* Array of color button widgets (for RGB controls) */
+    FilterControlParam* params;   /* Copy of control parameters */
     gint num_controls;
     FilterDialogPreviewCallback preview_callback; /* Callback for live preview */
     gpointer preview_user_data;                   /* User data for preview callback */
@@ -28,6 +30,7 @@ static void on_scale_value_changed(GtkRange* range, gpointer user_data) {
     gdouble value;
     gdouble* values;
     gint i;
+    gint total_values;
 
     if (!dialog) {
         return;
@@ -44,10 +47,12 @@ static void on_scale_value_changed(GtkRange* range, gpointer user_data) {
 
             /* Trigger preview update if callback is set */
             if (dialog->preview_callback) {
-                values = (gdouble*)g_malloc(sizeof(gdouble) * dialog->num_controls);
+                /* Calculate total number of values needed */
+                total_values = filter_dialog_get_total_values_count(dialog);
+                values = (gdouble*)g_malloc(sizeof(gdouble) * total_values);
                 if (values) {
-                    filter_dialog_get_values(dialog, values, dialog->num_controls);
-                    dialog->preview_callback(dialog, values, dialog->num_controls, dialog->preview_user_data);
+                    filter_dialog_get_values(dialog, values, total_values);
+                    dialog->preview_callback(dialog, values, total_values, dialog->preview_user_data);
                     g_free(values);
                 }
             }
@@ -65,6 +70,7 @@ static void on_spin_value_changed(GtkSpinButton* spin, gpointer user_data) {
     gdouble value;
     gdouble* values;
     gint i;
+    gint total_values;
 
     if (!dialog) {
         return;
@@ -81,14 +87,63 @@ static void on_spin_value_changed(GtkSpinButton* spin, gpointer user_data) {
 
             /* Trigger preview update if callback is set */
             if (dialog->preview_callback) {
-                values = (gdouble*)g_malloc(sizeof(gdouble) * dialog->num_controls);
+                total_values = filter_dialog_get_total_values_count(dialog);
+                values = (gdouble*)g_malloc(sizeof(gdouble) * total_values);
                 if (values) {
-                    filter_dialog_get_values(dialog, values, dialog->num_controls);
-                    dialog->preview_callback(dialog, values, dialog->num_controls, dialog->preview_user_data);
+                    filter_dialog_get_values(dialog, values, total_values);
+                    dialog->preview_callback(dialog, values, total_values, dialog->preview_user_data);
                     g_free(values);
                 }
             }
             break;
+        }
+    }
+}
+
+/**
+ * Checkbox toggled callback - triggers preview
+ */
+static void on_checkbox_toggled(GtkToggleButton* toggle, gpointer user_data) {
+    FilterDialog* dialog = (FilterDialog*)user_data;
+    gdouble* values;
+    gint total_values;
+
+    if (!dialog) {
+        return;
+    }
+
+    /* Trigger preview update if callback is set */
+    if (dialog->preview_callback) {
+        total_values = filter_dialog_get_total_values_count(dialog);
+        values = (gdouble*)g_malloc(sizeof(gdouble) * total_values);
+        if (values) {
+            filter_dialog_get_values(dialog, values, total_values);
+            dialog->preview_callback(dialog, values, total_values, dialog->preview_user_data);
+            g_free(values);
+        }
+    }
+}
+
+/**
+ * Color button color-set callback - triggers preview
+ */
+static void on_color_set(GtkColorButton* color_button, gpointer user_data) {
+    FilterDialog* dialog = (FilterDialog*)user_data;
+    gdouble* values;
+    gint total_values;
+
+    if (!dialog) {
+        return;
+    }
+
+    /* Trigger preview update if callback is set */
+    if (dialog->preview_callback) {
+        total_values = filter_dialog_get_total_values_count(dialog);
+        values = (gdouble*)g_malloc(sizeof(gdouble) * total_values);
+        if (values) {
+            filter_dialog_get_values(dialog, values, total_values);
+            dialog->preview_callback(dialog, values, total_values, dialog->preview_user_data);
+            g_free(values);
         }
     }
 }
@@ -128,11 +183,16 @@ FilterDialog* filter_dialog_new(const gchar* title,
     /* Allocate arrays for widgets */
     dialog->scale_widgets = (GtkWidget**)g_malloc(sizeof(GtkWidget*) * num_controls);
     dialog->spin_widgets = (GtkWidget**)g_malloc(sizeof(GtkWidget*) * num_controls);
+    dialog->checkbox_widgets = (GtkWidget**)g_malloc(sizeof(GtkWidget*) * num_controls);
+    dialog->color_widgets = (GtkWidget**)g_malloc(sizeof(GtkWidget*) * num_controls);
     dialog->params = (FilterControlParam*)g_malloc(sizeof(FilterControlParam) * num_controls);
 
-    if (!dialog->scale_widgets || !dialog->spin_widgets || !dialog->params) {
+    if (!dialog->scale_widgets || !dialog->spin_widgets || !dialog->checkbox_widgets ||
+        !dialog->color_widgets || !dialog->params) {
         g_free(dialog->scale_widgets);
         g_free(dialog->spin_widgets);
+        g_free(dialog->checkbox_widgets);
+        g_free(dialog->color_widgets);
         g_free(dialog->params);
         g_free(dialog);
         return NULL;
@@ -146,6 +206,8 @@ FilterDialog* filter_dialog_new(const gchar* title,
     for (i = 0; i < num_controls; i++) {
         dialog->scale_widgets[i] = NULL;
         dialog->spin_widgets[i] = NULL;
+        dialog->checkbox_widgets[i] = NULL;
+        dialog->color_widgets[i] = NULL;
     }
 
     /* Create dialog window */
@@ -189,18 +251,6 @@ FilterDialog* filter_dialog_new(const gchar* title,
     for (i = 0; i < num_controls; i++) {
         GtkWidget* control_vbox;
         GtkWidget* label;
-        GtkWidget* scale_hbox;
-        GtkWidget* scale;
-        GtkWidget* spin;
-        GtkAdjustment* adjustment;
-        gdouble step;
-
-        /* Initialize filter range to UI range if not specified */
-        if (dialog->params[i].filter_min == 0.0 && dialog->params[i].filter_max == 0.0 &&
-            dialog->params[i].min_value != 0.0) {
-            /* Only set defaults if filter range wasn't explicitly set */
-            /* We can't distinguish 0.0 from unset, so we'll require explicit setting */
-        }
 
         /* Create vertical box for this control (no frame) */
         control_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
@@ -213,49 +263,94 @@ FilterDialog* filter_dialog_new(const gchar* title,
         gtk_widget_set_margin_bottom(label, 3);
         gtk_box_pack_start(GTK_BOX(control_vbox), label, FALSE, FALSE, 0);
 
-        /* Create horizontal box for scale and spin */
-        scale_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
-        gtk_box_pack_start(GTK_BOX(control_vbox), scale_hbox, TRUE, TRUE, 0);
+        /* Create control based on type */
+        if (controls[i].type == FILTER_CONTROL_DOUBLE) {
+            GtkWidget* scale_hbox;
+            GtkWidget* scale;
+            GtkWidget* spin;
+            GtkAdjustment* adjustment;
+            gdouble step;
 
-        /* Determine step value */
-        step = controls[i].step;
-        if (step == 0.0) {
-            /* Default step based on range */
-            gdouble range = controls[i].max_value - controls[i].min_value;
-            step = (range > 100.0) ? 1.0 : (range > 10.0) ? 0.1
-                                                          : 0.01;
+            /* Create horizontal box for scale and spin */
+            scale_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+            gtk_box_pack_start(GTK_BOX(control_vbox), scale_hbox, TRUE, TRUE, 0);
+
+            /* Determine step value */
+            step = controls[i].step;
+            if (step == 0.0) {
+                /* Default step based on range */
+                gdouble range = controls[i].max_value - controls[i].min_value;
+                step = (range > 100.0) ? 1.0 : (range > 10.0) ? 0.1
+                                                              : 0.01;
+            }
+
+            /* Create adjustment */
+            adjustment = gtk_adjustment_new(controls[i].default_value,
+                                            controls[i].min_value,
+                                            controls[i].max_value,
+                                            step,
+                                            step * 10.0, /* Page step */
+                                            0.0);
+
+            /* Create scale (slider) */
+            scale = gtk_scale_new(GTK_ORIENTATION_HORIZONTAL, adjustment);
+            gtk_scale_set_digits(GTK_SCALE(scale), controls[i].decimals);
+            gtk_scale_set_draw_value(GTK_SCALE(scale), FALSE);
+            gtk_widget_set_hexpand(scale, TRUE);
+            gtk_widget_set_margin_end(scale, 5);
+            gtk_box_pack_start(GTK_BOX(scale_hbox), scale, TRUE, TRUE, 0);
+
+            /* Create spin button */
+            spin = gtk_spin_button_new(adjustment, step, controls[i].decimals);
+            gtk_widget_set_size_request(spin, 70, -1);
+            gtk_box_pack_start(GTK_BOX(scale_hbox), spin, FALSE, FALSE, 0);
+
+            /* Store widgets */
+            dialog->scale_widgets[i] = scale;
+            dialog->spin_widgets[i] = spin;
+
+            /* Connect signals for synchronization and preview updates */
+            g_signal_connect(scale, "value-changed",
+                             G_CALLBACK(on_scale_value_changed), dialog);
+            g_signal_connect(spin, "value-changed",
+                             G_CALLBACK(on_spin_value_changed), dialog);
+        } else if (controls[i].type == FILTER_CONTROL_BOOLEAN) {
+            GtkWidget* checkbox;
+
+            /* Create checkbox */
+            checkbox = gtk_check_button_new();
+            gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(checkbox), controls[i].default_bool);
+            gtk_widget_set_halign(checkbox, GTK_ALIGN_START);
+            gtk_box_pack_start(GTK_BOX(control_vbox), checkbox, FALSE, FALSE, 0);
+
+            /* Store widget */
+            dialog->checkbox_widgets[i] = checkbox;
+
+            /* Connect signal for preview updates */
+            g_signal_connect(checkbox, "toggled",
+                             G_CALLBACK(on_checkbox_toggled), dialog);
+        } else if (controls[i].type == FILTER_CONTROL_RGB) {
+            GtkWidget* color_button;
+            GdkRGBA color;
+
+            /* Create color button */
+            color_button = gtk_color_button_new();
+            color.red = controls[i].default_r;
+            color.green = controls[i].default_g;
+            color.blue = controls[i].default_b;
+            color.alpha = 1.0;
+            gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(color_button), &color);
+            gtk_widget_set_hexpand(color_button, TRUE);
+            gtk_widget_set_size_request(color_button, -1, 35);
+            gtk_box_pack_start(GTK_BOX(control_vbox), color_button, TRUE, TRUE, 0);
+
+            /* Store widget */
+            dialog->color_widgets[i] = color_button;
+
+            /* Connect signal for preview updates */
+            g_signal_connect(color_button, "color-set",
+                             G_CALLBACK(on_color_set), dialog);
         }
-
-        /* Create adjustment */
-        adjustment = gtk_adjustment_new(controls[i].default_value,
-                                        controls[i].min_value,
-                                        controls[i].max_value,
-                                        step,
-                                        step * 10.0, /* Page step */
-                                        0.0);
-
-        /* Create scale (slider) */
-        scale = gtk_scale_new(GTK_ORIENTATION_HORIZONTAL, adjustment);
-        gtk_scale_set_digits(GTK_SCALE(scale), controls[i].decimals);
-        gtk_scale_set_draw_value(GTK_SCALE(scale), FALSE);
-        gtk_widget_set_hexpand(scale, TRUE);
-        gtk_widget_set_margin_end(scale, 5);
-        gtk_box_pack_start(GTK_BOX(scale_hbox), scale, TRUE, TRUE, 0);
-
-        /* Create spin button */
-        spin = gtk_spin_button_new(adjustment, step, controls[i].decimals);
-        gtk_widget_set_size_request(spin, 70, -1);
-        gtk_box_pack_start(GTK_BOX(scale_hbox), spin, FALSE, FALSE, 0);
-
-        /* Store widgets */
-        dialog->scale_widgets[i] = scale;
-        dialog->spin_widgets[i] = spin;
-
-        /* Connect signals for synchronization and preview updates */
-        g_signal_connect(scale, "value-changed",
-                         G_CALLBACK(on_scale_value_changed), dialog);
-        g_signal_connect(spin, "value-changed",
-                         G_CALLBACK(on_spin_value_changed), dialog);
     }
 
 /* Get button box from dialog (for OK/Cancel) */
@@ -395,32 +490,79 @@ gint filter_dialog_run(FilterDialog* dialog,
     response = gtk_dialog_run(GTK_DIALOG(dialog->dialog));
 
     if (response == GTK_RESPONSE_OK) {
-        filter_dialog_get_values(dialog, values, num_values);
+        gint total_values = filter_dialog_get_total_values_count(dialog);
+        gint actual_count = (num_values < total_values) ? num_values : total_values;
+        filter_dialog_get_values(dialog, values, actual_count);
     }
 
     return response;
 }
 
 /**
+ * Get total number of values needed (accounts for RGB controls taking 3 values)
+ */
+gint filter_dialog_get_total_values_count(FilterDialog* dialog) {
+    gint i;
+    gint total = 0;
+
+    if (!dialog) {
+        return 0;
+    }
+
+    for (i = 0; i < dialog->num_controls; i++) {
+        if (dialog->params[i].type == FILTER_CONTROL_RGB) {
+            total += 3; /* RGB takes 3 values */
+        } else {
+            total += 1; /* Double and boolean take 1 value */
+        }
+    }
+
+    return total;
+}
+
+/**
  * Get current control values
+ * Note: RGB controls take 3 consecutive values (R, G, B in 0.0-1.0 range)
+ * Boolean controls return 0.0 (false) or 1.0 (true)
  */
 void filter_dialog_get_values(FilterDialog* dialog,
                               gdouble* values,
                               gint num_values) {
     gint i;
-    gint count;
+    gint value_index = 0;
+    GdkRGBA color;
 
     if (!dialog || !values || num_values <= 0) {
         return;
     }
 
-    count = (num_values < dialog->num_controls) ? num_values : dialog->num_controls;
-
-    for (i = 0; i < count; i++) {
-        if (dialog->spin_widgets[i]) {
-            values[i] = gtk_spin_button_get_value(GTK_SPIN_BUTTON(dialog->spin_widgets[i]));
-        } else {
-            values[i] = dialog->params[i].default_value;
+    for (i = 0; i < dialog->num_controls && value_index < num_values; i++) {
+        if (dialog->params[i].type == FILTER_CONTROL_DOUBLE) {
+            if (dialog->spin_widgets[i]) {
+                values[value_index] = gtk_spin_button_get_value(GTK_SPIN_BUTTON(dialog->spin_widgets[i]));
+            } else {
+                values[value_index] = dialog->params[i].default_value;
+            }
+            value_index++;
+        } else if (dialog->params[i].type == FILTER_CONTROL_BOOLEAN) {
+            if (dialog->checkbox_widgets[i]) {
+                values[value_index] = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(dialog->checkbox_widgets[i])) ? 1.0 : 0.0;
+            } else {
+                values[value_index] = dialog->params[i].default_bool ? 1.0 : 0.0;
+            }
+            value_index++;
+        } else if (dialog->params[i].type == FILTER_CONTROL_RGB) {
+            if (dialog->color_widgets[i] && value_index + 2 < num_values) {
+                gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(dialog->color_widgets[i]), &color);
+                values[value_index] = color.red;
+                values[value_index + 1] = color.green;
+                values[value_index + 2] = color.blue;
+            } else {
+                values[value_index] = dialog->params[i].default_r;
+                values[value_index + 1] = dialog->params[i].default_g;
+                values[value_index + 2] = dialog->params[i].default_b;
+            }
+            value_index += 3;
         }
     }
 }
@@ -444,15 +586,31 @@ void filter_dialog_set_preview_callback(FilterDialog* dialog,
  */
 void filter_dialog_reset(FilterDialog* dialog) {
     gint i;
+    GdkRGBA color;
 
     if (!dialog) {
         return;
     }
 
     for (i = 0; i < dialog->num_controls; i++) {
-        if (dialog->spin_widgets[i]) {
-            gtk_spin_button_set_value(GTK_SPIN_BUTTON(dialog->spin_widgets[i]),
-                                      dialog->params[i].default_value);
+        if (dialog->params[i].type == FILTER_CONTROL_DOUBLE) {
+            if (dialog->spin_widgets[i]) {
+                gtk_spin_button_set_value(GTK_SPIN_BUTTON(dialog->spin_widgets[i]),
+                                          dialog->params[i].default_value);
+            }
+        } else if (dialog->params[i].type == FILTER_CONTROL_BOOLEAN) {
+            if (dialog->checkbox_widgets[i]) {
+                gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(dialog->checkbox_widgets[i]),
+                                             dialog->params[i].default_bool);
+            }
+        } else if (dialog->params[i].type == FILTER_CONTROL_RGB) {
+            if (dialog->color_widgets[i]) {
+                color.red = dialog->params[i].default_r;
+                color.green = dialog->params[i].default_g;
+                color.blue = dialog->params[i].default_b;
+                color.alpha = 1.0;
+                gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(dialog->color_widgets[i]), &color);
+            }
         }
     }
 }
@@ -477,6 +635,14 @@ void filter_dialog_free(FilterDialog* dialog) {
 
     if (dialog->spin_widgets) {
         g_free(dialog->spin_widgets);
+    }
+
+    if (dialog->checkbox_widgets) {
+        g_free(dialog->checkbox_widgets);
+    }
+
+    if (dialog->color_widgets) {
+        g_free(dialog->color_widgets);
     }
 
     if (dialog->params) {

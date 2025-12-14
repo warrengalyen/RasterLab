@@ -182,7 +182,7 @@ gboolean ui_apply_layer_filter(AppContext* ctx,
 
     /* Start timing */
     start_time = start_processing_timer();
-    
+
     /* Apply filter (this is blocking, but progress bar will pulse via timeout) */
     gboolean success = filter_func(layer);
 
@@ -367,6 +367,7 @@ gint ui_show_filter_dialog(AppContext* ctx,
     ImageLayer* temp_layer;
     cairo_t* cr;
     gint response;
+    gint total_values;
 
     if (!ctx || !controls || num_controls <= 0 || !values) {
         return GTK_RESPONSE_CANCEL;
@@ -417,15 +418,25 @@ gint ui_show_filter_dialog(AppContext* ctx,
     /* Set up live preview callback if provided */
     if (preview_callback) {
         filter_dialog_set_preview_callback(dialog, preview_callback, temp_layer);
-        
+
         /* Trigger initial preview update with default values */
-        gdouble* default_values = (gdouble*)g_malloc(sizeof(gdouble) * num_controls);
+        gint total_values = filter_dialog_get_total_values_count(dialog);
+        gdouble* default_values = (gdouble*)g_malloc(sizeof(gdouble) * total_values);
         if (default_values) {
             gint i;
+            gint value_index = 0;
             for (i = 0; i < num_controls; i++) {
-                default_values[i] = controls[i].default_value;
+                if (controls[i].type == FILTER_CONTROL_DOUBLE) {
+                    default_values[value_index++] = controls[i].default_value;
+                } else if (controls[i].type == FILTER_CONTROL_BOOLEAN) {
+                    default_values[value_index++] = controls[i].default_bool ? 1.0 : 0.0;
+                } else if (controls[i].type == FILTER_CONTROL_RGB) {
+                    default_values[value_index++] = controls[i].default_r;
+                    default_values[value_index++] = controls[i].default_g;
+                    default_values[value_index++] = controls[i].default_b;
+                }
             }
-            preview_callback(dialog, default_values, num_controls, temp_layer);
+            preview_callback(dialog, default_values, total_values, temp_layer);
             g_free(default_values);
         }
     }
@@ -435,8 +446,10 @@ gint ui_show_filter_dialog(AppContext* ctx,
         gtk_window_set_transient_for(filter_dialog_get_window(dialog), GTK_WINDOW(ctx->window));
     }
 
-    /* Run dialog */
-    response = filter_dialog_run(dialog, GTK_WINDOW(ctx->window), values, num_controls);
+    /* Run dialog - get total values count for proper allocation */
+    total_values = filter_dialog_get_total_values_count(dialog);
+    gint actual_count = (total_values < num_controls) ? num_controls : total_values;
+    response = filter_dialog_run(dialog, GTK_WINDOW(ctx->window), values, actual_count);
 
     /* Clean up */
     g_object_set_data(G_OBJECT(filter_dialog_get_window(dialog)), "original_layer", NULL);
