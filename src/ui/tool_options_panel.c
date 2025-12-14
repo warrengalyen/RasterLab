@@ -12,12 +12,14 @@
 static void on_tool_size_changed(GtkScale* scale, gpointer user_data) {
     (void)user_data; /* Unused */
     gfloat size = gtk_range_get_value(GTK_RANGE(scale));
-    ToolOptions* opts = tool_options_get_global();
-    if (opts) {
-        tool_options_set_size(opts, size);
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)g_object_get_data(G_OBJECT(scale), "tool_options_panel");
+    if (panel && panel->current_tool_type != TOOL_MOVE) {
+        ToolOptions* opts = tool_options_get_for_tool(panel->current_tool_type);
+        if (opts) {
+            tool_options_set_size(opts, size);
+        }
 
         /* Update cursor for brush and eraser tools when size changes */
-        ToolOptionsPanel* panel = (ToolOptionsPanel*)g_object_get_data(G_OBJECT(scale), "tool_options_panel");
         if (panel && panel->tool_registry) {
             Tool* brush_tool = tool_manager_get(panel->tool_registry, TOOL_BRUSH);
             Tool* eraser_tool = tool_manager_get(panel->tool_registry, TOOL_ERASER);
@@ -61,9 +63,12 @@ static void on_tool_size_changed(GtkScale* scale, gpointer user_data) {
 static void on_tool_opacity_changed(GtkScale* scale, gpointer user_data) {
     (void)user_data; /* Unused */
     gfloat opacity = gtk_range_get_value(GTK_RANGE(scale));
-    ToolOptions* opts = tool_options_get_global();
-    if (opts) {
-        tool_options_set_opacity(opts, opacity / 100.0f);
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)g_object_get_data(G_OBJECT(scale), "tool_options_panel");
+    if (panel && panel->current_tool_type != TOOL_MOVE) {
+        ToolOptions* opts = tool_options_get_for_tool(panel->current_tool_type);
+        if (opts) {
+            tool_options_set_opacity(opts, opacity / 100.0f);
+        }
     }
 }
 
@@ -73,9 +78,12 @@ static void on_tool_opacity_changed(GtkScale* scale, gpointer user_data) {
 static void on_tool_hardness_changed(GtkScale* scale, gpointer user_data) {
     (void)user_data; /* Unused */
     gfloat hardness = gtk_range_get_value(GTK_RANGE(scale));
-    ToolOptions* opts = tool_options_get_global();
-    if (opts) {
-        tool_options_set_hardness(opts, hardness / 100.0f);
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)g_object_get_data(G_OBJECT(scale), "tool_options_panel");
+    if (panel && panel->current_tool_type != TOOL_MOVE) {
+        ToolOptions* opts = tool_options_get_for_tool(panel->current_tool_type);
+        if (opts) {
+            tool_options_set_hardness(opts, hardness / 100.0f);
+        }
     }
 }
 
@@ -85,9 +93,12 @@ static void on_tool_hardness_changed(GtkScale* scale, gpointer user_data) {
 static void on_tool_flow_changed(GtkScale* scale, gpointer user_data) {
     (void)user_data; /* Unused */
     gfloat flow = gtk_range_get_value(GTK_RANGE(scale));
-    ToolOptions* opts = tool_options_get_global();
-    if (opts) {
-        tool_options_set_flow(opts, flow / 100.0f);
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)g_object_get_data(G_OBJECT(scale), "tool_options_panel");
+    if (panel && panel->current_tool_type != TOOL_MOVE) {
+        ToolOptions* opts = tool_options_get_for_tool(panel->current_tool_type);
+        if (opts) {
+            tool_options_set_flow(opts, flow / 100.0f);
+        }
     }
 }
 
@@ -97,9 +108,12 @@ static void on_tool_flow_changed(GtkScale* scale, gpointer user_data) {
 static void on_tool_spacing_changed(GtkScale* scale, gpointer user_data) {
     (void)user_data; /* Unused */
     gfloat spacing = gtk_range_get_value(GTK_RANGE(scale));
-    ToolOptions* opts = tool_options_get_global();
-    if (opts) {
-        tool_options_set_spacing(opts, spacing / 100.0f);
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)g_object_get_data(G_OBJECT(scale), "tool_options_panel");
+    if (panel && panel->current_tool_type != TOOL_MOVE) {
+        ToolOptions* opts = tool_options_get_for_tool(panel->current_tool_type);
+        if (opts) {
+            tool_options_set_spacing(opts, spacing / 100.0f);
+        }
     }
 }
 
@@ -109,9 +123,12 @@ static void on_tool_spacing_changed(GtkScale* scale, gpointer user_data) {
 static void on_tool_tolerance_changed(GtkScale* scale, gpointer user_data) {
     (void)user_data; /* Unused */
     gfloat tolerance = gtk_range_get_value(GTK_RANGE(scale));
-    ToolOptions* opts = tool_options_get_global();
-    if (opts) {
-        tool_options_set_tolerance(opts, tolerance);
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)g_object_get_data(G_OBJECT(scale), "tool_options_panel");
+    if (panel && panel->current_tool_type != TOOL_MOVE) {
+        ToolOptions* opts = tool_options_get_for_tool(panel->current_tool_type);
+        if (opts) {
+            tool_options_set_tolerance(opts, tolerance);
+        }
     }
 }
 
@@ -124,7 +141,12 @@ static void on_fill_area_changed(GtkToggleButton* button, gpointer user_data) {
         return; /* Only handle activation, not deactivation */
     }
 
-    ToolOptions* opts = tool_options_get_global();
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)g_object_get_data(G_OBJECT(button), "tool_options_panel");
+    if (!panel || panel->current_tool_type == TOOL_MOVE) {
+        return;
+    }
+
+    ToolOptions* opts = tool_options_get_for_tool(panel->current_tool_type);
     if (!opts) {
         return;
     }
@@ -143,10 +165,13 @@ static void on_fill_area_changed(GtkToggleButton* button, gpointer user_data) {
  */
 static void on_fill_antialiased_toggled(GtkToggleButton* button, gpointer user_data) {
     (void)user_data; /* Unused */
-    ToolOptions* opts = tool_options_get_global();
-    if (opts) {
-        gboolean active = gtk_toggle_button_get_active(button);
-        tool_options_set_fill_antialiased(opts, active);
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)g_object_get_data(G_OBJECT(button), "tool_options_panel");
+    if (panel && panel->current_tool_type != TOOL_MOVE) {
+        ToolOptions* opts = tool_options_get_for_tool(panel->current_tool_type);
+        if (opts) {
+            gboolean active = gtk_toggle_button_get_active(button);
+            tool_options_set_fill_antialiased(opts, active);
+        }
     }
 }
 
@@ -175,7 +200,8 @@ static GtkWidget* load_panel_from_glade(const gchar* resource_path, const gchar*
     GtkBuilder* builder;
     GError* error = NULL;
     GtkWidget* panel;
-    ToolOptions* opts = tool_options_get_global();
+    /* Note: Don't set initial values here - they will be set when switching tools */
+    ToolOptions* opts = NULL;
 
     builder = gtk_builder_new();
     if (!builder) {
@@ -232,10 +258,8 @@ static GtkWidget* load_panel_from_glade(const gchar* resource_path, const gchar*
             *size_scale = NULL;
         } else {
             *size_scale = widget;
-            if (opts) {
-                set_scale_value(widget, opts->size);
-                g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_size_changed), NULL);
-            }
+            /* Connect signal - values will be set when switching tools */
+            g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_size_changed), NULL);
         }
     }
 
@@ -260,10 +284,8 @@ static GtkWidget* load_panel_from_glade(const gchar* resource_path, const gchar*
             *hardness_scale = NULL;
         } else {
             *hardness_scale = widget;
-            if (opts) {
-                set_scale_value(widget, opts->hardness * 100.0);
-                g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_hardness_changed), NULL);
-            }
+            /* Connect signal - values will be set when switching tools */
+            g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_hardness_changed), NULL);
         }
     }
 
@@ -274,10 +296,8 @@ static GtkWidget* load_panel_from_glade(const gchar* resource_path, const gchar*
             *flow_scale = NULL;
         } else {
             *flow_scale = widget;
-            if (opts) {
-                set_scale_value(widget, opts->flow * 100.0);
-                g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_flow_changed), NULL);
-            }
+            /* Connect signal - values will be set when switching tools */
+            g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_flow_changed), NULL);
         }
     }
 
@@ -288,10 +308,8 @@ static GtkWidget* load_panel_from_glade(const gchar* resource_path, const gchar*
             *spacing_scale = NULL;
         } else {
             *spacing_scale = widget;
-            if (opts) {
-                set_scale_value(widget, opts->spacing * 100.0);
-                g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_spacing_changed), NULL);
-            }
+            /* Connect signal - values will be set when switching tools */
+            g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_spacing_changed), NULL);
         }
     }
 
@@ -414,7 +432,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
     GtkWidget *paintbucket_title = NULL, *paintbucket_tolerance = NULL;
     GtkWidget *paintbucket_contiguous = NULL, *paintbucket_global = NULL;
     GtkWidget* paintbucket_antialiased = NULL;
-    ToolOptions* paintbucket_opts = tool_options_get_global();
+    ToolOptions* paintbucket_opts = tool_options_get_for_tool(TOOL_PAINT_BUCKET);
 
     if (gtk_builder_add_from_resource(paintbucket_builder, "/ui/paintbucket_options.glade", &paintbucket_error)) {
         tool_opts_panel->paintbucket_panel = GTK_WIDGET(gtk_builder_get_object(paintbucket_builder, "paintbucket_options_panel"));
@@ -505,6 +523,9 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
         new_tool_type = TOOL_PAINT_BUCKET;
     }
 
+    /* Update current tool type */
+    panel->current_tool_type = new_tool_type;
+
     /* Hide all panels first */
     if (panel->brush_panel) {
         gtk_widget_set_visible(panel->brush_panel, FALSE);
@@ -528,7 +549,7 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
         gtk_widget_show_all(panel->brush_panel);
         /* Get brush panel widgets from builder and initialize them */
         GtkBuilder* builder = GTK_BUILDER(g_object_get_data(G_OBJECT(panel->brush_panel), "builder"));
-        ToolOptions* opts = tool_options_get_global();
+        ToolOptions* opts = tool_options_get_for_tool(TOOL_BRUSH);
         if (builder) {
             GtkWidget* widget;
             widget = GTK_WIDGET(gtk_builder_get_object(builder, "brush_title_label"));
@@ -538,9 +559,12 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
             if (widget) {
                 panel->size_scale = widget;
                 if (opts) {
-                    set_scale_value(widget, opts->size);
-                    /* Reconnect signal in case it was disconnected */
+                    /* Disconnect signal before setting value to prevent triggering callback */
                     g_signal_handlers_disconnect_by_func(widget, G_CALLBACK(on_tool_size_changed), NULL);
+                    set_scale_value(widget, opts->size);
+                    /* Store panel reference in scale widget for cursor updates */
+                    g_object_set_data(G_OBJECT(widget), "tool_options_panel", panel);
+                    /* Reconnect signal after setting value */
                     g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_size_changed), NULL);
                 }
             }
@@ -548,8 +572,8 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
             if (widget) {
                 panel->opacity_scale = widget;
                 if (opts) {
-                    set_scale_value(widget, opts->opacity * 100.0);
                     g_signal_handlers_disconnect_by_func(widget, G_CALLBACK(on_tool_opacity_changed), NULL);
+                    set_scale_value(widget, opts->opacity * 100.0);
                     g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_opacity_changed), NULL);
                 }
             }
@@ -557,8 +581,8 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
             if (widget) {
                 panel->hardness_scale = widget;
                 if (opts) {
-                    set_scale_value(widget, opts->hardness * 100.0);
                     g_signal_handlers_disconnect_by_func(widget, G_CALLBACK(on_tool_hardness_changed), NULL);
+                    set_scale_value(widget, opts->hardness * 100.0);
                     g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_hardness_changed), NULL);
                 }
             }
@@ -566,8 +590,8 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
             if (widget) {
                 panel->flow_scale = widget;
                 if (opts) {
-                    set_scale_value(widget, opts->flow * 100.0);
                     g_signal_handlers_disconnect_by_func(widget, G_CALLBACK(on_tool_flow_changed), NULL);
+                    set_scale_value(widget, opts->flow * 100.0);
                     g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_flow_changed), NULL);
                 }
             }
@@ -575,8 +599,8 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
             if (widget) {
                 panel->spacing_scale = widget;
                 if (opts) {
-                    set_scale_value(widget, opts->spacing * 100.0);
                     g_signal_handlers_disconnect_by_func(widget, G_CALLBACK(on_tool_spacing_changed), NULL);
+                    set_scale_value(widget, opts->spacing * 100.0);
                     g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_spacing_changed), NULL);
                 }
             }
@@ -591,7 +615,7 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
         gtk_widget_set_visible(panel->eraser_panel, TRUE);
         gtk_widget_show_all(panel->eraser_panel);
         /* Get eraser panel widgets from stored references and initialize them */
-        ToolOptions* opts = tool_options_get_global();
+        ToolOptions* opts = tool_options_get_for_tool(TOOL_ERASER);
         GtkWidget* widget;
         widget = GTK_WIDGET(g_object_get_data(G_OBJECT(panel->eraser_panel), "title_label"));
         if (widget)
@@ -600,10 +624,12 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
         if (widget) {
             panel->size_scale = widget;
             if (opts) {
+                /* Disconnect signal before setting value to prevent triggering callback */
+                g_signal_handlers_disconnect_by_func(widget, G_CALLBACK(on_tool_size_changed), NULL);
                 set_scale_value(widget, opts->size);
                 /* Store panel reference in scale widget for cursor updates */
                 g_object_set_data(G_OBJECT(widget), "tool_options_panel", panel);
-                g_signal_handlers_disconnect_by_func(widget, G_CALLBACK(on_tool_size_changed), NULL);
+                /* Reconnect signal after setting value */
                 g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_size_changed), NULL);
             }
         }
@@ -611,8 +637,8 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
         if (widget) {
             panel->opacity_scale = widget;
             if (opts) {
-                set_scale_value(widget, opts->opacity * 100.0);
                 g_signal_handlers_disconnect_by_func(widget, G_CALLBACK(on_tool_opacity_changed), NULL);
+                set_scale_value(widget, opts->opacity * 100.0);
                 g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_opacity_changed), NULL);
             }
         }
@@ -620,8 +646,8 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
         if (widget) {
             panel->hardness_scale = widget;
             if (opts) {
-                set_scale_value(widget, opts->hardness * 100.0);
                 g_signal_handlers_disconnect_by_func(widget, G_CALLBACK(on_tool_hardness_changed), NULL);
+                set_scale_value(widget, opts->hardness * 100.0);
                 g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_hardness_changed), NULL);
             }
         }
@@ -629,8 +655,8 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
         if (widget) {
             panel->flow_scale = widget;
             if (opts) {
-                set_scale_value(widget, opts->flow * 100.0);
                 g_signal_handlers_disconnect_by_func(widget, G_CALLBACK(on_tool_flow_changed), NULL);
+                set_scale_value(widget, opts->flow * 100.0);
                 g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_flow_changed), NULL);
             }
         }
@@ -638,8 +664,8 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
         if (widget) {
             panel->spacing_scale = widget;
             if (opts) {
-                set_scale_value(widget, opts->spacing * 100.0);
                 g_signal_handlers_disconnect_by_func(widget, G_CALLBACK(on_tool_spacing_changed), NULL);
+                set_scale_value(widget, opts->spacing * 100.0);
                 g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_spacing_changed), NULL);
             }
         }
@@ -655,7 +681,7 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
 
         /* Get paint bucket panel widgets and initialize them */
         GtkWidget* widget;
-        ToolOptions* opts = tool_options_get_global();
+        ToolOptions* opts = tool_options_get_for_tool(TOOL_PAINT_BUCKET);
 
         widget = GTK_WIDGET(g_object_get_data(G_OBJECT(panel->paintbucket_panel), "title_label"));
         if (widget)
@@ -665,8 +691,9 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
         if (widget) {
             panel->tolerance_scale = widget;
             if (opts) {
-                set_scale_value(widget, opts->tolerance);
                 g_signal_handlers_disconnect_by_func(widget, G_CALLBACK(on_tool_tolerance_changed), NULL);
+                set_scale_value(widget, opts->tolerance);
+                g_object_set_data(G_OBJECT(widget), "tool_options_panel", panel);
                 g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_tolerance_changed), NULL);
             }
         }
@@ -675,8 +702,9 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
         if (widget) {
             panel->contiguous_radio = widget;
             if (opts) {
-                gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widget), opts->fill_contiguous);
                 g_signal_handlers_disconnect_by_func(widget, G_CALLBACK(on_fill_area_changed), NULL);
+                gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widget), opts->fill_contiguous);
+                g_object_set_data(G_OBJECT(widget), "tool_options_panel", panel);
                 g_signal_connect(widget, "toggled", G_CALLBACK(on_fill_area_changed), NULL);
             }
         }
@@ -690,8 +718,9 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
                                             GTK_RADIO_BUTTON(panel->contiguous_radio));
             }
             if (opts) {
-                gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widget), !opts->fill_contiguous);
                 g_signal_handlers_disconnect_by_func(widget, G_CALLBACK(on_fill_area_changed), NULL);
+                gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widget), !opts->fill_contiguous);
+                g_object_set_data(G_OBJECT(widget), "tool_options_panel", panel);
                 g_signal_connect(widget, "toggled", G_CALLBACK(on_fill_area_changed), NULL);
             }
         }
@@ -700,8 +729,9 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
         if (widget) {
             panel->antialiased_checkbox = widget;
             if (opts) {
-                gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widget), opts->fill_antialiased);
                 g_signal_handlers_disconnect_by_func(widget, G_CALLBACK(on_fill_antialiased_toggled), NULL);
+                gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widget), opts->fill_antialiased);
+                g_object_set_data(G_OBJECT(widget), "tool_options_panel", panel);
                 g_signal_connect(widget, "toggled", G_CALLBACK(on_fill_antialiased_toggled), NULL);
             }
         }

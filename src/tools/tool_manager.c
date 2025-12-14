@@ -102,7 +102,7 @@ gboolean tool_manager_activate(ToolRegistry* registry, ToolType type) {
 
     /* Update cursor for brush/eraser tools based on current size */
     if (tool->type == TOOL_BRUSH || tool->type == TOOL_ERASER) {
-        ToolOptions* opts = tool_options_get_global();
+        ToolOptions* opts = tool_options_get_for_tool(tool->type);
         if (opts) {
             tool_update_cursor(tool, opts->size);
         }

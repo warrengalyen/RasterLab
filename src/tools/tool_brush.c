@@ -1,72 +1,72 @@
 #include "tool_brush.h"
 #include "command.h"
 #include "document.h"
-#include "tool_options.h"
 #include "render/compositor.h"
 #include "render/dirty.h"
 #include "render/layer.h"
+#include "tool_options.h"
 #include "ui/tools_panel.h"
-#include <stdlib.h>
-#include <stdio.h>
 #include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 /* Forward declarations */
 typedef struct AppContext AppContext;
-extern void ui_update_menu_and_button_states(AppContext *ctx);
-extern void ui_update_window_title(AppContext *ctx);
+extern void ui_update_menu_and_button_states(AppContext* ctx);
+extern void ui_update_window_title(AppContext* ctx);
 
 /**
  * Brush Tool state
  */
 typedef struct {
-  gboolean is_drawing;             /* Currently drawing? */
-  gint last_x;                     /* Last mouse X position */
-  gint last_y;                     /* Last mouse Y position */
-  struct ImageLayer *active_layer; /* Layer being drawn on */
-  Command *current_command;        /* Current draw command for undo */
+    gboolean is_drawing;             /* Currently drawing? */
+    gint last_x;                     /* Last mouse X position */
+    gint last_y;                     /* Last mouse Y position */
+    struct ImageLayer* active_layer; /* Layer being drawn on */
+    Command* current_command;        /* Current draw command for undo */
 } BrushToolState;
 
 /**
  * Stamp brush at a specific point with gradient based on hardness
  * Flow parameter controls the strength of each stamp (0.0-1.0)
  */
-static void brush_stamp_at(cairo_t *cr, gdouble x, gdouble y, gfloat size,
-                           GdkRGBA *color, gfloat opacity, gfloat hardness,
+static void brush_stamp_at(cairo_t* cr, gdouble x, gdouble y, gfloat size,
+                           GdkRGBA* color, gfloat opacity, gfloat hardness,
                            gfloat flow) {
-    cairo_pattern_t *pattern;
+    cairo_pattern_t* pattern;
     gdouble radius = size / 2.0;
 
     /* Flow modulates the effective opacity of this stamp
-    * Flow 0.0 = no effect (doesn't paint)
-    * Flow 1.0 = full opacity effect
-    * This allows for buildable, gradual painting */
+     * Flow 0.0 = no effect (doesn't paint)
+     * Flow 1.0 = full opacity effect
+     * This allows for buildable, gradual painting */
     gfloat effective_opacity = opacity * flow * color->alpha;
 
     /* Create radial gradient based on hardness
-    * Hardness 0.0 = very soft (gradual falloff)
-    * Hardness 1.0 = very hard (sharp edge) */
+     * Hardness 0.0 = very soft (gradual falloff)
+     * Hardness 1.0 = very hard (sharp edge) */
     pattern = cairo_pattern_create_radial(x, y, 0.0, x, y, radius);
 
     /* Inner circle: full opacity (modulated by flow) */
     cairo_pattern_add_color_stop_rgba(pattern, 0.0, color->red, color->green,
-                                        color->blue, effective_opacity);
+                                      color->blue, effective_opacity);
 
     /* Outer edge: opacity based on hardness
-    * Higher hardness = sharper transition */
+     * Higher hardness = sharper transition */
     gdouble inner_radius = hardness; /* 0.0 to 1.0 */
 
     if (hardness < 1.0f) {
         cairo_pattern_add_color_stop_rgba(pattern, inner_radius, color->red,
-                                        color->green, color->blue,
-                                        effective_opacity);
+                                          color->green, color->blue,
+                                          effective_opacity);
         cairo_pattern_add_color_stop_rgba(pattern, 1.0, color->red, color->green,
-                                        color->blue, 0.0);
+                                          color->blue, 0.0);
     } else {
         /* Hardness = 1.0: sharp edge */
         cairo_pattern_add_color_stop_rgba(pattern, 0.99, color->red, color->green,
-                                        color->blue, effective_opacity);
+                                          color->blue, effective_opacity);
         cairo_pattern_add_color_stop_rgba(pattern, 1.0, color->red, color->green,
-                                        color->blue, 0.0);
+                                          color->blue, 0.0);
     }
 
     cairo_set_source(cr, pattern);
@@ -86,10 +86,10 @@ static void brush_stamp_at(cairo_t *cr, gdouble x, gdouble y, gfloat size,
  * Uses tool options for size, opacity, hardness, flow, spacing, and foreground
  * color Interpolates stamps along the line for smooth strokes
  */
-static void brush_draw_line(cairo_surface_t *surface, gdouble x1, gdouble y1,
+static void brush_draw_line(cairo_surface_t* surface, gdouble x1, gdouble y1,
                             gdouble x2, gdouble y2) {
-    cairo_t *cr;
-    ToolOptions *opts;
+    cairo_t* cr;
+    ToolOptions* opts;
     GdkRGBA fg_color;
     gfloat brush_size;
     gfloat brush_opacity;
@@ -101,8 +101,8 @@ static void brush_draw_line(cairo_surface_t *surface, gdouble x1, gdouble y1,
         return;
     }
 
-    /* Get tool options */
-    opts = tool_options_get_global();
+    /* Get tool options - note: tool parameter not available here, use TOOL_BRUSH */
+    opts = tool_options_get_for_tool(TOOL_BRUSH);
     brush_size = opts ? opts->size : 5.0f;
     brush_opacity = opts ? opts->opacity : 1.0f;
     hardness = opts ? opts->hardness : 0.5f;
@@ -139,7 +139,7 @@ static void brush_draw_line(cairo_surface_t *surface, gdouble x1, gdouble y1,
         gdouble y = y1 + t * dy;
 
         brush_stamp_at(cr, x, y, brush_size, &fg_color, brush_opacity, hardness,
-                    flow);
+                       flow);
     }
 
     cairo_destroy(cr);
@@ -151,21 +151,21 @@ static void brush_draw_line(cairo_surface_t *surface, gdouble x1, gdouble y1,
 /**
  * Draw a single dot (for initial mouse down)
  */
-static void brush_draw_dot(cairo_surface_t *surface, gint x, gint y) {
-    ToolOptions *opts;
+static void brush_draw_dot(cairo_surface_t* surface, gint x, gint y) {
+    ToolOptions* opts;
     GdkRGBA fg_color;
     gfloat brush_size;
     gfloat brush_opacity;
     gfloat hardness;
     gfloat flow;
-    cairo_t *cr;
+    cairo_t* cr;
 
     if (!surface) {
         return;
     }
 
-    /* Get tool options */
-    opts = tool_options_get_global();
+    /* Get tool options - note: tool parameter not available here, use TOOL_BRUSH */
+    opts = tool_options_get_for_tool(TOOL_BRUSH);
     brush_size = opts ? opts->size : 5.0f;
     brush_opacity = opts ? opts->opacity : 1.0f;
     hardness = opts ? opts->hardness : 0.5f;
@@ -181,7 +181,7 @@ static void brush_draw_dot(cairo_surface_t *surface, gint x, gint y) {
 
     cr = cairo_create(surface);
     brush_stamp_at(cr, (gdouble)x, (gdouble)y, brush_size, &fg_color,
-                    brush_opacity, hardness, flow);
+                   brush_opacity, hardness, flow);
 
     cairo_destroy(cr);
     cairo_surface_mark_dirty(surface);
@@ -190,10 +190,10 @@ static void brush_draw_dot(cairo_surface_t *surface, gint x, gint y) {
 /**
  * Brush tool: mouse down - start drawing
  */
-static void brush_tool_mouse_down(Tool *tool, struct ImageDocument *doc,
-                                  MouseEvent *event) {
-    BrushToolState *state;
-    struct ImageLayer *active_layer;
+static void brush_tool_mouse_down(Tool* tool, struct ImageDocument* doc,
+                                  MouseEvent* event) {
+    BrushToolState* state;
+    struct ImageLayer* active_layer;
 
     if (!tool || !doc || !doc->layers) {
         return;
@@ -203,7 +203,7 @@ static void brush_tool_mouse_down(Tool *tool, struct ImageDocument *doc,
     if (!tool->user_data) {
         tool->user_data = g_malloc0(sizeof(BrushToolState));
     }
-    state = (BrushToolState *)tool->user_data;
+    state = (BrushToolState*)tool->user_data;
 
     /* Get the selected layer (from layers panel) */
     active_layer = document_get_selected_layer(doc);
@@ -226,13 +226,13 @@ static void brush_tool_mouse_down(Tool *tool, struct ImageDocument *doc,
     active_layer->cache_dirty = TRUE;
 
     /* Mark initial dot area as dirty */
-    ToolOptions *opts = tool_options_get_global();
+    ToolOptions* opts = tool_options_get_for_tool(tool->type);
     gfloat brush_size = opts ? opts->size : 5.0f;
     gint margin = (gint)(brush_size / 2.0f) + 3;
 
     DirtyRect dirty_rect;
     dirty_rect_set(&dirty_rect, event->x - margin, event->y - margin,
-                    brush_size + 2 * margin, brush_size + 2 * margin);
+                   brush_size + 2 * margin, brush_size + 2 * margin);
     dirty_rect_clamp(&dirty_rect, doc->width, doc->height);
 
     if (!dirty_rect_is_empty(&dirty_rect)) {
@@ -240,8 +240,8 @@ static void brush_tool_mouse_down(Tool *tool, struct ImageDocument *doc,
     }
 
     /* Create a draw command for undo/redo */
-    state->current_command = command_create_draw(active_layer, 
-                                                  command_get_name_string(CMD_NAME_DRAW_BRUSH_STROKE));
+    state->current_command = command_create_draw(active_layer,
+                                                 command_get_name_string(CMD_NAME_DRAW_BRUSH_STROKE));
     if (state->current_command && doc->undo_stack) {
         // printf("Brush tool: draw command created\n");
     }
@@ -252,16 +252,16 @@ static void brush_tool_mouse_down(Tool *tool, struct ImageDocument *doc,
 /**
  * Brush tool: mouse move - draw strokes
  */
-static void brush_tool_mouse_move(Tool *tool, struct ImageDocument *doc,
-                                  MouseEvent *event) {
-    BrushToolState *state;
-    struct ImageLayer *active_layer;
+static void brush_tool_mouse_move(Tool* tool, struct ImageDocument* doc,
+                                  MouseEvent* event) {
+    BrushToolState* state;
+    struct ImageLayer* active_layer;
 
     if (!tool || !doc || !tool->user_data) {
         return;
     }
 
-    state = (BrushToolState *)tool->user_data;
+    state = (BrushToolState*)tool->user_data;
 
     if (!state->is_drawing || !state->active_layer) {
         return;
@@ -292,7 +292,7 @@ static void brush_tool_mouse_move(Tool *tool, struct ImageDocument *doc,
 
     /* Calculate dirty rectangle BEFORE updating last_x/y
         Use the previous position and current position */
-    ToolOptions *opts = tool_options_get_global();
+    ToolOptions* opts = tool_options_get_for_tool(tool->type);
     gfloat brush_size = opts ? opts->size : 5.0f;
     gint margin =
         (gint)(brush_size / 2.0f) + 3; /* Add margin for anti-aliasing */
@@ -312,7 +312,7 @@ static void brush_tool_mouse_move(Tool *tool, struct ImageDocument *doc,
 
     DirtyRect dirty_rect;
     dirty_rect_set(&dirty_rect, min_x - margin, min_y - margin,
-                    (max_x - min_x) + 2 * margin, (max_y - min_y) + 2 * margin);
+                   (max_x - min_x) + 2 * margin, (max_y - min_y) + 2 * margin);
     dirty_rect_clamp(&dirty_rect, doc->width, doc->height);
 
     /* Only invalidate the stroke region */
@@ -327,10 +327,10 @@ static void brush_tool_mouse_move(Tool *tool, struct ImageDocument *doc,
 /**
  * Brush tool: mouse up - end drawing
  */
-static void brush_tool_mouse_up(Tool *tool, struct ImageDocument *doc,
-                                MouseEvent *event) {
-    BrushToolState *state;
-    AppContext *ctx;
+static void brush_tool_mouse_up(Tool* tool, struct ImageDocument* doc,
+                                MouseEvent* event) {
+    BrushToolState* state;
+    AppContext* ctx;
 
     (void)event; /* Unused */
 
@@ -338,7 +338,7 @@ static void brush_tool_mouse_up(Tool *tool, struct ImageDocument *doc,
         return;
     }
 
-    state = (BrushToolState *)tool->user_data;
+    state = (BrushToolState*)tool->user_data;
 
     if (!state->is_drawing) {
         return;
@@ -356,14 +356,14 @@ static void brush_tool_mouse_up(Tool *tool, struct ImageDocument *doc,
 
         /* Clear redo stack */
         if (doc->redo_stack) {
-        command_stack_clear(doc->redo_stack);
+            command_stack_clear(doc->redo_stack);
         }
 
         /* Update UI */
-        ctx = (AppContext *)tool->app_context;
+        ctx = (AppContext*)tool->app_context;
         if (ctx) {
-        ui_update_menu_and_button_states(ctx);
-        ui_update_window_title(ctx);
+            ui_update_menu_and_button_states(ctx);
+            ui_update_window_title(ctx);
         }
     }
 
@@ -380,9 +380,8 @@ static void brush_tool_mouse_up(Tool *tool, struct ImageDocument *doc,
 /**
  * Create the Brush Tool
  */
-Tool *tool_brush_create(void) 
-{
-    Tool *tool;
+Tool* tool_brush_create(void) {
+    Tool* tool;
 
     /* Brush tool supports size, opacity, hardness, flow, and spacing */
     tool = tool_new("Brush", TOOL_BRUSH, GDK_CROSSHAIR,
