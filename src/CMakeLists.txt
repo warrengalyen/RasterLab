@@ -77,6 +77,7 @@ set(SOURCES
     ui/filters/filter_luminance_threshold.c
     ui/filters/filter_monochrome.c
     ui/filters/filter_posterize.c
+    ui/filters/filter_chroma_key.c
     ui/filters/filter_brightness_contrast.c
     ui/filters/filter_shadow_highlights.c
     ui/filters/filter_temperature.c

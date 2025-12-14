@@ -57,8 +57,8 @@ typedef struct _FilterDialog FilterDialog;
  */
 typedef gboolean (*FilterDialogPreviewCallback)(FilterDialog* dialog,
                                                 const gdouble* values,
-                                                gint num_values,
-                                                gpointer user_data);
+                                               gint num_values,
+                                               gpointer user_data);
 
 /**
  * Create a new filter dialog
@@ -69,7 +69,7 @@ typedef gboolean (*FilterDialogPreviewCallback)(FilterDialog* dialog,
  */
 FilterDialog* filter_dialog_new(const gchar* title,
                                 const FilterControlParam* controls,
-                                gint num_controls);
+                                 gint num_controls);
 
 /**
  * Set the image layer for the preview widget

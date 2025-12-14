@@ -14,6 +14,7 @@
 #include "ui/filters/filter_auto_whitebalance.h"
 #include "ui/filters/filter_backlight.h"
 #include "ui/filters/filter_brightness_contrast.h"
+#include "ui/filters/filter_chroma_key.h"
 #include "ui/filters/filter_color_invert.h"
 #include "ui/filters/filter_colorbalance.h"
 #include "ui/filters/filter_dehaze.h"
@@ -1590,6 +1591,109 @@ static void on_adjust_monochrome(GtkWidget* widget, gpointer data) {
 }
 
 /**
+ * Chroma key filter preview update callback
+ */
+static gboolean on_chroma_key_preview_update(FilterDialog* dialog,
+                                             const gdouble* values,
+                                             gint num_values,
+                                             gpointer user_data) {
+    gfloat filter_values[5];
+    gdouble scaled_threshold, scaled_smoothing;
+
+    if (!dialog || !values || num_values < 5) {
+        return FALSE;
+    }
+
+    /* Scale threshold and smoothing from UI range (0-100) to filter range (0.0-1.0) */
+    scaled_threshold = adjustments_scale_value(
+        values[3], 0.0, 100.0, 0.0, 1.0);
+    scaled_smoothing = adjustments_scale_value(
+        values[4], 0.0, 100.0, 0.0, 1.0);
+
+    /* Values: [r, g, b, threshold, smoothing] */
+    filter_values[0] = (gfloat)values[0];        /* r (0.0-1.0) */
+    filter_values[1] = (gfloat)values[1];        /* g (0.0-1.0) */
+    filter_values[2] = (gfloat)values[2];        /* b (0.0-1.0) */
+    filter_values[3] = (gfloat)scaled_threshold; /* threshold (0.0-1.0) */
+    filter_values[4] = (gfloat)scaled_smoothing; /* smoothing (0.0-1.0) */
+
+    /* Set up viewport-based filter */
+    setup_viewport_filter(dialog, (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_chroma_key_apply,
+                          filter_values, 5);
+
+    return TRUE;
+}
+
+/**
+ * Adjustments > Chroma Key callback
+ */
+static void on_adjust_chroma_key(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    FilterControlParam controls[3];
+    gdouble values[5]; /* RGB (3) + threshold (1) + smoothing (1) = 5 total */
+    gint response;
+    gfloat filter_values[5];
+    gdouble scaled_threshold, scaled_smoothing;
+
+    if (!ctx) {
+        return;
+    }
+
+    /* Control 0: Color to replace (RGB) */
+    controls[0].type = FILTER_CONTROL_RGB;
+    controls[0].label = "Color to Remove";
+    controls[0].default_r = 0.0; /* Default to white */
+    controls[0].default_g = 255.0;
+    controls[0].default_b = 0.0;
+
+    /* Control 1: Threshold (double) */
+    controls[1].type = FILTER_CONTROL_DOUBLE;
+    controls[1].label = "Threshold";
+    controls[1].min_value = 0.0;
+    controls[1].max_value = 100.0;
+    controls[1].default_value = 15.0;
+    controls[1].step = 1.0;
+    controls[1].decimals = 0;
+    controls[1].filter_min = 0.0;
+    controls[1].filter_max = 1.0;
+
+    /* Control 2: Smoothing (double) */
+    controls[2].type = FILTER_CONTROL_DOUBLE;
+    controls[2].label = "Smoothing";
+    controls[2].min_value = 0.0;
+    controls[2].max_value = 100.0;
+    controls[2].default_value = 15.0;
+    controls[2].step = 1.0;
+    controls[2].decimals = 0;
+    controls[2].filter_min = 0.0;
+    controls[2].filter_max = 1.0;
+
+    response = ui_show_filter_dialog(ctx, "Chroma Key", controls, 3,
+                                     on_chroma_key_preview_update, values);
+
+    if (response == GTK_RESPONSE_OK) {
+        /* Scale threshold and smoothing from UI range (0-100) to filter range (0.0-1.0) */
+        scaled_threshold = adjustments_scale_value(
+            values[3], controls[1].min_value, controls[1].max_value,
+            controls[1].filter_min, controls[1].filter_max);
+        scaled_smoothing = adjustments_scale_value(
+            values[4], controls[2].min_value, controls[2].max_value,
+            controls[2].filter_min, controls[2].filter_max);
+
+        /* Values: [r, g, b, threshold, smoothing] = 5 values total */
+        filter_values[0] = (gfloat)values[0];        /* r (0.0-1.0) */
+        filter_values[1] = (gfloat)values[1];        /* g (0.0-1.0) */
+        filter_values[2] = (gfloat)values[2];        /* b (0.0-1.0) */
+        filter_values[3] = (gfloat)scaled_threshold; /* threshold (0.0-1.0) */
+        filter_values[4] = (gfloat)scaled_smoothing; /* smoothing (0.0-1.0) */
+
+        ui_apply_layer_filter_with_value(ctx, filter_chroma_key_apply,
+                                         "Chroma Key", filter_values, 5);
+    }
+}
+
+/**
  * Posterize filter preview update callback
  */
 static gboolean on_posterize_preview_update(FilterDialog* dialog,
@@ -2076,5 +2180,10 @@ void ui_filter_adjust_setup_menu(GtkBuilder* builder, AppContext* ctx) {
     GtkWidget* adjust_menu_retinex = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_retinex"));
     if (adjust_menu_retinex) {
         g_signal_connect(adjust_menu_retinex, "activate", G_CALLBACK(on_adjust_retinex), ctx);
+    }
+
+    GtkWidget* adjust_menu_chroma_key = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_chroma_key"));
+    if (adjust_menu_chroma_key) {
+        g_signal_connect(adjust_menu_chroma_key, "activate", G_CALLBACK(on_adjust_chroma_key), ctx);
     }
 }

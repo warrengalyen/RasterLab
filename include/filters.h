@@ -2,8 +2,8 @@
 #define FILTERS_H
 
 #include "render/layer.h"
-#include <glib.h>
 #include <cairo.h>
+#include <glib.h>
 
 /**
  * Convert Cairo ARGB32 surface to RGB buffer for Ocular library
@@ -11,7 +11,7 @@
  * @param rgb_output Output buffer (must be allocated: width * height * 3 bytes)
  * @return TRUE if successful, FALSE otherwise
  */
-gboolean adjustments_cairo_to_rgb(cairo_surface_t *surface, guchar *rgb_output);
+gboolean adjustments_cairo_to_rgb(cairo_surface_t* surface, guchar* rgb_output);
 
 /**
  * Convert RGB buffer to Cairo ARGB32 surface
@@ -19,7 +19,23 @@ gboolean adjustments_cairo_to_rgb(cairo_surface_t *surface, guchar *rgb_output);
  * @param rgb_input Input buffer (width * height * 3 bytes)
  * @return TRUE if successful, FALSE otherwise
  */
-gboolean adjustments_rgb_to_cairo(cairo_surface_t *surface, const guchar *rgb_input);
+gboolean adjustments_rgb_to_cairo(cairo_surface_t* surface, const guchar* rgb_input);
+
+/**
+ * Convert Cairo ARGB32 surface to RGBA buffer for Ocular library
+ * @param surface The Cairo surface (must be ARGB32 format)
+ * @param rgba_output Output buffer (must be allocated: width * height * 4 bytes)
+ * @return TRUE if successful, FALSE otherwise
+ */
+gboolean adjustments_cairo_to_rgba(cairo_surface_t* surface, guchar* rgba_output);
+
+/**
+ * Convert RGBA buffer to Cairo ARGB32 surface
+ * @param surface The Cairo surface (must be ARGB32 format)
+ * @param rgba_input Input buffer (width * height * 4 bytes)
+ * @return TRUE if successful, FALSE otherwise
+ */
+gboolean adjustments_rgba_to_cairo(cairo_surface_t* surface, const guchar* rgba_input);
 
 /**
  * Convert single-channel grayscale buffer to Cairo ARGB32 surface
@@ -27,7 +43,7 @@ gboolean adjustments_rgb_to_cairo(cairo_surface_t *surface, const guchar *rgb_in
  * @param grayscale_input Input buffer (width * height bytes)
  * @return TRUE if successful, FALSE otherwise
  */
-gboolean adjustments_grayscale_to_cairo(cairo_surface_t *surface, const guchar *grayscale_input);
+gboolean adjustments_grayscale_to_cairo(cairo_surface_t* surface, const guchar* grayscale_input);
 
 /**
  * Validate surface format and get dimensions
@@ -36,7 +52,7 @@ gboolean adjustments_grayscale_to_cairo(cairo_surface_t *surface, const guchar *
  * @param height Output parameter for height
  * @return TRUE if surface is valid ARGB32, FALSE otherwise
  */
-gboolean adjustments_validate_surface(cairo_surface_t *surface, gint *width, gint *height);
+gboolean adjustments_validate_surface(cairo_surface_t* surface, gint* width, gint* height);
 
 /**
  * Scale a value from UI range to filter range
@@ -54,4 +70,3 @@ gdouble adjustments_scale_value(gdouble ui_value,
                                 gdouble filter_max);
 
 #endif /* FILTERS_H */
-
