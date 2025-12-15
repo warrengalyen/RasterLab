@@ -1,4 +1,5 @@
 #include "ui.h"
+#include "app/recent_files.h"
 #include "command.h"
 #include "document.h"
 #include "panels.h"
@@ -36,6 +37,9 @@ static gboolean gtk_builder_menu_warning_handler(const gchar* log_domain,
 /* Forward declarations */
 static void on_file_open(GtkWidget* widget, gpointer data);
 static void on_file_open_response(GtkDialog* dialog, gint response_id, gpointer user_data);
+static void on_recent_file_activate(GtkMenuItem* menu_item, gpointer user_data);
+static void on_clear_recent_files(GtkMenuItem* menu_item, gpointer user_data);
+void ui_update_recent_files_menu(AppContext* ctx);
 static void on_file_save_as(GtkWidget* widget, gpointer data);
 static void on_file_save_as_response(GtkDialog* dialog, gint response_id, gpointer user_data);
 static void on_file_close(GtkWidget* widget, gpointer data);
@@ -460,6 +464,9 @@ AppContext* ui_create_main_window(void) {
     /* Initialize menu and button states */
     ui_update_menu_and_button_states(ctx);
 
+    /* Initialize recent files menu */
+    ui_update_recent_files_menu(ctx);
+
     // printf("Main window created with dockable panels and status bar\n");
 
     return ctx;
@@ -736,6 +743,187 @@ void ui_update_window_title(AppContext* ctx) {
 /**
  * Free the application context
  */
+/**
+ * Callback for opening a recent file
+ */
+static void on_recent_file_activate(GtkMenuItem* menu_item, gpointer user_data) {
+    (void)menu_item; /* Unused */
+    AppContext* ctx = (AppContext*)user_data;
+    gchar* file_path = (gchar*)g_object_get_data(G_OBJECT(menu_item), "recent_file_path");
+
+    if (!file_path) {
+        return;
+    }
+
+    /* Check if file still exists */
+    if (!g_file_test(file_path, G_FILE_TEST_EXISTS)) {
+        /* Show warning dialog */
+        GtkWidget* dialog = gtk_message_dialog_new(
+            GTK_WINDOW(ctx->window),
+            GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+            GTK_MESSAGE_WARNING,
+            GTK_BUTTONS_OK,
+            "File not found: %s\n\nThe file has been removed from the recent files list.",
+            file_path);
+
+        gtk_dialog_run(GTK_DIALOG(dialog));
+        gtk_widget_destroy(dialog);
+
+        /* Remove from recent files */
+        recent_files_remove(file_path);
+        recent_files_save();
+        ui_update_recent_files_menu(ctx);
+
+        return;
+    }
+
+    /* Open the file */
+    gchar* basename = g_path_get_basename(file_path);
+    ImageDocument* doc = ui_create_document_tab(ctx, basename);
+
+    if (doc) {
+        /* Load the image into the document */
+        if (!document_load_image_from_file(doc, file_path)) {
+            g_warning("Failed to load image: %s", file_path);
+        } else {
+            /* Update recent files (move to top) */
+            recent_files_add(file_path);
+            recent_files_save();
+
+            /* Update status bar after successful load */
+            ui_update_status_bar(ctx, NULL);
+
+            /* Update layers panel with loaded document */
+            LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(
+                G_OBJECT(ctx->window), "layers_panel");
+            if (layers_panel) {
+                layers_panel_update(layers_panel, doc);
+            }
+
+            /* Update menu and button states */
+            ui_update_menu_and_button_states(ctx);
+
+            /* Update recent files menu */
+            ui_update_recent_files_menu(ctx);
+        }
+    }
+
+    g_free(basename);
+}
+
+/**
+ * Callback for clearing recent files
+ */
+static void on_clear_recent_files(GtkMenuItem* menu_item, gpointer user_data) {
+    (void)menu_item; /* Unused */
+    AppContext* ctx = (AppContext*)user_data;
+
+    recent_files_clear();
+    recent_files_save();
+    ui_update_recent_files_menu(ctx);
+}
+
+/**
+ * Update the "Open Recent" submenu with current recent files
+ */
+void ui_update_recent_files_menu(AppContext* ctx) {
+    if (!ctx || !ctx->window) {
+        return;
+    }
+
+    /* Get the file menu from the window */
+    GtkBuilder* builder = (GtkBuilder*)g_object_get_data(G_OBJECT(ctx->window), "main_builder");
+    if (!builder) {
+        return;
+    }
+
+    GtkWidget* file_menu = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu"));
+    if (!file_menu) {
+        return;
+    }
+
+    GtkWidget* recent_submenu = (GtkWidget*)g_object_get_data(G_OBJECT(file_menu), "recent_files_submenu");
+    if (!recent_submenu) {
+        /* Submenu not created yet - this is okay, just return */
+        return;
+    }
+
+    if (!GTK_IS_MENU(recent_submenu)) {
+        g_warning("recent_files_submenu is not a GtkMenu");
+        return;
+    }
+
+    /* Clear existing menu items and free stored file paths */
+    if (GTK_IS_CONTAINER(recent_submenu)) {
+        GList* children = gtk_container_get_children(GTK_CONTAINER(recent_submenu));
+        for (GList* iter = children; iter; iter = iter->next) {
+            GtkWidget* widget = GTK_WIDGET(iter->data);
+            if (widget) {
+                gchar* stored_path = (gchar*)g_object_get_data(G_OBJECT(widget), "recent_file_path");
+                if (stored_path) {
+                    g_free(stored_path);
+                }
+                gtk_widget_destroy(widget);
+            }
+        }
+        g_list_free(children);
+    }
+
+    /* Get recent files list */
+    const GList* recent_files = recent_files_get();
+
+    if (!recent_files || g_list_length((GList*)recent_files) == 0) {
+        /* No recent files - disable the menu item */
+        GtkWidget* file_menu_open_recent = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_open_recent"));
+        if (file_menu_open_recent) {
+            gtk_widget_set_sensitive(file_menu_open_recent, FALSE);
+        }
+        return;
+    }
+
+    /* Enable the menu item */
+    GtkWidget* file_menu_open_recent = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_open_recent"));
+    if (file_menu_open_recent) {
+        gtk_widget_set_sensitive(file_menu_open_recent, TRUE);
+    }
+
+    /* Add menu items for each recent file */
+    for (const GList* iter = recent_files; iter; iter = iter->next) {
+        RecentFile* rf = (RecentFile*)iter->data;
+        if (!rf || !rf->path) {
+            continue;
+        }
+
+        /* Get filename for display */
+        gchar* basename = g_path_get_basename(rf->path);
+        GtkWidget* menu_item = gtk_menu_item_new_with_label(basename);
+        g_free(basename);
+
+        /* Set tooltip to full path */
+        gtk_widget_set_tooltip_text(menu_item, rf->path);
+
+        /* Store file path in menu item data */
+        g_object_set_data(G_OBJECT(menu_item), "recent_file_path", g_strdup(rf->path));
+
+        /* Connect activate signal */
+        g_signal_connect(menu_item, "activate", G_CALLBACK(on_recent_file_activate), ctx);
+
+        gtk_menu_shell_append(GTK_MENU_SHELL(recent_submenu), menu_item);
+        gtk_widget_show(menu_item);
+    }
+
+    /* Add separator */
+    GtkWidget* separator = gtk_separator_menu_item_new();
+    gtk_menu_shell_append(GTK_MENU_SHELL(recent_submenu), separator);
+    gtk_widget_show(separator);
+
+    /* Add "Clear Recent Files" item */
+    GtkWidget* clear_item = gtk_menu_item_new_with_label("Clear Recent Files");
+    g_signal_connect(clear_item, "activate", G_CALLBACK(on_clear_recent_files), ctx);
+    gtk_menu_shell_append(GTK_MENU_SHELL(recent_submenu), clear_item);
+    gtk_widget_show(clear_item);
+}
+
 void ui_context_free(AppContext* ctx) {
     if (!ctx) {
         return;
@@ -769,6 +957,7 @@ static void setup_file_menu(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup*
 
     /* Connect File menu signals */
     GtkWidget* file_menu_open = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_open"));
+    GtkWidget* file_menu_open_recent = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_open_recent"));
     GtkWidget* file_menu_save_as = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_save_as"));
     GtkWidget* file_menu_close = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_close"));
     GtkWidget* file_menu_exit = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_exit"));
@@ -778,6 +967,19 @@ static void setup_file_menu(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup*
         gtk_widget_add_accelerator(file_menu_open, "activate", accel_group,
                                    GDK_KEY_o, GDK_CONTROL_MASK, GTK_ACCEL_VISIBLE);
     }
+
+    /* Setup "Open Recent" submenu */
+    if (file_menu_open_recent) {
+        if (!file_menu) {
+            g_warning("file_menu is NULL, cannot setup Open Recent submenu");
+        } else {
+            GtkWidget* recent_submenu = gtk_menu_new();
+            gtk_menu_item_set_submenu(GTK_MENU_ITEM(file_menu_open_recent), recent_submenu);
+            g_object_set_data(G_OBJECT(file_menu), "recent_files_submenu", recent_submenu);
+            /* Don't update menu here - it will be updated after window is fully created */
+        }
+    }
+
     if (file_menu_save_as) {
         g_signal_connect(file_menu_save_as, "activate", G_CALLBACK(on_file_save_as), ctx);
         gtk_widget_add_accelerator(file_menu_save_as, "activate", accel_group,
@@ -921,6 +1123,10 @@ static void on_file_open_response(GtkDialog* dialog, gint response_id, gpointer 
                 if (!document_load_image_from_file(doc, file_path)) {
                     g_warning("Failed to load image: %s", file_path);
                 } else {
+                    /* Add to recent files after successful load */
+                    recent_files_add(file_path);
+                    recent_files_save();
+
                     /* Update status bar after successful load */
                     ui_update_status_bar(ctx, NULL);
 
@@ -933,6 +1139,9 @@ static void on_file_open_response(GtkDialog* dialog, gint response_id, gpointer 
 
                     /* Update menu and button states */
                     ui_update_menu_and_button_states(ctx);
+
+                    /* Update recent files menu */
+                    ui_update_recent_files_menu(ctx);
                 }
             }
 
@@ -951,6 +1160,14 @@ static void on_file_open(GtkWidget* widget, gpointer data) {
     (void)widget; /* Unused */
 
     AppContext* ctx = (AppContext*)data;
+    if (!ctx) {
+        g_warning("Invalid context in on_file_open");
+        return;
+    }
+    if (!ctx->window || !GTK_IS_WINDOW(ctx->window)) {
+        g_warning("Invalid window in on_file_open");
+        return;
+    }
     GtkWidget* dialog;
     GtkFileFilter* filter;
 
@@ -1110,6 +1327,9 @@ static gboolean on_window_delete(GtkWidget* widget, GdkEvent* event, gpointer da
 
     // printf("Window delete event triggered - shutting down\n");
 
+    /* Save and shutdown recent files */
+    recent_files_shutdown();
+
     /* Free the context (which frees all documents) */
     ui_context_free(ctx);
 
@@ -1126,6 +1346,9 @@ static void on_file_exit(GtkWidget* widget, gpointer data) {
     (void)widget; /* Unused */
 
     AppContext* ctx = (AppContext*)data;
+
+    /* Save and shutdown recent files */
+    recent_files_shutdown();
 
     /* Free the context (which frees all documents) */
     ui_context_free(ctx);

@@ -668,6 +668,14 @@
       </object>
     </child>
     <child>
+      <object class="GtkMenuItem" id="file_menu_open_recent">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Open Recent</property>
+        <property name="use-underline">True</property>
+      </object>
+    </child>
+    <child>
       <object class="GtkMenuItem" id="file_menu_save_as">
         <property name="visible">True</property>
         <property name="can-focus">False</property>

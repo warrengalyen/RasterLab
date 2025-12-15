@@ -119,6 +119,7 @@ set(SOURCES
     render/compositor.c
     render/dirty.c
     render/tile.c
+    app/recent_files.c
     ${GRESOURCE_FILE}
 )
 
