@@ -1,10 +1,10 @@
+#include "app/autosave.h"
 #include "app/recent_files.h"
 #include "render/layer.h"
 #include "test_widgets.h"
 #include "ui.h"
 #include <cairo.h>
 #include <gtk/gtk.h>
-#include <math.h>
 #include <stdio.h>
 
 /**
@@ -24,6 +24,9 @@ int main(int argc, char* argv[]) {
 
     /* Initialize recent files system */
     recent_files_init();
+
+    /* Initialize autosave system */
+    autosave_init();
 
     /* Test filter preview widget */
     // test_filter_preview_dialog();

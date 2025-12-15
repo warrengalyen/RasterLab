@@ -1,4 +1,5 @@
 #include "ui.h"
+#include "app/autosave.h"
 #include "app/recent_files.h"
 #include "command.h"
 #include "document.h"
@@ -6,6 +7,7 @@
 #include "render/compositor.h"
 #include "render/layer.h"
 #include "tool_manager.h"
+#include "ui/dialogs/recovery_dialog.h"
 #include "ui/layers_panel.h"
 #include "ui/tool_options_panel.h"
 #include "ui/tools_panel.h"
@@ -16,6 +18,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 /* Log handler to suppress harmless GTK Builder menu warnings */
 static gboolean gtk_builder_menu_warning_handler(const gchar* log_domain,
@@ -467,6 +470,9 @@ AppContext* ui_create_main_window(void) {
     /* Initialize recent files menu */
     ui_update_recent_files_menu(ctx);
 
+    /* Check for recovery files and show dialog if found */
+    recovery_dialog_show(ctx);
+
     // printf("Main window created with dockable panels and status bar\n");
 
     return ctx;
@@ -534,6 +540,9 @@ ImageDocument* ui_create_document_tab(AppContext* ctx, const gchar* filename) {
     /* Add document to list */
     ctx->documents = g_list_append(ctx->documents, doc);
 
+    /* Register document for autosave */
+    autosave_register_document(doc);
+
     /* Update window title */
     ui_update_window_title(ctx);
 
@@ -584,6 +593,9 @@ static void ui_close_document_tab_internal(AppContext* ctx, ImageDocument* doc) 
         /* Remove from document list BEFORE removing page to prevent
          * switch-page callback from accessing the document */
         ctx->documents = g_list_remove(ctx->documents, doc);
+
+        /* Unregister from autosave before freeing */
+        autosave_unregister_document(doc);
 
         /* Remove the notebook page (this destroys the scrolled window
          * and may trigger switch-page signal, but doc is already removed) */
@@ -1329,6 +1341,9 @@ static gboolean on_window_delete(GtkWidget* widget, GdkEvent* event, gpointer da
 
     /* Save and shutdown recent files */
     recent_files_shutdown();
+
+    /* Shutdown autosave system */
+    autosave_shutdown();
 
     /* Free the context (which frees all documents) */
     ui_context_free(ctx);

@@ -48,6 +48,7 @@ set(SOURCES
     ui/dialogs/clouds_dialog.c
     ui/dialogs/color_balance_dialog.c
     ui/dialogs/gamma_dialog.c
+    ui/dialogs/recovery_dialog.c
     ui/dialogs/retinex_dialog.c
     tools.c
     tools/tool_manager.c
@@ -120,6 +121,7 @@ set(SOURCES
     render/dirty.c
     render/tile.c
     app/recent_files.c
+    app/autosave.c
     ${GRESOURCE_FILE}
 )
 
