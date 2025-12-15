@@ -3,3 +3,5 @@ build/
 !README.md
 !TODO.md
 *.glade~
+*.txt
+*.imgtmp

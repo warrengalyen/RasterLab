@@ -468,6 +468,7 @@ static void on_adjust_whitebalance(GtkWidget* widget, gpointer data) {
     }
 
     /* Define white balance control parameters */
+    controls[0].type = FILTER_CONTROL_DOUBLE;
     controls[0].label = "Temperature (K):";
     controls[0].min_value = 4000.0;
     controls[0].max_value = 7500.0;
@@ -477,6 +478,7 @@ static void on_adjust_whitebalance(GtkWidget* widget, gpointer data) {
     controls[0].filter_min = 4000;
     controls[0].filter_max = 7500;
 
+    controls[1].type = FILTER_CONTROL_DOUBLE;
     controls[1].label = "Tint";
     controls[1].min_value = -200.0;
     controls[1].max_value = 200.0;
@@ -523,6 +525,7 @@ static void on_adjust_vibrance(GtkWidget* widget, gpointer data) {
     }
 
     /* Define vibrance control parameter */
+    controls[0].type = FILTER_CONTROL_DOUBLE;
     controls[0].label = "vibrance";
     controls[0].min_value = -100.0; /* UI range: -100 to 100 */
     controls[0].max_value = 100.0;
@@ -627,6 +630,7 @@ static void on_adjust_sepia(GtkWidget* widget, gpointer data) {
     }
 
     /* Define sepia control parameter */
+    controls[0].type = FILTER_CONTROL_DOUBLE;
     controls[0].label = "Intensity";
     controls[0].min_value = 0.0; /* UI range: 0 to 100 */
     controls[0].max_value = 100.0;
@@ -1013,6 +1017,7 @@ static void on_adjust_exposure(GtkWidget* widget, gpointer data) {
     }
 
     /* Define exposure control parameter */
+    controls[0].type = FILTER_CONTROL_DOUBLE;
     controls[0].label = "exposure";
     controls[0].min_value = -5.0;
     controls[0].max_value = 5.0;
@@ -1059,6 +1064,7 @@ static void on_adjust_hsl(GtkWidget* widget, gpointer data) {
     }
 
     /* Define HSL control parameters */
+    controls[0].type = FILTER_CONTROL_DOUBLE;
     controls[0].label = "hue";
     controls[0].min_value = -180.0;
     controls[0].max_value = 180.0;
@@ -1068,6 +1074,7 @@ static void on_adjust_hsl(GtkWidget* widget, gpointer data) {
     controls[0].filter_min = 0.0;
     controls[0].filter_max = 1.0;
 
+    controls[1].type = FILTER_CONTROL_DOUBLE;
     controls[1].label = "saturation";
     controls[1].min_value = -100.0;
     controls[1].max_value = 100.0;
@@ -1077,6 +1084,7 @@ static void on_adjust_hsl(GtkWidget* widget, gpointer data) {
     controls[1].filter_min = 0.0;
     controls[1].filter_max = 1.0;
 
+    controls[2].type = FILTER_CONTROL_DOUBLE;
     controls[2].label = "lightness";
     controls[2].min_value = -100.0;
     controls[2].max_value = 100.0;
@@ -1138,6 +1146,7 @@ static void on_adjust_brightness_contrast(GtkWidget* widget, gpointer data) {
     }
 
     /* Define brightness/contrast control parameters */
+    controls[0].type = FILTER_CONTROL_DOUBLE;
     controls[0].label = "brightness";
     controls[0].min_value = -255.0; /* UI range: -255 to 255 */
     controls[0].max_value = 255.0;
@@ -1147,6 +1156,7 @@ static void on_adjust_brightness_contrast(GtkWidget* widget, gpointer data) {
     controls[0].filter_min = -1.0; /* Filter range: -1.0 to 1.0 */
     controls[0].filter_max = 1.0;
 
+    controls[1].type = FILTER_CONTROL_DOUBLE;
     controls[1].label = "contrast";
     controls[1].min_value = -100.0; /* UI range: -100 to 100 */
     controls[1].max_value = 100.0;
@@ -1201,6 +1211,7 @@ static void on_adjust_shadow_highlights(GtkWidget* widget, gpointer data) {
     }
 
     /* Define shadow/highlights control parameters */
+    controls[0].type = FILTER_CONTROL_DOUBLE;
     controls[0].label = "shadows";
     controls[0].min_value = -100.0; /* UI range: -100 to 100 */
     controls[0].max_value = 100.0;
@@ -1210,6 +1221,7 @@ static void on_adjust_shadow_highlights(GtkWidget* widget, gpointer data) {
     controls[0].filter_min = -1.0; /* Filter range: -1.0 to 1.0 */
     controls[0].filter_max = 1.0;
 
+    controls[1].type = FILTER_CONTROL_DOUBLE;
     controls[1].label = "midtone contrast";
     controls[1].min_value = -100.0; /* UI range: -100 to 100 */
     controls[1].max_value = 100.0;
@@ -1219,6 +1231,7 @@ static void on_adjust_shadow_highlights(GtkWidget* widget, gpointer data) {
     controls[1].filter_min = -1.0; /* Filter range: -1.0 to 1.0 */
     controls[1].filter_max = 1.0;
 
+    controls[2].type = FILTER_CONTROL_DOUBLE;
     controls[2].label = "highlights";
     controls[2].min_value = -100.0; /* UI range: -100 to 100 */
     controls[2].max_value = 100.0;
@@ -1402,6 +1415,7 @@ static void on_adjust_dehaze(GtkWidget* widget, gpointer data) {
     }
 
     /* Define dehaze control parameters */
+    controls[0].type = FILTER_CONTROL_DOUBLE;
     controls[0].label = "radius";
     controls[0].min_value = 1.0;
     controls[0].max_value = 50.0;
@@ -1411,6 +1425,7 @@ static void on_adjust_dehaze(GtkWidget* widget, gpointer data) {
     controls[0].filter_min = 1.0;
     controls[0].filter_max = 50.0;
 
+    controls[1].type = FILTER_CONTROL_DOUBLE;
     controls[1].label = "edge preservation radius";
     controls[1].min_value = 10.0;
     controls[1].max_value = 120.0;
@@ -1420,6 +1435,7 @@ static void on_adjust_dehaze(GtkWidget* widget, gpointer data) {
     controls[1].filter_min = 1.0;
     controls[1].filter_max = 120.0;
 
+    controls[2].type = FILTER_CONTROL_DOUBLE;
     controls[2].label = "sky brightness";
     controls[2].min_value = 0.1;
     controls[2].max_value = 1.0;
@@ -1429,6 +1445,7 @@ static void on_adjust_dehaze(GtkWidget* widget, gpointer data) {
     controls[2].filter_min = 0.1;
     controls[2].filter_max = 1.0;
 
+    controls[3].type = FILTER_CONTROL_DOUBLE;
     controls[3].label = "intensity";
     controls[3].min_value = 0.1;
     controls[3].max_value = 1.0;
@@ -1438,6 +1455,7 @@ static void on_adjust_dehaze(GtkWidget* widget, gpointer data) {
     controls[3].filter_min = 0.0;
     controls[3].filter_max = 1.0;
 
+    controls[4].type = FILTER_CONTROL_DOUBLE;
     controls[4].label = "edge sensitivity";
     controls[4].min_value = 0.0001;
     controls[4].max_value = 0.1;
@@ -1447,6 +1465,7 @@ static void on_adjust_dehaze(GtkWidget* widget, gpointer data) {
     controls[4].filter_min = 0.0001;
     controls[4].filter_max = 0.1;
 
+    controls[5].type = FILTER_CONTROL_DOUBLE;
     controls[5].label = "minimum transmission";
     controls[5].min_value = 0.1;
     controls[5].max_value = 0.3;
@@ -1645,8 +1664,8 @@ static void on_adjust_chroma_key(GtkWidget* widget, gpointer data) {
     /* Control 0: Color to replace (RGB) */
     controls[0].type = FILTER_CONTROL_RGB;
     controls[0].label = "Color to Remove";
-    controls[0].default_r = 0.0; /* Default to white */
-    controls[0].default_g = 255.0;
+    controls[0].default_r = 0.0; /* Default to green */
+    controls[0].default_g = 1.0;
     controls[0].default_b = 0.0;
 
     /* Control 1: Threshold (double) */

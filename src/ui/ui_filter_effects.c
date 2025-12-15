@@ -246,6 +246,7 @@ static void on_effects_average_blur(GtkWidget* widget, gpointer data) {
     }
 
     /* Define average blur control parameters */
+    controls[0].type = FILTER_CONTROL_DOUBLE;
     controls[0].label = "radius";
     controls[0].min_value = 1.0; /* UI range: 1 to 100 */
     controls[0].max_value = 100.0;
@@ -293,6 +294,7 @@ static void on_effects_gaussian_blur(GtkWidget* widget, gpointer data) {
     }
 
     /* Define Gaussian blur control parameters */
+    controls[0].type = FILTER_CONTROL_DOUBLE;
     controls[0].label = "radius";
     controls[0].min_value = 1.0;
     controls[0].max_value = 100.0;
@@ -368,6 +370,7 @@ static void on_effects_exponential_blur(GtkWidget* widget, gpointer data) {
     if (!ctx)
         return;
 
+    controls[0].type = FILTER_CONTROL_DOUBLE;
     controls[0].label = "radius";
     controls[0].min_value = 1.0;
     controls[0].max_value = 100.0;
@@ -436,6 +439,7 @@ static void on_effects_box_blur(GtkWidget* widget, gpointer data) {
     if (!ctx)
         return;
 
+    controls[0].type = FILTER_CONTROL_DOUBLE;
     controls[0].label = "radius";
     controls[0].min_value = 1.0;
     controls[0].max_value = 100.0;
@@ -504,6 +508,7 @@ static void on_effects_median_blur(GtkWidget* widget, gpointer data) {
     if (!ctx)
         return;
 
+    controls[0].type = FILTER_CONTROL_DOUBLE;
     controls[0].label = "radius";
     controls[0].min_value = 1.0;
     controls[0].max_value = 100.0;
@@ -576,6 +581,7 @@ static void on_effects_motion_blur(GtkWidget* widget, gpointer data) {
     if (!ctx)
         return;
 
+    controls[0].type = FILTER_CONTROL_DOUBLE;
     controls[0].label = "distance";
     controls[0].min_value = 1.0;
     controls[0].max_value = 100.0;
@@ -585,6 +591,7 @@ static void on_effects_motion_blur(GtkWidget* widget, gpointer data) {
     controls[0].filter_min = 1.0;
     controls[0].filter_max = 100.0;
 
+    controls[1].type = FILTER_CONTROL_DOUBLE;
     controls[1].label = "angle";
     controls[1].min_value = 0.0;
     controls[1].max_value = 360.0;
@@ -677,6 +684,7 @@ static void on_effects_radial_blur(GtkWidget* widget, gpointer data) {
     if (!layer)
         return;
 
+    controls[0].type = FILTER_CONTROL_DOUBLE;
     controls[0].label = "center X";
     controls[0].min_value = 0.0;
     controls[0].max_value = 1.0;
@@ -686,6 +694,7 @@ static void on_effects_radial_blur(GtkWidget* widget, gpointer data) {
     controls[0].filter_min = 0.0; /* Normalized range 0.0-1.0 */
     controls[0].filter_max = 1.0;
 
+    controls[1].type = FILTER_CONTROL_DOUBLE;
     controls[1].label = "center Y";
     controls[1].min_value = 0.0;
     controls[1].max_value = 1.0;
@@ -695,6 +704,7 @@ static void on_effects_radial_blur(GtkWidget* widget, gpointer data) {
     controls[1].filter_min = 0.0; /* Normalized range 0.0-1.0 */
     controls[1].filter_max = 1.0;
 
+    controls[2].type = FILTER_CONTROL_DOUBLE;
     controls[2].label = "intensity";
     controls[2].min_value = 1.0;
     controls[2].max_value = 100.0;
@@ -774,6 +784,7 @@ static void on_effects_surface_blur(GtkWidget* widget, gpointer data) {
     if (!ctx)
         return;
 
+    controls[0].type = FILTER_CONTROL_DOUBLE;
     controls[0].label = "radius";
     controls[0].min_value = 1.0;
     controls[0].max_value = 127.0;
@@ -783,6 +794,7 @@ static void on_effects_surface_blur(GtkWidget* widget, gpointer data) {
     controls[0].filter_min = 1.0;
     controls[0].filter_max = 127.0;
 
+    controls[1].type = FILTER_CONTROL_DOUBLE;
     controls[1].label = "threshold";
     controls[1].min_value = 2.0;
     controls[1].max_value = 255.0;
@@ -880,6 +892,7 @@ static void on_effects_zoom_blur(GtkWidget* widget, gpointer data) {
     if (!layer)
         return;
 
+    controls[0].type = FILTER_CONTROL_DOUBLE;
     controls[0].label = "strength";
     controls[0].min_value = 10.0;
     controls[0].max_value = 200.0;
@@ -889,6 +902,7 @@ static void on_effects_zoom_blur(GtkWidget* widget, gpointer data) {
     controls[0].filter_min = 10.0;
     controls[0].filter_max = 200.0;
 
+    controls[1].type = FILTER_CONTROL_DOUBLE;
     controls[1].label = "distance";
     controls[1].min_value = 1.0;
     controls[1].max_value = 100.0;
@@ -898,6 +912,7 @@ static void on_effects_zoom_blur(GtkWidget* widget, gpointer data) {
     controls[1].filter_min = 0.1;
     controls[1].filter_max = 1.0;
 
+    controls[2].type = FILTER_CONTROL_DOUBLE;
     controls[2].label = "center X";
     controls[2].min_value = 0.0;
     controls[2].max_value = 1.0;
@@ -907,6 +922,7 @@ static void on_effects_zoom_blur(GtkWidget* widget, gpointer data) {
     controls[2].filter_min = 0.0; /* Normalized range 0.0-1.0 */
     controls[2].filter_max = 1.0;
 
+    controls[3].type = FILTER_CONTROL_DOUBLE;
     controls[3].label = "center Y";
     controls[3].min_value = 0.0;
     controls[3].max_value = 1.0;
@@ -991,6 +1007,7 @@ static void on_artistic_film_grain(GtkWidget* widget, gpointer data) {
     if (!ctx)
         return;
 
+    controls[0].type = FILTER_CONTROL_DOUBLE;
     controls[0].label = "strength";
     controls[0].min_value = 1.0;
     controls[0].max_value = 100.0;
@@ -1000,6 +1017,7 @@ static void on_artistic_film_grain(GtkWidget* widget, gpointer data) {
     controls[0].filter_min = 0.0;
     controls[0].filter_max = 1.0;
 
+    controls[1].type = FILTER_CONTROL_DOUBLE;
     controls[1].label = "softness";
     controls[1].min_value = 0.0;
     controls[1].max_value = 25.0;
@@ -1076,6 +1094,7 @@ static void on_artistic_frosted_glass(GtkWidget* widget, gpointer data) {
     if (!ctx)
         return;
 
+    controls[0].type = FILTER_CONTROL_DOUBLE;
     controls[0].label = "radius";
     controls[0].min_value = 1.0;
     controls[0].max_value = 100.0;
@@ -1085,6 +1104,7 @@ static void on_artistic_frosted_glass(GtkWidget* widget, gpointer data) {
     controls[0].filter_min = 1.0;
     controls[0].filter_max = 100.0;
 
+    controls[1].type = FILTER_CONTROL_DOUBLE;
     controls[1].label = "range";
     controls[1].min_value = 1.0;
     controls[1].max_value = 20.0;
@@ -1246,6 +1266,7 @@ static void on_artistic_oil_paint(GtkWidget* widget, gpointer data) {
     if (!ctx)
         return;
 
+    controls[0].type = FILTER_CONTROL_DOUBLE;
     controls[0].label = "brush size";
     controls[0].min_value = 1.0;
     controls[0].max_value = 200.0;
@@ -1255,6 +1276,7 @@ static void on_artistic_oil_paint(GtkWidget* widget, gpointer data) {
     controls[0].filter_min = 1.0;
     controls[0].filter_max = 200.0;
 
+    controls[1].type = FILTER_CONTROL_DOUBLE;
     controls[1].label = "detail";
     controls[1].min_value = 1.0;
     controls[1].max_value = 100.0;
