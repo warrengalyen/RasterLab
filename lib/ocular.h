@@ -132,8 +132,7 @@ typedef enum {
 /* Quantize method */
 typedef enum {
     OC_QUANTIZE_MEDIAN_CUT,
-    OC_QUANTIZE_OCTREE,
-    OC_QUANTIZE_KMEANS
+    OC_QUANTIZE_OCTREE
 } OcQuantizeMethod;
 
 /* Dither method */
@@ -350,7 +349,8 @@ OC_STATUS ocularPalettetizeFromFile(unsigned char* input, unsigned char* output,
                                     const char* filename, OcDitherMethod method, int amount);
 
 OC_STATUS ocularPalettetizeFromImage(unsigned char* input, unsigned char* output, int width, int height, int channels,
-                                     OcQuantizeMethod method, int maxColors, int amount);
+                                     OcQuantizeMethod quantizeMethod, int maxColors, OcDitherMethod ditherMethod,
+                                     int ditherAmount);
 
 /* ============================================================================
  * Image Processing Functions

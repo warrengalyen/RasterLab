@@ -6,6 +6,7 @@
 #include "ui.h"
 #include "ui/dialogs/color_balance_dialog.h"
 #include "ui/dialogs/gamma_dialog.h"
+#include "ui/dialogs/palettize_dialog.h"
 #include "ui/dialogs/retinex_dialog.h"
 #include "ui/filters/filter_auto_contrast.h"
 #include "ui/filters/filter_auto_gamma.h"
@@ -26,6 +27,7 @@
 #include "ui/filters/filter_hsl.h"
 #include "ui/filters/filter_luminance_threshold.h"
 #include "ui/filters/filter_monochrome.h"
+#include "ui/filters/filter_palettize.h"
 #include "ui/filters/filter_posterize.h"
 #include "ui/filters/filter_retinex.h"
 #include "ui/filters/filter_sepia.h"
@@ -1927,6 +1929,114 @@ static void on_adjust_shadows_highlights_tint(GtkWidget* widget, gpointer data) 
 }
 
 /**
+ * Adjustments > Palettize callback
+ */
+static void on_adjust_palettize(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc;
+    ImageLayer* layer;
+    PalettizeDialog* dialog;
+    ImageLayer* temp_layer;
+    cairo_t* cr;
+    gint response;
+    PalettizeParams params;
+
+    if (!ctx) {
+        return;
+    }
+
+    doc = ui_get_active_document(ctx);
+    if (!doc) {
+        g_warning("No document open");
+        return;
+    }
+
+    layer = document_get_selected_layer(doc);
+    if (!layer) {
+        g_warning("No layer selected");
+        return;
+    }
+
+    /* Create palettize dialog */
+    dialog = palettize_dialog_new("Palettize");
+    if (!dialog) {
+        g_warning("Failed to create palettize dialog");
+        return;
+    }
+
+    /* Create a copy of the layer for preview */
+    temp_layer = layer_new("Temp", layer->width, layer->height, TRUE);
+    if (!temp_layer) {
+        g_warning("Failed to create temporary layer for preview");
+        palettize_dialog_free(dialog);
+        return;
+    }
+
+    /* Copy layer surface to temp layer */
+    cr = cairo_create(temp_layer->surface);
+    cairo_set_source_surface(cr, layer->surface, 0, 0);
+    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+    cairo_paint(cr);
+    cairo_destroy(cr);
+
+    /* Set layers in dialog */
+    palettize_dialog_set_layers(dialog, layer, temp_layer);
+
+    /* Set dialog as transient for main window */
+    if (ctx->window) {
+        gtk_window_set_transient_for(palettize_dialog_get_window(dialog), GTK_WINDOW(ctx->window));
+    }
+
+    /* Run dialog */
+    response = palettize_dialog_run(dialog, GTK_WINDOW(ctx->window), &params);
+
+    if (response == GTK_RESPONSE_OK) {
+        /* Apply palettize filter directly */
+        Command* cmd = command_create_draw(layer, "Palettize");
+        if (cmd) {
+            /* Start timing */
+            gint64 start_time = g_get_monotonic_time();
+
+            gboolean success = filter_palettize_apply(layer, &params);
+
+            if (success) {
+                /* Get processing time */
+                gint64 current_time = g_get_monotonic_time();
+                gdouble processing_time = (gdouble)(current_time - start_time) / 1000000.0;
+
+                command_finalize_draw(cmd);
+                if (doc->undo_stack) {
+                    command_stack_push(doc->undo_stack, cmd);
+                    if (doc->redo_stack) {
+                        command_stack_clear(doc->redo_stack);
+                    }
+                } else {
+                    command_free(cmd);
+                }
+                layer_invalidate_cache(layer);
+                doc->modified = TRUE;
+                document_invalidate_composite(doc);
+                ui_update_status_bar_time(ctx, processing_time);
+                ui_update_window_title(ctx);
+                ui_update_menu_and_button_states(ctx);
+            } else {
+                command_free(cmd);
+            }
+        }
+
+        /* Free palette file path if allocated */
+        if (params.palette_file) {
+            g_free(params.palette_file);
+        }
+    }
+
+    /* Clean up */
+    palettize_dialog_free(dialog);
+    layer_free(temp_layer);
+}
+
+/**
  * Adjustments > Retinex callback
  */
 static void on_adjust_retinex(GtkWidget* widget, gpointer data) {
@@ -2185,5 +2295,10 @@ void ui_filter_adjust_setup_menu(GtkBuilder* builder, AppContext* ctx) {
     GtkWidget* adjust_menu_chroma_key = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_chroma_key"));
     if (adjust_menu_chroma_key) {
         g_signal_connect(adjust_menu_chroma_key, "activate", G_CALLBACK(on_adjust_chroma_key), ctx);
+    }
+
+    GtkWidget* adjust_menu_palettize = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_palettize"));
+    if (adjust_menu_palettize) {
+        g_signal_connect(adjust_menu_palettize, "activate", G_CALLBACK(on_adjust_palettize), ctx);
     }
 }

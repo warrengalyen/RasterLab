@@ -48,6 +48,7 @@ set(SOURCES
     ui/dialogs/clouds_dialog.c
     ui/dialogs/color_balance_dialog.c
     ui/dialogs/gamma_dialog.c
+    ui/dialogs/palettize_dialog.c
     ui/dialogs/recovery_dialog.c
     ui/dialogs/retinex_dialog.c
     tools.c
@@ -77,6 +78,7 @@ set(SOURCES
     ui/filters/filter_hsl.c
     ui/filters/filter_luminance_threshold.c
     ui/filters/filter_monochrome.c
+    ui/filters/filter_palettize.c
     ui/filters/filter_posterize.c
     ui/filters/filter_chroma_key.c
     ui/filters/filter_brightness_contrast.c
