@@ -370,9 +370,15 @@ void document_free(ImageDocument* doc) {
         g_free(doc->file_path);
     }
 
+    /* Mark document as being freed by setting layers to NULL first
+     * This allows command destroy callbacks to detect that the document is being freed */
+    GList* layers_to_free = doc->layers;
+    doc->layers = NULL;
+
     /* Free undo/redo stacks BEFORE freeing layers
      * This ensures command destroy callbacks can safely check layer ownership
-     * and free any layers they own (e.g., layers in undo state) */
+     * and free any layers they own (e.g., layers in undo state)
+     * Note: doc->layers is now NULL, so destroy callbacks know the document is being freed */
     if (doc->undo_stack) {
         command_stack_free(doc->undo_stack);
         doc->undo_stack = NULL;
@@ -383,11 +389,10 @@ void document_free(ImageDocument* doc) {
     }
 
     /* Free all layers */
-    for (GList* iter = doc->layers; iter; iter = iter->next) {
+    for (GList* iter = layers_to_free; iter; iter = iter->next) {
         layer_free((ImageLayer*)iter->data);
     }
-    g_list_free(doc->layers);
-    doc->layers = NULL;
+    g_list_free(layers_to_free);
 
     /* Free composite surface */
     if (doc->composite_surface) {

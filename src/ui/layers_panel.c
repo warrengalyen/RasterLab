@@ -1,35 +1,34 @@
 #include "ui/layers_panel.h"
 #include "document.h"
-#include "ui/widgets/accordion.h"
-#include "render/render_utils.h"
-#include "render/layer.h"
 #include "render/compositor.h"
 #include "render/dirty.h"
+#include "render/layer.h"
+#include "render/render_utils.h"
+#include "ui/widgets/accordion.h"
 #include <stdio.h>
 #include <string.h>
 
 /* Forward declarations */
-static GdkPixbuf* create_layer_thumbnail(cairo_surface_t *layer_surface, gint thumb_size, gboolean visible);
+static GdkPixbuf* create_layer_thumbnail(cairo_surface_t* layer_surface, gint thumb_size, gboolean visible);
 static GdkPixbuf* get_visibility_icon(gboolean visible);
-static GtkWidget* create_overview_widget(LayersPanel *layers_panel);
-static gboolean on_overview_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data);
+static GtkWidget* create_overview_widget(LayersPanel* layers_panel);
+static gboolean on_overview_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data);
 
 /**
  * Treeview button press event handler - handles visibility icon clicks
  */
-static gboolean on_treeview_button_press(GtkWidget *widget,
-                                         GdkEventButton *event,
-                                         gpointer user_data)
-{
-    LayersPanel *layers_panel = (LayersPanel *)user_data;
-    GtkTreeView *tree_view = GTK_TREE_VIEW(widget);
-    GtkTreePath *path = NULL;
-    GtkTreeViewColumn *column = NULL;
+static gboolean on_treeview_button_press(GtkWidget* widget,
+                                         GdkEventButton* event,
+                                         gpointer user_data) {
+    LayersPanel* layers_panel = (LayersPanel*)user_data;
+    GtkTreeView* tree_view = GTK_TREE_VIEW(widget);
+    GtkTreePath* path = NULL;
+    GtkTreeViewColumn* column = NULL;
     gint cell_x, cell_y;
     GtkTreeIter iter;
     gboolean visible;
-    GdkPixbuf *visibility_icon;
-    ImageLayer *layer;
+    GdkPixbuf* visibility_icon;
+    ImageLayer* layer;
 
     if (event->button != 1 || event->type != GDK_BUTTON_PRESS) {
         return FALSE;
@@ -41,9 +40,9 @@ static gboolean on_treeview_button_press(GtkWidget *widget,
         return FALSE;
     }
 
-    GtkTreeViewColumn *visibility_column = GTK_TREE_VIEW_COLUMN(
+    GtkTreeViewColumn* visibility_column = GTK_TREE_VIEW_COLUMN(
         g_object_get_data(G_OBJECT(widget), "visibility_column"));
-    
+
     if (column != visibility_column) {
         gtk_tree_path_free(path);
         return FALSE;
@@ -57,8 +56,8 @@ static gboolean on_treeview_button_press(GtkWidget *widget,
 
     /* Get current visibility value */
     gtk_tree_model_get(GTK_TREE_MODEL(layers_panel->store), &iter,
-                      3, &visible,
-                      -1);
+                       3, &visible,
+                       -1);
 
     /* Toggle visibility */
     visible = !visible;
@@ -66,30 +65,30 @@ static gboolean on_treeview_button_press(GtkWidget *widget,
     /* Update layer visibility in document */
     if (layers_panel->current_doc) {
         /* Get the layer from the row */
-        gint *indices = gtk_tree_path_get_indices(path);
+        gint* indices = gtk_tree_path_get_indices(path);
         gint row = indices[0];
         guint layer_count = document_get_layer_count(layers_panel->current_doc);
-        
+
         /* Layers are displayed in reverse order */
         gint layer_index = layer_count - 1 - row;
-        
+
         if (layer_index >= 0 && layer_index < (gint)layer_count) {
             layer = document_get_layer(layers_panel->current_doc, layer_index);
             if (layer) {
                 layer->visible = visible;
                 /* Mark composite as dirty and trigger redraw */
                 document_invalidate_composite(layers_panel->current_doc);
-                
+
                 /* Update thumbnail with new visibility state */
-                GdkPixbuf *thumbnail = create_layer_thumbnail(layer->surface, 48, visible);
+                GdkPixbuf* thumbnail = create_layer_thumbnail(layer->surface, 48, visible);
                 visibility_icon = get_visibility_icon(visible);
-                
+
                 if (thumbnail && visibility_icon) {
                     gtk_list_store_set(layers_panel->store, &iter,
-                                      0, visibility_icon,
-                                      1, thumbnail,
-                                      3, visible,
-                                      -1);
+                                       0, visibility_icon,
+                                       1, thumbnail,
+                                       3, visible,
+                                       -1);
                     g_object_unref(visibility_icon);
                     g_object_unref(thumbnail);
                 }
@@ -98,36 +97,35 @@ static gboolean on_treeview_button_press(GtkWidget *widget,
     }
 
     gtk_tree_path_free(path);
-    //printf("Layer visibility toggled to %s\n", visible ? "visible" : "hidden");
+    // printf("Layer visibility toggled to %s\n", visible ? "visible" : "hidden");
     return TRUE;
 }
 
 /* Forward declarations for opacity callbacks */
-static void on_opacity_scale_changed(GtkRange *range, gpointer user_data);
-static void on_opacity_spin_changed(GtkSpinButton *spin_button, gpointer user_data);
-static void on_opacity_reset_clicked(GtkButton *button, gpointer user_data);
+static void on_opacity_scale_changed(GtkRange* range, gpointer user_data);
+static void on_opacity_spin_changed(GtkSpinButton* spin_button, gpointer user_data);
+static void on_opacity_reset_clicked(GtkButton* button, gpointer user_data);
 
 /* Forward declaration for blend mode callback */
-static void on_blend_mode_changed(GtkComboBox *combo, gpointer user_data);
+static void on_blend_mode_changed(GtkComboBox* combo, gpointer user_data);
 
 /**
  * Blend mode changed callback
  */
-static void on_blend_mode_changed(GtkComboBox *combo, gpointer user_data)
-{
-    LayersPanel *layers_panel = (LayersPanel *)user_data;
+static void on_blend_mode_changed(GtkComboBox* combo, gpointer user_data) {
+    LayersPanel* layers_panel = (LayersPanel*)user_data;
     gint active = gtk_combo_box_get_active(combo);
-    ImageLayer *selected_layer;
+    ImageLayer* selected_layer;
     BlendMode blend_mode;
-    
+
     if (!layers_panel || !layers_panel->current_doc) {
         return;
     }
-    
+
     if (active < 0) {
-        return;  /* No selection */
+        return; /* No selection */
     }
-    
+
     /* Map combo box index to BlendMode enum */
     switch (active) {
         case 0:
@@ -146,67 +144,66 @@ static void on_blend_mode_changed(GtkComboBox *combo, gpointer user_data)
             blend_mode = BLEND_MODE_NORMAL;
             break;
     }
-    
+
     selected_layer = layers_panel_get_selected_layer(layers_panel);
     if (!selected_layer) {
         return;
     }
-    
+
     /* Update layer blend mode */
     selected_layer->blend_mode = blend_mode;
-    
+
     /* Mark cache as dirty but don't destroy it - will be regenerated lazily */
     selected_layer->cache_dirty = TRUE;
-    
+
     /* Invalidate entire layer region (blend mode affects how layer composites) */
     DirtyRect dirty_rect;
     dirty_rect_set(&dirty_rect, selected_layer->offset_x, selected_layer->offset_y,
                    selected_layer->width, selected_layer->height);
-    dirty_rect_clamp(&dirty_rect, layers_panel->current_doc->width, 
-                    layers_panel->current_doc->height);
+    dirty_rect_clamp(&dirty_rect, layers_panel->current_doc->width,
+                     layers_panel->current_doc->height);
     document_invalidate_region(layers_panel->current_doc, &dirty_rect);
-    
-    //printf("Layer blend mode changed to %d\n", blend_mode);
+
+    // printf("Layer blend mode changed to %d\n", blend_mode);
 }
 
 /**
  * Opacity scale changed callback
  */
-static void on_opacity_scale_changed(GtkRange *range, gpointer user_data)
-{
-    LayersPanel *layers_panel = (LayersPanel *)user_data;
+static void on_opacity_scale_changed(GtkRange* range, gpointer user_data) {
+    LayersPanel* layers_panel = (LayersPanel*)user_data;
     gdouble value = gtk_range_get_value(range);
-    ImageLayer *selected_layer;
-    
+    ImageLayer* selected_layer;
+
     if (!layers_panel || !layers_panel->current_doc) {
         return;
     }
-    
+
     selected_layer = layers_panel_get_selected_layer(layers_panel);
     if (!selected_layer) {
         return;
     }
-    
+
     /* Update layer opacity (convert from 0-100 to 0.0-1.0) */
     selected_layer->opacity = value / 100.0;
-    
+
     /* Invalidate layer cache since opacity affects rendering */
     layer_invalidate_cache(selected_layer);
-    
+
     /* Update spin button to stay in sync */
     if (layers_panel->spin_opacity) {
         g_signal_handlers_block_by_func(layers_panel->spin_opacity,
-                                       G_CALLBACK(on_opacity_spin_changed),
-                                       layers_panel);
+                                        G_CALLBACK(on_opacity_spin_changed),
+                                        layers_panel);
         gtk_spin_button_set_value(GTK_SPIN_BUTTON(layers_panel->spin_opacity), value);
         g_signal_handlers_unblock_by_func(layers_panel->spin_opacity,
-                                         G_CALLBACK(on_opacity_spin_changed),
-                                         layers_panel);
+                                          G_CALLBACK(on_opacity_spin_changed),
+                                          layers_panel);
     }
-    
+
     /* Invalidate entire composite (opacity affects how layer composites) */
     document_invalidate_composite(layers_panel->current_doc);
-    
+
     /* Queue redraw */
     if (layers_panel->current_doc->drawing_area) {
         gtk_widget_queue_draw(layers_panel->current_doc->drawing_area);
@@ -216,46 +213,45 @@ static void on_opacity_scale_changed(GtkRange *range, gpointer user_data)
 /**
  * Opacity spin button changed callback
  */
-static void on_opacity_spin_changed(GtkSpinButton *spin_button, gpointer user_data)
-{
-    LayersPanel *layers_panel = (LayersPanel *)user_data;
+static void on_opacity_spin_changed(GtkSpinButton* spin_button, gpointer user_data) {
+    LayersPanel* layers_panel = (LayersPanel*)user_data;
     gdouble value = gtk_spin_button_get_value(spin_button);
-    ImageLayer *selected_layer;
-    
+    ImageLayer* selected_layer;
+
     if (!layers_panel || !layers_panel->current_doc) {
         return;
     }
-    
+
     selected_layer = layers_panel_get_selected_layer(layers_panel);
     if (!selected_layer) {
         return;
     }
-    
+
     /* Update layer opacity (convert from 0-100 to 0.0-1.0) */
     selected_layer->opacity = value / 100.0;
-    
+
     /* Mark cache as dirty but don't destroy it - will be regenerated lazily */
     selected_layer->cache_dirty = TRUE;
-    
+
     /* Update scale to stay in sync */
     if (layers_panel->scale_opacity) {
         g_signal_handlers_block_by_func(layers_panel->scale_opacity,
-                                       G_CALLBACK(on_opacity_scale_changed),
-                                       layers_panel);
+                                        G_CALLBACK(on_opacity_scale_changed),
+                                        layers_panel);
         gtk_range_set_value(GTK_RANGE(layers_panel->scale_opacity), value);
         g_signal_handlers_unblock_by_func(layers_panel->scale_opacity,
-                                         G_CALLBACK(on_opacity_scale_changed),
-                                         layers_panel);
+                                          G_CALLBACK(on_opacity_scale_changed),
+                                          layers_panel);
     }
-    
+
     /* Invalidate entire layer region (opacity affects how layer composites) */
     DirtyRect dirty_rect;
     dirty_rect_set(&dirty_rect, selected_layer->offset_x, selected_layer->offset_y,
                    selected_layer->width, selected_layer->height);
-    dirty_rect_clamp(&dirty_rect, layers_panel->current_doc->width, 
-                    layers_panel->current_doc->height);
+    dirty_rect_clamp(&dirty_rect, layers_panel->current_doc->width,
+                     layers_panel->current_doc->height);
     document_invalidate_region(layers_panel->current_doc, &dirty_rect);
-    
+
     /* Queue redraw */
     if (layers_panel->current_doc->drawing_area) {
         gtk_widget_queue_draw(layers_panel->current_doc->drawing_area);
@@ -265,57 +261,56 @@ static void on_opacity_spin_changed(GtkSpinButton *spin_button, gpointer user_da
 /**
  * Opacity reset button clicked callback
  */
-static void on_opacity_reset_clicked(GtkButton *button, gpointer user_data)
-{
-    LayersPanel *layers_panel = (LayersPanel *)user_data;
-    ImageLayer *selected_layer;
-    
-    (void)button;  /* Unused */
-    
+static void on_opacity_reset_clicked(GtkButton* button, gpointer user_data) {
+    LayersPanel* layers_panel = (LayersPanel*)user_data;
+    ImageLayer* selected_layer;
+
+    (void)button; /* Unused */
+
     if (!layers_panel || !layers_panel->current_doc) {
         return;
     }
-    
+
     selected_layer = layers_panel_get_selected_layer(layers_panel);
     if (!selected_layer) {
         return;
     }
-    
+
     /* Reset opacity to 100% (1.0) */
     selected_layer->opacity = 1.0;
-    
+
     /* Mark cache as dirty but don't destroy it - will be regenerated lazily */
     selected_layer->cache_dirty = TRUE;
-    
+
     /* Update controls */
     if (layers_panel->scale_opacity) {
         g_signal_handlers_block_by_func(layers_panel->scale_opacity,
-                                       G_CALLBACK(on_opacity_scale_changed),
-                                       layers_panel);
+                                        G_CALLBACK(on_opacity_scale_changed),
+                                        layers_panel);
         gtk_range_set_value(GTK_RANGE(layers_panel->scale_opacity), 100.0);
         g_signal_handlers_unblock_by_func(layers_panel->scale_opacity,
-                                         G_CALLBACK(on_opacity_scale_changed),
-                                         layers_panel);
+                                          G_CALLBACK(on_opacity_scale_changed),
+                                          layers_panel);
     }
-    
+
     if (layers_panel->spin_opacity) {
         g_signal_handlers_block_by_func(layers_panel->spin_opacity,
-                                       G_CALLBACK(on_opacity_spin_changed),
-                                       layers_panel);
+                                        G_CALLBACK(on_opacity_spin_changed),
+                                        layers_panel);
         gtk_spin_button_set_value(GTK_SPIN_BUTTON(layers_panel->spin_opacity), 100.0);
         g_signal_handlers_unblock_by_func(layers_panel->spin_opacity,
-                                         G_CALLBACK(on_opacity_spin_changed),
-                                         layers_panel);
+                                          G_CALLBACK(on_opacity_spin_changed),
+                                          layers_panel);
     }
-    
+
     /* Invalidate entire layer region (opacity affects how layer composites) */
     DirtyRect dirty_rect;
     dirty_rect_set(&dirty_rect, selected_layer->offset_x, selected_layer->offset_y,
                    selected_layer->width, selected_layer->height);
-    dirty_rect_clamp(&dirty_rect, layers_panel->current_doc->width, 
-                    layers_panel->current_doc->height);
+    dirty_rect_clamp(&dirty_rect, layers_panel->current_doc->width,
+                     layers_panel->current_doc->height);
     document_invalidate_region(layers_panel->current_doc, &dirty_rect);
-    
+
     /* Queue redraw */
     if (layers_panel->current_doc->drawing_area) {
         gtk_widget_queue_draw(layers_panel->current_doc->drawing_area);
@@ -325,18 +320,17 @@ static void on_opacity_reset_clicked(GtkButton *button, gpointer user_data)
 /**
  * Layer name edited callback
  */
-static void on_layer_name_edited(GtkCellRendererText *renderer,
-                                 gchar *path_str,
-                                 gchar *new_text,
-                                 gpointer user_data)
-{
-    LayersPanel *layers_panel = (LayersPanel *)user_data;
+static void on_layer_name_edited(GtkCellRendererText* renderer,
+                                 gchar* path_str,
+                                 gchar* new_text,
+                                 gpointer user_data) {
+    LayersPanel* layers_panel = (LayersPanel*)user_data;
     GtkTreeIter iter;
 
-    (void)renderer;  /* Unused */
+    (void)renderer; /* Unused */
 
     if (!new_text || strlen(new_text) == 0) {
-        return;  /* Don't allow empty names */
+        return; /* Don't allow empty names */
     }
 
     if (!gtk_tree_model_get_iter_from_string(GTK_TREE_MODEL(layers_panel->store),
@@ -349,12 +343,12 @@ static void on_layer_name_edited(GtkCellRendererText *renderer,
         /* Get the layer from the position */
         gint row = atoi(path_str);
         guint layer_count = document_get_layer_count(layers_panel->current_doc);
-        
+
         /* Layers are displayed in reverse order */
         gint layer_index = layer_count - 1 - row;
-        
+
         if (layer_index >= 0 && layer_index < (gint)layer_count) {
-            ImageLayer *layer = document_get_layer(layers_panel->current_doc, layer_index);
+            ImageLayer* layer = document_get_layer(layers_panel->current_doc, layer_index);
             if (layer) {
                 g_free(layer->name);
                 layer->name = g_strdup(new_text);
@@ -364,37 +358,34 @@ static void on_layer_name_edited(GtkCellRendererText *renderer,
 
     /* Update name in list store */
     gtk_list_store_set(layers_panel->store, &iter,
-                      2, new_text,
-                      -1);
+                       2, new_text,
+                       -1);
 
-    //printf("Layer name changed to: %s\n", new_text);
+    // printf("Layer name changed to: %s\n", new_text);
 }
 
 /**
  * Layer tree view row activated callback
  */
-static gboolean on_layer_row_activated(GtkTreeView *tree_view, GtkTreePath *path,
-                                        GtkTreeViewColumn *column, gpointer user_data)
-{
+static gboolean on_layer_row_activated(GtkTreeView* tree_view, GtkTreePath* path,
+                                       GtkTreeViewColumn* column, gpointer user_data) {
     (void)tree_view;
     (void)path;
     (void)column;
     (void)user_data;
 
-    //printf("Layer selected\n");
+    // printf("Layer selected\n");
     return FALSE;
 }
-
 
 /**
  * Create a thumbnail from a layer surface
  */
-static GdkPixbuf* create_layer_thumbnail(cairo_surface_t *layer_surface, gint thumb_size, gboolean visible)
-{
-    GdkPixbuf *thumbnail = NULL;
-    GdkPixbuf *full_pixbuf = NULL;
-    cairo_surface_t *thumb_surface = NULL;
-    cairo_t *cr = NULL;
+static GdkPixbuf* create_layer_thumbnail(cairo_surface_t* layer_surface, gint thumb_size, gboolean visible) {
+    GdkPixbuf* thumbnail = NULL;
+    GdkPixbuf* full_pixbuf = NULL;
+    cairo_surface_t* thumb_surface = NULL;
+    cairo_t* cr = NULL;
     gint layer_width, layer_height;
     gdouble scale_x, scale_y, scale;
 
@@ -424,12 +415,12 @@ static GdkPixbuf* create_layer_thumbnail(cairo_surface_t *layer_surface, gint th
     }
 
     cr = cairo_create(thumb_surface);
-    
+
     /* Clear to transparent */
     cairo_set_operator(cr, CAIRO_OPERATOR_CLEAR);
     cairo_paint(cr);
     cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
-    
+
     /* Draw layer scaled and centered */
     cairo_save(cr);
     cairo_translate(cr, (thumb_size - thumb_width) / 2.0, (thumb_size - thumb_height) / 2.0);
@@ -461,13 +452,12 @@ static GdkPixbuf* create_layer_thumbnail(cairo_surface_t *layer_surface, gint th
 /**
  * Overview widget draw callback
  */
-static gboolean on_overview_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
-{
-    LayersPanel *layers_panel = (LayersPanel *)user_data;
-    ImageDocument *doc;
-    cairo_surface_t *composite;
-    GdkPixbuf *thumbnail_pixbuf = NULL;
-    GdkPixbuf *scaled_thumb = NULL;
+static gboolean on_overview_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
+    LayersPanel* layers_panel = (LayersPanel*)user_data;
+    ImageDocument* doc;
+    cairo_surface_t* composite;
+    GdkPixbuf* thumbnail_pixbuf = NULL;
+    GdkPixbuf* scaled_thumb = NULL;
     gint widget_width, widget_height;
     gint doc_width, doc_height;
     gdouble scale_x, scale_y, scale;
@@ -477,11 +467,11 @@ static gboolean on_overview_draw(GtkWidget *widget, cairo_t *cr, gpointer user_d
     gint viewport_width, viewport_height;
     GtkAdjustment *hadj = NULL, *vadj = NULL;
     gdouble zoom_factor;
-    
+
     if (!layers_panel) {
         return FALSE;
     }
-    
+
     doc = layers_panel->current_doc;
     if (!doc) {
         /* Draw empty state */
@@ -492,27 +482,27 @@ static gboolean on_overview_draw(GtkWidget *widget, cairo_t *cr, gpointer user_d
         cairo_fill(cr);
         return FALSE;
     }
-    
+
     widget_width = gtk_widget_get_allocated_width(widget);
     widget_height = gtk_widget_get_allocated_height(widget);
-    
+
     doc_width = doc->width;
     doc_height = doc->height;
-    
+
     if (doc_width <= 0 || doc_height <= 0) {
         return FALSE;
     }
-    
+
     /* Calculate scale to fit thumbnail */
     scale_x = (gdouble)(widget_width - 8) / doc_width;
     scale_y = (gdouble)(widget_height - 8) / doc_height;
     scale = (scale_x < scale_y) ? scale_x : scale_y;
-    
+
     thumb_width = (gint)(doc_width * scale);
     thumb_height = (gint)(doc_height * scale);
     thumb_x = (widget_width - thumb_width) / 2;
     thumb_y = (widget_height - thumb_height) / 2;
-    
+
     /* TILE-BASED: Generate thumbnail directly from tiles at thumbnail size (much faster) */
     composite = document_generate_thumbnail_from_tiles(doc, thumb_width, thumb_height);
     if (!composite) {
@@ -522,15 +512,15 @@ static gboolean on_overview_draw(GtkWidget *widget, cairo_t *cr, gpointer user_d
         cairo_fill(cr);
         return FALSE;
     }
-    
+
     /* Convert thumbnail surface to pixbuf */
     scaled_thumb = cairo_surface_to_pixbuf(composite, TRUE);
     cairo_surface_destroy(composite);
-    
+
     if (!scaled_thumb) {
         return FALSE;
     }
-    
+
     /* Draw checkered background behind thumbnail (clipped to thumbnail bounds) */
     cairo_save(cr);
     cairo_rectangle(cr, thumb_x, thumb_y, thumb_width, thumb_height);
@@ -538,31 +528,31 @@ static gboolean on_overview_draw(GtkWidget *widget, cairo_t *cr, gpointer user_d
     cairo_translate(cr, thumb_x, thumb_y);
     draw_checkered_background(cr, thumb_width, thumb_height);
     cairo_restore(cr);
-    
+
     /* Draw thumbnail */
     gdk_cairo_set_source_pixbuf(cr, scaled_thumb, thumb_x, thumb_y);
     cairo_paint(cr);
     g_object_unref(scaled_thumb);
-    
+
     /* Get viewport information from scrolled window */
     if (doc->scrolled_window && GTK_IS_SCROLLED_WINDOW(doc->scrolled_window)) {
         hadj = gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(doc->scrolled_window));
         vadj = gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(doc->scrolled_window));
         zoom_factor = document_get_zoom(doc);
-        
+
         if (hadj && vadj) {
             /* Calculate viewport rectangle in document coordinates */
             viewport_x = (gint)(gtk_adjustment_get_value(hadj) / zoom_factor);
             viewport_y = (gint)(gtk_adjustment_get_value(vadj) / zoom_factor);
             viewport_width = (gint)(gtk_adjustment_get_page_size(hadj) / zoom_factor);
             viewport_height = (gint)(gtk_adjustment_get_page_size(vadj) / zoom_factor);
-            
+
             /* Convert to thumbnail coordinates */
             gint rect_x = thumb_x + (gint)(viewport_x * scale);
             gint rect_y = thumb_y + (gint)(viewport_y * scale);
             gint rect_w = (gint)(viewport_width * scale);
             gint rect_h = (gint)(viewport_height * scale);
-            
+
             /* Clamp rectangle to thumbnail boundaries */
             if (rect_x < thumb_x) {
                 rect_w -= (thumb_x - rect_x);
@@ -578,69 +568,83 @@ static gboolean on_overview_draw(GtkWidget *widget, cairo_t *cr, gpointer user_d
             if (rect_y + rect_h > thumb_y + thumb_height) {
                 rect_h = (thumb_y + thumb_height) - rect_y;
             }
-            
+
             /* Only draw rectangle if it's within thumbnail bounds */
-            if (rect_w > 0 && rect_h > 0 && 
+            if (rect_w > 0 && rect_h > 0 &&
                 rect_x >= thumb_x && rect_y >= thumb_y &&
                 rect_x + rect_w <= thumb_x + thumb_width &&
                 rect_y + rect_h <= thumb_y + thumb_height) {
-                
+
                 /* Draw selection rectangle */
                 cairo_save(cr);
                 cairo_set_line_width(cr, 2.0);
-                cairo_set_source_rgba(cr, 0.0, 0.5, 1.0, 0.8);  /* Blue with transparency */
+                cairo_set_source_rgba(cr, 0.0, 0.5, 1.0, 0.8); /* Blue with transparency */
                 cairo_rectangle(cr, rect_x, rect_y, rect_w, rect_h);
                 cairo_stroke(cr);
-                
+
                 /* Draw inner border for better visibility */
                 cairo_set_line_width(cr, 1.0);
-                cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.9);  /* White inner border */
+                cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.9); /* White inner border */
                 cairo_rectangle(cr, rect_x + 1, rect_y + 1, rect_w - 2, rect_h - 2);
                 cairo_stroke(cr);
                 cairo_restore(cr);
             }
         }
     }
-    
+
     return FALSE;
 }
 
 /**
  * Create overview widget for composite thumbnail
  */
-static GtkWidget* create_overview_widget(LayersPanel *layers_panel)
-{
-    GtkWidget *drawing_area;
-    
+static GtkWidget* create_overview_widget(LayersPanel* layers_panel) {
+    GtkWidget* drawing_area;
+
     drawing_area = gtk_drawing_area_new();
-    gtk_widget_set_size_request(drawing_area, -1, 100);  /* Fixed height of 100 */
-    gtk_widget_set_vexpand(drawing_area, FALSE);  /* Don't expand vertically */
-    gtk_widget_set_hexpand(drawing_area, TRUE);   /* Expand horizontally */
-    
+    gtk_widget_set_size_request(drawing_area, -1, 100); /* Fixed height of 100 */
+    gtk_widget_set_vexpand(drawing_area, FALSE);        /* Don't expand vertically */
+    gtk_widget_set_hexpand(drawing_area, TRUE);         /* Expand horizontally */
+
     /* Connect draw signal */
     g_signal_connect(drawing_area, "draw", G_CALLBACK(on_overview_draw), layers_panel);
-    
+
     /* Store layers panel reference */
     g_object_set_data(G_OBJECT(drawing_area), "layers_panel", layers_panel);
-    
+
     return drawing_area;
 }
 
 /**
  * Get visibility icon pixbuf
  */
-static GdkPixbuf* get_visibility_icon(gboolean visible)
-{
-    const gchar *resource_path = visible 
-        ? "/icons/visibility-on.png"
-        : "/icons/visibility-off.png";
-    
-    GdkPixbuf *pixbuf = gdk_pixbuf_new_from_resource(resource_path, NULL);
+static GdkPixbuf* get_visibility_icon(gboolean visible) {
+    const gchar* resource_path = visible
+                                     ? "/icons/visibility-on.png"
+                                     : "/icons/visibility-off.png";
+
+    GError* error = NULL;
+    GdkPixbuf* pixbuf = gdk_pixbuf_new_from_resource(resource_path, &error);
     if (pixbuf) {
+        /* Ensure pixbuf is fully loaded by accessing its data
+         * This forces librsvg to complete all operations before we unref
+         * For SVG files, this ensures the critical section is unlocked */
+        (void)gdk_pixbuf_get_width(pixbuf);
+        (void)gdk_pixbuf_get_height(pixbuf);
+        (void)gdk_pixbuf_get_has_alpha(pixbuf);
+        (void)gdk_pixbuf_get_pixels(pixbuf);
+
         /* Scale to 16x16 for treeview */
-        GdkPixbuf *scaled = gdk_pixbuf_scale_simple(pixbuf, 16, 16, GDK_INTERP_BILINEAR);
+        GdkPixbuf* scaled = gdk_pixbuf_scale_simple(pixbuf, 16, 16, GDK_INTERP_BILINEAR);
+
+        /* Unref original pixbuf before returning scaled
+         * This ensures librsvg cleanup happens while we still have control */
         g_object_unref(pixbuf);
+
         return scaled;
+    } else if (error) {
+        g_warning("Failed to load visibility icon from resource %s: %s", resource_path, error->message);
+        g_error_free(error);
     }
     return NULL;
 }
@@ -648,78 +652,94 @@ static GdkPixbuf* get_visibility_icon(gboolean visible)
 /**
  * Panel button callbacks
  */
-static void on_panel_btn_new_clicked(GtkButton *button, gpointer user_data)
-{
-    (void)button;  /* Unused */
-    (void)user_data;  /* Context passed differently */
-    //printf("New layer button clicked (handled by UI callback)\n");
+static void on_panel_btn_new_clicked(GtkButton* button, gpointer user_data) {
+    (void)button;    /* Unused */
+    (void)user_data; /* Context passed differently */
+    // printf("New layer button clicked (handled by UI callback)\n");
 }
 
-static void on_panel_btn_delete_clicked(GtkButton *button, gpointer user_data)
-{
-    (void)button;  /* Unused */
-    (void)user_data;  /* Context passed differently */
-    //printf("Delete layer button clicked (handled by UI callback)\n");
+static void on_panel_btn_delete_clicked(GtkButton* button, gpointer user_data) {
+    (void)button;    /* Unused */
+    (void)user_data; /* Context passed differently */
+    // printf("Delete layer button clicked (handled by UI callback)\n");
 }
 
-static void on_panel_btn_duplicate_clicked(GtkButton *button, gpointer user_data)
-{
-    (void)button;  /* Unused */
-    (void)user_data;  /* Context passed differently */
-    //printf("Duplicate layer button clicked (handled by UI callback)\n");
+static void on_panel_btn_duplicate_clicked(GtkButton* button, gpointer user_data) {
+    (void)button;    /* Unused */
+    (void)user_data; /* Context passed differently */
+    // printf("Duplicate layer button clicked (handled by UI callback)\n");
 }
 
 /**
  * Helper function to set icon on a button from SVG resource and remove padding
  */
-static void set_button_icon(GtkButton *button, const gchar *resource_path, gint width, gint height)
-{
+static void set_button_icon(GtkButton* button, const gchar* resource_path, gint width, gint height) {
     if (!button) {
         return;
     }
-    
+
     /* Remove button padding and styling */
     gtk_button_set_relief(button, GTK_RELIEF_NONE);
     gtk_widget_set_margin_start(GTK_WIDGET(button), 0);
     gtk_widget_set_margin_end(GTK_WIDGET(button), 0);
     gtk_widget_set_margin_top(GTK_WIDGET(button), 0);
     gtk_widget_set_margin_bottom(GTK_WIDGET(button), 0);
-    
+
     /* Use CSS to remove inner padding and add hover effect with border */
-    GtkCssProvider *css = gtk_css_provider_new();
+    GtkCssProvider* css = gtk_css_provider_new();
     gtk_css_provider_load_from_data(css,
-        "button { padding: 0px; border: 1px solid transparent; } "
-        "button:hover { background-color: #e0e0e0; border: 1px solid #b0b0b0; } "
-        "button:active { background-color: #d0d0d0; border: 1px solid #909090; }",
-        -1, NULL);
-    GtkStyleContext *context = gtk_widget_get_style_context(GTK_WIDGET(button));
-    gtk_style_context_add_provider(context, GTK_STYLE_PROVIDER(css), 
+                                    "button { padding: 0px; border: 1px solid transparent; } "
+                                    "button:hover { background-color: #e0e0e0; border: 1px solid #b0b0b0; } "
+                                    "button:active { background-color: #d0d0d0; border: 1px solid #909090; }",
+                                    -1, NULL);
+    GtkStyleContext* context = gtk_widget_get_style_context(GTK_WIDGET(button));
+    gtk_style_context_add_provider(context, GTK_STYLE_PROVIDER(css),
                                    GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
     g_object_unref(css);
-    
-    GdkPixbuf *pixbuf = gdk_pixbuf_new_from_resource(resource_path, NULL);
+
+    GError* error = NULL;
+    GdkPixbuf* pixbuf = gdk_pixbuf_new_from_resource(resource_path, &error);
     if (pixbuf) {
+        /* Ensure pixbuf is fully loaded by accessing its data
+         * This forces librsvg to complete all operations before we unref
+         * For SVG files, this ensures the critical section is unlocked */
+        (void)gdk_pixbuf_get_width(pixbuf);
+        (void)gdk_pixbuf_get_height(pixbuf);
+        (void)gdk_pixbuf_get_has_alpha(pixbuf);
+        (void)gdk_pixbuf_get_pixels(pixbuf);
+
         /* Scale to specified size */
-        GdkPixbuf *scaled = gdk_pixbuf_scale_simple(pixbuf, width, height, GDK_INTERP_BILINEAR);
-        GtkWidget *image = gtk_image_new_from_pixbuf(scaled);
-        gtk_button_set_image(button, image);
-        gtk_button_set_image_position(button, GTK_POS_TOP);
-        g_object_unref(scaled);
+        GdkPixbuf* scaled = gdk_pixbuf_scale_simple(pixbuf, width, height, GDK_INTERP_BILINEAR);
+
+        /* Unref original pixbuf BEFORE creating image
+         * This ensures librsvg cleanup happens while we still have control */
         g_object_unref(pixbuf);
+
+        if (scaled) {
+            /* Create image from scaled pixbuf - image takes ownership of the reference */
+            GtkWidget* image = gtk_image_new_from_pixbuf(scaled);
+            gtk_button_set_image(button, image);
+            gtk_button_set_image_position(button, GTK_POS_TOP);
+
+            /* Unref scaled pixbuf - image now owns it, so this just releases our reference */
+            g_object_unref(scaled);
+        }
+    } else if (error) {
+        g_warning("Failed to load icon from resource %s: %s", resource_path, error->message);
+        g_error_free(error);
     }
 }
 
 /**
  * Create the layers panel with tree view (loads from Glade file)
  */
-LayersPanel* create_layers_panel(void)
-{
-    LayersPanel *layers_panel = (LayersPanel *)g_malloc(sizeof(LayersPanel));
-    GtkBuilder *builder;
-    GError *error = NULL;
-    GtkWidget *scroll_window;
-    GtkCellRenderer *renderer;
-    GtkTreeViewColumn *column;
+LayersPanel* create_layers_panel(void) {
+    LayersPanel* layers_panel = (LayersPanel*)g_malloc(sizeof(LayersPanel));
+    GtkBuilder* builder;
+    GError* error = NULL;
+    GtkWidget* scroll_window;
+    GtkCellRenderer* renderer;
+    GtkTreeViewColumn* column;
 
     /* Load the Glade file from resources */
     builder = gtk_builder_new();
@@ -727,7 +747,7 @@ LayersPanel* create_layers_panel(void)
         g_warning("Failed to load layers_panel.glade: %s", error->message);
         g_error_free(error);
         g_object_unref(builder);
-        
+
         /* Fallback: create empty panel */
         layers_panel->panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
         layers_panel->store = NULL;
@@ -746,9 +766,9 @@ LayersPanel* create_layers_panel(void)
         layers_panel->app_context = NULL;
         return layers_panel;
     }
-    
+
     /* Get the main Glade panel container */
-    GtkWidget *glade_panel = GTK_WIDGET(gtk_builder_get_object(builder, "layers_panel"));
+    GtkWidget* glade_panel = GTK_WIDGET(gtk_builder_get_object(builder, "layers_panel"));
     if (!glade_panel) {
         g_warning("Failed to get layers_panel from builder");
         g_object_unref(builder);
@@ -768,29 +788,29 @@ LayersPanel* create_layers_panel(void)
         layers_panel->app_context = NULL;
         return layers_panel;
     }
-    
+
     /* Get scrolled window from builder for tree view population */
     scroll_window = GTK_WIDGET(gtk_builder_get_object(builder, "layers_scroll"));
-    
+
     /* Get buttons from builder */
     layers_panel->btn_new = GTK_WIDGET(gtk_builder_get_object(builder, "btn_new_layer"));
     layers_panel->btn_delete = GTK_WIDGET(gtk_builder_get_object(builder, "btn_delete_layer"));
     layers_panel->btn_up = GTK_WIDGET(gtk_builder_get_object(builder, "btn_move_layer_up"));
     layers_panel->btn_down = GTK_WIDGET(gtk_builder_get_object(builder, "btn_move_layer_down"));
     layers_panel->btn_duplicate = GTK_WIDGET(gtk_builder_get_object(builder, "btn_duplicate_layer"));
-    
+
     /* Get opacity controls from builder */
     layers_panel->scale_opacity = GTK_WIDGET(gtk_builder_get_object(builder, "scale_opacity"));
     layers_panel->spin_opacity = GTK_WIDGET(gtk_builder_get_object(builder, "spin_opacity"));
     layers_panel->btn_opacity_reset = GTK_WIDGET(gtk_builder_get_object(builder, "btn_opacity_reset"));
-    
+
     /* Get blend mode combo box from builder */
     layers_panel->combo_blend = GTK_WIDGET(gtk_builder_get_object(builder, "combo_blend"));
-    
+
     /* Create accordion widget - this becomes the main panel container */
     layers_panel->accordion = accordion_new();
     layers_panel->panel = accordion_get_widget(layers_panel->accordion);
-    
+
     /* Keep builder alive by storing it on the panel as object data */
     g_object_set_data_full(G_OBJECT(layers_panel->panel), "builder", builder, g_object_unref);
 
@@ -824,7 +844,7 @@ LayersPanel* create_layers_panel(void)
     gtk_tree_view_column_set_sizing(column, GTK_TREE_VIEW_COLUMN_FIXED);
     gtk_tree_view_column_set_fixed_width(column, 24);
     gtk_tree_view_append_column(GTK_TREE_VIEW(layers_panel->tree_view), column);
-    
+
     /* Store column reference for click detection */
     g_object_set_data(G_OBJECT(layers_panel->tree_view), "visibility_column", column);
 
@@ -841,11 +861,11 @@ LayersPanel* create_layers_panel(void)
 
     /* Name column (editable) */
     renderer = gtk_cell_renderer_text_new();
-    g_object_set(renderer, 
+    g_object_set(renderer,
                  "editable", TRUE,
-                 "yalign", 0.5,      /* Center vertically */
-                 "ypad", 0,          /* No vertical padding */
-                 "height", -1,       /* Let height fit content */
+                 "yalign", 0.5, /* Center vertically */
+                 "ypad", 0,     /* No vertical padding */
+                 "height", -1,  /* Let height fit content */
                  NULL);
     column = gtk_tree_view_column_new_with_attributes("Layer",
                                                       renderer,
@@ -855,7 +875,7 @@ LayersPanel* create_layers_panel(void)
                      G_CALLBACK(on_layer_name_edited), layers_panel);
     gtk_tree_view_column_set_expand(column, TRUE);
     gtk_tree_view_append_column(GTK_TREE_VIEW(layers_panel->tree_view), column);
-    
+
     /* Note: We don't use gtk_tree_view_set_fixed_height_mode because the Name column
      * needs to expand, which conflicts with fixed height mode. The yalign and ypad
      * properties on the cell renderer control the vertical alignment instead. */
@@ -879,72 +899,72 @@ LayersPanel* create_layers_panel(void)
     if (layers_panel->btn_down) {
         set_button_icon(GTK_BUTTON(layers_panel->btn_down), "/icons/layer-down.svg", 32, 32);
     }
-    
+
     /* Set up opacity controls */
     if (layers_panel->scale_opacity) {
         gtk_range_set_range(GTK_RANGE(layers_panel->scale_opacity), 0.0, 100.0);
         gtk_range_set_value(GTK_RANGE(layers_panel->scale_opacity), 100.0);
         g_signal_connect(layers_panel->scale_opacity, "value-changed",
-                        G_CALLBACK(on_opacity_scale_changed), layers_panel);
+                         G_CALLBACK(on_opacity_scale_changed), layers_panel);
     }
-    
+
     if (layers_panel->spin_opacity) {
-        GtkAdjustment *adj = gtk_adjustment_new(100.0, 0.0, 100.0, 1.0, 10.0, 0.0);
+        GtkAdjustment* adj = gtk_adjustment_new(100.0, 0.0, 100.0, 1.0, 10.0, 0.0);
         gtk_spin_button_set_adjustment(GTK_SPIN_BUTTON(layers_panel->spin_opacity), adj);
         gtk_spin_button_set_digits(GTK_SPIN_BUTTON(layers_panel->spin_opacity), 0);
         g_signal_connect(layers_panel->spin_opacity, "value-changed",
-                        G_CALLBACK(on_opacity_spin_changed), layers_panel);
+                         G_CALLBACK(on_opacity_spin_changed), layers_panel);
     }
-    
+
     if (layers_panel->btn_opacity_reset) {
         set_button_icon(GTK_BUTTON(layers_panel->btn_opacity_reset), "/icons/reset.svg", 16, 16);
         g_signal_connect(layers_panel->btn_opacity_reset, "clicked",
-                        G_CALLBACK(on_opacity_reset_clicked), layers_panel);
+                         G_CALLBACK(on_opacity_reset_clicked), layers_panel);
     }
-    
+
     /* Set up blend mode combo box */
     if (layers_panel->combo_blend) {
         /* Create list store for blend modes */
-        GtkListStore *blend_store = gtk_list_store_new(1, G_TYPE_STRING);
+        GtkListStore* blend_store = gtk_list_store_new(1, G_TYPE_STRING);
         GtkTreeIter iter;
-        
+
         /* Add blend mode options */
         gtk_list_store_append(blend_store, &iter);
         gtk_list_store_set(blend_store, &iter, 0, "Normal", -1);
-        
+
         gtk_list_store_append(blend_store, &iter);
         gtk_list_store_set(blend_store, &iter, 0, "Multiply", -1);
-        
+
         gtk_list_store_append(blend_store, &iter);
         gtk_list_store_set(blend_store, &iter, 0, "Screen", -1);
-        
+
         gtk_list_store_append(blend_store, &iter);
         gtk_list_store_set(blend_store, &iter, 0, "Overlay", -1);
-        
+
         /* Set the model */
         gtk_combo_box_set_model(GTK_COMBO_BOX(layers_panel->combo_blend), GTK_TREE_MODEL(blend_store));
         g_object_unref(blend_store);
-        
+
         /* Set up cell renderer */
-        GtkCellRenderer *cell = gtk_cell_renderer_text_new();
+        GtkCellRenderer* cell = gtk_cell_renderer_text_new();
         gtk_cell_layout_pack_start(GTK_CELL_LAYOUT(layers_panel->combo_blend), cell, TRUE);
         gtk_cell_layout_set_attributes(GTK_CELL_LAYOUT(layers_panel->combo_blend), cell, "text", 0, NULL);
-        
+
         /* Set default to Normal */
         gtk_combo_box_set_active(GTK_COMBO_BOX(layers_panel->combo_blend), 0);
-        
+
         /* Connect signal handler */
         g_signal_connect(layers_panel->combo_blend, "changed",
-                        G_CALLBACK(on_blend_mode_changed), layers_panel);
+                         G_CALLBACK(on_blend_mode_changed), layers_panel);
     }
 
     /* Create overview widget for composite thumbnail */
     layers_panel->overview_widget = create_overview_widget(layers_panel);
-    
+
     /* Ensure layers panel content expands vertically */
     gtk_widget_set_vexpand(glade_panel, TRUE);
     gtk_widget_set_hexpand(glade_panel, TRUE);
-    
+
     /* Add overview section first, then layers section */
     accordion_add_section(layers_panel->accordion, "Overview", layers_panel->overview_widget);
     accordion_add_section(layers_panel->accordion, "Layers", glade_panel);
@@ -964,19 +984,18 @@ LayersPanel* create_layers_panel(void)
 /**
  * Update layers panel with document layers
  */
-void layers_panel_update(LayersPanel *layers_panel, ImageDocument *doc)
-{
+void layers_panel_update(LayersPanel* layers_panel, ImageDocument* doc) {
     if (!layers_panel) {
         return;
     }
 
     /* Always set current_doc, even if doc is NULL (when closing document) */
     layers_panel->current_doc = doc;
-    
+
     if (!doc) {
         /* Clear existing layers */
         gtk_list_store_clear(layers_panel->store);
-        
+
         /* Disable opacity controls */
         if (layers_panel->scale_opacity) {
             gtk_widget_set_sensitive(layers_panel->scale_opacity, FALSE);
@@ -987,18 +1006,18 @@ void layers_panel_update(LayersPanel *layers_panel, ImageDocument *doc)
         if (layers_panel->btn_opacity_reset) {
             gtk_widget_set_sensitive(layers_panel->btn_opacity_reset, FALSE);
         }
-        
+
         /* Update overview widget */
         if (layers_panel->overview_widget) {
             gtk_widget_queue_draw(layers_panel->overview_widget);
         }
-        
+
         return;
     }
 
     /* Clear existing layers */
     gtk_list_store_clear(layers_panel->store);
-    
+
     /* Update overview widget to show new document */
     if (layers_panel->overview_widget) {
         gtk_widget_queue_draw(layers_panel->overview_widget);
@@ -1008,20 +1027,20 @@ void layers_panel_update(LayersPanel *layers_panel, ImageDocument *doc)
     guint layer_count = document_get_layer_count(doc);
 
     for (gint i = layer_count - 1; i >= 0; i--) {
-        ImageLayer *layer = document_get_layer(doc, i);
+        ImageLayer* layer = document_get_layer(doc, i);
 
         if (layer) {
             GtkTreeIter iter;
-            GdkPixbuf *visibility_icon = get_visibility_icon(layer->visible);
-            GdkPixbuf *thumbnail = create_layer_thumbnail(layer->surface, 48, layer->visible);
+            GdkPixbuf* visibility_icon = get_visibility_icon(layer->visible);
+            GdkPixbuf* thumbnail = create_layer_thumbnail(layer->surface, 48, layer->visible);
 
             gtk_list_store_append(layers_panel->store, &iter);
             gtk_list_store_set(layers_panel->store, &iter,
-                              0, visibility_icon,  /* Visibility icon */
-                              1, thumbnail,        /* Thumbnail */
-                              2, layer->name,      /* Name */
-                              3, layer->visible,   /* Visible state */
-                              -1);
+                               0, visibility_icon, /* Visibility icon */
+                               1, thumbnail,       /* Thumbnail */
+                               2, layer->name,     /* Name */
+                               3, layer->visible,  /* Visible state */
+                               -1);
 
             /* Unref pixbufs - the store will take ownership */
             if (visibility_icon) {
@@ -1033,14 +1052,14 @@ void layers_panel_update(LayersPanel *layers_panel, ImageDocument *doc)
         }
     }
 
-    //printf("Layers panel updated with %u layers\n", layer_count);
-    
+    // printf("Layers panel updated with %u layers\n", layer_count);
+
     /* Always select the layer at index 0 (last row in tree view since layers are displayed in reverse) */
     if (layer_count > 0 && layers_panel->tree_view) {
-        GtkTreeSelection *selection = gtk_tree_view_get_selection(
+        GtkTreeSelection* selection = gtk_tree_view_get_selection(
             GTK_TREE_VIEW(layers_panel->tree_view));
         GtkTreeIter iter;
-        
+
         /* Navigate to the last row (which corresponds to index 0) */
         if (gtk_tree_model_get_iter_first(GTK_TREE_MODEL(layers_panel->store), &iter)) {
             /* Move to the last row */
@@ -1051,9 +1070,9 @@ void layers_panel_update(LayersPanel *layers_panel, ImageDocument *doc)
             }
             gtk_tree_selection_select_iter(selection, &iter);
         }
-        
+
         /* Ensure document's selected layer is set to index 0 */
-        ImageLayer *layer_0 = document_get_layer(doc, 0);
+        ImageLayer* layer_0 = document_get_layer(doc, 0);
         if (layer_0) {
             document_set_selected_layer(doc, layer_0);
         }
@@ -1064,8 +1083,7 @@ void layers_panel_update(LayersPanel *layers_panel, ImageDocument *doc)
  * Update thumbnails for all layers in the panel
  * Call this after layer content changes to refresh thumbnails
  */
-void layers_panel_refresh_thumbnails(LayersPanel *layers_panel)
-{
+void layers_panel_refresh_thumbnails(LayersPanel* layers_panel) {
     if (!layers_panel || !layers_panel->current_doc || !layers_panel->store) {
         return;
     }
@@ -1078,26 +1096,26 @@ void layers_panel_refresh_thumbnails(LayersPanel *layers_panel)
     while (valid) {
         /* Get layer from row (layers are displayed in reverse order) */
         gint layer_index = layer_count - 1 - row;
-        
+
         if (layer_index >= 0 && layer_index < (gint)layer_count) {
-            ImageLayer *layer = document_get_layer(layers_panel->current_doc, layer_index);
-            
+            ImageLayer* layer = document_get_layer(layers_panel->current_doc, layer_index);
+
             if (layer) {
-                GdkPixbuf *thumbnail = create_layer_thumbnail(layer->surface, 48, layer->visible);
-                GdkPixbuf *visibility_icon = get_visibility_icon(layer->visible);
-                
+                GdkPixbuf* thumbnail = create_layer_thumbnail(layer->surface, 48, layer->visible);
+                GdkPixbuf* visibility_icon = get_visibility_icon(layer->visible);
+
                 if (thumbnail && visibility_icon) {
                     gtk_list_store_set(layers_panel->store, &iter,
-                                      0, visibility_icon,
-                                      1, thumbnail,
-                                      3, layer->visible,
-                                      -1);
+                                       0, visibility_icon,
+                                       1, thumbnail,
+                                       3, layer->visible,
+                                       -1);
                     g_object_unref(visibility_icon);
                     g_object_unref(thumbnail);
                 }
             }
         }
-        
+
         row++;
         valid = gtk_tree_model_iter_next(GTK_TREE_MODEL(layers_panel->store), &iter);
     }
@@ -1107,16 +1125,15 @@ void layers_panel_refresh_thumbnails(LayersPanel *layers_panel)
  * Update thumbnail for the currently selected layer only
  * Call this after drawing operations to update the selected layer's thumbnail
  */
-void layers_panel_update_selected_thumbnail(LayersPanel *layers_panel)
-{
-    ImageLayer *selected_layer;
-    GdkPixbuf *thumbnail;
-    GdkPixbuf *visibility_icon;
-    ImageDocument *doc;
-    GtkTreeSelection *selection;
+void layers_panel_update_selected_thumbnail(LayersPanel* layers_panel) {
+    ImageLayer* selected_layer;
+    GdkPixbuf* thumbnail;
+    GdkPixbuf* visibility_icon;
+    ImageDocument* doc;
+    GtkTreeSelection* selection;
     GtkTreeIter iter;
-    gchar *layer_name = NULL;
-    ImageLayer *tree_layer = NULL;
+    gchar* layer_name = NULL;
+    ImageLayer* tree_layer = NULL;
 
     if (!layers_panel || !layers_panel->tree_view || !layers_panel->store) {
         return;
@@ -1141,13 +1158,13 @@ void layers_panel_update_selected_thumbnail(LayersPanel *layers_panel)
     }
 
     if (!gtk_tree_selection_get_selected(selection, NULL, &iter)) {
-        return;  /* No selection in treeview */
+        return; /* No selection in treeview */
     }
 
     /* Get the layer name from the selected row */
     gtk_tree_model_get(GTK_TREE_MODEL(layers_panel->store), &iter,
-                      2, &layer_name,
-                      -1);
+                       2, &layer_name,
+                       -1);
 
     if (!layer_name) {
         return;
@@ -1156,7 +1173,7 @@ void layers_panel_update_selected_thumbnail(LayersPanel *layers_panel)
     /* Verify this is the same layer as the document's selected layer */
     if (g_strcmp0(layer_name, selected_layer->name) != 0) {
         g_free(layer_name);
-        return;  /* Treeview selection doesn't match document selection */
+        return; /* Treeview selection doesn't match document selection */
     }
 
     g_free(layer_name);
@@ -1167,10 +1184,10 @@ void layers_panel_update_selected_thumbnail(LayersPanel *layers_panel)
 
     if (thumbnail && visibility_icon) {
         gtk_list_store_set(layers_panel->store, &iter,
-                          0, visibility_icon,
-                          1, thumbnail,
-                          3, selected_layer->visible,
-                          -1);
+                           0, visibility_icon,
+                           1, thumbnail,
+                           3, selected_layer->visible,
+                           -1);
         g_object_unref(visibility_icon);
         g_object_unref(thumbnail);
     }
@@ -1179,11 +1196,10 @@ void layers_panel_update_selected_thumbnail(LayersPanel *layers_panel)
 /**
  * Get the currently selected layer from the panel
  */
-ImageLayer* layers_panel_get_selected_layer(LayersPanel *layers_panel)
-{
-    GtkTreeSelection *selection;
+ImageLayer* layers_panel_get_selected_layer(LayersPanel* layers_panel) {
+    GtkTreeSelection* selection;
     GtkTreeIter iter;
-    gchar *layer_name = NULL;
+    gchar* layer_name = NULL;
 
     if (!layers_panel || !layers_panel->current_doc || !layers_panel->tree_view) {
         return NULL;
@@ -1195,19 +1211,19 @@ ImageLayer* layers_panel_get_selected_layer(LayersPanel *layers_panel)
 
     /* Get the selection */
     selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(layers_panel->tree_view));
-    
+
     if (!selection) {
         return NULL;
     }
 
     if (!gtk_tree_selection_get_selected(selection, NULL, &iter)) {
-        return NULL;  /* No selection */
+        return NULL; /* No selection */
     }
 
     /* Get the layer name from the selected row */
     gtk_tree_model_get(GTK_TREE_MODEL(layers_panel->store), &iter,
-                      2, &layer_name,
-                      -1);
+                       2, &layer_name,
+                       -1);
 
     if (!layer_name) {
         return NULL;
@@ -1216,7 +1232,7 @@ ImageLayer* layers_panel_get_selected_layer(LayersPanel *layers_panel)
     /* Find the layer in the document by name */
     guint layer_count = document_get_layer_count(layers_panel->current_doc);
     for (guint i = 0; i < layer_count; i++) {
-        ImageLayer *layer = document_get_layer(layers_panel->current_doc, i);
+        ImageLayer* layer = document_get_layer(layers_panel->current_doc, i);
         if (layer && g_strcmp0(layer->name, layer_name) == 0) {
             g_free(layer_name);
             return layer;
@@ -1230,54 +1246,53 @@ ImageLayer* layers_panel_get_selected_layer(LayersPanel *layers_panel)
 /**
  * Update opacity controls based on selected layer
  */
-void layers_panel_update_opacity_controls(LayersPanel *layers_panel)
-{
-    ImageLayer *selected_layer;
+void layers_panel_update_opacity_controls(LayersPanel* layers_panel) {
+    ImageLayer* selected_layer;
     gdouble opacity_percent;
-    
+
     if (!layers_panel) {
         return;
     }
-    
+
     selected_layer = layers_panel_get_selected_layer(layers_panel);
-    
+
     if (selected_layer) {
         /* Convert opacity from 0.0-1.0 to 0-100 */
         opacity_percent = selected_layer->opacity * 100.0;
-        
+
         /* Update scale */
         if (layers_panel->scale_opacity) {
             g_signal_handlers_block_by_func(layers_panel->scale_opacity,
-                                           G_CALLBACK(on_opacity_scale_changed),
-                                           layers_panel);
+                                            G_CALLBACK(on_opacity_scale_changed),
+                                            layers_panel);
             gtk_range_set_value(GTK_RANGE(layers_panel->scale_opacity), opacity_percent);
             gtk_widget_set_sensitive(layers_panel->scale_opacity, TRUE);
             g_signal_handlers_unblock_by_func(layers_panel->scale_opacity,
-                                             G_CALLBACK(on_opacity_scale_changed),
-                                             layers_panel);
+                                              G_CALLBACK(on_opacity_scale_changed),
+                                              layers_panel);
         }
-        
+
         /* Update spin button */
         if (layers_panel->spin_opacity) {
             g_signal_handlers_block_by_func(layers_panel->spin_opacity,
-                                           G_CALLBACK(on_opacity_spin_changed),
-                                           layers_panel);
+                                            G_CALLBACK(on_opacity_spin_changed),
+                                            layers_panel);
             gtk_spin_button_set_value(GTK_SPIN_BUTTON(layers_panel->spin_opacity), opacity_percent);
             gtk_widget_set_sensitive(layers_panel->spin_opacity, TRUE);
             g_signal_handlers_unblock_by_func(layers_panel->spin_opacity,
-                                             G_CALLBACK(on_opacity_spin_changed),
-                                             layers_panel);
+                                              G_CALLBACK(on_opacity_spin_changed),
+                                              layers_panel);
         }
-        
+
         /* Enable reset button */
         if (layers_panel->btn_opacity_reset) {
             gtk_widget_set_sensitive(layers_panel->btn_opacity_reset, TRUE);
         }
-        
+
         /* Update blend mode combo box */
         if (layers_panel->combo_blend) {
             gint blend_index = 0;
-            
+
             /* Map BlendMode enum to combo box index */
             switch (selected_layer->blend_mode) {
                 case BLEND_MODE_NORMAL:
@@ -1296,15 +1311,15 @@ void layers_panel_update_opacity_controls(LayersPanel *layers_panel)
                     blend_index = 0;
                     break;
             }
-            
+
             g_signal_handlers_block_by_func(layers_panel->combo_blend,
-                                           G_CALLBACK(on_blend_mode_changed),
-                                           layers_panel);
+                                            G_CALLBACK(on_blend_mode_changed),
+                                            layers_panel);
             gtk_combo_box_set_active(GTK_COMBO_BOX(layers_panel->combo_blend), blend_index);
             gtk_widget_set_sensitive(layers_panel->combo_blend, TRUE);
             g_signal_handlers_unblock_by_func(layers_panel->combo_blend,
-                                             G_CALLBACK(on_blend_mode_changed),
-                                             layers_panel);
+                                              G_CALLBACK(on_blend_mode_changed),
+                                              layers_panel);
         }
     } else {
         /* No layer selected - disable controls */
@@ -1326,12 +1341,11 @@ void layers_panel_update_opacity_controls(LayersPanel *layers_panel)
 /**
  * Update button sensitivity based on state
  */
-void layers_panel_update_button_sensitivity(LayersPanel *layers_panel,
+void layers_panel_update_button_sensitivity(LayersPanel* layers_panel,
                                             gboolean has_document,
                                             gboolean has_selection,
-                                            ImageDocument *doc,
-                                            ImageLayer *selected_layer)
-{
+                                            ImageDocument* doc,
+                                            ImageLayer* selected_layer) {
     if (!layers_panel) {
         return;
     }
@@ -1343,28 +1357,28 @@ void layers_panel_update_button_sensitivity(LayersPanel *layers_panel,
 
     /* Delete and Duplicate: enabled when document exists AND layer is selected */
     gboolean delete_dup_enabled = has_document && has_selection;
-    
+
     if (layers_panel->btn_delete) {
         gtk_widget_set_sensitive(layers_panel->btn_delete, delete_dup_enabled);
     }
-    
+
     if (layers_panel->btn_duplicate) {
         gtk_widget_set_sensitive(layers_panel->btn_duplicate, delete_dup_enabled);
     }
-    
+
     /* Move Up/Down: enabled when document exists, layer is selected, AND move is possible */
     gboolean can_move_up = FALSE;
     gboolean can_move_down = FALSE;
-    
+
     if (has_document && has_selection && doc && selected_layer) {
         can_move_up = document_layer_can_move_up(doc, selected_layer);
         can_move_down = document_layer_can_move_down(doc, selected_layer);
     }
-    
+
     if (layers_panel->btn_up) {
         gtk_widget_set_sensitive(layers_panel->btn_up, can_move_up);
     }
-    
+
     if (layers_panel->btn_down) {
         gtk_widget_set_sensitive(layers_panel->btn_down, can_move_down);
     }
@@ -1373,13 +1387,12 @@ void layers_panel_update_button_sensitivity(LayersPanel *layers_panel,
 /**
  * Connect layers panel buttons to UI callbacks
  */
-void layers_panel_connect_buttons(LayersPanel *layers_panel,
+void layers_panel_connect_buttons(LayersPanel* layers_panel,
                                   GCallback new_callback,
                                   GCallback delete_callback,
                                   GCallback duplicate_callback,
-                                  gpointer user_data)
-{
-    GtkTreeSelection *selection;
+                                  gpointer user_data) {
+    GtkTreeSelection* selection;
 
     if (!layers_panel) {
         return;
@@ -1405,8 +1418,7 @@ void layers_panel_connect_buttons(LayersPanel *layers_panel,
 /**
  * Free a layers panel
  */
-void layers_panel_free(LayersPanel *layers_panel)
-{
+void layers_panel_free(LayersPanel* layers_panel) {
     if (!layers_panel) {
         return;
     }
@@ -1414,8 +1426,7 @@ void layers_panel_free(LayersPanel *layers_panel)
     if (layers_panel->accordion) {
         accordion_free(layers_panel->accordion);
     }
-    
+
     g_object_unref(layers_panel->store);
     g_free(layers_panel);
 }
-

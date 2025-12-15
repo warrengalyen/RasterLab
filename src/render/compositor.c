@@ -1,5 +1,6 @@
 #include "render/compositor.h"
 #include "render/layer.h"
+#include "render/mipmap.h"
 #include "render/tile.h"
 #include "ui/layers_panel.h"
 #include <stdio.h>
@@ -53,6 +54,13 @@ gboolean document_render_composite(ImageDocument* doc) {
 
     /* Set operator for proper alpha blending */
     cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+
+    /* Safety check: if document is being freed (layers is NULL), don't render */
+    if (!doc->layers) {
+        cairo_destroy(cr);
+        cairo_surface_flush(doc->composite_surface);
+        return FALSE;
+    }
 
     /* Track if this is the first visible layer */
     gboolean is_first_visible_layer = TRUE;
@@ -144,9 +152,9 @@ gboolean document_render_composite_dirty(ImageDocument* doc, const DirtyRect* di
     /* Clip dirty rect to document bounds */
     clipped_rect = *dirty_rect;
     dirty_rect_clamp(&clipped_rect, doc->width, doc->height);
-    
+
     if (dirty_rect_is_empty(&clipped_rect)) {
-        return TRUE;  /* Clipped to nothing */
+        return TRUE; /* Clipped to nothing */
     }
 
     dirty_left = clipped_rect.x;
@@ -163,6 +171,12 @@ gboolean document_render_composite_dirty(ImageDocument* doc, const DirtyRect* di
     cairo_set_operator(cr, CAIRO_OPERATOR_CLEAR);
     cairo_paint(cr);
     cairo_restore(cr);
+
+    /* Safety check: if document is being freed (layers is NULL), don't render */
+    if (!doc->layers) {
+        cairo_destroy(cr);
+        return TRUE; /* Nothing to render */
+    }
 
     /* Track if this is the first visible layer */
     gboolean is_first_visible_layer = TRUE;
@@ -214,13 +228,13 @@ gboolean document_render_composite_dirty(ImageDocument* doc, const DirtyRect* di
             op = blend_mode_to_cairo_operator(layer->blend_mode);
         }
         cairo_set_operator(cr, op);
-        
+
         /* OPTIMIZATION: For large layers with dirty cache, use source directly
            with opacity applied on-the-fly instead of regenerating entire cache.
            This is much faster for frequent updates during drawing. */
         guint layer_area = layer->width * layer->height;
-        const guint LARGE_LAYER_THRESHOLD = 1500 * 1500;  /* ~2.25 million pixels */
-        
+        const guint LARGE_LAYER_THRESHOLD = 1500 * 1500; /* ~2.25 million pixels */
+
         if (layer->cache_dirty && layer_area > LARGE_LAYER_THRESHOLD) {
             /* Use source surface directly with opacity - no cache needed for this render */
             cairo_set_source_surface(cr, layer->surface, layer_x, layer_y);
@@ -238,7 +252,7 @@ gboolean document_render_composite_dirty(ImageDocument* doc, const DirtyRect* di
             cairo_set_source_surface(cr, layer->cache_surface, layer_x, layer_y);
             cairo_paint(cr);
         }
-        
+
         cairo_restore(cr);
     }
 
@@ -269,27 +283,27 @@ cairo_surface_t* document_get_composite_surface(ImageDocument* doc) {
     if (!doc->composite_surface && doc->width > 0 && doc->height > 0) {
         doc->composite_surface = cairo_image_surface_create(
             CAIRO_FORMAT_ARGB32, doc->width, doc->height);
-        
+
         if (cairo_surface_status(doc->composite_surface) == CAIRO_STATUS_SUCCESS) {
             /* Copy from tiles if available, otherwise render */
             if (doc->tile_grid) {
                 /* Ensure all tiles are composited first */
                 tile_grid_composite(doc, doc->tile_grid);
-                
+
                 /* Copy tiles to composite surface */
-                cairo_t *cr = cairo_create(doc->composite_surface);
+                cairo_t* cr = cairo_create(doc->composite_surface);
                 gint tx, ty;
-                
+
                 for (ty = 0; ty < doc->tile_grid->tiles_y; ty++) {
                     for (tx = 0; tx < doc->tile_grid->tiles_x; tx++) {
-                        Tile *tile = &doc->tile_grid->tiles[ty][tx];
+                        Tile* tile = &doc->tile_grid->tiles[ty][tx];
                         if (tile && tile->surface) {
                             cairo_set_source_surface(cr, tile->surface, tile->px, tile->py);
                             cairo_paint(cr);
                         }
                     }
                 }
-                
+
                 cairo_destroy(cr);
                 cairo_surface_flush(doc->composite_surface);
             } else {
@@ -362,6 +376,13 @@ cairo_surface_t* document_export_composite_surface(ImageDocument* doc) {
             }
         }
     } else {
+        /* Safety check: if document is being freed (layers is NULL), don't render */
+        if (!doc->layers) {
+            cairo_destroy(cr);
+            cairo_surface_flush(export_surface);
+            return export_surface;
+        }
+
         /* Non-tile-based: composite all visible layers directly */
         for (iter = doc->layers; iter; iter = iter->next) {
             layer = (ImageLayer*)iter->data;
@@ -446,6 +467,13 @@ cairo_surface_t* document_generate_thumbnail_from_tiles(ImageDocument* doc, gint
     cairo_set_source(cr, dummy);
     cairo_pattern_destroy(dummy);
 
+    /* Safety check: if document is being freed (layers is NULL), don't render */
+    if (!doc->layers) {
+        cairo_destroy(cr);
+        cairo_surface_flush(thumb_surface);
+        return thumb_surface;
+    }
+
     /* Composite each visible layer directly at thumbnail scale */
     for (iter = doc->layers; iter; iter = iter->next) {
         layer = (ImageLayer*)iter->data;
@@ -493,7 +521,7 @@ cairo_surface_t* document_generate_thumbnail_from_tiles(ImageDocument* doc, gint
 
 /**
  * Render layers directly to a Cairo context at zoom scale
- * This avoids tile boundary artifacts by rendering layers directly instead of using tiles
+ * Uses mipmaps when zoomed out to avoid expensive scaling operations
  */
 void document_render_layers_at_zoom(ImageDocument* doc, cairo_t* cr,
                                     gint viewport_x, gint viewport_y,
@@ -501,8 +529,14 @@ void document_render_layers_at_zoom(ImageDocument* doc, cairo_t* cr,
     GList* iter;
     ImageLayer* layer;
     gboolean is_first_visible_layer = TRUE;
+    gdouble zoom_factor = doc ? doc->zoom_factor : 1.0;
 
     if (!doc || !cr) {
+        return;
+    }
+
+    /* Safety check: if document is being freed (layers is NULL), don't render */
+    if (!doc->layers) {
         return;
     }
 
@@ -530,15 +564,73 @@ void document_render_layers_at_zoom(ImageDocument* doc, cairo_t* cr,
             continue; /* Layer doesn't intersect viewport */
         }
 
-        /* Ensure layer cache is up to date */
-        if (!layer_ensure_cache(layer)) {
-            continue;
-        }
-
         cairo_save(cr);
 
         /* Translate to layer position */
         cairo_translate(cr, layer->offset_x, layer->offset_y);
+
+        /* Use mipmap if zoomed out */
+        if (zoom_factor < 1.0) {
+            /* Ensure mipmap pyramid exists and is valid */
+            if (!layer->mipmap_pyramid || !layer->mipmap_pyramid->levels) {
+                const gint tile_size = 128;
+                layer->mipmap_pyramid = mipmap_pyramid_create(layer->width, layer->height, tile_size);
+            }
+
+            /* Safety check: ensure pyramid is still valid before using it */
+            if (layer->mipmap_pyramid && layer->mipmap_pyramid->levels) {
+                /* Select appropriate mipmap level */
+                guint mip_level = mipmap_select_level(layer->mipmap_pyramid, zoom_factor);
+                MipmapLevel* level = mipmap_get_level(layer->mipmap_pyramid, mip_level);
+
+                /* Use cache surface (with opacity) for mipmap generation */
+                if (!layer_ensure_cache(layer)) {
+                    cairo_restore(cr);
+                    continue;
+                }
+
+                /* Safety check: ensure level is still valid and pyramid hasn't been freed */
+                if (level && layer->mipmap_pyramid && layer->mipmap_pyramid->levels &&
+                    mipmap_ensure_level(layer->mipmap_pyramid, mip_level, layer->cache_surface)) {
+                    /* Re-get level pointer after ensure_level (it might have changed) */
+                    level = mipmap_get_level(layer->mipmap_pyramid, mip_level);
+
+                    /* Use mipmap surface if available, otherwise use tile grid */
+                    if (level && level->surface) {
+                        /* Calculate scale to match zoom */
+                        gdouble mip_scale = zoom_factor / level->scale_factor;
+
+                        cairo_save(cr);
+                        cairo_scale(cr, mip_scale, mip_scale);
+                        cairo_set_source_surface(cr, level->surface, 0, 0);
+
+                        /* Set operator based on layer's blend mode */
+                        cairo_operator_t op;
+                        if (is_first_visible_layer) {
+                            op = CAIRO_OPERATOR_OVER;
+                            is_first_visible_layer = FALSE;
+                        } else {
+                            op = blend_mode_to_cairo_operator(layer->blend_mode);
+                        }
+                        cairo_set_operator(cr, op);
+
+                        /* Paint mipmap (opacity is already applied in cache_surface used for generation) */
+                        cairo_paint(cr);
+
+                        cairo_restore(cr);
+                        cairo_restore(cr);
+                        continue;
+                    }
+                }
+            }
+        }
+
+        /* Fallback to normal rendering (full resolution or mipmap unavailable) */
+        /* Ensure layer cache is up to date */
+        if (!layer_ensure_cache(layer)) {
+            cairo_restore(cr);
+            continue;
+        }
 
         /* Set source with bilinear filtering for smooth scaling */
         cairo_set_source_surface(cr, layer->cache_surface, 0, 0);

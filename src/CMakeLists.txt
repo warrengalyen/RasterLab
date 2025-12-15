@@ -120,6 +120,7 @@ set(SOURCES
     render/compositor.c
     render/dirty.c
     render/tile.c
+    render/mipmap.c
     app/recent_files.c
     app/autosave.c
     ${GRESOURCE_FILE}

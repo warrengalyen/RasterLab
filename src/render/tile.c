@@ -81,13 +81,19 @@ void tile_grid_free(TileGrid* grid) {
                 for (x = 0; x < grid->tiles_x; x++) {
                     Tile* tile = &grid->tiles[y][x];
                     if (tile->surface) {
-                        cairo_surface_destroy(tile->surface);
+                        /* Save surface pointer and destroy directly
+                         * Skip flush/finish to avoid crashes on invalid surfaces */
+                        cairo_surface_t* surface = tile->surface;
+                        tile->surface = NULL;
+                        cairo_surface_destroy(surface);
                     }
                 }
                 g_free(grid->tiles[y]);
+                grid->tiles[y] = NULL; /* Set to NULL after freeing */
             }
         }
         g_free(grid->tiles);
+        grid->tiles = NULL; /* Set to NULL after freeing */
     }
 
     g_free(grid);
@@ -191,6 +197,12 @@ static gboolean tile_composite(ImageDocument* doc, Tile* tile) {
 
     tile_right = tile->px + tile->w;
     tile_bottom = tile->py + tile->h;
+
+    /* Safety check: if document is being freed (layers is NULL), don't composite */
+    if (!doc->layers) {
+        cairo_destroy(cr);
+        return FALSE;
+    }
 
     /* Composite each visible layer that intersects this tile */
     for (iter = doc->layers; iter; iter = iter->next) {

@@ -878,6 +878,7 @@ static void filter_preview_init(FilterPreview* preview) {
     preview->update_sequence = 0;
     preview->force_update = FALSE;
 
+    /* Initialize mutex - must be done before any thread uses it */
     g_mutex_init(&preview->cache_mutex);
 
     preview->mode = FILTER_PREVIEW_MODE_FIT;
@@ -999,7 +1000,10 @@ static void filter_preview_dispose(GObject* object) {
         g_thread_join(thread);
     }
 
-    /* Clean up surfaces */
+    /* Clean up surfaces - lock mutex first to ensure no thread is accessing them
+     * This ensures the mutex is unlocked before we clear it */
+    g_mutex_lock(&preview->cache_mutex);
+
     if (preview->before_surface_full) {
         cairo_surface_destroy(preview->before_surface_full);
         preview->before_surface_full = NULL;
@@ -1015,6 +1019,10 @@ static void filter_preview_dispose(GObject* object) {
         preview->viewport_cache = NULL;
     }
 
+    /* Unlock mutex before clearing it - this ensures it's in an unlocked state */
+    g_mutex_unlock(&preview->cache_mutex);
+
+    /* Clear mutex - must be unlocked at this point */
     g_mutex_clear(&preview->cache_mutex);
 
     G_OBJECT_CLASS(filter_preview_parent_class)->dispose(object);
