@@ -1015,7 +1015,7 @@ static void on_artistic_film_grain(GtkWidget* widget, gpointer data) {
     controls[0].step = 1.0;
     controls[0].decimals = 0;
     controls[0].filter_min = 0.0;
-    controls[0].filter_max = 1.0;
+    controls[0].filter_max = 100.0;
 
     controls[1].type = FILTER_CONTROL_DOUBLE;
     controls[1].label = "softness";
