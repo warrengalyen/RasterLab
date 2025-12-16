@@ -27,6 +27,26 @@ typedef enum {
     BLEND_MODE_OVERLAY = 3,
 } BlendMode;
 
+/**
+ * Background type for new layers
+ */
+typedef enum {
+    LAYER_BACKGROUND_TRANSPARENT = 0, /* Transparent (default) */
+    LAYER_BACKGROUND_BLACK = 1,       /* Black */
+    LAYER_BACKGROUND_WHITE = 2,       /* White */
+    LAYER_BACKGROUND_CUSTOM = 3       /* Custom color */
+} LayerBackgroundType;
+
+/**
+ * Position for new layers in the layer stack
+ */
+typedef enum {
+    LAYER_POSITION_ABOVE_CURRENT = 0, /* Above current layer (default) */
+    LAYER_POSITION_BELOW_CURRENT = 1, /* Below current layer */
+    LAYER_POSITION_TOP = 2,           /* Top of layer stack */
+    LAYER_POSITION_BOTTOM = 3         /* Bottom of layer stack */
+} LayerPosition;
+
 /* Forward declaration */
 struct MipmapPyramid;
 typedef struct MipmapPyramid MipmapPyramid;
@@ -183,9 +203,16 @@ void document_invalidate_composite(ImageDocument* doc);
  * Add a new empty layer to the document
  * @param doc The document
  * @param name The layer name
+ * @param background Background type for the layer (default: LAYER_BACKGROUND_TRANSPARENT)
+ * @param position Position in layer stack (default: LAYER_POSITION_ABOVE_CURRENT)
+ * @param custom_color Custom color for background (only used if background is LAYER_BACKGROUND_CUSTOM)
+ *                     Format: RGBA as gdouble array [r, g, b, a] where values are 0.0-1.0
  * @return The newly created layer, or NULL on error
  */
-ImageLayer* document_add_layer(ImageDocument* doc, const gchar* name);
+ImageLayer* document_add_layer(ImageDocument* doc, const gchar* name,
+                               LayerBackgroundType background,
+                               LayerPosition position,
+                               const gdouble* custom_color);
 
 /**
  * Delete a layer from the document

@@ -1581,7 +1581,11 @@ static void on_layer_new(GtkWidget* widget, gpointer data) {
     static int layer_count = 1;
     gchar* layer_name = g_strdup_printf("Layer %d", layer_count++);
 
-    ImageLayer* new_layer = document_add_layer(doc, layer_name);
+    /* Use default values: transparent background, above current layer */
+    ImageLayer* new_layer = document_add_layer(doc, layer_name,
+                                               LAYER_BACKGROUND_TRANSPARENT,
+                                               LAYER_POSITION_ABOVE_CURRENT,
+                                               NULL);
     g_free(layer_name);
 
     if (new_layer) {

@@ -1,6 +1,8 @@
 #include "render/layer.h"
+#include "document.h"
 #include "render/compositor.h"
 #include "render/mipmap.h"
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -92,13 +94,95 @@ void layer_free(ImageLayer* layer) {
 }
 
 /**
+ * Fill layer surface with background color
+ */
+static void layer_fill_background(ImageLayer* layer, LayerBackgroundType background, const gdouble* custom_color) {
+    cairo_t* cr;
+    gdouble r, g, b, a;
+
+    if (!layer || !layer->surface) {
+        return;
+    }
+
+    cr = cairo_create(layer->surface);
+    if (!cr) {
+        return;
+    }
+
+    /* Determine color based on background type */
+    switch (background) {
+        case LAYER_BACKGROUND_TRANSPARENT:
+            r = 0.0;
+            g = 0.0;
+            b = 0.0;
+            a = 0.0;
+            break;
+        case LAYER_BACKGROUND_BLACK:
+            r = 0.0;
+            g = 0.0;
+            b = 0.0;
+            a = 1.0;
+            break;
+        case LAYER_BACKGROUND_WHITE:
+            r = 1.0;
+            g = 1.0;
+            b = 1.0;
+            a = 1.0;
+            break;
+        case LAYER_BACKGROUND_CUSTOM:
+            if (custom_color && custom_color[0] >= 0.0 && custom_color[0] <= 1.0 &&
+                custom_color[1] >= 0.0 && custom_color[1] <= 1.0 &&
+                custom_color[2] >= 0.0 && custom_color[2] <= 1.0 &&
+                custom_color[3] >= 0.0 && custom_color[3] <= 1.0) {
+                r = custom_color[0];
+                g = custom_color[1];
+                b = custom_color[2];
+                a = custom_color[3];
+            } else {
+                /* Fallback to transparent if custom color is invalid */
+                r = 0.0;
+                g = 0.0;
+                b = 0.0;
+                a = 0.0;
+            }
+            break;
+        default:
+            /* Default to transparent */
+            r = 0.0;
+            g = 0.0;
+            b = 0.0;
+            a = 0.0;
+            break;
+    }
+
+    /* Fill layer with background color */
+    cairo_set_source_rgba(cr, r, g, b, a);
+    cairo_paint(cr);
+    cairo_destroy(cr);
+}
+
+/**
  * Add a new empty layer to the document
  */
-ImageLayer* document_add_layer(ImageDocument* doc, const gchar* name) {
+ImageLayer* document_add_layer(ImageDocument* doc, const gchar* name,
+                               LayerBackgroundType background,
+                               LayerPosition position,
+                               const gdouble* custom_color) {
     ImageLayer* layer;
+    ImageLayer* reference_layer;
+    GList* iter;
+    gint pos;
 
     if (!doc || doc->width == 0 || doc->height == 0) {
         return NULL;
+    }
+
+    /* Use defaults if not specified */
+    if (background < LAYER_BACKGROUND_TRANSPARENT || background > LAYER_BACKGROUND_CUSTOM) {
+        background = LAYER_BACKGROUND_TRANSPARENT;
+    }
+    if (position < LAYER_POSITION_ABOVE_CURRENT || position > LAYER_POSITION_BOTTOM) {
+        position = LAYER_POSITION_ABOVE_CURRENT;
     }
 
     /* Create new layer with document dimensions */
@@ -108,8 +192,69 @@ ImageLayer* document_add_layer(ImageDocument* doc, const gchar* name) {
         return NULL;
     }
 
-    /* Add to top of layer stack */
-    doc->layers = g_list_append(doc->layers, layer);
+    /* Fill layer with background color */
+    layer_fill_background(layer, background, custom_color);
+
+    /* Determine insertion position */
+    switch (position) {
+        case LAYER_POSITION_TOP:
+            /* Add to top of layer stack (end of list) */
+            doc->layers = g_list_append(doc->layers, layer);
+            break;
+
+        case LAYER_POSITION_BOTTOM:
+            /* Add to bottom of layer stack (beginning of list) */
+            doc->layers = g_list_prepend(doc->layers, layer);
+            break;
+
+        case LAYER_POSITION_ABOVE_CURRENT:
+            /* Add above current/selected layer */
+            reference_layer = document_get_selected_layer(doc);
+            if (reference_layer) {
+                iter = g_list_find(doc->layers, reference_layer);
+                if (iter && iter->next) {
+                    /* Insert after reference layer */
+                    pos = g_list_position(doc->layers, iter);
+                    doc->layers = g_list_remove(doc->layers, layer);
+                    doc->layers = g_list_insert(doc->layers, layer, pos + 1);
+                } else if (iter) {
+                    /* Reference layer is at end, append */
+                    doc->layers = g_list_append(doc->layers, layer);
+                } else {
+                    /* Fallback: add to top */
+                    doc->layers = g_list_append(doc->layers, layer);
+                }
+            } else {
+                /* No selected layer: add to top */
+                doc->layers = g_list_append(doc->layers, layer);
+            }
+            break;
+
+        case LAYER_POSITION_BELOW_CURRENT:
+            /* Add below current/selected layer */
+            reference_layer = document_get_selected_layer(doc);
+            if (reference_layer) {
+                iter = g_list_find(doc->layers, reference_layer);
+                if (iter) {
+                    /* Insert before reference layer */
+                    pos = g_list_position(doc->layers, iter);
+                    doc->layers = g_list_remove(doc->layers, layer);
+                    doc->layers = g_list_insert(doc->layers, layer, pos);
+                } else {
+                    /* Fallback: add to bottom */
+                    doc->layers = g_list_prepend(doc->layers, layer);
+                }
+            } else {
+                /* No selected layer: add to bottom */
+                doc->layers = g_list_prepend(doc->layers, layer);
+            }
+            break;
+
+        default:
+            /* Default: add to top */
+            doc->layers = g_list_append(doc->layers, layer);
+            break;
+    }
 
     /* Mark composite as needing re-render */
     document_invalidate_composite(doc);
