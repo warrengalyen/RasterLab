@@ -4,13 +4,17 @@
 #include <gdk/gdk.h>
 #include <stdio.h>
 
+/* Forward declaration */
+typedef struct AppContext AppContext;
+extern void ui_update_status_bar(AppContext* ctx, ImageDocument* doc);
+
 /**
  * Zoom tool: mouse down - zoom in on left click, zoom out on right click
  */
 static void zoom_tool_mouse_down(Tool* tool, struct ImageDocument* doc, MouseEvent* event) {
-    (void)tool; /* Unused */
+    AppContext* ctx;
 
-    if (!doc) {
+    if (!doc || !tool) {
         return;
     }
 
@@ -21,6 +25,12 @@ static void zoom_tool_mouse_down(Tool* tool, struct ImageDocument* doc, MouseEve
     /* Secondary button (right click) = zoom out */
     else if (event->button == 3) {
         document_zoom_out(doc);
+    }
+
+    /* Update statusbar after zoom change */
+    ctx = (AppContext*)tool->app_context;
+    if (ctx) {
+        ui_update_status_bar(ctx, doc);
     }
 }
 
