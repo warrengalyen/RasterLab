@@ -15,6 +15,9 @@
 typedef struct AppContext AppContext;
 static void on_scroll_adjustment_changed(GtkAdjustment* adjustment, gpointer user_data);
 static void on_scrolled_window_adjustment_notify(GObject* object, GParamSpec* pspec, gpointer user_data);
+static gboolean on_viewport_button_press(GtkWidget* widget, GdkEventButton* event, gpointer user_data);
+static gboolean on_viewport_button_release(GtkWidget* widget, GdkEventButton* event, gpointer user_data);
+static gboolean on_viewport_motion_notify(GtkWidget* widget, GdkEventMotion* event, gpointer user_data);
 
 /**
  * Callback for scroll adjustment changes - triggers redraw
@@ -369,6 +372,167 @@ static gboolean on_drawing_area_enter_notify(GtkWidget* widget, GdkEventCrossing
 }
 
 /**
+ * Viewport button press callback - for hand tool panning anywhere in viewport
+ */
+static gboolean on_viewport_button_press(GtkWidget* widget, GdkEventButton* event, gpointer user_data) {
+    ImageDocument* doc = (ImageDocument*)user_data;
+    ToolRegistry* tool_registry = NULL;
+    Tool* active_tool = NULL;
+    MouseEvent tool_event;
+
+    (void)widget; /* Unused */
+
+    /* Safety check */
+    if (!doc || !doc->drawing_area || !doc->scrolled_window) {
+        return FALSE;
+    }
+
+    /* Get tool registry from drawing area data */
+    tool_registry = (ToolRegistry*)g_object_get_data(G_OBJECT(doc->drawing_area), "tool_registry");
+    if (!tool_registry) {
+        return FALSE;
+    }
+
+    /* Get active tool */
+    active_tool = tool_manager_get_active(tool_registry);
+    if (!active_tool || active_tool->type != TOOL_HAND || !active_tool->mouse_down) {
+        return FALSE; /* Only handle hand tool */
+    }
+
+    /* For hand tool, we need to convert viewport coordinates to drawing area coordinates */
+    /* Get drawing area allocation to calculate relative position */
+    GtkAllocation drawing_alloc;
+    gtk_widget_get_allocation(doc->drawing_area, &drawing_alloc);
+
+    /* Get viewport allocation */
+    GtkAllocation viewport_alloc;
+    gtk_widget_get_allocation(widget, &viewport_alloc);
+
+    /* Calculate drawing area position relative to viewport */
+    gint drawing_x_in_viewport = drawing_alloc.x;
+    gint drawing_y_in_viewport = drawing_alloc.y;
+
+    /* Convert event coordinates (relative to viewport) to drawing area coordinates */
+    gdouble widget_x = event->x - drawing_x_in_viewport;
+    gdouble widget_y = event->y - drawing_y_in_viewport;
+
+    /* Convert to image coordinates */
+    widget_to_image_coords(doc, widget_x, widget_y, &tool_event.x, &tool_event.y);
+
+    tool_event.button = event->button;
+    tool_event.state = event->state;
+
+    /* Call tool handler */
+    active_tool->mouse_down(active_tool, doc, &tool_event);
+
+    return TRUE;
+}
+
+/**
+ * Viewport button release callback - for hand tool panning
+ */
+static gboolean on_viewport_button_release(GtkWidget* widget, GdkEventButton* event, gpointer user_data) {
+    ImageDocument* doc = (ImageDocument*)user_data;
+    ToolRegistry* tool_registry = NULL;
+    Tool* active_tool = NULL;
+    MouseEvent tool_event;
+
+    (void)widget; /* Unused */
+
+    /* Safety check */
+    if (!doc || !doc->drawing_area || !doc->scrolled_window) {
+        return FALSE;
+    }
+
+    /* Get tool registry from drawing area data */
+    tool_registry = (ToolRegistry*)g_object_get_data(G_OBJECT(doc->drawing_area), "tool_registry");
+    if (!tool_registry) {
+        return FALSE;
+    }
+
+    /* Get active tool */
+    active_tool = tool_manager_get_active(tool_registry);
+    if (!active_tool || active_tool->type != TOOL_HAND || !active_tool->mouse_up) {
+        return FALSE; /* Only handle hand tool */
+    }
+
+    /* Convert viewport coordinates to drawing area coordinates */
+    GtkAllocation drawing_alloc;
+    gtk_widget_get_allocation(doc->drawing_area, &drawing_alloc);
+
+    GtkAllocation viewport_alloc;
+    gtk_widget_get_allocation(widget, &viewport_alloc);
+
+    gint drawing_x_in_viewport = drawing_alloc.x;
+    gint drawing_y_in_viewport = drawing_alloc.y;
+
+    gdouble widget_x = event->x - drawing_x_in_viewport;
+    gdouble widget_y = event->y - drawing_y_in_viewport;
+
+    widget_to_image_coords(doc, widget_x, widget_y, &tool_event.x, &tool_event.y);
+
+    tool_event.button = event->button;
+    tool_event.state = event->state;
+
+    /* Call tool handler */
+    active_tool->mouse_up(active_tool, doc, &tool_event);
+
+    return TRUE;
+}
+
+/**
+ * Viewport motion notify callback - for hand tool panning
+ */
+static gboolean on_viewport_motion_notify(GtkWidget* widget, GdkEventMotion* event, gpointer user_data) {
+    ImageDocument* doc = (ImageDocument*)user_data;
+    ToolRegistry* tool_registry = NULL;
+    Tool* active_tool = NULL;
+    MouseEvent tool_event;
+
+    (void)widget; /* Unused */
+
+    /* Safety check */
+    if (!doc || !doc->drawing_area || !doc->scrolled_window) {
+        return FALSE;
+    }
+
+    /* Get tool registry from drawing area data */
+    tool_registry = (ToolRegistry*)g_object_get_data(G_OBJECT(doc->drawing_area), "tool_registry");
+    if (!tool_registry) {
+        return FALSE;
+    }
+
+    /* Get active tool */
+    active_tool = tool_manager_get_active(tool_registry);
+    if (!active_tool || active_tool->type != TOOL_HAND || !active_tool->mouse_move) {
+        return FALSE; /* Only handle hand tool */
+    }
+
+    /* Convert viewport coordinates to drawing area coordinates */
+    GtkAllocation drawing_alloc;
+    gtk_widget_get_allocation(doc->drawing_area, &drawing_alloc);
+
+    GtkAllocation viewport_alloc;
+    gtk_widget_get_allocation(widget, &viewport_alloc);
+
+    gint drawing_x_in_viewport = drawing_alloc.x;
+    gint drawing_y_in_viewport = drawing_alloc.y;
+
+    gdouble widget_x = event->x - drawing_x_in_viewport;
+    gdouble widget_y = event->y - drawing_y_in_viewport;
+
+    widget_to_image_coords(doc, widget_x, widget_y, &tool_event.x, &tool_event.y);
+
+    tool_event.button = 0; /* No button pressed during motion */
+    tool_event.state = event->state;
+
+    /* Call tool handler */
+    active_tool->mouse_move(active_tool, doc, &tool_event);
+
+    return TRUE;
+}
+
+/**
  * Create a new image document
  */
 ImageDocument* document_new(const gchar* filename) {
@@ -517,6 +681,21 @@ GtkWidget* document_create_drawing_area(ImageDocument* doc) {
                      G_CALLBACK(on_drawing_area_motion_notify), doc);
     g_signal_connect(drawing_area, "enter-notify-event",
                      G_CALLBACK(on_drawing_area_enter_notify), doc);
+
+    /* Enable mouse events on viewport for hand tool panning */
+    gtk_widget_set_events(viewport,
+                          gtk_widget_get_events(viewport) |
+                              GDK_BUTTON_PRESS_MASK |
+                              GDK_BUTTON_RELEASE_MASK |
+                              GDK_POINTER_MOTION_MASK);
+
+    /* Connect viewport mouse events for hand tool */
+    g_signal_connect(viewport, "button-press-event",
+                     G_CALLBACK(on_viewport_button_press), doc);
+    g_signal_connect(viewport, "button-release-event",
+                     G_CALLBACK(on_viewport_button_release), doc);
+    g_signal_connect(viewport, "motion-notify-event",
+                     G_CALLBACK(on_viewport_motion_notify), doc);
 
     /* Store references in document */
     doc->drawing_area = drawing_area;

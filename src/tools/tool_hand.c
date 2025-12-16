@@ -9,8 +9,8 @@
  */
 typedef struct {
     gboolean is_dragging;     /* Currently dragging? */
-    gdouble start_x;          /* Mouse down position X in image coordinates */
-    gdouble start_y;          /* Mouse down position Y in image coordinates */
+    gdouble start_x;          /* Mouse down position X in widget/viewport coordinates */
+    gdouble start_y;          /* Mouse down position Y in widget/viewport coordinates */
     gdouble start_hadj_value; /* Horizontal adjustment value at drag start */
     gdouble start_vadj_value; /* Vertical adjustment value at drag start */
 } HandToolState;
@@ -45,9 +45,10 @@ static void hand_tool_mouse_down(Tool* tool, struct ImageDocument* doc, MouseEve
 
     /* Start dragging */
     state->is_dragging = TRUE;
-    /* Store start position in image coordinates */
-    state->start_x = (gdouble)event->x;
-    state->start_y = (gdouble)event->y;
+    /* Store start position in widget coordinates (for panning, we work in widget space) */
+    /* Convert image coordinates to widget coordinates */
+    state->start_x = (gdouble)event->x * doc->zoom_factor;
+    state->start_y = (gdouble)event->y * doc->zoom_factor;
     state->start_hadj_value = gtk_adjustment_get_value(hadj);
     state->start_vadj_value = gtk_adjustment_get_value(vadj);
 
@@ -101,13 +102,14 @@ static void hand_tool_mouse_move(Tool* tool, struct ImageDocument* doc, MouseEve
         return;
     }
 
-    /* Calculate delta in image coordinates (to avoid rounding errors from double conversion) */
-    gdouble delta_image_x = state->start_x - (gdouble)event->x;
-    gdouble delta_image_y = state->start_y - (gdouble)event->y;
+    /* Calculate delta in widget coordinates */
+    /* Convert current position from image coordinates to widget coordinates */
+    gdouble current_x = (gdouble)event->x * doc->zoom_factor;
+    gdouble current_y = (gdouble)event->y * doc->zoom_factor;
 
-    /* Convert delta to widget coordinates for adjustments */
-    delta_x = delta_image_x * doc->zoom_factor;
-    delta_y = delta_image_y * doc->zoom_factor;
+    /* Calculate delta in widget space (inverted because we're panning) */
+    delta_x = state->start_x - current_x;
+    delta_y = state->start_y - current_y;
 
     /* Calculate new adjustment values (add delta to start position) */
     new_hadj_value = state->start_hadj_value + delta_x;
