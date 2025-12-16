@@ -3,8 +3,8 @@
 #include "render/compositor.h"
 #include "render/dirty.h"
 #include "render/layer.h"
-#include "tool_fill.h"
 #include "tool_options.h"
+#include "tools/tool_fill.h"
 #include "ui/tools_panel.h"
 #include <glib.h>
 #include <math.h>

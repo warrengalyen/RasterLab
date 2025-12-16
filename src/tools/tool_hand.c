@@ -1,4 +1,4 @@
-#include "tool_hand.h"
+#include "tools/tool_hand.h"
 #include "document.h"
 #include <gdk/gdk.h>
 #include <gtk/gtk.h>

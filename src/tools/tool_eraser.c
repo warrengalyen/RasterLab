@@ -1,4 +1,4 @@
-#include "tool_eraser.h"
+#include "tools/tool_eraser.h"
 #include "command.h"
 #include "document.h"
 #include "render/compositor.h"

@@ -1,4 +1,4 @@
-#include "tool_brush.h"
+#include "tools/tool_brush.h"
 #include "command.h"
 #include "document.h"
 #include "render/compositor.h"

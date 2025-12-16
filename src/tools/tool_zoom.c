@@ -1,4 +1,4 @@
-#include "tool_zoom.h"
+#include "tools/tool_zoom.h"
 #include "document.h"
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <gdk/gdk.h>

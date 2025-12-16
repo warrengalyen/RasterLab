@@ -1,4 +1,4 @@
-#include "tool_move.h"
+#include "tools/tool_move.h"
 #include "command.h"
 #include "document.h"
 #include "render/compositor.h"

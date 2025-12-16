@@ -1,11 +1,12 @@
 #include "tool_manager.h"
-#include "tool_brush.h"
-#include "tool_eraser.h"
-#include "tool_fill.h"
-#include "tool_hand.h"
-#include "tool_move.h"
 #include "tool_options.h"
-#include "tool_zoom.h"
+#include "tools/tool_brush.h"
+#include "tools/tool_eraser.h"
+#include "tools/tool_fill.h"
+#include "tools/tool_hand.h"
+#include "tools/tool_move.h"
+#include "tools/tool_zoom.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 
