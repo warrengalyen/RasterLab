@@ -66,6 +66,7 @@ set(SOURCES
     ui/tool_options_panel.c
     ui/layers_panel.c
     filters/filters.c
+    ui/filters/filter_utils.c
     ui/filters/filter_grayscale.c
     ui/filters/filter_vibrance.c
     ui/filters/filter_whitebalance.c

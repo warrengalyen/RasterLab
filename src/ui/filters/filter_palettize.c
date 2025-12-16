@@ -1,6 +1,7 @@
 #include "ui/filters/filter_palettize.h"
 #include "filters.h"
 #include "ocular.h"
+#include "ui/filters/filter_utils.h"
 #include <glib.h>
 #include <string.h>
 
@@ -8,10 +9,7 @@
  * Apply palettize filter to a layer using Ocular library
  */
 gboolean filter_palettize_apply(ImageLayer* layer, const PalettizeParams* params) {
-    cairo_surface_t* surface;
-    gint width, height;
-    guchar* rgba_input;
-    guchar* rgba_output;
+    FilterRGBABuffers buffers;
     OC_STATUS status;
     gint channels = 4; /* RGBA format for Ocular (supports 3 or 4 channels) */
 
@@ -19,29 +17,14 @@ gboolean filter_palettize_apply(ImageLayer* layer, const PalettizeParams* params
         return FALSE;
     }
 
-    surface = layer->surface;
-
-    /* Validate surface and get dimensions */
-    if (!adjustments_validate_surface(surface, &width, &height)) {
-        return FALSE;
-    }
-
-    /* Allocate buffers for RGBA input and output */
-    rgba_input = (guchar*)g_malloc(width * height * 4);
-    rgba_output = (guchar*)g_malloc(width * height * 4);
-
-    if (!rgba_input || !rgba_output) {
-        g_warning("Palettize filter: Failed to allocate memory");
-        g_free(rgba_input);
-        g_free(rgba_output);
+    /* Allocate and initialize RGBA buffers */
+    if (!filter_utils_allocate_rgba_buffers(layer->surface, &buffers, "Palettize filter")) {
         return FALSE;
     }
 
     /* Convert from Cairo ARGB32 to RGBA */
-    if (!adjustments_cairo_to_rgba(surface, rgba_input)) {
-        g_warning("Palettize filter: Failed to convert surface to RGBA");
-        g_free(rgba_input);
-        g_free(rgba_output);
+    if (!filter_utils_cairo_to_rgba(layer->surface, &buffers, "Palettize filter")) {
+        filter_utils_free_rgba_buffers(&buffers);
         return FALSE;
     }
 
@@ -49,20 +32,20 @@ gboolean filter_palettize_apply(ImageLayer* layer, const PalettizeParams* params
        Input and output: RGBA format (Channels = 4) */
     if (params->use_file && params->palette_file) {
         status = ocularPalettetizeFromFile(
-            rgba_input,
-            rgba_output,
-            width,
-            height,
+            buffers.rgba_input,
+            buffers.rgba_output,
+            buffers.width,
+            buffers.height,
             channels,
             params->palette_file,
             params->dither_method,
             params->dither_amount);
     } else {
         status = ocularPalettetizeFromImage(
-            rgba_input,
-            rgba_output,
-            width,
-            height,
+            buffers.rgba_input,
+            buffers.rgba_output,
+            buffers.width,
+            buffers.height,
             channels,
             params->quantize_method,
             params->max_colors,
@@ -72,22 +55,18 @@ gboolean filter_palettize_apply(ImageLayer* layer, const PalettizeParams* params
 
     if (status != OC_STATUS_OK) {
         g_warning("Palettize filter: Ocular filter returned error %d", status);
-        g_free(rgba_input);
-        g_free(rgba_output);
+        filter_utils_free_rgba_buffers(&buffers);
         return FALSE;
     }
 
     /* Convert back from RGBA to Cairo ARGB32 */
-    if (!adjustments_rgba_to_cairo(surface, rgba_output)) {
-        g_warning("Palettize filter: Failed to convert RGBA to surface");
-        g_free(rgba_input);
-        g_free(rgba_output);
+    if (!filter_utils_rgba_to_cairo(layer->surface, &buffers, "Palettize filter")) {
+        filter_utils_free_rgba_buffers(&buffers);
         return FALSE;
     }
 
     /* Free temporary buffers */
-    g_free(rgba_input);
-    g_free(rgba_output);
+    filter_utils_free_rgba_buffers(&buffers);
 
     return TRUE;
 }

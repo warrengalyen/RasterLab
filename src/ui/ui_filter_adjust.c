@@ -1055,8 +1055,8 @@ static gboolean on_monochrome_preview_update(FilterDialog* dialog,
     filter_values[3] = (gfloat)values[3]; /* intensity (0-100) */
 
     /* Set up viewport-based filter */
-    setup_viewport_filter(dialog, (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_monochrome_apply,
-                          filter_values, 4);
+    ui_filter_utils_setup_viewport_filter(dialog, (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_monochrome_apply,
+                                          filter_values, 4);
 
     return TRUE;
 }
@@ -1137,8 +1137,8 @@ static gboolean on_chroma_key_preview_update(FilterDialog* dialog,
     filter_values[4] = (gfloat)scaled_smoothing; /* smoothing (0.0-1.0) */
 
     /* Set up viewport-based filter */
-    setup_viewport_filter(dialog, (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_chroma_key_apply,
-                          filter_values, 5);
+    ui_filter_utils_setup_viewport_filter(dialog, (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_chroma_key_apply,
+                                          filter_values, 5);
 
     return TRUE;
 }
@@ -1228,8 +1228,8 @@ static gboolean on_posterize_preview_update(FilterDialog* dialog,
     filter_values[0] = (gfloat)values[0]; /* levels */
 
     /* Set up viewport-based filter */
-    setup_viewport_filter(dialog, (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_posterize_apply,
-                          filter_values, 1);
+    ui_filter_utils_setup_viewport_filter(dialog, (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_posterize_apply,
+                                          filter_values, 1);
 
     return TRUE;
 }
@@ -1287,8 +1287,8 @@ static gboolean on_threshold_preview_update(FilterDialog* dialog,
     filter_values[0] = (gfloat)values[0]; /* threshold (0.0-1.0) */
 
     /* Set up viewport-based filter */
-    setup_viewport_filter(dialog, (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_luminance_threshold_apply,
-                          filter_values, 1);
+    ui_filter_utils_setup_viewport_filter(dialog, (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_luminance_threshold_apply,
+                                          filter_values, 1);
 
     return TRUE;
 }
@@ -1359,8 +1359,8 @@ static gboolean on_shadows_highlights_tint_preview_update(FilterDialog* dialog,
     filter_values[7] = (gfloat)values[7]; /* highlightIntensity */
 
     /* Set up viewport-based filter */
-    setup_viewport_filter(dialog, (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_highlight_shadow_tint_apply,
-                          filter_values, 8);
+    ui_filter_utils_setup_viewport_filter(dialog, (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_highlight_shadow_tint_apply,
+                                          filter_values, 8);
 
     return TRUE;
 }

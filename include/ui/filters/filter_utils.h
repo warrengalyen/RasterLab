@@ -1,0 +1,108 @@
+#ifndef FILTER_UTILS_H
+#define FILTER_UTILS_H
+
+#include "render/layer.h"
+#include <cairo.h>
+#include <glib.h>
+
+/**
+ * Structure to hold RGB buffers for filter processing
+ */
+typedef struct {
+    guchar* rgb_input;
+    guchar* rgb_output;
+    gint width;
+    gint height;
+    gint stride;
+} FilterRGBBuffers;
+
+/**
+ * Structure to hold RGBA buffers for filter processing
+ */
+typedef struct {
+    guchar* rgba_input;
+    guchar* rgba_output;
+    gint width;
+    gint height;
+    gint stride;
+} FilterRGBABuffers;
+
+/**
+ * Allocate and initialize RGB buffers for filter processing
+ * @param surface The Cairo surface to process
+ * @param buffers Output structure to hold allocated buffers
+ * @param filter_name Name of the filter (for error messages)
+ * @return TRUE if successful, FALSE otherwise
+ */
+gboolean filter_utils_allocate_rgb_buffers(cairo_surface_t* surface,
+                                           FilterRGBBuffers* buffers,
+                                           const gchar* filter_name);
+
+/**
+ * Free RGB buffers allocated by filter_utils_allocate_rgb_buffers
+ * @param buffers The buffers structure to free
+ */
+void filter_utils_free_rgb_buffers(FilterRGBBuffers* buffers);
+
+/**
+ * Allocate and initialize RGBA buffers for filter processing
+ * @param surface The Cairo surface to process
+ * @param buffers Output structure to hold allocated buffers
+ * @param filter_name Name of the filter (for error messages)
+ * @return TRUE if successful, FALSE otherwise
+ */
+gboolean filter_utils_allocate_rgba_buffers(cairo_surface_t* surface,
+                                            FilterRGBABuffers* buffers,
+                                            const gchar* filter_name);
+
+/**
+ * Free RGBA buffers allocated by filter_utils_allocate_rgba_buffers
+ * @param buffers The buffers structure to free
+ */
+void filter_utils_free_rgba_buffers(FilterRGBABuffers* buffers);
+
+/**
+ * Convert Cairo surface to RGB and prepare buffers for filter processing
+ * @param surface The Cairo surface to convert
+ * @param buffers Pre-allocated RGB buffers
+ * @param filter_name Name of the filter (for error messages)
+ * @return TRUE if successful, FALSE otherwise
+ */
+gboolean filter_utils_cairo_to_rgb(cairo_surface_t* surface,
+                                   FilterRGBBuffers* buffers,
+                                   const gchar* filter_name);
+
+/**
+ * Convert RGB buffer back to Cairo surface after filter processing
+ * @param surface The Cairo surface to update
+ * @param buffers RGB buffers containing processed data
+ * @param filter_name Name of the filter (for error messages)
+ * @return TRUE if successful, FALSE otherwise
+ */
+gboolean filter_utils_rgb_to_cairo(cairo_surface_t* surface,
+                                   FilterRGBBuffers* buffers,
+                                   const gchar* filter_name);
+
+/**
+ * Convert Cairo surface to RGBA and prepare buffers for filter processing
+ * @param surface The Cairo surface to convert
+ * @param buffers Pre-allocated RGBA buffers
+ * @param filter_name Name of the filter (for error messages)
+ * @return TRUE if successful, FALSE otherwise
+ */
+gboolean filter_utils_cairo_to_rgba(cairo_surface_t* surface,
+                                    FilterRGBABuffers* buffers,
+                                    const gchar* filter_name);
+
+/**
+ * Convert RGBA buffer back to Cairo surface after filter processing
+ * @param surface The Cairo surface to update
+ * @param buffers RGBA buffers containing processed data
+ * @param filter_name Name of the filter (for error messages)
+ * @return TRUE if successful, FALSE otherwise
+ */
+gboolean filter_utils_rgba_to_cairo(cairo_surface_t* surface,
+                                    FilterRGBABuffers* buffers,
+                                    const gchar* filter_name);
+
+#endif /* FILTER_UTILS_H */

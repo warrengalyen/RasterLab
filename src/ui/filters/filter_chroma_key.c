@@ -1,28 +1,19 @@
 #include "ui/filters/filter_chroma_key.h"
 #include "filters.h"
 #include "ocular.h"
+#include "ui/filters/filter_utils.h"
 #include <glib.h>
 
 /**
  * Apply chroma key filter to a layer using Ocular library
  */
 gboolean filter_chroma_key_apply(ImageLayer* layer, const gfloat* values, gint num_values) {
-    cairo_surface_t* surface;
-    gint width, height;
-    guchar* rgba_input;
-    guchar* rgba_output;
+    FilterRGBABuffers buffers;
     OC_STATUS status;
     guchar color_r, color_g, color_b;
     gfloat threshold, smoothing;
 
     if (!layer || !layer->surface || !values || num_values < 5) {
-        return FALSE;
-    }
-
-    surface = layer->surface;
-
-    /* Validate surface and get dimensions */
-    if (!adjustments_validate_surface(surface, &width, &height)) {
         return FALSE;
     }
 
@@ -33,49 +24,38 @@ gboolean filter_chroma_key_apply(ImageLayer* layer, const gfloat* values, gint n
     threshold = values[3];
     smoothing = values[4];
 
-    /* Allocate buffers for RGBA input and output */
-    rgba_input = (guchar*)g_malloc(width * height * 4);
-    rgba_output = (guchar*)g_malloc(width * height * 4);
-
-    if (!rgba_input || !rgba_output) {
-        g_warning("Chroma key filter: Failed to allocate memory");
-        g_free(rgba_input);
-        g_free(rgba_output);
+    /* Allocate and initialize RGBA buffers */
+    if (!filter_utils_allocate_rgba_buffers(layer->surface, &buffers, "Chroma key filter")) {
         return FALSE;
     }
 
     /* Convert from Cairo ARGB32 to RGBA */
-    if (!adjustments_cairo_to_rgba(surface, rgba_input)) {
-        g_warning("Chroma key filter: Failed to convert surface to RGBA");
-        g_free(rgba_input);
-        g_free(rgba_output);
+    if (!filter_utils_cairo_to_rgba(layer->surface, &buffers, "Chroma key filter")) {
+        filter_utils_free_rgba_buffers(&buffers);
         return FALSE;
     }
 
     /* Apply chroma key filter using Ocular library
        Input and output: RGBA format (4 channels, Stride = width * 4)
        This allows the filter to modify the alpha channel for transparency */
-    status = ocularChromaKeyFilter(rgba_input, rgba_output, width, height, width * 4,
+    status = ocularChromaKeyFilter(buffers.rgba_input, buffers.rgba_output,
+                                   buffers.width, buffers.height, buffers.stride,
                                    color_r, color_g, color_b, threshold, smoothing);
 
     if (status != OC_STATUS_OK) {
         g_warning("Chroma key filter: Ocular filter returned error %d", status);
-        g_free(rgba_input);
-        g_free(rgba_output);
+        filter_utils_free_rgba_buffers(&buffers);
         return FALSE;
     }
 
     /* Convert back from RGBA to Cairo ARGB32 */
-    if (!adjustments_rgba_to_cairo(surface, rgba_output)) {
-        g_warning("Chroma key filter: Failed to convert RGBA to surface");
-        g_free(rgba_input);
-        g_free(rgba_output);
+    if (!filter_utils_rgba_to_cairo(layer->surface, &buffers, "Chroma key filter")) {
+        filter_utils_free_rgba_buffers(&buffers);
         return FALSE;
     }
 
     /* Free temporary buffers */
-    g_free(rgba_input);
-    g_free(rgba_output);
+    filter_utils_free_rgba_buffers(&buffers);
 
     return TRUE;
 }

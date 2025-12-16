@@ -64,10 +64,10 @@ gboolean ui_filter_utils_copy_layer_surface(ImageLayer* dest_layer, ImageLayer* 
  * @param filter_values Array of filter parameter values
  * @param num_values Number of values
  */
-void setup_viewport_filter(FilterDialog* dialog,
-                           gboolean (*filter_func)(ImageLayer*, const gfloat*, gint),
-                           const gfloat* filter_values,
-                           gint num_values);
+void ui_filter_utils_setup_viewport_filter(FilterDialog* dialog,
+                                           gboolean (*filter_func)(ImageLayer*, const gfloat*, gint),
+                                           const gfloat* filter_values,
+                                           gint num_values);
 
 /**
  * Apply filter with command, timing, and document updates
