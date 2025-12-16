@@ -6,6 +6,7 @@
 #include "render/tile.h"
 #include "tool_manager.h"
 #include "tools.h"
+#include "ui/layers_panel.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -24,12 +25,19 @@ static gboolean on_viewport_motion_notify(GtkWidget* widget, GdkEventMotion* eve
  */
 static void on_scroll_adjustment_changed(GtkAdjustment* adjustment, gpointer user_data) {
     ImageDocument* doc = (ImageDocument*)user_data;
+    LayersPanel* layers_panel;
 
     (void)adjustment; /* Unused */
 
     if (doc && doc->drawing_area) {
         /* Invalidate the entire drawing area to trigger redraw */
         gtk_widget_queue_draw(doc->drawing_area);
+
+        /* Update overview widget selection rectangle when scrolling */
+        layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(doc->drawing_area), "layers_panel");
+        if (layers_panel && layers_panel->overview_widget && layers_panel->current_doc == doc) {
+            gtk_widget_queue_draw(layers_panel->overview_widget);
+        }
     }
 }
 
