@@ -40,6 +40,7 @@ set(SOURCES
     ui/ui_filter.c
     ui/ui_filter_adjust.c
     ui/ui_filter_effects.c
+    ui/ui_filter_utils.c
     document.c
     panels.c
     ui/widgets/accordion.c

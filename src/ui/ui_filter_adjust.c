@@ -37,126 +37,11 @@
 #include "ui/filters/filter_vibrance.h"
 #include "ui/filters/filter_whitebalance.h"
 #include "ui/ui_filter.h"
+#include "ui/ui_filter_utils.h"
 #include "ui/widgets/filter_dialog.h"
 #include <glib.h>
 
-/**
- * Filter function wrapper data structure
- */
-typedef struct {
-    gboolean (*filter_apply_func)(ImageLayer* layer, const gfloat* values, gint num_values);
-    gfloat* filter_values;
-    gint num_values;
-} FilterWrapperData;
-
-/* Forward declaration */
-static cairo_surface_t* apply_filter_to_viewport_surface(cairo_surface_t* viewport_surface, gpointer params);
-
-/**
- * Free function for filter wrapper data
- */
-static void free_filter_wrapper_data(gpointer data) {
-    FilterWrapperData* wrapper_data = (FilterWrapperData*)data;
-    if (wrapper_data) {
-        if (wrapper_data->filter_values) {
-            g_free(wrapper_data->filter_values);
-        }
-        g_free(wrapper_data);
-    }
-}
-
-/**
- * Helper function to set up viewport-based filter for preview
- * This replaces the old approach of applying filters to full layers
- */
-static void setup_viewport_filter(FilterDialog* dialog,
-                                  gboolean (*filter_func)(ImageLayer*, const gfloat*, gint),
-                                  const gfloat* filter_values,
-                                  gint num_values) {
-    FilterWrapperData* wrapper_data;
-    FilterPreview* preview;
-
-    if (!dialog || !filter_func || !filter_values || num_values <= 0) {
-        return;
-    }
-
-    preview = filter_dialog_get_preview(dialog);
-    if (!preview) {
-        return;
-    }
-
-    /* Get or create wrapper data */
-    wrapper_data = (FilterWrapperData*)g_object_get_data(G_OBJECT(filter_dialog_get_window(dialog)), "filter_wrapper_data");
-
-    if (!wrapper_data || wrapper_data->num_values != num_values) {
-        /* Free old wrapper data if it exists */
-        if (wrapper_data) {
-            free_filter_wrapper_data(wrapper_data);
-        }
-
-        /* Create new wrapper data */
-        wrapper_data = g_malloc(sizeof(FilterWrapperData));
-        wrapper_data->filter_apply_func = filter_func;
-        wrapper_data->filter_values = g_malloc(sizeof(gfloat) * num_values);
-        wrapper_data->num_values = num_values;
-        g_object_set_data_full(G_OBJECT(filter_dialog_get_window(dialog)), "filter_wrapper_data",
-                               wrapper_data, (GDestroyNotify)free_filter_wrapper_data);
-    }
-
-    /* Update filter function and values */
-    wrapper_data->filter_apply_func = filter_func;
-    memcpy(wrapper_data->filter_values, filter_values, sizeof(gfloat) * num_values);
-
-    /* Set filter function on preview to use viewport-based filtering */
-    filter_preview_set_filter_function(preview, apply_filter_to_viewport_surface, wrapper_data);
-}
-
-/**
- * Helper function to wrap layer-based filter functions for viewport system
- * Creates a temporary layer from the viewport surface, applies the filter, and returns the surface
- */
-static cairo_surface_t* apply_filter_to_viewport_surface(cairo_surface_t* viewport_surface, gpointer params) {
-    FilterWrapperData* wrapper_data = (FilterWrapperData*)params;
-    ImageLayer* temp_layer;
-    cairo_surface_t* result;
-
-    if (!viewport_surface || !wrapper_data || !wrapper_data->filter_apply_func) {
-        return NULL;
-    }
-
-    /* Get viewport dimensions */
-    gint width = cairo_image_surface_get_width(viewport_surface);
-    gint height = cairo_image_surface_get_height(viewport_surface);
-
-    if (width <= 0 || height <= 0) {
-        return NULL;
-    }
-
-    /* Create a temporary layer with the viewport surface */
-    temp_layer = layer_new("TempViewport", width, height, TRUE);
-    if (!temp_layer) {
-        return NULL;
-    }
-
-    /* Copy viewport surface to layer */
-    cairo_t* cr = cairo_create(temp_layer->surface);
-    cairo_set_source_surface(cr, viewport_surface, 0, 0);
-    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
-    cairo_paint(cr);
-    cairo_destroy(cr);
-
-    /* Apply filter to the layer */
-    if (!wrapper_data->filter_apply_func(temp_layer, wrapper_data->filter_values, wrapper_data->num_values)) {
-        layer_free(temp_layer);
-        return NULL;
-    }
-
-    /* Return a reference to the filtered surface */
-    result = cairo_surface_reference(temp_layer->surface);
-    layer_free(temp_layer);
-
-    return result;
-}
+/* Filter wrapper functions moved to ui_filter_utils.c */
 
 /**
  * Vibrance filter preview update callback
@@ -166,34 +51,10 @@ static gboolean on_vibrance_preview_update(FilterDialog* dialog,
                                            const gdouble* values,
                                            gint num_values,
                                            gpointer user_data) {
-    FilterControlParam* controls;
-    gdouble scaled_vibrance;
-    gfloat filter_values[1];
-
-    if (!dialog || !values || num_values < 1) {
-        return FALSE;
-    }
-
-    /* Get control parameters from dialog's stored data */
-    controls = (FilterControlParam*)g_object_get_data(G_OBJECT(filter_dialog_get_window(dialog)), "control_params");
-    if (!controls) {
-        return FALSE;
-    }
-
-    /* Scale UI value to filter range */
-    scaled_vibrance = adjustments_scale_value(
-        values[0],
-        controls[0].min_value,
-        controls[0].max_value,
-        controls[0].filter_min,
-        controls[0].filter_max);
-    filter_values[0] = (gfloat)scaled_vibrance;
-
-    /* Set up viewport-based filter */
-    setup_viewport_filter(dialog, (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_vibrance_apply,
-                          filter_values, 1);
-
-    return TRUE;
+    static FilterApplyFuncData func_data = {
+        .filter_apply_func = (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_vibrance_apply,
+        .num_values = 1};
+    return ui_filter_utils_preview_update_scaled(dialog, values, num_values, &func_data);
 }
 
 /**
@@ -204,32 +65,10 @@ static gboolean on_exposure_preview_update(FilterDialog* dialog,
                                            const gdouble* values,
                                            gint num_values,
                                            gpointer user_data) {
-    FilterControlParam* controls;
-    gdouble scaled_exposure;
-    gfloat filter_values[1];
-
-    if (!dialog || !values || num_values < 1) {
-        return FALSE;
-    }
-
-    /* Get control parameters from dialog's stored data */
-    controls = (FilterControlParam*)g_object_get_data(
-        G_OBJECT(filter_dialog_get_window(dialog)), "control_params");
-    if (!controls) {
-        return FALSE;
-    }
-
-    /* Scale UI value to filter range */
-    scaled_exposure = adjustments_scale_value(
-        values[0], controls[0].min_value, controls[0].max_value,
-        controls[0].filter_min, controls[0].filter_max);
-    filter_values[0] = (gfloat)scaled_exposure;
-
-    /* Set up viewport-based filter */
-    setup_viewport_filter(dialog, (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_exposure_apply,
-                          filter_values, 1);
-
-    return TRUE;
+    static FilterApplyFuncData func_data = {
+        .filter_apply_func = (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_exposure_apply,
+        .num_values = 1};
+    return ui_filter_utils_preview_update_scaled(dialog, values, num_values, &func_data);
 }
 
 /**
@@ -240,40 +79,10 @@ static gboolean on_hsl_preview_update(FilterDialog* dialog,
                                       const gdouble* values,
                                       gint num_values,
                                       gpointer user_data) {
-    FilterControlParam* controls;
-    gdouble scaled_hue, scaled_saturation, scaled_lightness;
-    gfloat filter_values[3];
-
-    if (!dialog || !values || num_values < 3) {
-        return FALSE;
-    }
-
-    /* Get control parameters from dialog's stored data */
-    controls = (FilterControlParam*)g_object_get_data(
-        G_OBJECT(filter_dialog_get_window(dialog)), "control_params");
-    if (!controls) {
-        return FALSE;
-    }
-
-    /* Scale UI values to filter range */
-    scaled_hue = adjustments_scale_value(
-        values[0], controls[0].min_value, controls[0].max_value,
-        controls[0].filter_min, controls[0].filter_max);
-    scaled_saturation = adjustments_scale_value(
-        values[1], controls[1].min_value, controls[1].max_value,
-        controls[1].filter_min, controls[1].filter_max);
-    scaled_lightness = adjustments_scale_value(
-        values[2], controls[2].min_value, controls[2].max_value,
-        controls[2].filter_min, controls[2].filter_max);
-    filter_values[0] = (gfloat)scaled_hue;
-    filter_values[1] = (gfloat)scaled_saturation;
-    filter_values[2] = (gfloat)scaled_lightness;
-
-    /* Set up viewport-based filter */
-    setup_viewport_filter(dialog, (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_hsl_apply,
-                          filter_values, 3);
-
-    return TRUE;
+    static FilterApplyFuncData func_data = {
+        .filter_apply_func = (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_hsl_apply,
+        .num_values = 3};
+    return ui_filter_utils_preview_update_scaled(dialog, values, num_values, &func_data);
 }
 
 /**
@@ -284,36 +93,10 @@ static gboolean on_brightness_contrast_preview_update(FilterDialog* dialog,
                                                       const gdouble* values,
                                                       gint num_values,
                                                       gpointer user_data) {
-    FilterControlParam* controls;
-    gdouble scaled_brightness, scaled_contrast;
-    gfloat filter_values[2];
-
-    if (!dialog || !values || num_values < 2) {
-        return FALSE;
-    }
-
-    /* Get control parameters from dialog's stored data */
-    controls = (FilterControlParam*)g_object_get_data(
-        G_OBJECT(filter_dialog_get_window(dialog)), "control_params");
-    if (!controls) {
-        return FALSE;
-    }
-
-    /* Scale UI values to filter range */
-    scaled_brightness = adjustments_scale_value(
-        values[0], controls[0].min_value, controls[0].max_value,
-        controls[0].filter_min, controls[0].filter_max);
-    scaled_contrast = adjustments_scale_value(
-        values[1], controls[1].min_value, controls[1].max_value,
-        controls[1].filter_min, controls[1].filter_max);
-    filter_values[0] = (gfloat)scaled_brightness;
-    filter_values[1] = (gfloat)scaled_contrast;
-
-    /* Set up viewport-based filter */
-    setup_viewport_filter(dialog, (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_brightness_contrast_apply,
-                          filter_values, 2);
-
-    return TRUE;
+    static FilterApplyFuncData func_data = {
+        .filter_apply_func = (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_brightness_contrast_apply,
+        .num_values = 2};
+    return ui_filter_utils_preview_update_scaled(dialog, values, num_values, &func_data);
 }
 
 /**
@@ -324,40 +107,10 @@ static gboolean on_shadow_highlights_preview_update(FilterDialog* dialog,
                                                     const gdouble* values,
                                                     gint num_values,
                                                     gpointer user_data) {
-    FilterControlParam* controls;
-    gdouble scaled_shadows, scaled_midtone_contrast, scaled_highlights;
-    gfloat filter_values[3];
-
-    if (!dialog || !values || num_values < 3) {
-        return FALSE;
-    }
-
-    /* Get control parameters from dialog's stored data */
-    controls = (FilterControlParam*)g_object_get_data(
-        G_OBJECT(filter_dialog_get_window(dialog)), "control_params");
-    if (!controls) {
-        return FALSE;
-    }
-
-    /* Scale UI values to filter range */
-    scaled_shadows = adjustments_scale_value(
-        values[0], controls[0].min_value, controls[0].max_value,
-        controls[0].filter_min, controls[0].filter_max);
-    scaled_midtone_contrast = adjustments_scale_value(
-        values[1], controls[1].min_value, controls[1].max_value,
-        controls[1].filter_min, controls[1].filter_max);
-    scaled_highlights = adjustments_scale_value(
-        values[2], controls[2].min_value, controls[2].max_value,
-        controls[2].filter_min, controls[2].filter_max);
-    filter_values[0] = (gfloat)scaled_shadows;
-    filter_values[1] = (gfloat)scaled_midtone_contrast;
-    filter_values[2] = (gfloat)scaled_highlights;
-
-    /* Set up viewport-based filter */
-    setup_viewport_filter(dialog, (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_shadow_highlights_apply,
-                          filter_values, 3);
-
-    return TRUE;
+    static FilterApplyFuncData func_data = {
+        .filter_apply_func = (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_shadow_highlights_apply,
+        .num_values = 3};
+    return ui_filter_utils_preview_update_scaled(dialog, values, num_values, &func_data);
 }
 
 /**
@@ -368,36 +121,10 @@ static gboolean on_whitebalance_preview_update(FilterDialog* dialog,
                                                const gdouble* values,
                                                gint num_values,
                                                gpointer user_data) {
-    FilterControlParam* controls;
-    gdouble scaled_temperature, scaled_tint;
-    gfloat filter_values[2];
-
-    if (!dialog || !values || num_values < 2) {
-        return FALSE;
-    }
-
-    /* Get control parameters from dialog's stored data */
-    controls = (FilterControlParam*)g_object_get_data(
-        G_OBJECT(filter_dialog_get_window(dialog)), "control_params");
-    if (!controls) {
-        return FALSE;
-    }
-
-    /* Scale UI values to filter range */
-    scaled_temperature = adjustments_scale_value(
-        values[0], controls[0].min_value, controls[0].max_value,
-        controls[0].filter_min, controls[0].filter_max);
-    scaled_tint = adjustments_scale_value(
-        values[1], controls[1].min_value, controls[1].max_value,
-        controls[1].filter_min, controls[1].filter_max);
-    filter_values[0] = (gfloat)scaled_temperature;
-    filter_values[1] = (gfloat)scaled_tint;
-
-    /* Set up viewport-based filter */
-    setup_viewport_filter(dialog, (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_whitebalance_apply,
-                          filter_values, 2);
-
-    return TRUE;
+    static FilterApplyFuncData func_data = {
+        .filter_apply_func = (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_whitebalance_apply,
+        .num_values = 2};
+    return ui_filter_utils_preview_update_scaled(dialog, values, num_values, &func_data);
 }
 
 /**
@@ -408,36 +135,10 @@ static gboolean on_temperature_preview_update(FilterDialog* dialog,
                                               const gdouble* values,
                                               gint num_values,
                                               gpointer user_data) {
-    FilterControlParam* controls;
-    gdouble scaled_temperature, scaled_strength;
-    gfloat filter_values[2];
-
-    if (!dialog || !values || num_values < 2) {
-        return FALSE;
-    }
-
-    /* Get control parameters from dialog's stored data */
-    controls = (FilterControlParam*)g_object_get_data(
-        G_OBJECT(filter_dialog_get_window(dialog)), "control_params");
-    if (!controls) {
-        return FALSE;
-    }
-
-    /* Scale UI values to filter range */
-    scaled_temperature = adjustments_scale_value(
-        values[0], controls[0].min_value, controls[0].max_value,
-        controls[0].filter_min, controls[0].filter_max);
-    scaled_strength = adjustments_scale_value(
-        values[1], controls[1].min_value, controls[1].max_value,
-        controls[1].filter_min, controls[1].filter_max);
-    filter_values[0] = (gfloat)scaled_temperature;
-    filter_values[1] = (gfloat)scaled_strength;
-
-    /* Set up viewport-based filter */
-    setup_viewport_filter(dialog, (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_temperature_apply,
-                          filter_values, 2);
-
-    return TRUE;
+    static FilterApplyFuncData func_data = {
+        .filter_apply_func = (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_temperature_apply,
+        .num_values = 2};
+    return ui_filter_utils_preview_update_scaled(dialog, values, num_values, &func_data);
 }
 
 /**
@@ -493,18 +194,12 @@ static void on_adjust_whitebalance(GtkWidget* widget, gpointer data) {
                                      on_whitebalance_preview_update, values);
 
     if (response == GTK_RESPONSE_OK) {
-        /* Scale UI value to filter range */
-        scaled_temperature = adjustments_scale_value(
-            values[0], controls[0].min_value, controls[0].max_value,
-            controls[0].filter_min, controls[0].filter_max);
-        scaled_tint = adjustments_scale_value(
-            values[1], controls[1].min_value, controls[1].max_value,
-            controls[1].filter_min, controls[1].filter_max);
-
-        /* Apply white balance filter */
-        gfloat filter_values[2] = {(gfloat)scaled_temperature, (gfloat)scaled_tint};
-        ui_apply_layer_filter_with_value(ctx, filter_whitebalance_apply,
-                                         "White Balance", filter_values, 2);
+        /* Scale UI values to filter range and apply filter */
+        gfloat filter_values[2];
+        if (ui_filter_utils_scale_values(values, filter_values, controls, 2)) {
+            ui_apply_layer_filter_with_value(ctx, filter_whitebalance_apply,
+                                             "White Balance", filter_values, 2);
+        }
     }
 }
 
@@ -540,18 +235,12 @@ static void on_adjust_vibrance(GtkWidget* widget, gpointer data) {
                                      on_vibrance_preview_update, values);
 
     if (response == GTK_RESPONSE_OK) {
-        /* Scale UI value to filter range */
-        scaled_vibrance = adjustments_scale_value(
-            values[0],
-            controls[0].min_value,
-            controls[0].max_value,
-            controls[0].filter_min,
-            controls[0].filter_max);
-
-        /* Apply vibrance filter */
-        gfloat filter_values[1] = {(gfloat)scaled_vibrance};
-        ui_apply_layer_filter_with_value(ctx, filter_vibrance_apply,
-                                         "Vibrance", filter_values, 1);
+        /* Scale UI value to filter range and apply filter */
+        gfloat filter_values[1];
+        if (ui_filter_utils_scale_values(values, filter_values, controls, 1)) {
+            ui_apply_layer_filter_with_value(ctx, filter_vibrance_apply,
+                                             "Vibrance", filter_values, 1);
+        }
     }
 }
 
@@ -583,34 +272,10 @@ static gboolean on_sepia_preview_update(FilterDialog* dialog,
                                         const gdouble* values,
                                         gint num_values,
                                         gpointer user_data) {
-    FilterControlParam* controls;
-    gdouble scaled_intensity;
-    gfloat filter_values[1];
-
-    if (!dialog || !values || num_values < 1) {
-        return FALSE;
-    }
-
-    /* Get control parameters from dialog's stored data */
-    controls = (FilterControlParam*)g_object_get_data(G_OBJECT(filter_dialog_get_window(dialog)), "control_params");
-    if (!controls) {
-        return FALSE;
-    }
-
-    /* Scale UI value to filter range */
-    scaled_intensity = adjustments_scale_value(
-        values[0],
-        controls[0].min_value,
-        controls[0].max_value,
-        controls[0].filter_min,
-        controls[0].filter_max);
-    filter_values[0] = (gfloat)scaled_intensity;
-
-    /* Set up viewport-based filter */
-    setup_viewport_filter(dialog, (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_sepia_apply,
-                          filter_values, 1);
-
-    return TRUE;
+    static FilterApplyFuncData func_data = {
+        .filter_apply_func = (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_sepia_apply,
+        .num_values = 1};
+    return ui_filter_utils_preview_update_scaled(dialog, values, num_values, &func_data);
 }
 
 /**
@@ -645,18 +310,12 @@ static void on_adjust_sepia(GtkWidget* widget, gpointer data) {
                                      on_sepia_preview_update, values);
 
     if (response == GTK_RESPONSE_OK) {
-        /* Scale UI value to filter range */
-        scaled_intensity = adjustments_scale_value(
-            values[0],
-            controls[0].min_value,
-            controls[0].max_value,
-            controls[0].filter_min,
-            controls[0].filter_max);
-
-        /* Apply sepia filter */
-        gfloat filter_values[1] = {(gfloat)scaled_intensity};
-        ui_apply_layer_filter_with_value(ctx, filter_sepia_apply,
-                                         "Sepia", filter_values, 1);
+        /* Scale UI value to filter range and apply filter */
+        gfloat filter_values[1];
+        if (ui_filter_utils_scale_values(values, filter_values, controls, 1)) {
+            ui_apply_layer_filter_with_value(ctx, filter_sepia_apply,
+                                             "Sepia", filter_values, 1);
+        }
     }
 }
 
@@ -757,11 +416,9 @@ static gboolean on_gamma_preview_update(void* dialog_ptr,
     }
 
     /* Copy original layer to temp layer */
-    cr = cairo_create(temp_layer->surface);
-    cairo_set_source_surface(cr, original_layer->surface, 0, 0);
-    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
-    cairo_paint(cr);
-    cairo_destroy(cr);
+    if (!ui_filter_utils_copy_layer_surface(temp_layer, original_layer)) {
+        return FALSE;
+    }
 
     /* Apply gamma filter to temp layer */
     gamma_values[0] = (gfloat)values[0];
@@ -817,19 +474,12 @@ static void on_adjust_gamma(GtkWidget* widget, gpointer data) {
     }
 
     /* Create a copy of the layer for preview */
-    temp_layer = layer_new("Temp", layer->width, layer->height, TRUE);
+    temp_layer = ui_filter_utils_create_temp_layer(layer);
     if (!temp_layer) {
         g_warning("Failed to create temporary layer for preview");
         gamma_dialog_free(dialog);
         return;
     }
-
-    /* Copy layer surface to temp layer */
-    cr = cairo_create(temp_layer->surface);
-    cairo_set_source_surface(cr, layer->surface, 0, 0);
-    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
-    cairo_paint(cr);
-    cairo_destroy(cr);
 
     /* Set layers in dialog */
     gamma_dialog_set_layers(dialog, layer, temp_layer);
@@ -888,11 +538,9 @@ static gboolean on_colorbalance_preview_update(void* dialog_ptr,
     }
 
     /* Copy original layer to temp layer */
-    cr = cairo_create(temp_layer->surface);
-    cairo_set_source_surface(cr, original_layer->surface, 0, 0);
-    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
-    cairo_paint(cr);
-    cairo_destroy(cr);
+    if (!ui_filter_utils_copy_layer_surface(temp_layer, original_layer)) {
+        return FALSE;
+    }
 
     /* Apply color balance filter to temp layer */
     if (!filter_colorbalance_apply(temp_layer, values[0], values[1], values[2], mode, preserve_luminosity)) {
@@ -948,19 +596,12 @@ static void on_adjust_colorbalance(GtkWidget* widget, gpointer data) {
     }
 
     /* Create a copy of the layer for preview */
-    temp_layer = layer_new("Temp", layer->width, layer->height, TRUE);
+    temp_layer = ui_filter_utils_create_temp_layer(layer);
     if (!temp_layer) {
         g_warning("Failed to create temporary layer for preview");
         color_balance_dialog_free(dialog);
         return;
     }
-
-    /* Copy layer surface to temp layer */
-    cr = cairo_create(temp_layer->surface);
-    cairo_set_source_surface(cr, layer->surface, 0, 0);
-    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
-    cairo_paint(cr);
-    cairo_destroy(cr);
 
     /* Set layers in dialog */
     color_balance_dialog_set_layers(dialog, layer, temp_layer);
@@ -1032,18 +673,12 @@ static void on_adjust_exposure(GtkWidget* widget, gpointer data) {
                                      on_exposure_preview_update, values);
 
     if (response == GTK_RESPONSE_OK) {
-        /* Scale UI value to filter range */
-        scaled_exposure = adjustments_scale_value(
-            values[0],
-            controls[0].min_value,
-            controls[0].max_value,
-            controls[0].filter_min,
-            controls[0].filter_max);
-
-        /* Apply exposure filter */
-        gfloat filter_values[1] = {(gfloat)scaled_exposure};
-        ui_apply_layer_filter_with_value(ctx, filter_exposure_apply,
-                                         "Exposure", filter_values, 1);
+        /* Scale UI value to filter range and apply filter */
+        gfloat filter_values[1];
+        if (ui_filter_utils_scale_values(values, filter_values, controls, 1)) {
+            ui_apply_layer_filter_with_value(ctx, filter_exposure_apply,
+                                             "Exposure", filter_values, 1);
+        }
     }
 }
 
@@ -1099,33 +734,12 @@ static void on_adjust_hsl(GtkWidget* widget, gpointer data) {
                                      on_hsl_preview_update, values);
 
     if (response == GTK_RESPONSE_OK) {
-        /* Scale UI values to filter range */
-        scaled_hue = adjustments_scale_value(
-            values[0],
-            controls[0].min_value,
-            controls[0].max_value,
-            controls[0].filter_min,
-            controls[0].filter_max);
-        scaled_saturation = adjustments_scale_value(
-            values[1],
-            controls[1].min_value,
-            controls[1].max_value,
-            controls[1].filter_min,
-            controls[1].filter_max);
-        scaled_lightness = adjustments_scale_value(
-            values[2],
-            controls[2].min_value,
-            controls[2].max_value,
-            controls[2].filter_min,
-            controls[2].filter_max);
-
-        /* Apply HSL filter */
-        gfloat filter_values[3] = {
-            (gfloat)scaled_hue,
-            (gfloat)scaled_saturation,
-            (gfloat)scaled_lightness};
-        ui_apply_layer_filter_with_value(ctx, filter_hsl_apply,
-                                         "HSL", filter_values, 3);
+        /* Scale UI values to filter range and apply filter */
+        gfloat filter_values[3];
+        if (ui_filter_utils_scale_values(values, filter_values, controls, 3)) {
+            ui_apply_layer_filter_with_value(ctx, filter_hsl_apply,
+                                             "HSL", filter_values, 3);
+        }
     }
 }
 
@@ -1171,26 +785,12 @@ static void on_adjust_brightness_contrast(GtkWidget* widget, gpointer data) {
                                      on_brightness_contrast_preview_update, values);
 
     if (response == GTK_RESPONSE_OK) {
-        /* Scale UI values to filter range */
-        scaled_brightness = adjustments_scale_value(
-            values[0],
-            controls[0].min_value,
-            controls[0].max_value,
-            controls[0].filter_min,
-            controls[0].filter_max);
-        scaled_contrast = adjustments_scale_value(
-            values[1],
-            controls[1].min_value,
-            controls[1].max_value,
-            controls[1].filter_min,
-            controls[1].filter_max);
-
-        /* Apply brightness/contrast filter */
-        gfloat filter_values[2] = {
-            (gfloat)scaled_brightness,
-            (gfloat)scaled_contrast};
-        ui_apply_layer_filter_with_value(ctx, filter_brightness_contrast_apply,
-                                         "Brightness And Contrast", filter_values, 2);
+        /* Scale UI values to filter range and apply filter */
+        gfloat filter_values[2];
+        if (ui_filter_utils_scale_values(values, filter_values, controls, 2)) {
+            ui_apply_layer_filter_with_value(ctx, filter_brightness_contrast_apply,
+                                             "Brightness And Contrast", filter_values, 2);
+        }
     }
 }
 
@@ -1246,35 +846,12 @@ static void on_adjust_shadow_highlights(GtkWidget* widget, gpointer data) {
                                      on_shadow_highlights_preview_update, values);
 
     if (response == GTK_RESPONSE_OK) {
-        /* Scale UI values to filter range */
-        /* UI order: shadows (values[0]), midtone contrast (values[1]), highlights (values[2]) */
-        scaled_shadows = adjustments_scale_value(
-            values[0],
-            controls[0].min_value,
-            controls[0].max_value,
-            controls[0].filter_min,
-            controls[0].filter_max);
-        scaled_midtone_contrast = adjustments_scale_value(
-            values[1],
-            controls[1].min_value,
-            controls[1].max_value,
-            controls[1].filter_min,
-            controls[1].filter_max);
-        scaled_highlights = adjustments_scale_value(
-            values[2],
-            controls[2].min_value,
-            controls[2].max_value,
-            controls[2].filter_min,
-            controls[2].filter_max);
-
-        /* Apply shadow/highlights filter */
-        /* Filter order: shadows, midtone contrast, highlights */
-        gfloat filter_values[3] = {
-            (gfloat)scaled_shadows,
-            (gfloat)scaled_midtone_contrast,
-            (gfloat)scaled_highlights};
-        ui_apply_layer_filter_with_value(ctx, filter_shadow_highlights_apply,
-                                         "Shadows And Highlights", filter_values, 3);
+        /* Scale UI values to filter range and apply filter */
+        gfloat filter_values[3];
+        if (ui_filter_utils_scale_values(values, filter_values, controls, 3)) {
+            ui_apply_layer_filter_with_value(ctx, filter_shadow_highlights_apply,
+                                             "Shadows And Highlights", filter_values, 3);
+        }
     }
 }
 
@@ -1320,26 +897,12 @@ static void on_adjust_temperature(GtkWidget* widget, gpointer data) {
                                      on_temperature_preview_update, values);
 
     if (response == GTK_RESPONSE_OK) {
-        /* Scale UI values to filter range */
-        scaled_temperature = adjustments_scale_value(
-            values[0],
-            controls[0].min_value,
-            controls[0].max_value,
-            controls[0].filter_min,
-            controls[0].filter_max);
-        scaled_strength = adjustments_scale_value(
-            values[1],
-            controls[1].min_value,
-            controls[1].max_value,
-            controls[1].filter_min,
-            controls[1].filter_max);
-
-        /* Apply color temperature filter */
-        gfloat filter_values[2] = {
-            (gfloat)scaled_temperature,
-            (gfloat)scaled_strength};
-        ui_apply_layer_filter_with_value(ctx, filter_temperature_apply,
-                                         "Color Temperature", filter_values, 2);
+        /* Scale UI values to filter range and apply filter */
+        gfloat filter_values[2];
+        if (ui_filter_utils_scale_values(values, filter_values, controls, 2)) {
+            ui_apply_layer_filter_with_value(ctx, filter_temperature_apply,
+                                             "Color Temperature", filter_values, 2);
+        }
     }
 }
 
@@ -1351,51 +914,10 @@ static gboolean on_dehaze_preview_update(FilterDialog* dialog,
                                          const gdouble* values,
                                          gint num_values,
                                          gpointer user_data) {
-    FilterControlParam* controls;
-    gdouble scaled_radius, scaled_guide_radius, scaled_max_atm, scaled_omega, scaled_epsilon, scaled_t0;
-    gfloat filter_values[6];
-
-    if (!dialog || !values || num_values < 6) {
-        return FALSE;
-    }
-
-    /* Get control parameters from dialog's stored data */
-    controls = (FilterControlParam*)g_object_get_data(G_OBJECT(filter_dialog_get_window(dialog)), "control_params");
-    if (!controls) {
-        return FALSE;
-    }
-
-    /* Scale UI values to filter range */
-    scaled_radius = adjustments_scale_value(
-        values[0], controls[0].min_value, controls[0].max_value,
-        controls[0].filter_min, controls[0].filter_max);
-    scaled_guide_radius = adjustments_scale_value(
-        values[1], controls[1].min_value, controls[1].max_value,
-        controls[1].filter_min, controls[1].filter_max);
-    scaled_max_atm = adjustments_scale_value(
-        values[2], controls[2].min_value, controls[2].max_value,
-        controls[2].filter_min, controls[2].filter_max);
-    scaled_omega = adjustments_scale_value(
-        values[3], controls[3].min_value, controls[3].max_value,
-        controls[3].filter_min, controls[3].filter_max);
-    scaled_epsilon = adjustments_scale_value(
-        values[4], controls[4].min_value, controls[4].max_value,
-        controls[4].filter_min, controls[4].filter_max);
-    scaled_t0 = adjustments_scale_value(
-        values[5], controls[5].min_value, controls[5].max_value,
-        controls[5].filter_min, controls[5].filter_max);
-    filter_values[0] = (gfloat)scaled_radius;
-    filter_values[1] = (gfloat)scaled_guide_radius;
-    filter_values[2] = (gfloat)scaled_max_atm;
-    filter_values[3] = (gfloat)scaled_omega;
-    filter_values[4] = (gfloat)scaled_epsilon;
-    filter_values[5] = (gfloat)scaled_t0;
-
-    /* Set up viewport-based filter */
-    setup_viewport_filter(dialog, (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_dehaze_apply,
-                          filter_values, 6);
-
-    return TRUE;
+    static FilterApplyFuncData func_data = {
+        .filter_apply_func = (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_dehaze_apply,
+        .num_values = 6};
+    return ui_filter_utils_preview_update_scaled(dialog, values, num_values, &func_data);
 }
 
 /**
@@ -1480,36 +1002,12 @@ static void on_adjust_dehaze(GtkWidget* widget, gpointer data) {
                                      on_dehaze_preview_update, values);
 
     if (response == GTK_RESPONSE_OK) {
-        /* Scale UI values to filter range */
-        scaled_radius = adjustments_scale_value(
-            values[0], controls[0].min_value, controls[0].max_value,
-            controls[0].filter_min, controls[0].filter_max);
-        scaled_guide_radius = adjustments_scale_value(
-            values[1], controls[1].min_value, controls[1].max_value,
-            controls[1].filter_min, controls[1].filter_max);
-        scaled_max_atm = adjustments_scale_value(
-            values[2], controls[2].min_value, controls[2].max_value,
-            controls[2].filter_min, controls[2].filter_max);
-        scaled_omega = adjustments_scale_value(
-            values[3], controls[3].min_value, controls[3].max_value,
-            controls[3].filter_min, controls[3].filter_max);
-        scaled_epsilon = adjustments_scale_value(
-            values[4], controls[4].min_value, controls[4].max_value,
-            controls[4].filter_min, controls[4].filter_max);
-        scaled_t0 = adjustments_scale_value(
-            values[5], controls[5].min_value, controls[5].max_value,
-            controls[5].filter_min, controls[5].filter_max);
-
-        /* Apply dehaze filter */
-        gfloat filter_values[6] = {
-            (gfloat)scaled_radius,
-            (gfloat)scaled_guide_radius,
-            (gfloat)scaled_max_atm,
-            (gfloat)scaled_omega,
-            (gfloat)scaled_epsilon,
-            (gfloat)scaled_t0};
-        ui_apply_layer_filter_with_value(ctx, filter_dehaze_apply,
-                                         "Dehaze", filter_values, 6);
+        /* Scale UI values to filter range and apply filter */
+        gfloat filter_values[6];
+        if (ui_filter_utils_scale_values(values, filter_values, controls, 6)) {
+            ui_apply_layer_filter_with_value(ctx, filter_dehaze_apply,
+                                             "Dehaze", filter_values, 6);
+        }
     }
 }
 
