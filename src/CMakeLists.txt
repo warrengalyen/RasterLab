@@ -53,6 +53,8 @@ set(SOURCES
     ui/dialogs/retinex_dialog.c
     tools.c
     tools/tool_manager.c
+    tools/tool_hand.c
+    tools/tool_zoom.c
     tools/tool_move.c
     tools/tool_brush.c
     tools/tool_eraser.c

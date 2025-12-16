@@ -867,13 +867,59 @@
             <property name="can-focus">False</property>
             <child>
               <object class="GtkBox" id="tool_panel">
-                <property name="width-request">48</property>
+                <property name="width-request">32</property>
                 <property name="visible">True</property>
                 <property name="can-focus">False</property>
                 <property name="hexpand">False</property>
                 <property name="vexpand">True</property>
                 <property name="orientation">vertical</property>
                 <property name="spacing">5</property>
+                <child>
+                  <object class="GtkToggleButton" id="tool_button_hand">
+                    <property name="width-request">32</property>
+                    <property name="height-request">32</property>
+                    <property name="visible">True</property>
+                    <property name="can-focus">True</property>
+                    <property name="receives-default">False</property>
+                    <property name="relief">none</property>
+                    <child>
+                      <object class="GtkImage" id="hand_icon">
+                        <property name="visible">True</property>
+                        <property name="can-focus">False</property>
+                        <property name="pixel-size">24</property>
+                        <property name="resource">/icons/hand.png</property>
+                      </object>
+                    </child>
+                  </object>
+                  <packing>
+                    <property name="expand">False</property>
+                    <property name="fill">True</property>
+                    <property name="position">0</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkToggleButton" id="tool_button_zoom">
+                    <property name="width-request">32</property>
+                    <property name="height-request">32</property>
+                    <property name="visible">True</property>
+                    <property name="can-focus">True</property>
+                    <property name="receives-default">False</property>
+                    <property name="relief">none</property>
+                    <child>
+                      <object class="GtkImage" id="zoom_icon">
+                        <property name="visible">True</property>
+                        <property name="can-focus">False</property>
+                        <property name="pixel-size">24</property>
+                        <property name="resource">/icons/zoom.png</property>
+                      </object>
+                    </child>
+                  </object>
+                  <packing>
+                    <property name="expand">False</property>
+                    <property name="fill">True</property>
+                    <property name="position">1</property>
+                  </packing>
+                </child>
                 <child>
                   <object class="GtkToggleButton" id="tool_button_move">
                     <property name="width-request">32</property>
@@ -894,30 +940,7 @@
                   <packing>
                     <property name="expand">False</property>
                     <property name="fill">True</property>
-                    <property name="position">0</property>
-                  </packing>
-                </child>
-                <child>
-                  <object class="GtkToggleButton" id="tool_button_brush">
-                    <property name="width-request">32</property>
-                    <property name="height-request">32</property>
-                    <property name="visible">True</property>
-                    <property name="can-focus">False</property>
-                    <property name="receives-default">False</property>
-                    <property name="relief">none</property>
-                    <child>
-                      <object class="GtkImage" id="brush_icon">
-                        <property name="visible">True</property>
-                        <property name="can-focus">False</property>
-                        <property name="pixel-size">24</property>
-                        <property name="resource">/icons/paintbrush.png</property>
-                      </object>
-                    </child>
-                  </object>
-                  <packing>
-                    <property name="expand">False</property>
-                    <property name="fill">True</property>
-                    <property name="position">1</property>
+                    <property name="position">2</property>
                   </packing>
                 </child>
                 <child>
@@ -940,7 +963,30 @@
                   <packing>
                     <property name="expand">False</property>
                     <property name="fill">True</property>
-                    <property name="position">2</property>
+                    <property name="position">3</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkToggleButton" id="tool_button_brush">
+                    <property name="width-request">32</property>
+                    <property name="height-request">32</property>
+                    <property name="visible">True</property>
+                    <property name="can-focus">False</property>
+                    <property name="receives-default">False</property>
+                    <property name="relief">none</property>
+                    <child>
+                      <object class="GtkImage" id="brush_icon">
+                        <property name="visible">True</property>
+                        <property name="can-focus">False</property>
+                        <property name="pixel-size">24</property>
+                        <property name="resource">/icons/paintbrush.png</property>
+                      </object>
+                    </child>
+                  </object>
+                  <packing>
+                    <property name="expand">False</property>
+                    <property name="fill">True</property>
+                    <property name="position">4</property>
                   </packing>
                 </child>
                 <child>
@@ -963,7 +1009,7 @@
                   <packing>
                     <property name="expand">False</property>
                     <property name="fill">True</property>
-                    <property name="position">3</property>
+                    <property name="position">5</property>
                   </packing>
                 </child>
                 <child>
@@ -974,7 +1020,7 @@
                   <packing>
                     <property name="expand">False</property>
                     <property name="fill">True</property>
-                    <property name="position">4</property>
+                    <property name="position">6</property>
                   </packing>
                 </child>
                 <child>
@@ -983,13 +1029,10 @@
                     <property name="can-focus">False</property>
                     <property name="margin-start">4</property>
                     <property name="margin-end">4</property>
-                    <property name="hexpand">False</property>
                     <property name="orientation">vertical</property>
                     <property name="spacing">12</property>
                     <child>
                       <object class="GtkFixed" id="color_picker_container">
-                        <property name="width-request">40</property>
-                        <property name="height-request">40</property>
                         <property name="visible">True</property>
                         <property name="can-focus">False</property>
                         <child>
@@ -1000,20 +1043,22 @@
                             <property name="can-focus">True</property>
                             <property name="receives-default">True</property>
                             <property name="title">Select Background Color</property>
+                            <property name="show-editor">True</property>
                           </object>
                           <packing>
-                            <property name="x">18</property>
-                            <property name="y">18</property>
+                            <property name="x">15</property>
+                            <property name="y">15</property>
                           </packing>
                         </child>
                         <child>
                           <object class="GtkColorButton" id="fg_color_button">
-                            <property name="width-request">32</property>
-                            <property name="height-request">32</property>
+                            <property name="width-request">20</property>
+                            <property name="height-request">20</property>
                             <property name="visible">True</property>
                             <property name="can-focus">True</property>
                             <property name="receives-default">True</property>
                             <property name="title">Select Foreground Color</property>
+                            <property name="show-editor">True</property>
                           </object>
                         </child>
                       </object>
@@ -1026,11 +1071,9 @@
                     <child>
                       <object class="GtkButton" id="swap_button">
                         <property name="label">⇄</property>
-                        <property name="height-request">24</property>
                         <property name="visible">True</property>
                         <property name="can-focus">True</property>
                         <property name="receives-default">True</property>
-                        <property name="hexpand">False</property>
                       </object>
                       <packing>
                         <property name="expand">False</property>
@@ -1042,7 +1085,7 @@
                   <packing>
                     <property name="expand">False</property>
                     <property name="fill">True</property>
-                    <property name="position">5</property>
+                    <property name="position">7</property>
                   </packing>
                 </child>
                 <child>
@@ -1053,7 +1096,7 @@
                   <packing>
                     <property name="expand">True</property>
                     <property name="fill">True</property>
-                    <property name="position">6</property>
+                    <property name="position">8</property>
                   </packing>
                 </child>
               </object>

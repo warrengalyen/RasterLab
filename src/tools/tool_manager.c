@@ -2,8 +2,10 @@
 #include "tool_brush.h"
 #include "tool_eraser.h"
 #include "tool_fill.h"
+#include "tool_hand.h"
 #include "tool_move.h"
 #include "tool_options.h"
+#include "tool_zoom.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -33,6 +35,20 @@ gboolean tool_manager_init_defaults(ToolRegistry* registry) {
         return FALSE;
     }
 
+    /* Create Hand tool */
+    tool = tool_hand_create();
+    if (!tool) {
+        return FALSE;
+    }
+    tool_manager_register(registry, tool, TOOL_HAND);
+
+    /* Create Zoom tool */
+    tool = tool_zoom_create();
+    if (!tool) {
+        return FALSE;
+    }
+    tool_manager_register(registry, tool, TOOL_ZOOM);
+
     /* Create Move tool */
     tool = tool_move_create();
     if (!tool) {
@@ -61,8 +77,8 @@ gboolean tool_manager_init_defaults(ToolRegistry* registry) {
     }
     tool_manager_register(registry, tool, TOOL_PAINT_BUCKET);
 
-    /* Activate Move tool by default */
-    tool_manager_activate(registry, TOOL_MOVE);
+    /* Activate Hand tool by default */
+    tool_manager_activate(registry, TOOL_HAND);
 
     // printf("Tool manager initialized with %d default tools\n", TOOL_COUNT);
 

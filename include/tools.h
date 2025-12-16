@@ -13,11 +13,13 @@ struct ImageDocument; /* Forward declaration - full definition in document.h */
  * Tool enumeration for quick identification
  */
 typedef enum {
-    TOOL_MOVE = 0,
-    TOOL_BRUSH = 1,
-    TOOL_ERASER = 2,
-    TOOL_PAINT_BUCKET = 3,
-    TOOL_COUNT = 4 /* Total number of tools */
+    TOOL_HAND = 0,
+    TOOL_ZOOM = 1,
+    TOOL_MOVE = 2,
+    TOOL_BRUSH = 3,
+    TOOL_ERASER = 4,
+    TOOL_PAINT_BUCKET = 5,
+    TOOL_COUNT = 6 /* Total number of tools */
 } ToolType;
 
 /**

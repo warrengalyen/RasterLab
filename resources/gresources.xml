@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <gresources>
   <gresource prefix="/">
+    <file preprocess="to-pixdata">icons/hand.png</file>
+    <file preprocess="to-pixdata">icons/zoom.png</file>
     <file preprocess="to-pixdata">icons/move.png</file>
     <file preprocess="to-pixdata">icons/paintbrush.png</file>
     <file preprocess="to-pixdata">icons/eraser.png</file>
@@ -15,7 +17,7 @@
     <file preprocess="xml-stripblanks">icons/swap-colors.svg</file>
     <file preprocess="to-pixdata">icons/visibility-on.png</file>
     <file preprocess="to-pixdata">icons/visibility-off.png</file>
-    <file>ui/tool_panel.glade</file>
+    <file preprocess="to-pixdata">cursors/zoom_cursor.png</file>
     <file>ui/layers_panel.glade</file>
     <file>ui/brush_options.glade</file>
     <file>ui/eraser_options.glade</file>
