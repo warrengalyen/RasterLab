@@ -137,8 +137,9 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
             cairo_scale(cr, zoom, zoom);
         }
 
-        /* Draw checkered background for visible area */
-        draw_checkered_background(cr, viewport_w, viewport_h);
+        /* Draw checkered background for visible area, starting from viewport position */
+        /* This ensures the pattern is continuous across the entire canvas when scrolling */
+        draw_checkered_background_offset(cr, viewport_x, viewport_y, viewport_w, viewport_h);
 
         /* When zoomed, render layers directly to avoid tile boundary artifacts */
         if (zoom != 1.0) {

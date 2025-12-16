@@ -5,29 +5,27 @@
  * Clip Cairo context to dirty rectangle
  * @param ctx Render context
  */
-void render_clip_to_dirty(RenderContext *ctx)
-{
+void render_clip_to_dirty(RenderContext* ctx) {
     if (!ctx || !ctx->use_dirty_rect || dirty_rect_is_empty(&ctx->dirty_rect)) {
         return;
     }
-    
-    cairo_rectangle(ctx->cr, 
-                   ctx->dirty_rect.x, 
-                   ctx->dirty_rect.y, 
-                   ctx->dirty_rect.width, 
-                   ctx->dirty_rect.height);
+
+    cairo_rectangle(ctx->cr,
+                    ctx->dirty_rect.x,
+                    ctx->dirty_rect.y,
+                    ctx->dirty_rect.width,
+                    ctx->dirty_rect.height);
     cairo_clip(ctx->cr);
 }
 
 /**
  * Convert GdkPixbuf to Cairo image surface
  */
-cairo_surface_t* pixbuf_to_cairo_surface(GdkPixbuf *pixbuf)
-{
-    cairo_surface_t *surface;
+cairo_surface_t* pixbuf_to_cairo_surface(GdkPixbuf* pixbuf) {
+    cairo_surface_t* surface;
     gint width, height;
     gint rowstride;
-    guchar *pixels;
+    guchar* pixels;
     guint n_channels;
     gint y;
 
@@ -38,9 +36,9 @@ cairo_surface_t* pixbuf_to_cairo_surface(GdkPixbuf *pixbuf)
     n_channels = gdk_pixbuf_get_n_channels(pixbuf);
 
     /* Create RGB or ARGB surface depending on alpha channel */
-    cairo_format_t format = gdk_pixbuf_get_has_alpha(pixbuf) 
-                            ? CAIRO_FORMAT_ARGB32 
-                            : CAIRO_FORMAT_RGB24;
+    cairo_format_t format = gdk_pixbuf_get_has_alpha(pixbuf)
+                                ? CAIRO_FORMAT_ARGB32
+                                : CAIRO_FORMAT_RGB24;
     surface = cairo_image_surface_create(format, width, height);
 
     if (cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS) {
@@ -49,28 +47,28 @@ cairo_surface_t* pixbuf_to_cairo_surface(GdkPixbuf *pixbuf)
     }
 
     /* Copy pixel data row by row */
-    guchar *surface_data = cairo_image_surface_get_data(surface);
+    guchar* surface_data = cairo_image_surface_get_data(surface);
     gint surface_stride = cairo_image_surface_get_stride(surface);
 
     for (y = 0; y < height; y++) {
-        guchar *src_row = pixels + y * rowstride;
-        guchar *dst_row = surface_data + y * surface_stride;
+        guchar* src_row = pixels + y * rowstride;
+        guchar* dst_row = surface_data + y * surface_stride;
 
         if (n_channels == 3) {
             /* RGB to BGRX (Cairo RGB24) */
             for (int x = 0; x < width; x++) {
-                dst_row[4 * x + 0] = src_row[3 * x + 2];  /* B */
-                dst_row[4 * x + 1] = src_row[3 * x + 1];  /* G */
-                dst_row[4 * x + 2] = src_row[3 * x + 0];  /* R */
-                dst_row[4 * x + 3] = 0xFF;                /* X (opaque) */
+                dst_row[4 * x + 0] = src_row[3 * x + 2]; /* B */
+                dst_row[4 * x + 1] = src_row[3 * x + 1]; /* G */
+                dst_row[4 * x + 2] = src_row[3 * x + 0]; /* R */
+                dst_row[4 * x + 3] = 0xFF;               /* X (opaque) */
             }
         } else if (n_channels == 4) {
             /* RGBA to BGRA (Cairo ARGB32) */
             for (int x = 0; x < width; x++) {
-                dst_row[4 * x + 0] = src_row[4 * x + 2];  /* B */
-                dst_row[4 * x + 1] = src_row[4 * x + 1];  /* G */
-                dst_row[4 * x + 2] = src_row[4 * x + 0];  /* R */
-                dst_row[4 * x + 3] = src_row[4 * x + 3];  /* A */
+                dst_row[4 * x + 0] = src_row[4 * x + 2]; /* B */
+                dst_row[4 * x + 1] = src_row[4 * x + 1]; /* G */
+                dst_row[4 * x + 2] = src_row[4 * x + 0]; /* R */
+                dst_row[4 * x + 3] = src_row[4 * x + 3]; /* A */
             }
         }
     }
@@ -83,12 +81,11 @@ cairo_surface_t* pixbuf_to_cairo_surface(GdkPixbuf *pixbuf)
 /**
  * Convert Cairo image surface to GdkPixbuf
  */
-GdkPixbuf* cairo_surface_to_pixbuf(cairo_surface_t *surface, gboolean keep_alpha)
-{
-    GdkPixbuf *pixbuf;
+GdkPixbuf* cairo_surface_to_pixbuf(cairo_surface_t* surface, gboolean keep_alpha) {
+    GdkPixbuf* pixbuf;
     gint width, height;
-    guchar *pixels;
-    guchar *surface_data;
+    guchar* pixels;
+    guchar* surface_data;
     gint rowstride;
     gint x, y;
     cairo_format_t format;
@@ -115,7 +112,7 @@ GdkPixbuf* cairo_surface_to_pixbuf(cairo_surface_t *surface, gboolean keep_alpha
 
     pixels = gdk_pixbuf_get_pixels(pixbuf);
     rowstride = gdk_pixbuf_get_rowstride(pixbuf);
-    
+
     /* Flush surface to ensure all drawing operations are complete before reading */
     cairo_surface_flush(surface);
     surface_data = cairo_image_surface_get_data(surface);
@@ -125,8 +122,8 @@ GdkPixbuf* cairo_surface_to_pixbuf(cairo_surface_t *surface, gboolean keep_alpha
        Cairo ARGB32 format: on little-endian, bytes in memory are BGRA
        When read as 32-bit int: 0xAARRGGBB (A=MSB, B=LSB) */
     for (y = 0; y < height; y++) {
-        guchar *src_row = surface_data + y * surface_stride;
-        guchar *dst = pixels + y * rowstride;
+        guchar* src_row = surface_data + y * surface_stride;
+        guchar* dst = pixels + y * rowstride;
 
         for (x = 0; x < width; x++) {
             /* Read bytes directly to avoid endianness issues
@@ -139,13 +136,16 @@ GdkPixbuf* cairo_surface_to_pixbuf(cairo_surface_t *surface, gboolean keep_alpha
             /* Cairo uses pre-multiplied alpha, we need to un-premultiply */
             if (a > 0 && a < 255) {
                 /* Un-premultiply: convert from pre-multiplied to straight alpha */
-                r = (r * 255 + a / 2) / a;  /* Add rounding */
+                r = (r * 255 + a / 2) / a; /* Add rounding */
                 g = (g * 255 + a / 2) / a;
                 b = (b * 255 + a / 2) / a;
                 /* Clamp to valid range */
-                if (r > 255) r = 255;
-                if (g > 255) g = 255;
-                if (b > 255) b = 255;
+                if (r > 255)
+                    r = 255;
+                if (g > 255)
+                    g = 255;
+                if (b > 255)
+                    b = 255;
             } else if (a == 0) {
                 /* Fully transparent pixel - set RGB to 0 to ensure transparency */
                 r = g = b = 0;
@@ -172,11 +172,10 @@ GdkPixbuf* cairo_surface_to_pixbuf(cairo_surface_t *surface, gboolean keep_alpha
 /**
  * Draw a checkered background pattern for transparency
  */
-void draw_checkered_background(cairo_t *cr, gint image_width, gint image_height)
-{
-    const gint square_size = 10;    /* Size of each check square */
-    const double color1 = 0.85;    /* Light gray */
-    const double color2 = 0.95;    /* Lighter gray */
+void draw_checkered_background(cairo_t* cr, gint image_width, gint image_height) {
+    const gint square_size = 10; /* Size of each check square */
+    const double color1 = 0.85;  /* Light gray */
+    const double color2 = 0.95;  /* Lighter gray */
 
     /* Draw checkerboard pattern aligned to image origin */
     for (gint y = 0; y < image_height; y += square_size) {
@@ -184,7 +183,7 @@ void draw_checkered_background(cairo_t *cr, gint image_width, gint image_height)
             /* Calculate which cell we're in (relative to origin) */
             gint cell_x = x / square_size;
             gint cell_y = y / square_size;
-            
+
             /* Alternate colors in a checkerboard pattern */
             double color = ((cell_x + cell_y) % 2 == 0) ? color1 : color2;
 
@@ -196,3 +195,41 @@ void draw_checkered_background(cairo_t *cr, gint image_width, gint image_height)
     }
 }
 
+/**
+ * Draw a checkered background pattern starting from a specific offset
+ * This is useful when drawing only a portion of the canvas (e.g., when zoomed/scrolled)
+ */
+void draw_checkered_background_offset(cairo_t* cr, gint offset_x, gint offset_y, gint image_width, gint image_height) {
+    const gint square_size = 10; /* Size of each check square */
+    const double color1 = 0.85;  /* Light gray */
+    const double color2 = 0.95;  /* Lighter gray */
+
+    /* Calculate starting cell position */
+    gint start_cell_x = offset_x / square_size;
+    gint start_cell_y = offset_y / square_size;
+
+    /* Calculate starting pixel position (aligned to grid) */
+    gint start_x = start_cell_x * square_size;
+    gint start_y = start_cell_y * square_size;
+
+    /* Calculate how many squares we need to draw */
+    gint end_x = offset_x + image_width;
+    gint end_y = offset_y + image_height;
+
+    /* Draw checkerboard pattern aligned to document origin */
+    for (gint y = start_y; y < end_y; y += square_size) {
+        for (gint x = start_x; x < end_x; x += square_size) {
+            /* Calculate which cell we're in (relative to document origin) */
+            gint cell_x = x / square_size;
+            gint cell_y = y / square_size;
+
+            /* Alternate colors in a checkerboard pattern */
+            double color = ((cell_x + cell_y) % 2 == 0) ? color1 : color2;
+
+            /* Draw this square */
+            cairo_set_source_rgb(cr, color, color, color);
+            cairo_rectangle(cr, x, y, square_size, square_size);
+            cairo_fill(cr);
+        }
+    }
+}
