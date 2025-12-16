@@ -6,12 +6,60 @@
 #include "render/tile.h"
 #include "tool_manager.h"
 #include "tools.h"
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 /* Forward declarations */
 typedef struct AppContext AppContext;
+static void on_scroll_adjustment_changed(GtkAdjustment* adjustment, gpointer user_data);
+static void on_scrolled_window_adjustment_notify(GObject* object, GParamSpec* pspec, gpointer user_data);
+
+/**
+ * Callback for scroll adjustment changes - triggers redraw
+ */
+static void on_scroll_adjustment_changed(GtkAdjustment* adjustment, gpointer user_data) {
+    ImageDocument* doc = (ImageDocument*)user_data;
+
+    (void)adjustment; /* Unused */
+
+    if (doc && doc->drawing_area) {
+        /* Invalidate the entire drawing area to trigger redraw */
+        gtk_widget_queue_draw(doc->drawing_area);
+    }
+}
+
+/**
+ * Callback for when scroll adjustments are created/updated
+ */
+static void on_scrolled_window_adjustment_notify(GObject* object, GParamSpec* pspec, gpointer user_data) {
+    ImageDocument* doc = (ImageDocument*)user_data;
+    GtkScrolledWindow* scrolled_window = GTK_SCROLLED_WINDOW(object);
+    GtkAdjustment* adj;
+
+    (void)pspec; /* Unused */
+
+    if (!doc || !scrolled_window) {
+        return;
+    }
+
+    /* Get the adjustment that was just created/updated */
+    if (g_strcmp0(pspec->name, "hadjustment") == 0) {
+        adj = gtk_scrolled_window_get_hadjustment(scrolled_window);
+    } else if (g_strcmp0(pspec->name, "vadjustment") == 0) {
+        adj = gtk_scrolled_window_get_vadjustment(scrolled_window);
+    } else {
+        return;
+    }
+
+    /* Connect to value-changed signal if adjustment exists and not already connected */
+    if (adj && !g_signal_handler_find(adj, G_SIGNAL_MATCH_FUNC, 0, 0, NULL,
+                                      G_CALLBACK(on_scroll_adjustment_changed), doc)) {
+        g_signal_connect(adj, "value-changed",
+                         G_CALLBACK(on_scroll_adjustment_changed), doc);
+    }
+}
 
 /**
  * Forward declarations for mouse event handlers
@@ -64,11 +112,12 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
 
     /* Draw the document if image is loaded */
     if (doc->layers && g_list_length(doc->layers) > 0) {
-        /* Calculate viewport in document coordinates (unscaled) */
-        viewport_x = (gint)(x1 / zoom);
-        viewport_y = (gint)(y1 / zoom);
-        viewport_w = (gint)(clip_width / zoom);
-        viewport_h = (gint)(clip_height / zoom);
+        /* Calculate viewport in document coordinates (unscaled) with proper rounding */
+        /* Use proper rounding to avoid pixel misalignment that causes visible lines when scrolling */
+        viewport_x = (gint)(round(x1 / zoom));
+        viewport_y = (gint)(round(y1 / zoom));
+        viewport_w = (gint)(round((x2 - x1) / zoom));
+        viewport_h = (gint)(round((y2 - y1) / zoom));
 
         /* Apply zoom transform */
         if (zoom != 1.0) {
@@ -472,6 +521,28 @@ GtkWidget* document_create_drawing_area(ImageDocument* doc) {
     /* Store references in document */
     doc->drawing_area = drawing_area;
     doc->scrolled_window = scrolled_window;
+
+    /* Connect to scroll adjustment signals to trigger redraws when scrolling */
+    /* Note: Adjustments might be NULL initially, so we'll connect when they're created */
+    if (GTK_IS_SCROLLED_WINDOW(scrolled_window)) {
+        GtkAdjustment* hadj = gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(scrolled_window));
+        GtkAdjustment* vadj = gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(scrolled_window));
+
+        if (hadj) {
+            g_signal_connect(hadj, "value-changed",
+                             G_CALLBACK(on_scroll_adjustment_changed), doc);
+        }
+        if (vadj) {
+            g_signal_connect(vadj, "value-changed",
+                             G_CALLBACK(on_scroll_adjustment_changed), doc);
+        }
+
+        /* Also connect to notify signal to catch when adjustments are created */
+        g_signal_connect(scrolled_window, "notify::hadjustment",
+                         G_CALLBACK(on_scrolled_window_adjustment_notify), doc);
+        g_signal_connect(scrolled_window, "notify::vadjustment",
+                         G_CALLBACK(on_scrolled_window_adjustment_notify), doc);
+    }
 
     gtk_widget_show(scrolled_window);
 

@@ -632,10 +632,17 @@ void document_render_layers_at_zoom(ImageDocument* doc, cairo_t* cr,
             continue;
         }
 
-        /* Set source with bilinear filtering for smooth scaling */
+        /* Set source with appropriate filtering */
+        /* Use nearest filter when zoomed in to avoid sub-pixel artifacts that cause visible lines */
         cairo_set_source_surface(cr, layer->cache_surface, 0, 0);
         cairo_pattern_t* pattern = cairo_get_source(cr);
-        cairo_pattern_set_filter(pattern, CAIRO_FILTER_BILINEAR);
+        if (zoom_factor >= 1.0) {
+            /* When zoomed in, use nearest filter for pixel-perfect rendering */
+            cairo_pattern_set_filter(pattern, CAIRO_FILTER_NEAREST);
+        } else {
+            /* When zoomed out, use bilinear for smooth scaling */
+            cairo_pattern_set_filter(pattern, CAIRO_FILTER_BILINEAR);
+        }
 
         /* Set operator based on layer's blend mode */
         cairo_operator_t op;
