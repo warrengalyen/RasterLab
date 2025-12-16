@@ -19,6 +19,8 @@ static void on_scrolled_window_adjustment_notify(GObject* object, GParamSpec* ps
 static gboolean on_viewport_button_press(GtkWidget* widget, GdkEventButton* event, gpointer user_data);
 static gboolean on_viewport_button_release(GtkWidget* widget, GdkEventButton* event, gpointer user_data);
 static gboolean on_viewport_motion_notify(GtkWidget* widget, GdkEventMotion* event, gpointer user_data);
+static gboolean on_viewport_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data);
+static gboolean on_drawing_area_debug_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data);
 
 /**
  * Callback for scroll adjustment changes - triggers redraw
@@ -541,6 +543,51 @@ static gboolean on_viewport_motion_notify(GtkWidget* widget, GdkEventMotion* eve
 }
 
 /**
+ * Viewport draw callback - draws debug outline
+ */
+static gboolean on_viewport_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
+    gint width, height;
+
+    (void)user_data; /* Unused */
+
+    width = gtk_widget_get_allocated_width(widget);
+    height = gtk_widget_get_allocated_height(widget);
+
+    /* Draw red outline for debugging (on top of background) */
+    cairo_save(cr);
+    cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+    cairo_set_line_width(cr, 4.0);
+    cairo_set_source_rgb(cr, 1.0, 0.0, 0.0); /* Red */
+    cairo_rectangle(cr, 2.0, 2.0, width - 4, height - 4);
+    cairo_stroke(cr);
+    cairo_restore(cr);
+
+    return FALSE; /* Continue with default drawing */
+}
+
+/**
+ * Drawing area debug draw callback - draws debug outline
+ */
+static gboolean on_drawing_area_debug_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
+    gint width, height;
+
+    (void)user_data; /* Unused */
+
+    width = gtk_widget_get_allocated_width(widget);
+    height = gtk_widget_get_allocated_height(widget);
+
+    /* Draw blue outline for debugging (different from viewport red outline) */
+    cairo_save(cr);
+    cairo_set_line_width(cr, 3.0);
+    cairo_set_source_rgb(cr, 0.0, 0.0, 1.0); /* Blue */
+    cairo_rectangle(cr, 1.5, 1.5, width - 3, height - 3);
+    cairo_stroke(cr);
+    cairo_restore(cr);
+
+    return FALSE; /* Continue with default drawing */
+}
+
+/**
  * Create a new image document
  */
 ImageDocument* document_new(const gchar* filename) {
@@ -551,6 +598,7 @@ ImageDocument* document_new(const gchar* filename) {
     doc->modified = FALSE;
     doc->drawing_area = NULL;
     doc->scrolled_window = NULL;
+    doc->viewport = NULL;
 
     /* Initialize image metadata */
     doc->width = 0;
@@ -650,6 +698,29 @@ GtkWidget* document_create_drawing_area(ImageDocument* doc) {
 
     /* Create a viewport to hold the drawing area (allows centering) */
     viewport = gtk_viewport_new(NULL, NULL);
+
+    /* Set a name on the viewport for CSS targeting */
+    gtk_widget_set_name(viewport, "canvas-viewport");
+
+    /* Set default canvas background color on viewport using CSS (will be updated when AppContext is available) */
+    gchar* css = g_strdup("#canvas-viewport { background-color: rgb(160, 160, 160); }");
+    GtkCssProvider* provider = gtk_css_provider_new();
+    gtk_css_provider_load_from_data(provider, css, -1, NULL);
+    g_free(css);
+
+    /* Store provider in widget data so it can be updated later */
+    g_object_set_data_full(G_OBJECT(viewport), "canvas_bg_provider", provider, g_object_unref);
+
+    GtkStyleContext* style_context = gtk_widget_get_style_context(viewport);
+    gtk_style_context_add_provider(style_context, GTK_STYLE_PROVIDER(provider),
+                                   GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+
+    /* Connect draw signal to draw debug outline (after default drawing) */
+    g_signal_connect_after(viewport, "draw", G_CALLBACK(on_viewport_draw), doc);
+
+    /* Store viewport reference in document for later updates */
+    doc->viewport = viewport;
+
     gtk_container_add(GTK_CONTAINER(scrolled_window), viewport);
     gtk_widget_show(viewport);
 
@@ -679,6 +750,9 @@ GtkWidget* document_create_drawing_area(ImageDocument* doc) {
 
     /* Connect draw signal */
     g_signal_connect(drawing_area, "draw", G_CALLBACK(on_drawing_area_draw), doc);
+
+    /* Connect debug draw signal (runs after main draw) */
+    g_signal_connect_after(drawing_area, "draw", G_CALLBACK(on_drawing_area_debug_draw), doc);
 
     /* Connect mouse event signals */
     g_signal_connect(drawing_area, "button-press-event",

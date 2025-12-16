@@ -78,6 +78,7 @@ typedef struct ImageDocument {
     gboolean modified;          /* Has document been modified? */
     GtkWidget* drawing_area;    /* Associated drawing area widget */
     GtkWidget* scrolled_window; /* Parent scrolled window */
+    GtkWidget* viewport;        /* Viewport widget (child of scrolled window) */
 
     /* Image metadata */
     guint width;        /* Image width in pixels */

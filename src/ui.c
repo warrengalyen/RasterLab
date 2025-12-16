@@ -313,6 +313,11 @@ AppContext* ui_create_main_window(void) {
     ctx->edit_menu_redo = NULL;
     ctx->layers_panel = NULL; /* Initialize layers_panel early */
 
+    /* Initialize canvas background color to rgb(160, 160, 160) */
+    ctx->canvas_bg_r = 160.0 / 255.0;
+    ctx->canvas_bg_g = 160.0 / 255.0;
+    ctx->canvas_bg_b = 160.0 / 255.0;
+
     /* Create and initialize tool manager */
     ctx->tool_registry = tool_manager_new();
     if (!tool_manager_init_defaults(ctx->tool_registry)) {
@@ -537,6 +542,28 @@ ImageDocument* ui_create_document_tab(AppContext* ctx, const gchar* filename) {
         }
     }
 
+    /* Update viewport background color with current canvas background color using CSS */
+    if (doc && doc->viewport) {
+        guint r = (guint)(ctx->canvas_bg_r * 255.0);
+        guint g = (guint)(ctx->canvas_bg_g * 255.0);
+        guint b = (guint)(ctx->canvas_bg_b * 255.0);
+
+        /* Get or create CSS provider for this viewport */
+        GtkCssProvider* provider = (GtkCssProvider*)g_object_get_data(G_OBJECT(doc->viewport), "canvas_bg_provider");
+        if (!provider) {
+            provider = gtk_css_provider_new();
+            g_object_set_data_full(G_OBJECT(doc->viewport), "canvas_bg_provider", provider, g_object_unref);
+            GtkStyleContext* style_context = gtk_widget_get_style_context(doc->viewport);
+            gtk_style_context_add_provider(style_context, GTK_STYLE_PROVIDER(provider),
+                                           GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+        }
+
+        gchar* css = g_strdup_printf("#canvas-viewport { background-color: rgb(%u, %u, %u); }", r, g, b);
+        gtk_css_provider_load_from_data(provider, css, -1, NULL);
+        g_free(css);
+        gtk_widget_queue_draw(doc->viewport);
+    }
+
     /* Add document to list */
     ctx->documents = g_list_append(ctx->documents, doc);
 
@@ -545,8 +572,6 @@ ImageDocument* ui_create_document_tab(AppContext* ctx, const gchar* filename) {
 
     /* Update window title */
     ui_update_window_title(ctx);
-
-    // printf("Opened document: %s\n", filename);
 
     return doc;
 }
@@ -2042,6 +2067,80 @@ void ui_update_menu_and_button_states(AppContext* ctx) {
     }
     if (ctx->layer_menu_duplicate && GTK_IS_WIDGET(ctx->layer_menu_duplicate)) {
         gtk_widget_set_sensitive(ctx->layer_menu_duplicate, has_document && has_selection);
+    }
+}
+
+/**
+ * Get canvas background color
+ */
+void ui_get_canvas_background_color(AppContext* ctx, gdouble* r, gdouble* g, gdouble* b) {
+    if (!ctx) {
+        /* Return default if context is NULL */
+        if (r)
+            *r = 160.0 / 255.0;
+        if (g)
+            *g = 160.0 / 255.0;
+        if (b)
+            *b = 160.0 / 255.0;
+        return;
+    }
+
+    if (r)
+        *r = ctx->canvas_bg_r;
+    if (g)
+        *g = ctx->canvas_bg_g;
+    if (b)
+        *b = ctx->canvas_bg_b;
+}
+
+/**
+ * Set canvas background color
+ */
+void ui_set_canvas_background_color(AppContext* ctx, gdouble r, gdouble g, gdouble b) {
+    if (!ctx) {
+        return;
+    }
+
+    /* Clamp values to 0.0-1.0 */
+    ctx->canvas_bg_r = (r < 0.0) ? 0.0 : ((r > 1.0) ? 1.0 : r);
+    ctx->canvas_bg_g = (g < 0.0) ? 0.0 : ((g > 1.0) ? 1.0 : g);
+    ctx->canvas_bg_b = (b < 0.0) ? 0.0 : ((b > 1.0) ? 1.0 : b);
+
+    /* Update all open documents */
+    ui_update_canvas_background_color(ctx);
+}
+
+/**
+ * Update canvas background color for all open documents
+ */
+void ui_update_canvas_background_color(AppContext* ctx) {
+    if (!ctx) {
+        return;
+    }
+
+    guint r = (guint)(ctx->canvas_bg_r * 255.0);
+    guint g = (guint)(ctx->canvas_bg_g * 255.0);
+    guint b = (guint)(ctx->canvas_bg_b * 255.0);
+
+    /* Update viewport background for all documents */
+    for (GList* iter = ctx->documents; iter; iter = iter->next) {
+        ImageDocument* doc = (ImageDocument*)iter->data;
+        if (doc && doc->viewport) {
+            /* Get or create CSS provider for this viewport */
+            GtkCssProvider* provider = (GtkCssProvider*)g_object_get_data(G_OBJECT(doc->viewport), "canvas_bg_provider");
+            if (!provider) {
+                provider = gtk_css_provider_new();
+                g_object_set_data_full(G_OBJECT(doc->viewport), "canvas_bg_provider", provider, g_object_unref);
+                GtkStyleContext* style_context = gtk_widget_get_style_context(doc->viewport);
+                gtk_style_context_add_provider(style_context, GTK_STYLE_PROVIDER(provider),
+                                               GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+            }
+
+            gchar* css = g_strdup_printf("#canvas-viewport { background-color: rgb(%u, %u, %u); }", r, g, b);
+            gtk_css_provider_load_from_data(provider, css, -1, NULL);
+            g_free(css);
+            gtk_widget_queue_draw(doc->viewport);
+        }
     }
 }
 

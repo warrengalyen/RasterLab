@@ -27,6 +27,9 @@ typedef struct {
     ToolRegistry* tool_registry;          /* Tool registry and management */
     ToolOptionsPanel* tool_options_panel; /* Tool options panel */
     LayersPanel* layers_panel;            /* Layers panel for layer selection */
+    gdouble canvas_bg_r;                  /* Canvas background color (red, 0.0-1.0) */
+    gdouble canvas_bg_g;                  /* Canvas background color (green, 0.0-1.0) */
+    gdouble canvas_bg_b;                  /* Canvas background color (blue, 0.0-1.0) */
 } AppContext;
 
 /**
@@ -100,5 +103,29 @@ void ui_save_document_as(AppContext* ctx);
  * @param time_seconds Processing time in seconds
  */
 void ui_update_status_bar_time(AppContext* ctx, gdouble time_seconds);
+
+/**
+ * Get canvas background color
+ * @param ctx The application context
+ * @param r Output parameter for red component (0.0-1.0)
+ * @param g Output parameter for green component (0.0-1.0)
+ * @param b Output parameter for blue component (0.0-1.0)
+ */
+void ui_get_canvas_background_color(AppContext* ctx, gdouble* r, gdouble* g, gdouble* b);
+
+/**
+ * Set canvas background color
+ * @param ctx The application context
+ * @param r Red component (0.0-1.0)
+ * @param g Green component (0.0-1.0)
+ * @param b Blue component (0.0-1.0)
+ */
+void ui_set_canvas_background_color(AppContext* ctx, gdouble r, gdouble g, gdouble b);
+
+/**
+ * Update canvas background color for all open documents
+ * @param ctx The application context
+ */
+void ui_update_canvas_background_color(AppContext* ctx);
 
 #endif /* UI_H */
