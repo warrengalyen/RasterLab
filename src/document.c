@@ -1331,29 +1331,52 @@ void document_zoom_out(ImageDocument* doc) {
 }
 
 /**
- * Zoom fit (fit to window - simplified, just reset)
+ * Zoom fit (fit to viewport - canvas extends to edges while maintaining aspect ratio)
  */
 void document_zoom_fit(ImageDocument* doc) {
     if (!doc) {
         return;
     }
 
-    /* Simple fit: scale to fit typical window */
-    /* For now, just set a reasonable zoom for the image size */
-    if (doc->width > 0 && doc->height > 0) {
-        gdouble zoom = 1.0;
-
-        /* Fit to roughly 800x600 visible area */
-        if (doc->width > 800 || doc->height > 600) {
-            gdouble zoom_w = 800.0 / doc->width;
-            gdouble zoom_h = 600.0 / doc->height;
-            zoom = (zoom_w < zoom_h) ? zoom_w : zoom_h;
-        }
-
-        doc->zoom_factor = zoom;
-        document_set_zoom(doc, zoom);
-        // printf("Zoom fit: %.0f%%\n", zoom * 100);
+    if (doc->width <= 0 || doc->height <= 0) {
+        return;
     }
+
+    /* Get the viewport size (visible area) */
+    gint viewport_width = 0;
+    gint viewport_height = 0;
+
+    if (doc->viewport && gtk_widget_get_visible(doc->viewport)) {
+        /* Get allocated size of viewport (visible area) */
+        viewport_width = gtk_widget_get_allocated_width(doc->viewport);
+        viewport_height = gtk_widget_get_allocated_height(doc->viewport);
+    }
+
+    /* If viewport is not available or not yet allocated, use a default size */
+    if (viewport_width <= 0 || viewport_height <= 0) {
+        viewport_width = 800;
+        viewport_height = 600;
+    }
+
+    /* Calculate zoom factors for width and height */
+    gdouble zoom_w = (gdouble)viewport_width / (gdouble)doc->width;
+    gdouble zoom_h = (gdouble)viewport_height / (gdouble)doc->height;
+
+    /* Use the smaller zoom factor to ensure canvas fits inside viewport
+     * while maintaining aspect ratio. This makes the canvas extend to
+     * the edges of the viewport in at least one dimension. */
+    gdouble zoom = (zoom_w < zoom_h) ? zoom_w : zoom_h;
+
+    /* Clamp zoom to reasonable range (10% - 400%) */
+    if (zoom < 0.1) {
+        zoom = 0.1;
+    } else if (zoom > 4.0) {
+        zoom = 4.0;
+    }
+
+    doc->zoom_factor = zoom;
+    document_set_zoom(doc, zoom);
+    // printf("Zoom fit: %.0f%% (viewport: %dx%d, canvas: %dx%d)\n", zoom * 100, viewport_width, viewport_height, doc->width, doc->height);
 }
 
 /**
