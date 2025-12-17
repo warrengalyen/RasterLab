@@ -2,17 +2,21 @@
 #include "document.h"
 #include <gdk/gdk.h>
 #include <gtk/gtk.h>
-#include <stdio.h>
+#include <math.h>
 
 /**
  * Hand Tool state
  */
 typedef struct {
     gboolean is_dragging;     /* Currently dragging? */
-    gdouble start_x;          /* Mouse down position X in widget/viewport coordinates */
-    gdouble start_y;          /* Mouse down position Y in widget/viewport coordinates */
+    gdouble start_x;          /* Mouse down position X in viewport coordinates */
+    gdouble start_y;          /* Mouse down position Y in viewport coordinates */
+    gdouble last_x;           /* Last mouse position X (for incremental tracking) */
+    gdouble last_y;           /* Last mouse position Y (for incremental tracking) */
     gdouble start_hadj_value; /* Horizontal adjustment value at drag start */
     gdouble start_vadj_value; /* Vertical adjustment value at drag start */
+    GtkAdjustment* hadj;      /* Cached horizontal adjustment reference */
+    GtkAdjustment* vadj;      /* Cached vertical adjustment reference */
 } HandToolState;
 
 /**
@@ -45,10 +49,15 @@ static void hand_tool_mouse_down(Tool* tool, struct ImageDocument* doc, MouseEve
 
     /* Start dragging */
     state->is_dragging = TRUE;
-    /* Store start position in widget coordinates (for panning, we work in widget space) */
-    /* Convert image coordinates to widget coordinates */
-    state->start_x = (gdouble)event->x * doc->zoom_factor;
-    state->start_y = (gdouble)event->y * doc->zoom_factor;
+    /* Store adjustment references to ensure we use the same objects throughout the drag */
+    state->hadj = hadj;
+    state->vadj = vadj;
+    /* Store start mouse position in viewport coordinates */
+    state->start_x = (gdouble)event->x;
+    state->start_y = (gdouble)event->y;
+    state->last_x = state->start_x;
+    state->last_y = state->start_y;
+    /* Store start scroll position */
     state->start_hadj_value = gtk_adjustment_get_value(hadj);
     state->start_vadj_value = gtk_adjustment_get_value(vadj);
 
@@ -79,7 +88,6 @@ static void hand_tool_mouse_move(Tool* tool, struct ImageDocument* doc, MouseEve
     HandToolState* state;
     GtkAdjustment* hadj = NULL;
     GtkAdjustment* vadj = NULL;
-    gdouble delta_x, delta_y;
     gdouble new_hadj_value, new_vadj_value;
 
     if (!tool || !doc || !tool->user_data || !doc->scrolled_window) {
@@ -92,28 +100,40 @@ static void hand_tool_mouse_move(Tool* tool, struct ImageDocument* doc, MouseEve
         return;
     }
 
-    /* Get scroll adjustments */
-    if (GTK_IS_SCROLLED_WINDOW(doc->scrolled_window)) {
-        hadj = gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(doc->scrolled_window));
-        vadj = gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(doc->scrolled_window));
+    /* Use cached adjustment references from mouse_down */
+    hadj = state->hadj;
+    vadj = state->vadj;
+
+    /* Verify adjustments are still valid */
+    if (!hadj || !vadj || !GTK_IS_ADJUSTMENT(hadj) || !GTK_IS_ADJUSTMENT(vadj)) {
+        /* If adjustments are invalid, try to get fresh ones */
+        if (GTK_IS_SCROLLED_WINDOW(doc->scrolled_window)) {
+            hadj = gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(doc->scrolled_window));
+            vadj = gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(doc->scrolled_window));
+            state->hadj = hadj;
+            state->vadj = vadj;
+        }
+        if (!hadj || !vadj) {
+            return;
+        }
     }
 
-    if (!hadj || !vadj) {
-        return;
-    }
+    /* Get current mouse position in viewport coordinates */
+    gdouble current_x = (gdouble)event->x;
+    gdouble current_y = (gdouble)event->y;
 
-    /* Calculate delta in widget coordinates */
-    /* Convert current position from image coordinates to widget coordinates */
-    gdouble current_x = (gdouble)event->x * doc->zoom_factor;
-    gdouble current_y = (gdouble)event->y * doc->zoom_factor;
+    /* Calculate delta from last mouse position (incremental approach) */
+    /* This prevents jumps if something modifies scroll position between calls */
+    gdouble incremental_delta_x = state->last_x - current_x;
+    gdouble incremental_delta_y = state->last_y - current_y;
 
-    /* Calculate delta in widget space (inverted because we're panning) */
-    delta_x = state->start_x - current_x;
-    delta_y = state->start_y - current_y;
+    /* Get current scroll position */
+    gdouble current_hadj_value = gtk_adjustment_get_value(hadj);
+    gdouble current_vadj_value = gtk_adjustment_get_value(vadj);
 
-    /* Calculate new adjustment values (add delta to start position) */
-    new_hadj_value = state->start_hadj_value + delta_x;
-    new_vadj_value = state->start_vadj_value + delta_y;
+    /* Calculate new scroll position: current position + incremental mouse delta */
+    new_hadj_value = current_hadj_value + incremental_delta_x;
+    new_vadj_value = current_vadj_value + incremental_delta_y;
 
     /* Clamp to adjustment bounds */
     gdouble hadj_lower = gtk_adjustment_get_lower(hadj);
@@ -136,8 +156,23 @@ static void hand_tool_mouse_move(Tool* tool, struct ImageDocument* doc, MouseEve
     }
 
     /* Set new adjustment values */
+    /* Use gtk_adjustment_set_value - it will automatically clamp to valid range */
     gtk_adjustment_set_value(hadj, new_hadj_value);
     gtk_adjustment_set_value(vadj, new_vadj_value);
+
+    gdouble after_hadj = gtk_adjustment_get_value(hadj);
+    gdouble after_vadj = gtk_adjustment_get_value(vadj);
+
+    /* Update last mouse position based on actual scroll change, not mouse movement */
+    /* This prevents jumps when scroll is clamped at boundaries */
+    gdouble actual_delta_h = after_hadj - current_hadj_value;
+    gdouble actual_delta_v = after_vadj - current_vadj_value;
+
+    /* Adjust last mouse position to match the actual scroll change */
+    /* If scroll was clamped, we need to adjust last_x/y so the next delta calculation is correct */
+    /* The relationship is: mouse_delta = scroll_delta, so if scroll_delta != mouse_delta, adjust last_x */
+    state->last_x = current_x + actual_delta_h;
+    state->last_y = current_y + actual_delta_v;
 }
 
 /**

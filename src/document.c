@@ -408,25 +408,10 @@ static gboolean on_viewport_button_press(GtkWidget* widget, GdkEventButton* even
         return FALSE; /* Only handle hand tool */
     }
 
-    /* For hand tool, we need to convert viewport coordinates to drawing area coordinates */
-    /* Get drawing area allocation to calculate relative position */
-    GtkAllocation drawing_alloc;
-    gtk_widget_get_allocation(doc->drawing_area, &drawing_alloc);
-
-    /* Get viewport allocation */
-    GtkAllocation viewport_alloc;
-    gtk_widget_get_allocation(widget, &viewport_alloc);
-
-    /* Calculate drawing area position relative to viewport */
-    gint drawing_x_in_viewport = drawing_alloc.x;
-    gint drawing_y_in_viewport = drawing_alloc.y;
-
-    /* Convert event coordinates (relative to viewport) to drawing area coordinates */
-    gdouble widget_x = event->x - drawing_x_in_viewport;
-    gdouble widget_y = event->y - drawing_y_in_viewport;
-
-    /* Convert to image coordinates */
-    widget_to_image_coords(doc, widget_x, widget_y, &tool_event.x, &tool_event.y);
+    /* For hand tool, pass viewport coordinates directly */
+    /* Viewport coordinates are relative to the viewport widget and are stable */
+    tool_event.x = (gint)event->x;
+    tool_event.y = (gint)event->y;
 
     tool_event.button = event->button;
     tool_event.state = event->state;
@@ -465,20 +450,10 @@ static gboolean on_viewport_button_release(GtkWidget* widget, GdkEventButton* ev
         return FALSE; /* Only handle hand tool */
     }
 
-    /* Convert viewport coordinates to drawing area coordinates */
-    GtkAllocation drawing_alloc;
-    gtk_widget_get_allocation(doc->drawing_area, &drawing_alloc);
-
-    GtkAllocation viewport_alloc;
-    gtk_widget_get_allocation(widget, &viewport_alloc);
-
-    gint drawing_x_in_viewport = drawing_alloc.x;
-    gint drawing_y_in_viewport = drawing_alloc.y;
-
-    gdouble widget_x = event->x - drawing_x_in_viewport;
-    gdouble widget_y = event->y - drawing_y_in_viewport;
-
-    widget_to_image_coords(doc, widget_x, widget_y, &tool_event.x, &tool_event.y);
+    /* For hand tool, pass viewport coordinates directly */
+    /* Viewport coordinates are relative to the viewport widget and are stable */
+    tool_event.x = (gint)event->x;
+    tool_event.y = (gint)event->y;
 
     tool_event.button = event->button;
     tool_event.state = event->state;
@@ -517,20 +492,10 @@ static gboolean on_viewport_motion_notify(GtkWidget* widget, GdkEventMotion* eve
         return FALSE; /* Only handle hand tool */
     }
 
-    /* Convert viewport coordinates to drawing area coordinates */
-    GtkAllocation drawing_alloc;
-    gtk_widget_get_allocation(doc->drawing_area, &drawing_alloc);
-
-    GtkAllocation viewport_alloc;
-    gtk_widget_get_allocation(widget, &viewport_alloc);
-
-    gint drawing_x_in_viewport = drawing_alloc.x;
-    gint drawing_y_in_viewport = drawing_alloc.y;
-
-    gdouble widget_x = event->x - drawing_x_in_viewport;
-    gdouble widget_y = event->y - drawing_y_in_viewport;
-
-    widget_to_image_coords(doc, widget_x, widget_y, &tool_event.x, &tool_event.y);
+    /* For hand tool, pass viewport coordinates directly */
+    /* Viewport coordinates are relative to the viewport widget and are stable */
+    tool_event.x = (gint)event->x;
+    tool_event.y = (gint)event->y;
 
     tool_event.button = 0; /* No button pressed during motion */
     tool_event.state = event->state;
