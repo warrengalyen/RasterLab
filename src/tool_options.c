@@ -57,8 +57,9 @@ void tool_options_set_size(ToolOptions* opts, gfloat size) {
         return;
     }
 
-    /* Clamp size to 1-100 */
-    opts->size = fmaxf(1.0f, fminf(100.0f, size));
+    /* Clamp size to minimum 1.0, but don't cap the maximum as different tools have different limits
+       (brush: 0-2000, eraser: 0-100) */
+    opts->size = fmaxf(1.0f, size);
 }
 
 /**

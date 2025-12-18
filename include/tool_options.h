@@ -9,7 +9,7 @@
  */
 
 typedef struct {
-    gfloat size;               /* Brush/Eraser size in pixels (1-100) */
+    gfloat size;               /* Brush/Eraser size in pixels (brush: 1-2000, eraser: 1-100) */
     gfloat opacity;            /* Tool opacity 0-1 (0=transparent, 1=opaque) */
     gfloat hardness;           /* Brush hardness 0-1 (0=soft, 1=hard) */
     gfloat flow;               /* Eraser flow 0-1 (0=no effect, 1=full effect) */
@@ -47,7 +47,7 @@ ToolOptions* tool_options_get_for_tool(ToolType tool_type);
 /**
  * Set size
  * @param opts The tool options
- * @param size New size (clamped to 1-100)
+ * @param size New size (clamped to minimum 1, maximum depends on tool)
  */
 void tool_options_set_size(ToolOptions* opts, gfloat size);
 
@@ -99,5 +99,17 @@ void tool_options_set_fill_contiguous(ToolOptions* opts, gboolean contiguous);
  * @param antialiased TRUE for antialiased edges, FALSE for hard edges
  */
 void tool_options_set_fill_antialiased(ToolOptions* opts, gboolean antialiased);
+
+/**
+ * Save current tool options before switching tools
+ * @param tool_type The tool type whose options should be saved
+ */
+void tool_options_save_for_tool(ToolType tool_type);
+
+/**
+ * Load tool options when switching to a tool
+ * @param tool_type The tool type whose options should be loaded
+ */
+void tool_options_load_for_tool(ToolType tool_type);
 
 #endif /* TOOL_OPTIONS_H */
