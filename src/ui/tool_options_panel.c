@@ -259,6 +259,8 @@ static GtkWidget* load_panel_from_glade(const gchar* resource_path, const gchar*
             *size_scale = NULL;
         } else {
             *size_scale = widget;
+            /* Store panel reference for callbacks */
+            g_object_set_data(G_OBJECT(widget), "tool_options_panel", panel);
             /* Connect signal - values will be set when switching tools */
             g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_size_changed), NULL);
         }
@@ -273,8 +275,10 @@ static GtkWidget* load_panel_from_glade(const gchar* resource_path, const gchar*
             *opacity_scale = widget;
             if (opts) {
                 set_scale_value(widget, opts->opacity * 100.0);
-                g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_opacity_changed), NULL);
             }
+            /* Store panel reference for callbacks */
+            g_object_set_data(G_OBJECT(widget), "tool_options_panel", panel);
+            g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_opacity_changed), NULL);
         }
     }
 
@@ -285,6 +289,8 @@ static GtkWidget* load_panel_from_glade(const gchar* resource_path, const gchar*
             *hardness_scale = NULL;
         } else {
             *hardness_scale = widget;
+            /* Store panel reference for callbacks */
+            g_object_set_data(G_OBJECT(widget), "tool_options_panel", panel);
             /* Connect signal - values will be set when switching tools */
             g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_hardness_changed), NULL);
         }
@@ -297,6 +303,8 @@ static GtkWidget* load_panel_from_glade(const gchar* resource_path, const gchar*
             *flow_scale = NULL;
         } else {
             *flow_scale = widget;
+            /* Store panel reference for callbacks */
+            g_object_set_data(G_OBJECT(widget), "tool_options_panel", panel);
             /* Connect signal - values will be set when switching tools */
             g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_flow_changed), NULL);
         }
@@ -309,6 +317,8 @@ static GtkWidget* load_panel_from_glade(const gchar* resource_path, const gchar*
             *spacing_scale = NULL;
         } else {
             *spacing_scale = widget;
+            /* Store panel reference for callbacks */
+            g_object_set_data(G_OBJECT(widget), "tool_options_panel", panel);
             /* Connect signal - values will be set when switching tools */
             g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_spacing_changed), NULL);
         }
@@ -575,6 +585,8 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
                 if (opts) {
                     g_signal_handlers_disconnect_by_func(widget, G_CALLBACK(on_tool_opacity_changed), NULL);
                     set_scale_value(widget, opts->opacity * 100.0);
+                    /* Store panel reference in scale widget for callback */
+                    g_object_set_data(G_OBJECT(widget), "tool_options_panel", panel);
                     g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_opacity_changed), NULL);
                 }
             }
@@ -584,6 +596,8 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
                 if (opts) {
                     g_signal_handlers_disconnect_by_func(widget, G_CALLBACK(on_tool_hardness_changed), NULL);
                     set_scale_value(widget, opts->hardness * 100.0);
+                    /* Store panel reference in scale widget for callback */
+                    g_object_set_data(G_OBJECT(widget), "tool_options_panel", panel);
                     g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_hardness_changed), NULL);
                 }
             }
@@ -593,6 +607,8 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
                 if (opts) {
                     g_signal_handlers_disconnect_by_func(widget, G_CALLBACK(on_tool_flow_changed), NULL);
                     set_scale_value(widget, opts->flow * 100.0);
+                    /* Store panel reference in scale widget for callback */
+                    g_object_set_data(G_OBJECT(widget), "tool_options_panel", panel);
                     g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_flow_changed), NULL);
                 }
             }
@@ -602,6 +618,8 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
                 if (opts) {
                     g_signal_handlers_disconnect_by_func(widget, G_CALLBACK(on_tool_spacing_changed), NULL);
                     set_scale_value(widget, opts->spacing * 100.0);
+                    /* Store panel reference in scale widget for callback */
+                    g_object_set_data(G_OBJECT(widget), "tool_options_panel", panel);
                     g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_spacing_changed), NULL);
                 }
             }
@@ -640,6 +658,8 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
             if (opts) {
                 g_signal_handlers_disconnect_by_func(widget, G_CALLBACK(on_tool_opacity_changed), NULL);
                 set_scale_value(widget, opts->opacity * 100.0);
+                /* Store panel reference in scale widget for callback */
+                g_object_set_data(G_OBJECT(widget), "tool_options_panel", panel);
                 g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_opacity_changed), NULL);
             }
         }
@@ -649,6 +669,8 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
             if (opts) {
                 g_signal_handlers_disconnect_by_func(widget, G_CALLBACK(on_tool_hardness_changed), NULL);
                 set_scale_value(widget, opts->hardness * 100.0);
+                /* Store panel reference in scale widget for callback */
+                g_object_set_data(G_OBJECT(widget), "tool_options_panel", panel);
                 g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_hardness_changed), NULL);
             }
         }
@@ -658,6 +680,8 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
             if (opts) {
                 g_signal_handlers_disconnect_by_func(widget, G_CALLBACK(on_tool_flow_changed), NULL);
                 set_scale_value(widget, opts->flow * 100.0);
+                /* Store panel reference in scale widget for callback */
+                g_object_set_data(G_OBJECT(widget), "tool_options_panel", panel);
                 g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_flow_changed), NULL);
             }
         }
@@ -667,6 +691,8 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
             if (opts) {
                 g_signal_handlers_disconnect_by_func(widget, G_CALLBACK(on_tool_spacing_changed), NULL);
                 set_scale_value(widget, opts->spacing * 100.0);
+                /* Store panel reference in scale widget for callback */
+                g_object_set_data(G_OBJECT(widget), "tool_options_panel", panel);
                 g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_spacing_changed), NULL);
             }
         }
