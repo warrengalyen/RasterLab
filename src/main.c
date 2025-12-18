@@ -23,7 +23,7 @@ int main(int argc, char* argv[]) {
     gtk_init(&argc, &argv);
 
     /* Initialize recent files system */
-    // recent_files_init();
+    recent_files_init();
 
     /* Initialize autosave system */
     // autosave_init();
