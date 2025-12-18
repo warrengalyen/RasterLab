@@ -115,15 +115,7 @@ gboolean tool_manager_activate(ToolRegistry* registry, ToolType type) {
         return FALSE;
     }
 
-    /* Save options from the currently active tool before switching */
-    if (registry->active_tool) {
-        tool_options_save_for_tool(registry->active_tool->type);
-    }
-
     registry->active_tool = tool;
-
-    /* Load options for the new tool */
-    tool_options_load_for_tool(type);
 
     /* Update cursor for brush/eraser tools based on current size */
     if (tool->type == TOOL_BRUSH || tool->type == TOOL_ERASER) {

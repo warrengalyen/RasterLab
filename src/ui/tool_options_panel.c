@@ -14,6 +14,7 @@ static void on_tool_size_changed(GtkScale* scale, gpointer user_data) {
     gfloat size = gtk_range_get_value(GTK_RANGE(scale));
     ToolOptionsPanel* panel = (ToolOptionsPanel*)g_object_get_data(G_OBJECT(scale), "tool_options_panel");
     if (panel && panel->current_tool_type != TOOL_MOVE) {
+        /* Update only the per-tool options */
         ToolOptions* opts = tool_options_get_for_tool(panel->current_tool_type);
         if (opts) {
             tool_options_set_size(opts, size);

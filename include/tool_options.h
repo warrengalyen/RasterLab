@@ -100,16 +100,4 @@ void tool_options_set_fill_contiguous(ToolOptions* opts, gboolean contiguous);
  */
 void tool_options_set_fill_antialiased(ToolOptions* opts, gboolean antialiased);
 
-/**
- * Save current tool options before switching tools
- * @param tool_type The tool type whose options should be saved
- */
-void tool_options_save_for_tool(ToolType tool_type);
-
-/**
- * Load tool options when switching to a tool
- * @param tool_type The tool type whose options should be loaded
- */
-void tool_options_load_for_tool(ToolType tool_type);
-
 #endif /* TOOL_OPTIONS_H */
