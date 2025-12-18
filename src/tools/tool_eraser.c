@@ -211,7 +211,7 @@ static void eraser_tool_mouse_down(Tool* tool, struct ImageDocument* doc, MouseE
     active_layer->cache_dirty = TRUE;
 
     /* Mark initial dot area as dirty */
-    ToolOptions* opts = tool_options_get_global();
+    ToolOptions* opts = tool_options_get_for_tool(tool->type);
     gfloat eraser_size = opts ? opts->size : 5.0f;
     gint margin = (gint)(eraser_size / 2.0f) + 3;
     DirtyRect dirty_rect;
