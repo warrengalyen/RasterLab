@@ -23,16 +23,18 @@ int main(int argc, char* argv[]) {
     gtk_init(&argc, &argv);
 
     /* Initialize recent files system */
-    recent_files_init();
+    // recent_files_init();
 
     /* Initialize autosave system */
-    autosave_init();
+    // autosave_init();
 
     /* Test filter preview widget */
     // test_filter_preview_dialog();
 
     /* Test filter dialog */
     // test_filter_dialog();
+
+    test_curves_widget();
 
     /* Create the main application UI */
     app = ui_create_main_window();

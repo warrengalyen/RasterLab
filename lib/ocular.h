@@ -230,12 +230,47 @@ typedef enum {
     OC_AUTO_THRESHOLD_YEN,
 } OcAutoThresholdMethod;
 
+/* Curve structures */
+
+/**
+ * @struct OcCurvePoint
+ * @brief A point on the curve defined by input and output values
+ * @var input The input value (0-255)
+ * @var output The output value (0-255)
+ */
+typedef struct {
+    uint8_t input;
+    uint8_t output;
+} OcCurvePoint;
+
+/**
+ * @struct OcCurve
+ * @brief Curve definition with control points for tone mapping
+ * @var points Array of curve control points
+ * @var pointCount Number of control points
+ * @var lut Lookup table (256 entries) for fast curve application
+ */
+typedef struct {
+    OcCurvePoint* points;
+    int pointCount;
+    uint8_t lut[256]; // Precomputed lookup table
+} OcCurve;
+
+OcCurve* createCurve(void);
+void destroyCurve(OcCurve* curve);
+OC_STATUS curveAddPoint(OcCurve* curve, uint8_t input, uint8_t output);
+OC_STATUS curveRemovePoint(OcCurve* curve, uint8_t input);
+OC_STATUS curveBuild(OcCurve* curve);
+
 /* ============================================================================
  * Color Adjustment Functions
  * ============================================================================ */
 
 OC_STATUS ocularBrightnessAndContrastFilter(unsigned char* Input, unsigned char* Output, int Width,
                                             int Height, int Stride, float brightness, float contrast);
+
+OC_STATUS ocularCurvesFilter(const unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride,
+                             const OcCurve* curveR, const OcCurve* curveG, const OcCurve* curveB, const OcCurve* curveL);
 
 OC_STATUS ocularGrayscaleFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride);
 
