@@ -193,11 +193,21 @@ static void eraser_tool_mouse_down(Tool* tool, struct ImageDocument* doc, MouseE
     state->last_x = event->x;
     state->last_y = event->y;
     state->active_layer = active_layer;
+
+    /* CRITICAL: Create erase command BEFORE any erasing - captures the "before" state */
+    state->current_command = command_create_draw(active_layer,
+                                                 command_get_name_string(CMD_NAME_ERASE));
+
     /* Erase initial dot at mouse down position */
     gint layer_x = event->x - active_layer->offset_x;
     gint layer_y = event->y - active_layer->offset_y;
 
     eraser_erase_dot(active_layer->surface, layer_x, layer_y);
+
+    /* CRITICAL: Flush Cairo surface to ensure drawing is written to pixel buffer
+       Worker threads will read the raw pixels, so we must flush first */
+    cairo_surface_flush(active_layer->surface);
+
     active_layer->cache_dirty = TRUE;
 
     /* Mark initial dot area as dirty */
@@ -212,15 +222,6 @@ static void eraser_tool_mouse_down(Tool* tool, struct ImageDocument* doc, MouseE
     if (!dirty_rect_is_empty(&dirty_rect)) {
         document_invalidate_region(doc, &dirty_rect);
     }
-
-    /* Create a draw command for undo/redo */
-    state->current_command = command_create_draw(active_layer,
-                                                 command_get_name_string(CMD_NAME_ERASE));
-    if (state->current_command && doc->undo_stack) {
-        // printf("Eraser tool: erase command created\n");
-    }
-
-    // printf("Eraser tool: started erasing at (%d, %d)\n", event->x, event->y);
 }
 
 /**
@@ -258,6 +259,10 @@ static void eraser_tool_mouse_move(Tool* tool, struct ImageDocument* doc,
 
     eraser_erase_line(active_layer->surface, layer_x1, layer_y1, layer_x2,
                       layer_y2);
+
+    /* CRITICAL: Flush Cairo surface to ensure drawing is written to pixel buffer
+       Worker threads will read the raw pixels, so we must flush first */
+    cairo_surface_flush(active_layer->surface);
 
     /* Mark layer cache as dirty but don't destroy it yet
        We'll regenerate it lazily only when needed for compositing
@@ -315,7 +320,7 @@ static void eraser_tool_mouse_up(Tool* tool, struct ImageDocument* doc, MouseEve
         return;
     }
 
-    /* Finalize draw command by taking snapshot of state after erasing */
+    /* Finalize erase command - captures the "after" state */
     if (state->current_command) {
         command_finalize_draw(state->current_command);
     }

@@ -34,7 +34,7 @@ int main(int argc, char* argv[]) {
     /* Test filter dialog */
     // test_filter_dialog();
 
-    test_curves_widget();
+    // test_curves_widget();
 
     /* Create the main application UI */
     app = ui_create_main_window();

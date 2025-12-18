@@ -4,6 +4,8 @@
 #include "render/layer.h"
 #include "render/render_utils.h"
 #include "render/tile.h"
+#include "render/tile_thread_pool.h"
+#include "render/tile_worker.h"
 #include "tool_manager.h"
 #include "tools.h"
 #include "ui/layers_panel.h"
@@ -112,6 +114,63 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
         clip_height = (gint)(y2 - y1);
         draw_checkered_background(cr, clip_width, clip_height);
         return FALSE;
+    }
+
+    /* Process completed tiles from Cairo-safe worker pool
+       Workers have finished compositing into pixel_buffer, now upload to Cairo */
+    if (doc->tile_worker_pool) {
+        guint uploaded = tile_worker_pool_process_uploads(doc->tile_worker_pool);
+        if (uploaded > 0) {
+            g_debug("Uploaded %u tiles to Cairo surfaces", uploaded);
+        }
+    }
+
+    /* Poll completed tiles from legacy thread pool (if enabled) */
+    if (doc->tile_thread_pool) {
+        CompletedTile completed;
+        gint updated_count = 0;
+
+        while (tile_thread_pool_pop_completed(doc->tile_thread_pool, &completed)) {
+            /* Safety: check tile still exists and surface is valid */
+            if (!completed.tile || !doc->tile_grid || !completed.surface) {
+                if (completed.surface) {
+                    cairo_surface_destroy(completed.surface);
+                }
+                continue;
+            }
+
+            /* Safety: verify Cairo surface is valid */
+            if (cairo_surface_status(completed.surface) != CAIRO_STATUS_SUCCESS) {
+                g_warning("Discarding invalid Cairo surface from worker thread");
+                cairo_surface_destroy(completed.surface);
+                continue;
+            }
+
+            /* Apply result if generation ID matches (not stale) */
+            if (tile_apply_completed_result(completed.tile,
+                                            completed.surface,
+                                            completed.generation_id)) {
+                /* Successfully applied, queue redraw of this tile */
+                gint draw_x = completed.tile->px;
+                gint draw_y = completed.tile->py;
+                gint draw_w = completed.tile->w;
+                gint draw_h = completed.tile->h;
+
+                gtk_widget_queue_draw_area(widget,
+                                           (gint)(draw_x * doc->zoom_factor),
+                                           (gint)(draw_y * doc->zoom_factor),
+                                           (gint)(draw_w * doc->zoom_factor),
+                                           (gint)(draw_h * doc->zoom_factor));
+                updated_count++;
+            } else {
+                /* Result was stale, discard it */
+                cairo_surface_destroy(completed.surface);
+            }
+        }
+
+        if (updated_count > 0) {
+            g_debug("Applied %d completed tiles to main cache", updated_count);
+        }
     }
 
     zoom = doc->zoom_factor;
@@ -532,7 +591,8 @@ ImageDocument* document_new(const gchar* filename) {
     doc->composite_surface = NULL;
     doc->composite_dirty = TRUE;
     dirty_rect_init(&doc->dirty_region);
-    doc->tile_grid = NULL; /* Will be created when image is loaded */
+    doc->tile_grid = NULL;        /* Will be created when image is loaded */
+    doc->tile_thread_pool = NULL; /* Will be created when image is loaded */
     doc->zoom_factor = 1.0;
 
     /* Initialize undo/redo stacks (max 50 undo steps) */
@@ -593,6 +653,20 @@ void document_free(ImageDocument* doc) {
     if (doc->tile_grid) {
         tile_grid_free(doc->tile_grid);
         doc->tile_grid = NULL;
+    }
+
+    /* Shutdown Cairo-safe worker pool before freeing document */
+    if (doc->tile_worker_pool) {
+        g_message("Shutting down tile worker pool...");
+        tile_worker_pool_destroy(doc->tile_worker_pool);
+        doc->tile_worker_pool = NULL;
+    }
+
+    /* Shutdown legacy thread pool (if enabled) */
+    if (doc->tile_thread_pool) {
+        g_message("Shutting down legacy tile thread pool...");
+        tile_thread_pool_destroy(doc->tile_thread_pool);
+        doc->tile_thread_pool = NULL;
     }
 
     g_free(doc);
@@ -789,6 +863,18 @@ gboolean document_load_image_from_file(ImageDocument* doc, const gchar* file_pat
         g_object_unref(pixbuf);
         return FALSE;
     }
+
+    /* Create Cairo-safe tile worker pool for asynchronous rendering */
+    /* Workers composite into pixel buffers only, main thread handles Cairo surfaces */
+    doc->tile_worker_pool = tile_worker_pool_create(0);
+    if (!doc->tile_worker_pool) {
+        g_warning("Failed to create tile worker pool, will use single-threaded compositing");
+    } else {
+        g_message("Tile compositing: Using worker threads (Cairo-safe pixel buffer approach)");
+    }
+
+    /* Legacy thread pool (disabled - kept for reference) */
+    doc->tile_thread_pool = NULL;
 
     /* Free old layers if exists */
     for (GList* iter = doc->layers; iter; iter = iter->next) {

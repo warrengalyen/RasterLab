@@ -19,11 +19,12 @@ extern void ui_update_window_title(AppContext* ctx);
  * Brush Tool state
  */
 typedef struct {
-    gboolean is_drawing;             /* Currently drawing? */
-    gint last_x;                     /* Last mouse X position */
-    gint last_y;                     /* Last mouse Y position */
-    struct ImageLayer* active_layer; /* Layer being drawn on */
-    Command* current_command;        /* Current draw command for undo */
+    gboolean is_drawing;              /* Currently drawing? */
+    gint last_x;                      /* Last mouse X position */
+    gint last_y;                      /* Last mouse Y position */
+    struct ImageLayer* active_layer;  /* Layer being drawn on */
+    Command* current_command;         /* Current draw command for undo */
+    cairo_surface_t* before_snapshot; /* Layer state snapshot taken at mouse_down (before any drawing) */
 } BrushToolState;
 
 /**
@@ -218,11 +219,21 @@ static void brush_tool_mouse_down(Tool* tool, struct ImageDocument* doc,
     state->last_y = event->y;
     state->active_layer = active_layer;
 
+    /* CRITICAL: Create draw command BEFORE any drawing - captures the "before" state */
+    state->current_command = command_create_draw(active_layer,
+                                                 command_get_name_string(CMD_NAME_DRAW_BRUSH_STROKE));
+    state->before_snapshot = NULL; /* Not used anymore */
+
     /* Draw initial dot at mouse down position */
     gint layer_x = event->x - active_layer->offset_x;
     gint layer_y = event->y - active_layer->offset_y;
 
     brush_draw_dot(active_layer->surface, layer_x, layer_y);
+
+    /* CRITICAL: Flush Cairo surface to ensure drawing is written to pixel buffer
+       Worker threads will read the raw pixels, so we must flush first */
+    cairo_surface_flush(active_layer->surface);
+
     active_layer->cache_dirty = TRUE;
 
     /* Mark initial dot area as dirty */
@@ -237,13 +248,6 @@ static void brush_tool_mouse_down(Tool* tool, struct ImageDocument* doc,
 
     if (!dirty_rect_is_empty(&dirty_rect)) {
         document_invalidate_region(doc, &dirty_rect);
-    }
-
-    /* Create a draw command for undo/redo */
-    state->current_command = command_create_draw(active_layer,
-                                                 command_get_name_string(CMD_NAME_DRAW_BRUSH_STROKE));
-    if (state->current_command && doc->undo_stack) {
-        // printf("Brush tool: draw command created\n");
     }
 
     // printf("Brush tool: started drawing at (%d, %d)\n", event->x, event->y);
@@ -284,6 +288,10 @@ static void brush_tool_mouse_move(Tool* tool, struct ImageDocument* doc,
 
     brush_draw_line(active_layer->surface, layer_x1, layer_y1, layer_x2,
                     layer_y2);
+
+    /* CRITICAL: Flush Cairo surface to ensure drawing is written to pixel buffer
+       Worker threads will read the raw pixels, so we must flush first */
+    cairo_surface_flush(active_layer->surface);
 
     /* Mark layer cache as dirty but don't destroy it yet
         We'll regenerate it lazily only when needed for compositing
@@ -344,7 +352,7 @@ static void brush_tool_mouse_up(Tool* tool, struct ImageDocument* doc,
         return;
     }
 
-    /* Finalize draw command by taking snapshot of state after drawing */
+    /* Finalize draw command - captures the "after" state */
     if (state->current_command) {
         command_finalize_draw(state->current_command);
     }
@@ -352,7 +360,6 @@ static void brush_tool_mouse_up(Tool* tool, struct ImageDocument* doc,
     /* Push draw command to undo stack */
     if (state->current_command && doc->undo_stack) {
         command_stack_push(doc->undo_stack, state->current_command);
-        // printf("Brush tool: draw command pushed to undo stack\n");
 
         /* Clear redo stack */
         if (doc->redo_stack) {

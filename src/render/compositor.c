@@ -2,6 +2,8 @@
 #include "render/layer.h"
 #include "render/mipmap.h"
 #include "render/tile.h"
+#include "render/tile_thread_pool.h"
+#include "render/tile_worker.h"
 #include "ui/layers_panel.h"
 #include <stdio.h>
 
@@ -750,6 +752,80 @@ void document_invalidate_region(ImageDocument* doc, const DirtyRect* dirty_rect)
         tile_grid_mark_rect_dirty(doc->tile_grid,
                                   clamped_rect.x, clamped_rect.y,
                                   clamped_rect.width, clamped_rect.height);
+
+        /* Enqueue dirty tiles to Cairo-safe worker pool for pixel compositing */
+        if (doc->tile_worker_pool) {
+            gint tx, ty, start_tx, start_ty, end_tx, end_ty;
+            Tile* tile;
+
+            /* Calculate which tiles need recomposition */
+            start_tx = clamped_rect.x / doc->tile_grid->tile_size;
+            start_ty = clamped_rect.y / doc->tile_grid->tile_size;
+            end_tx = (clamped_rect.x + clamped_rect.width - 1) / doc->tile_grid->tile_size;
+            end_ty = (clamped_rect.y + clamped_rect.height - 1) / doc->tile_grid->tile_size;
+
+            /* Clamp to grid bounds */
+            if (start_tx < 0)
+                start_tx = 0;
+            if (start_ty < 0)
+                start_ty = 0;
+            if (end_tx >= doc->tile_grid->tiles_x)
+                end_tx = doc->tile_grid->tiles_x - 1;
+            if (end_ty >= doc->tile_grid->tiles_y)
+                end_ty = doc->tile_grid->tiles_y - 1;
+
+            /* Enqueue dirty tiles for worker pool */
+            for (ty = start_ty; ty <= end_ty; ty++) {
+                for (tx = start_tx; tx <= end_tx; tx++) {
+                    tile = &doc->tile_grid->tiles[ty][tx];
+                    if (tile && tile->dirty) {
+                        /* Worker threads will composite into pixel_buffer */
+                        if (!tile_worker_pool_enqueue(doc->tile_worker_pool,
+                                                      doc, tile, tx, ty)) {
+                            g_debug("Worker pool rejected tile (%d, %d), will fallback to main thread", tx, ty);
+                            /* Fallback: composite on main thread */
+                            if (tile_worker_composite_pixels(doc, tile, tx, ty)) {
+                                tile->pending_upload = TRUE;
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            /* Worker pool not available - composite on main thread (fallback) */
+            gint tx, ty, start_tx, start_ty, end_tx, end_ty;
+            Tile* tile;
+
+            start_tx = clamped_rect.x / doc->tile_grid->tile_size;
+            start_ty = clamped_rect.y / doc->tile_grid->tile_size;
+            end_tx = (clamped_rect.x + clamped_rect.width - 1) / doc->tile_grid->tile_size;
+            end_ty = (clamped_rect.y + clamped_rect.height - 1) / doc->tile_grid->tile_size;
+
+            if (start_tx < 0)
+                start_tx = 0;
+            if (start_ty < 0)
+                start_ty = 0;
+            if (end_tx >= doc->tile_grid->tiles_x)
+                end_tx = doc->tile_grid->tiles_x - 1;
+            if (end_ty >= doc->tile_grid->tiles_y)
+                end_ty = doc->tile_grid->tiles_y - 1;
+
+            for (ty = start_ty; ty <= end_ty; ty++) {
+                for (tx = start_tx; tx <= end_tx; tx++) {
+                    tile = &doc->tile_grid->tiles[ty][tx];
+                    if (tile && tile->dirty) {
+                        if (tile_worker_composite_pixels(doc, tile, tx, ty)) {
+                            tile->pending_upload = TRUE;
+                        }
+                    }
+                }
+            }
+        }
+
+        /* Legacy thread pool support (disabled for Cairo safety) */
+        if (doc->tile_thread_pool) {
+            g_debug("Legacy tile_thread_pool is set but not used (Cairo-safe worker pool active)");
+        }
     }
 
     /* Trigger redraw - use queue_draw instead of queue_draw_area for now

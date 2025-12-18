@@ -17,6 +17,13 @@ typedef struct MipmapPyramid MipmapPyramid;
 struct TileGrid;
 typedef struct TileGrid TileGrid;
 
+/* Forward declarations for thread pools */
+struct TileThreadPool;
+typedef struct TileThreadPool TileThreadPool;
+
+struct TileWorkerPool;
+typedef struct TileWorkerPool TileWorkerPool;
+
 /**
  * Blend modes for layers
  */
@@ -94,6 +101,8 @@ typedef struct ImageDocument {
     gboolean composite_dirty;           /* Does composite need re-rendering? */
     DirtyRect dirty_region;             /* Accumulated dirty rectangle region */
     TileGrid* tile_grid;                /* Tile-based rendering grid (replaces full-surface rendering) */
+    TileThreadPool* tile_thread_pool;   /* Thread pool for asynchronous tile compositing (deprecated) */
+    TileWorkerPool* tile_worker_pool;   /* Cairo-safe worker pool for pixel buffer compositing */
 
     /* Viewport and zoom */
     gdouble zoom_factor; /* Current zoom level (1.0 = 100%) */

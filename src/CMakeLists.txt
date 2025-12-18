@@ -127,6 +127,8 @@ set(SOURCES
     render/compositor.c
     render/dirty.c
     render/tile.c
+    render/tile_thread_pool.c
+    render/tile_worker.c
     render/mipmap.c
     app/recent_files.c
     app/autosave.c
@@ -138,6 +140,9 @@ add_executable(image-editor ${SOURCES})
 
 # Link GTK3 libraries
 target_link_libraries(image-editor ${GTK3_LIBRARIES})
+
+# Link pthread for tile thread pool
+target_link_libraries(image-editor pthread)
 
 # Link Ocular static library
 target_link_libraries(image-editor ${CMAKE_SOURCE_DIR}/lib/libocular.a)

@@ -461,9 +461,6 @@ AppContext* ui_create_main_window(void) {
     g_signal_connect(ctx->window, "delete-event",
                      G_CALLBACK(on_window_delete), ctx);
 
-    /* Clean up builder - widgets are now owned by their containers */
-    g_object_unref(builder);
-
     gtk_widget_show_all(ctx->window);
 
     /* Update status bar with initial information */
@@ -472,8 +469,11 @@ AppContext* ui_create_main_window(void) {
     /* Initialize menu and button states */
     ui_update_menu_and_button_states(ctx);
 
-    /* Initialize recent files menu */
+    /* Initialize recent files menu (must be before g_object_unref(builder)) */
     ui_update_recent_files_menu(ctx);
+
+    /* Clean up builder - widgets are now owned by their containers */
+    g_object_unref(builder);
 
     /* Check for recovery files and show dialog if found */
     recovery_dialog_show(ctx);

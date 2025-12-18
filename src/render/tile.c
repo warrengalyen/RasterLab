@@ -41,6 +41,14 @@ TileGrid* tile_grid_create(gint width, gint height, gint tile_size) {
             tile->w = (tile->px + tile_size > width) ? (width - tile->px) : tile_size;
             tile->h = (tile->py + tile_size > height) ? (height - tile->py) : tile_size;
 
+            /* Allocate pixel buffer for worker threads */
+            tile->stride = cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32, tile->w);
+            tile->pixel_buffer = (uint8_t*)g_malloc0(tile->stride * tile->h);
+
+            if (!tile->pixel_buffer) {
+                g_warning("Failed to allocate pixel buffer for tile at (%d, %d)", x, y);
+            }
+
             /* Create tile surface with Cairo's recommended stride */
             tile->surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, tile->w, tile->h);
 
@@ -58,6 +66,9 @@ TileGrid* tile_grid_create(gint width, gint height, gint tile_size) {
             }
 
             tile->dirty = TRUE; /* All tiles start dirty and need initial compositing */
+            tile->state = TILE_CLEAN;
+            tile->generation_id = 0;
+            tile->pending_upload = FALSE;
         }
     }
 
@@ -74,18 +85,24 @@ void tile_grid_free(TileGrid* grid) {
         return;
     }
 
-    /* Free all tile surfaces */
+    /* Free all tile resources */
     if (grid->tiles) {
         for (y = 0; y < grid->tiles_y; y++) {
             if (grid->tiles[y]) {
                 for (x = 0; x < grid->tiles_x; x++) {
                     Tile* tile = &grid->tiles[y][x];
+
+                    /* Free Cairo surface */
                     if (tile->surface) {
-                        /* Save surface pointer and destroy directly
-                         * Skip flush/finish to avoid crashes on invalid surfaces */
                         cairo_surface_t* surface = tile->surface;
                         tile->surface = NULL;
                         cairo_surface_destroy(surface);
+                    }
+
+                    /* Free pixel buffer (allocated by worker pool or init) */
+                    if (tile->pixel_buffer) {
+                        g_free(tile->pixel_buffer);
+                        tile->pixel_buffer = NULL;
                     }
                 }
                 g_free(grid->tiles[y]);
@@ -325,6 +342,47 @@ gboolean tile_grid_composite(ImageDocument* doc, TileGrid* grid) {
             }
         }
     }
+
+    return TRUE;
+}
+
+/**
+ * Mark a tile as needing recomposition via thread pool
+ * Increments generation_id to invalidate any pending work
+ */
+void tile_mark_dirty_for_thread_pool(Tile* tile) {
+    if (!tile) {
+        return;
+    }
+
+    tile->dirty = TRUE;
+    tile->generation_id++;    /* Invalidate any pending work */
+    tile->state = TILE_CLEAN; /* Reset state for new work */
+}
+
+/**
+ * Apply completed tile result from worker thread to main tile cache
+ * Should only be called from GTK main thread
+ * Returns TRUE if result was applied, FALSE if stale
+ */
+gboolean tile_apply_completed_result(Tile* tile, cairo_surface_t* new_surface, guint generation_id) {
+    if (!tile || !new_surface) {
+        return FALSE;
+    }
+
+    /* Check if this result is stale (newer work has been queued) */
+    if (generation_id != tile->generation_id) {
+        return FALSE; /* Stale result, discard */
+    }
+
+    /* Swap surfaces */
+    if (tile->surface) {
+        cairo_surface_destroy(tile->surface);
+    }
+
+    tile->surface = new_surface;
+    tile->dirty = FALSE;
+    tile->state = TILE_CLEAN;
 
     return TRUE;
 }
