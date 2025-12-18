@@ -1,10 +1,6 @@
 #include "app/recent_files.h"
-#include <errno.h>
+#include "app/settings.h"
 #include <glib.h>
-#include <glib/gstdio.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <time.h>
 
 /* Internal storage */
@@ -42,30 +38,6 @@ static RecentFile* recent_file_find(const gchar* path) {
 }
 
 /**
- * Get the path to the recent files storage file
- * Stores in the same directory as the application executable
- * @return Newly allocated path string (caller must free with g_free)
- */
-static gchar* recent_files_get_storage_path(void) {
-    /* Get the directory where the application is running from */
-    gchar* app_dir = g_get_current_dir();
-    gchar* file_path = g_build_filename(app_dir, "recent_files.txt", NULL);
-
-    g_free(app_dir);
-
-    return file_path;
-}
-
-/**
- * Ensure the application directory exists (for storing recent_files.txt)
- * Note: The directory should already exist since it's where the app runs from
- */
-static void recent_files_ensure_config_dir(void) {
-    /* No need to create directory - it's the current working directory where app runs */
-    /* If we need to ensure it exists, we could check here, but it should always exist */
-}
-
-/**
  * Convert relative path to absolute path
  */
 static gchar* recent_files_make_absolute(const gchar* filepath) {
@@ -86,139 +58,87 @@ static gchar* recent_files_make_absolute(const gchar* filepath) {
     return absolute;
 }
 
+/* Global Settings pointer for syncing */
+static Settings* g_settings = NULL;
+
+/**
+ * Set the Settings pointer for syncing
+ */
+void recent_files_set_settings(void* settings) {
+    g_settings = (Settings*)settings;
+}
+
 /**
  * Load recent files from persistent storage
+ * Loads from Settings XML file via settings_sync_recent_files_to_system()
  */
 void recent_files_load(void) {
-    gchar* file_path = recent_files_get_storage_path();
-    GError* error = NULL;
-    gchar* contents = NULL;
-    gsize length = 0;
-
-    if (!g_file_get_contents(file_path, &contents, &length, &error)) {
-        /* File doesn't exist yet, that's okay */
-        if (error) {
-            g_error_free(error);
-        }
-        g_free(file_path);
-        return;
+    /* Settings must be set before loading */
+    if (!g_settings) {
+        return; /* No settings available, nothing to load */
     }
 
-    /* Parse file line by line */
-    gchar** lines = g_strsplit(contents, "\n", -1);
-    g_free(contents);
-
-    for (gint i = 0; lines[i] != NULL; i++) {
-        gchar* line = lines[i];
-
-        /* Skip empty lines */
-        if (!line || strlen(line) == 0) {
-            continue;
-        }
-
-        /* Remove trailing newline if present */
-        g_strchomp(line);
-
-        if (strlen(line) == 0) {
-            continue; /* Skip empty lines after trimming */
-        }
-
-        /* Parse line: path|timestamp */
-        gchar* pipe = strchr(line, '|');
-        if (!pipe) {
-            continue; /* Skip malformed lines */
-        }
-
-        *pipe = '\0';
-        gchar* path = line;
-        gchar* timestamp_str = pipe + 1;
-
-        /* Validate path */
-        if (!path || strlen(path) == 0) {
-            continue;
-        }
-
-        /* Parse timestamp */
-        time_t timestamp = (time_t)strtol(timestamp_str, NULL, 10);
-        if (timestamp == 0 && errno == EINVAL) {
-            continue; /* Invalid timestamp */
-        }
-
-        /* Create recent file entry */
-        RecentFile* rf = g_malloc(sizeof(RecentFile));
-        rf->path = g_strdup(path);
-        rf->last_opened = timestamp;
-
-        /* Add to list (most recent first) */
-        g_recent_files = g_list_prepend(g_recent_files, rf);
-    }
-
-    g_strfreev(lines);
-    g_free(file_path);
+    /* Sync from settings XML */
+    settings_sync_recent_files_to_system(g_settings);
 }
 
 /**
  * Save recent files to persistent storage
+ * Saves to Settings XML file via settings_sync_recent_files_from_system()
  */
 void recent_files_save(void) {
     if (!g_initialized) {
         return;
     }
 
-    recent_files_ensure_config_dir();
-
-    gchar* file_path = recent_files_get_storage_path();
-    FILE* file = g_fopen(file_path, "w");
-
-    if (!file) {
-        g_warning("Failed to open recent files storage for writing: %s", file_path);
-        g_free(file_path);
-        return;
+    /* Settings must be set before saving */
+    if (!g_settings) {
+        return; /* No settings available, cannot save */
     }
 
-    /* Write entries in reverse order (oldest first) so loading restores correct order */
-    GList* reversed = g_list_reverse(g_list_copy(g_recent_files));
-
-    for (GList* iter = reversed; iter; iter = iter->next) {
-        RecentFile* rf = (RecentFile*)iter->data;
-        if (rf && rf->path) {
-            fprintf(file, "%s|%ld\n", rf->path, (long)rf->last_opened);
-        }
-    }
-
-    /* Free the copied list (but not the data, as it's still in g_recent_files) */
-    g_list_free(reversed);
-
-    fclose(file);
-    g_free(file_path);
+    /* Sync to settings XML */
+    settings_sync_recent_files_from_system(g_settings);
 }
 
 /**
  * Initialize the recent files system
+ * Settings must be set via recent_files_set_settings() before calling this
  */
 void recent_files_init(void) {
     if (g_initialized) {
         return; /* Already initialized */
     }
 
+    if (!g_settings) {
+        g_warning("recent_files_init() called but settings not set. Call recent_files_set_settings() first.");
+        return;
+    }
+
     g_recent_files = NULL;
-    recent_files_load();
+    /* Mark as initialized before loading so recent_files_add() works during load */
     g_initialized = TRUE;
+    recent_files_load();
 }
 
 /**
  * Shutdown the recent files system
+ * Note: recent_files_save() should be called before this if you want to save
+ * This function only cleans up memory
  */
 void recent_files_shutdown(void) {
     if (!g_initialized) {
         return;
     }
 
-    recent_files_save();
+    /* Don't save here - should be saved before shutdown in main.c */
+    /* recent_files_save() is called in main.c before this function */
 
     /* Free all entries */
     g_list_free_full(g_recent_files, (GDestroyNotify)recent_file_free);
     g_recent_files = NULL;
+
+    /* Clear settings pointer to avoid using freed memory */
+    g_settings = NULL;
 
     g_initialized = FALSE;
 }
@@ -227,6 +147,14 @@ void recent_files_shutdown(void) {
  * Add a file to the recent files list
  */
 void recent_files_add(const gchar* filepath) {
+    recent_files_add_with_timestamp(filepath, time(NULL), TRUE);
+}
+
+/**
+ * Add a file to the recent files list with a specific timestamp
+ * Used when loading from settings to preserve original timestamps
+ */
+void recent_files_add_with_timestamp(const gchar* filepath, time_t timestamp, gboolean check_exists) {
     if (!filepath || !g_initialized) {
         return;
     }
@@ -237,8 +165,8 @@ void recent_files_add(const gchar* filepath) {
         return;
     }
 
-    /* Check if file exists */
-    if (!g_file_test(absolute_path, G_FILE_TEST_EXISTS)) {
+    /* Check if file exists (if requested) */
+    if (check_exists && !g_file_test(absolute_path, G_FILE_TEST_EXISTS)) {
         g_free(absolute_path);
         return; /* Don't add non-existent files */
     }
@@ -249,12 +177,12 @@ void recent_files_add(const gchar* filepath) {
         /* Remove from current position */
         g_recent_files = g_list_remove(g_recent_files, existing);
         /* Update timestamp */
-        existing->last_opened = time(NULL);
+        existing->last_opened = timestamp;
     } else {
         /* Create new entry */
         existing = g_malloc(sizeof(RecentFile));
         existing->path = g_strdup(absolute_path);
-        existing->last_opened = time(NULL);
+        existing->last_opened = timestamp;
     }
 
     /* Add to front (most recent first) */
@@ -306,10 +234,9 @@ void recent_files_remove(const gchar* filepath) {
  * Clear all recent files
  */
 void recent_files_clear(void) {
-    if (!g_initialized) {
-        return;
+    /* Safe to call even if not initialized - just clears the list */
+    if (g_recent_files) {
+        g_list_free_full(g_recent_files, (GDestroyNotify)recent_file_free);
+        g_recent_files = NULL;
     }
-
-    g_list_free_full(g_recent_files, (GDestroyNotify)recent_file_free);
-    g_recent_files = NULL;
 }

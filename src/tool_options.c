@@ -1,4 +1,5 @@
 #include "tool_options.h"
+#include "app/settings.h"
 #include "tools.h"
 #include <math.h>
 #include <stdio.h>
@@ -9,7 +10,7 @@
 static ToolOptions* g_tool_options = NULL;
 
 /* Per-tool options storage */
-static ToolOptions* g_tool_options_per_tool[TOOL_COUNT] = {NULL, NULL, NULL, NULL};
+static ToolOptions* g_tool_options_per_tool[TOOL_COUNT] = {NULL};
 
 /**
  * Create a new tool options instance with defaults
@@ -17,15 +18,15 @@ static ToolOptions* g_tool_options_per_tool[TOOL_COUNT] = {NULL, NULL, NULL, NUL
 ToolOptions* tool_options_new(void) {
     ToolOptions* opts = (ToolOptions*)g_malloc(sizeof(ToolOptions));
 
-    /* Set default values */
-    opts->size = 5.0f;              /* 5px brush size */
-    opts->opacity = 1.0f;           /* 100% opacity */
-    opts->hardness = 1.0f;          /* Hard edge */
-    opts->flow = 1.0f;              /* Full flow */
-    opts->spacing = 0.25f;          /* 25% spacing (default) */
-    opts->tolerance = 15.0f;        /* 10% tolerance (default) */
-    opts->fill_contiguous = TRUE;   /* Contiguous fill by default */
-    opts->fill_antialiased = FALSE; /* Hard edges by default */
+    /* Set default values from settings (for consistency) */
+    opts->size = settings_get_default_tool_size();
+    opts->opacity = settings_get_default_tool_opacity();
+    opts->hardness = settings_get_default_tool_hardness();
+    opts->flow = settings_get_default_tool_flow();
+    opts->spacing = settings_get_default_tool_spacing();
+    opts->tolerance = settings_get_default_tool_tolerance();
+    opts->fill_contiguous = settings_get_default_tool_fill_contiguous();
+    opts->fill_antialiased = settings_get_default_tool_fill_antialiased();
 
     return opts;
 }

@@ -7,6 +7,24 @@
 #include <stdio.h>
 
 /**
+ * Helper function to save tool options to settings
+ */
+static void save_tool_options_to_settings(ToolOptionsPanel* panel, ToolType tool_type) {
+    if (!panel || !panel->panel) {
+        return;
+    }
+
+    /* Get window to find AppContext */
+    GtkWidget* window = gtk_widget_get_toplevel(panel->panel);
+    if (window) {
+        AppContext* ctx = (AppContext*)g_object_get_data(G_OBJECT(window), "app_context");
+        if (ctx) {
+            ui_save_tool_options_to_settings(ctx, tool_type);
+        }
+    }
+}
+
+/**
  * Tool options panel callback for size slider
  */
 static void on_tool_size_changed(GtkScale* scale, gpointer user_data) {
@@ -18,6 +36,8 @@ static void on_tool_size_changed(GtkScale* scale, gpointer user_data) {
         ToolOptions* opts = tool_options_get_for_tool(panel->current_tool_type);
         if (opts) {
             tool_options_set_size(opts, size);
+            /* Save to settings */
+            save_tool_options_to_settings(panel, panel->current_tool_type);
         }
 
         /* Update cursor for brush and eraser tools when size changes */
@@ -69,6 +89,8 @@ static void on_tool_opacity_changed(GtkScale* scale, gpointer user_data) {
         ToolOptions* opts = tool_options_get_for_tool(panel->current_tool_type);
         if (opts) {
             tool_options_set_opacity(opts, opacity / 100.0f);
+            /* Save to settings */
+            save_tool_options_to_settings(panel, panel->current_tool_type);
         }
     }
 }
@@ -84,6 +106,8 @@ static void on_tool_hardness_changed(GtkScale* scale, gpointer user_data) {
         ToolOptions* opts = tool_options_get_for_tool(panel->current_tool_type);
         if (opts) {
             tool_options_set_hardness(opts, hardness / 100.0f);
+            /* Save to settings */
+            save_tool_options_to_settings(panel, panel->current_tool_type);
         }
     }
 }
@@ -99,6 +123,8 @@ static void on_tool_flow_changed(GtkScale* scale, gpointer user_data) {
         ToolOptions* opts = tool_options_get_for_tool(panel->current_tool_type);
         if (opts) {
             tool_options_set_flow(opts, flow / 100.0f);
+            /* Save to settings */
+            save_tool_options_to_settings(panel, panel->current_tool_type);
         }
     }
 }
@@ -114,6 +140,8 @@ static void on_tool_spacing_changed(GtkScale* scale, gpointer user_data) {
         ToolOptions* opts = tool_options_get_for_tool(panel->current_tool_type);
         if (opts) {
             tool_options_set_spacing(opts, spacing / 100.0f);
+            /* Save to settings */
+            save_tool_options_to_settings(panel, panel->current_tool_type);
         }
     }
 }
@@ -129,6 +157,8 @@ static void on_tool_tolerance_changed(GtkScale* scale, gpointer user_data) {
         ToolOptions* opts = tool_options_get_for_tool(panel->current_tool_type);
         if (opts) {
             tool_options_set_tolerance(opts, tolerance);
+            /* Save to settings */
+            save_tool_options_to_settings(panel, panel->current_tool_type);
         }
     }
 }
@@ -156,8 +186,12 @@ static void on_fill_area_changed(GtkToggleButton* button, gpointer user_data) {
     const gchar* label = gtk_button_get_label(GTK_BUTTON(button));
     if (label && g_strcmp0(label, "Contiguous") == 0) {
         tool_options_set_fill_contiguous(opts, TRUE);
+        /* Save to settings */
+        save_tool_options_to_settings(panel, panel->current_tool_type);
     } else if (label && g_strcmp0(label, "Global") == 0) {
         tool_options_set_fill_contiguous(opts, FALSE);
+        /* Save to settings */
+        save_tool_options_to_settings(panel, panel->current_tool_type);
     }
 }
 
@@ -172,6 +206,8 @@ static void on_fill_antialiased_toggled(GtkToggleButton* button, gpointer user_d
         if (opts) {
             gboolean active = gtk_toggle_button_get_active(button);
             tool_options_set_fill_antialiased(opts, active);
+            /* Save to settings */
+            save_tool_options_to_settings(panel, panel->current_tool_type);
         }
     }
 }

@@ -1,12 +1,14 @@
 #include "ui.h"
 #include "app/autosave.h"
 #include "app/recent_files.h"
+#include "app/settings.h"
 #include "command.h"
 #include "document.h"
 #include "panels.h"
 #include "render/compositor.h"
 #include "render/layer.h"
 #include "tool_manager.h"
+#include "tool_options.h"
 #include "ui/dialogs/recovery_dialog.h"
 #include "ui/layers_panel.h"
 #include "ui/tool_options_panel.h"
@@ -312,11 +314,8 @@ AppContext* ui_create_main_window(void) {
     ctx->edit_menu_undo = NULL;
     ctx->edit_menu_redo = NULL;
     ctx->layers_panel = NULL; /* Initialize layers_panel early */
-
-    /* Initialize canvas background color to rgb(160, 160, 160) */
-    ctx->canvas_bg_r = 160.0 / 255.0;
-    ctx->canvas_bg_g = 160.0 / 255.0;
-    ctx->canvas_bg_b = 160.0 / 255.0;
+    ctx->settings = NULL;     /* Will be set in main.c */
+    ctx->app_dir = NULL;      /* Will be set in main.c */
 
     /* Create and initialize tool manager */
     ctx->tool_registry = tool_manager_new();
@@ -544,9 +543,11 @@ ImageDocument* ui_create_document_tab(AppContext* ctx, const gchar* filename) {
 
     /* Update viewport background color with current canvas background color using CSS */
     if (doc && doc->viewport) {
-        guint r = (guint)(ctx->canvas_bg_r * 255.0);
-        guint g = (guint)(ctx->canvas_bg_g * 255.0);
-        guint b = (guint)(ctx->canvas_bg_b * 255.0);
+        gdouble r_val, g_val, b_val;
+        ui_get_canvas_background_color(ctx, &r_val, &g_val, &b_val);
+        guint r = (guint)(r_val * 255.0);
+        guint g = (guint)(g_val * 255.0);
+        guint b = (guint)(b_val * 255.0);
 
         /* Get or create CSS provider for this viewport */
         GtkCssProvider* provider = (GtkCssProvider*)g_object_get_data(G_OBJECT(doc->viewport), "canvas_bg_provider");
@@ -808,7 +809,7 @@ static void on_recent_file_activate(GtkMenuItem* menu_item, gpointer user_data) 
 
         /* Remove from recent files */
         recent_files_remove(file_path);
-        recent_files_save();
+        recent_files_save(); /* This syncs to settings if connected */
         ui_update_recent_files_menu(ctx);
 
         return;
@@ -825,7 +826,11 @@ static void on_recent_file_activate(GtkMenuItem* menu_item, gpointer user_data) 
         } else {
             /* Update recent files (move to top) */
             recent_files_add(file_path);
-            recent_files_save();
+            if (ctx->settings && ctx->app_dir) {
+                /* Sync recent files to settings and save */
+                recent_files_save();
+                settings_save(ctx->settings, ctx->app_dir);
+            }
 
             /* Update status bar after successful load */
             ui_update_status_bar(ctx, NULL);
@@ -855,8 +860,10 @@ static void on_clear_recent_files(GtkMenuItem* menu_item, gpointer user_data) {
     (void)menu_item; /* Unused */
     AppContext* ctx = (AppContext*)user_data;
 
+    /* Clear recent files */
     recent_files_clear();
-    recent_files_save();
+    recent_files_save(); /* This syncs to settings if connected */
+
     ui_update_recent_files_menu(ctx);
 }
 
@@ -906,7 +913,7 @@ void ui_update_recent_files_menu(AppContext* ctx) {
         g_list_free(children);
     }
 
-    /* Get recent files list */
+    /* Get recent files list from recent_files system */
     const GList* recent_files = recent_files_get();
 
     if (!recent_files || g_list_length((GList*)recent_files) == 0) {
@@ -976,6 +983,16 @@ void ui_context_free(AppContext* ctx) {
     /* Free tool manager */
     if (ctx->tool_registry) {
         tool_manager_free(ctx->tool_registry);
+    }
+
+    /* Free settings (will be saved in main.c before this is called) */
+    if (ctx->settings) {
+        settings_free(ctx->settings);
+    }
+
+    /* Free app directory */
+    if (ctx->app_dir) {
+        g_free(ctx->app_dir);
     }
 
     g_free(ctx);
@@ -1162,7 +1179,7 @@ static void on_file_open_response(GtkDialog* dialog, gint response_id, gpointer 
                 } else {
                     /* Add to recent files after successful load */
                     recent_files_add(file_path);
-                    recent_files_save();
+                    recent_files_save(); /* This syncs to settings if connected */
 
                     /* Update status bar after successful load */
                     ui_update_status_bar(ctx, NULL);
@@ -1259,9 +1276,14 @@ static void on_file_save_as_response(GtkDialog* dialog, gint response_id, gpoint
             if (doc) {
                 /* Save the document */
                 if (document_save_as(doc, file_path)) {
+                    /* Add to recent files */
+                    recent_files_add(file_path);
+                    recent_files_save(); /* This syncs to settings if connected */
+
                     /* Update window title to reflect new filename */
                     ui_update_window_title(ctx);
                     ui_update_status_bar(ctx, NULL);
+                    ui_update_recent_files_menu(ctx);
                     // printf("Document saved: %s\n", file_path);
                 } else {
                     g_warning("Failed to save document");
@@ -1364,16 +1386,22 @@ static gboolean on_window_delete(GtkWidget* widget, GdkEvent* event, gpointer da
 
     // printf("Window delete event triggered - shutting down\n");
 
-    /* Save and shutdown recent files */
-    recent_files_shutdown();
+    /* SAVE SETTINGS FIRST - before any cleanup */
+    if (ctx && ctx->settings && ctx->app_dir) {
+        /* Sync recent files to settings before saving */
+        recent_files_save(); /* This will sync to settings if connected */
 
-    /* Shutdown autosave system */
-    autosave_shutdown();
+        /* Save all current tool options to settings before final save */
+        if (ctx->tool_registry) {
+            ui_save_all_tool_options_to_settings(ctx);
+        }
 
-    /* Free the context (which frees all documents) */
-    ui_context_free(ctx);
+        /* Save all settings to file */
+        settings_save(ctx->settings, ctx->app_dir);
+    }
 
-    /* Exit GTK main loop */
+    /* Exit GTK main loop - let main() handle cleanup */
+    /* Don't free context here - main() will handle it */
     gtk_main_quit();
 
     return FALSE; /* Allow window to close */
@@ -1387,13 +1415,22 @@ static void on_file_exit(GtkWidget* widget, gpointer data) {
 
     AppContext* ctx = (AppContext*)data;
 
-    /* Save and shutdown recent files */
-    recent_files_shutdown();
+    /* SAVE SETTINGS FIRST - before any cleanup */
+    if (ctx && ctx->settings && ctx->app_dir) {
+        /* Sync recent files to settings before saving */
+        recent_files_save(); /* This will sync to settings if connected */
 
-    /* Free the context (which frees all documents) */
-    ui_context_free(ctx);
+        /* Save all current tool options to settings before final save */
+        if (ctx->tool_registry) {
+            ui_save_all_tool_options_to_settings(ctx);
+        }
 
-    /* Exit GTK main loop */
+        /* Save all settings to file */
+        settings_save(ctx->settings, ctx->app_dir);
+    }
+
+    /* Exit GTK main loop - let main() handle cleanup */
+    /* Don't free context here - main() will handle it */
     gtk_main_quit();
 }
 
@@ -2085,12 +2122,18 @@ void ui_get_canvas_background_color(AppContext* ctx, gdouble* r, gdouble* g, gdo
         return;
     }
 
-    if (r)
-        *r = ctx->canvas_bg_r;
-    if (g)
-        *g = ctx->canvas_bg_g;
-    if (b)
-        *b = ctx->canvas_bg_b;
+    /* Get from settings if available, otherwise use defaults */
+    if (ctx->settings) {
+        settings_get_canvas_background(ctx->settings, r, g, b);
+    } else {
+        /* Return defaults if settings not loaded yet */
+        if (r)
+            *r = 160.0 / 255.0;
+        if (g)
+            *g = 160.0 / 255.0;
+        if (b)
+            *b = 160.0 / 255.0;
+    }
 }
 
 /**
@@ -2102,9 +2145,18 @@ void ui_set_canvas_background_color(AppContext* ctx, gdouble r, gdouble g, gdoub
     }
 
     /* Clamp values to 0.0-1.0 */
-    ctx->canvas_bg_r = (r < 0.0) ? 0.0 : ((r > 1.0) ? 1.0 : r);
-    ctx->canvas_bg_g = (g < 0.0) ? 0.0 : ((g > 1.0) ? 1.0 : g);
-    ctx->canvas_bg_b = (b < 0.0) ? 0.0 : ((b > 1.0) ? 1.0 : b);
+    gdouble r_clamped = (r < 0.0) ? 0.0 : ((r > 1.0) ? 1.0 : r);
+    gdouble g_clamped = (g < 0.0) ? 0.0 : ((g > 1.0) ? 1.0 : g);
+    gdouble b_clamped = (b < 0.0) ? 0.0 : ((b > 1.0) ? 1.0 : b);
+
+    /* Update settings if available */
+    if (ctx->settings) {
+        settings_set_canvas_background(ctx->settings, r_clamped, g_clamped, b_clamped);
+        /* Save settings immediately */
+        if (ctx->app_dir) {
+            settings_save(ctx->settings, ctx->app_dir);
+        }
+    }
 
     /* Update all open documents */
     ui_update_canvas_background_color(ctx);
@@ -2118,9 +2170,11 @@ void ui_update_canvas_background_color(AppContext* ctx) {
         return;
     }
 
-    guint r = (guint)(ctx->canvas_bg_r * 255.0);
-    guint g = (guint)(ctx->canvas_bg_g * 255.0);
-    guint b = (guint)(ctx->canvas_bg_b * 255.0);
+    gdouble r_val, g_val, b_val;
+    ui_get_canvas_background_color(ctx, &r_val, &g_val, &b_val);
+    guint r = (guint)(r_val * 255.0);
+    guint g = (guint)(g_val * 255.0);
+    guint b = (guint)(b_val * 255.0);
 
     /* Update viewport background for all documents */
     for (GList* iter = ctx->documents; iter; iter = iter->next) {
@@ -2153,4 +2207,255 @@ void ui_save_document_as(AppContext* ctx) {
     }
 
     on_file_save_as(NULL, ctx);
+}
+
+/* Forward declaration */
+static void ui_save_tool_options_to_settings_internal(AppContext* ctx, ToolType tool_type, gboolean save_immediately);
+
+/**
+ * Get tool name from tool type (for settings storage)
+ */
+static const char* tool_type_to_name(ToolType tool_type) {
+    switch (tool_type) {
+        case TOOL_BRUSH:
+            return "brush";
+        case TOOL_ERASER:
+            return "eraser";
+        case TOOL_PAINT_BUCKET:
+            return "paintbucket";
+        case TOOL_HAND:
+            return "hand";
+        case TOOL_ZOOM:
+            return "zoom";
+        case TOOL_MOVE:
+            return "move";
+        default:
+            return NULL;
+    }
+}
+
+/**
+ * Load tool options from settings
+ */
+void ui_load_tool_options_from_settings(AppContext* ctx) {
+    if (!ctx || !ctx->settings || !ctx->tool_registry) {
+        return;
+    }
+
+    /* Load options for each tool type */
+    for (int i = 0; i < TOOL_COUNT; i++) {
+        ToolType tool_type = (ToolType)i;
+        const char* tool_name = tool_type_to_name(tool_type);
+        if (!tool_name) {
+            continue;
+        }
+
+        ToolOptions* opts = tool_options_get_for_tool(tool_type);
+        if (!opts) {
+            continue;
+        }
+
+        /* Load size (use default if not found) */
+        const char* size_str = settings_get_tool_option(ctx->settings, tool_name, "size");
+        if (size_str) {
+            gfloat size = (gfloat)g_ascii_strtod(size_str, NULL);
+            if (size > 0.0f) {
+                tool_options_set_size(opts, size);
+            } else {
+                tool_options_set_size(opts, settings_get_default_tool_size());
+            }
+        } else {
+            tool_options_set_size(opts, settings_get_default_tool_size());
+        }
+
+        /* Load opacity (use default if not found) */
+        const char* opacity_str = settings_get_tool_option(ctx->settings, tool_name, "opacity");
+        if (opacity_str) {
+            gfloat opacity = (gfloat)g_ascii_strtod(opacity_str, NULL);
+            tool_options_set_opacity(opts, opacity);
+        } else {
+            tool_options_set_opacity(opts, settings_get_default_tool_opacity());
+        }
+
+        /* Load hardness (use default if not found) */
+        const char* hardness_str = settings_get_tool_option(ctx->settings, tool_name, "hardness");
+        if (hardness_str) {
+            gfloat hardness = (gfloat)g_ascii_strtod(hardness_str, NULL);
+            tool_options_set_hardness(opts, hardness);
+        } else {
+            tool_options_set_hardness(opts, settings_get_default_tool_hardness());
+        }
+
+        /* Load flow (use default if not found) */
+        const char* flow_str = settings_get_tool_option(ctx->settings, tool_name, "flow");
+        if (flow_str) {
+            gfloat flow = (gfloat)g_ascii_strtod(flow_str, NULL);
+            tool_options_set_flow(opts, flow);
+        } else {
+            tool_options_set_flow(opts, settings_get_default_tool_flow());
+        }
+
+        /* Load spacing (use default if not found) */
+        const char* spacing_str = settings_get_tool_option(ctx->settings, tool_name, "spacing");
+        if (spacing_str) {
+            gfloat spacing = (gfloat)g_ascii_strtod(spacing_str, NULL);
+            tool_options_set_spacing(opts, spacing);
+        } else {
+            tool_options_set_spacing(opts, settings_get_default_tool_spacing());
+        }
+
+        /* Load tolerance (use default if not found) */
+        const char* tolerance_str = settings_get_tool_option(ctx->settings, tool_name, "tolerance");
+        if (tolerance_str) {
+            gfloat tolerance = (gfloat)g_ascii_strtod(tolerance_str, NULL);
+            tool_options_set_tolerance(opts, tolerance);
+        } else {
+            tool_options_set_tolerance(opts, settings_get_default_tool_tolerance());
+        }
+
+        /* Load fill_contiguous (use default if not found) */
+        const char* contiguous_str = settings_get_tool_option(ctx->settings, tool_name, "fill_contiguous");
+        if (contiguous_str) {
+            gboolean contiguous = (g_strcmp0(contiguous_str, "true") == 0 || g_strcmp0(contiguous_str, "1") == 0);
+            tool_options_set_fill_contiguous(opts, contiguous);
+        } else {
+            tool_options_set_fill_contiguous(opts, settings_get_default_tool_fill_contiguous());
+        }
+
+        /* Load fill_antialiased (use default if not found) */
+        const char* antialiased_str = settings_get_tool_option(ctx->settings, tool_name, "fill_antialiased");
+        if (antialiased_str) {
+            gboolean antialiased = (g_strcmp0(antialiased_str, "true") == 0 || g_strcmp0(antialiased_str, "1") == 0);
+            tool_options_set_fill_antialiased(opts, antialiased);
+        } else {
+            tool_options_set_fill_antialiased(opts, settings_get_default_tool_fill_antialiased());
+        }
+    }
+}
+
+/* Forward declaration */
+static void ui_save_tool_options_to_settings_internal(AppContext* ctx, ToolType tool_type, gboolean save_immediately);
+
+/**
+ * Save tool options to settings (in-memory only, not to file)
+ * Tool options are saved to file only on app shutdown
+ */
+void ui_save_tool_options_to_settings(AppContext* ctx, ToolType tool_type) {
+    ui_save_tool_options_to_settings_internal(ctx, tool_type, FALSE);
+}
+
+/**
+ * Internal function to save tool options to settings
+ * @param save_immediately If TRUE, saves settings to file immediately. If FALSE, only updates in-memory settings.
+ */
+static void ui_save_tool_options_to_settings_internal(AppContext* ctx, ToolType tool_type, gboolean save_immediately) {
+    if (!ctx || !ctx->settings || !ctx->tool_registry) {
+        return;
+    }
+
+    const char* tool_name = tool_type_to_name(tool_type);
+    if (!tool_name) {
+        return;
+    }
+
+    /* Get the tool to check which options it supports */
+    Tool* tool = tool_manager_get(ctx->tool_registry, tool_type);
+    if (!tool) {
+        return;
+    }
+
+    /* Read tool options flags immediately to avoid accessing freed memory */
+    ToolOptionFlags tool_options_flags = tool->options;
+
+    ToolOptions* opts = tool_options_get_for_tool(tool_type);
+    if (!opts) {
+        return;
+    }
+
+    /* Read all values from opts structure immediately to avoid accessing freed memory */
+    /* Store values in local variables before any operations that might free memory */
+    gfloat size_val = opts->size;
+    gfloat opacity_val = opts->opacity;
+    gfloat hardness_val = opts->hardness;
+    gfloat flow_val = opts->flow;
+    gfloat spacing_val = opts->spacing;
+    gfloat tolerance_val = opts->tolerance;
+    gboolean fill_contiguous_val = opts->fill_contiguous;
+    gboolean fill_antialiased_val = opts->fill_antialiased;
+
+    /* Save only the options that this tool supports */
+    /* Check tool_options_flags to determine which options to save */
+
+    if (tool_options_flags & TOOL_OPT_SIZE) {
+        gchar size_str[32];
+        gfloat safe_size = (size_val >= 1.0f && size_val <= 10000.0f) ? size_val : 5.0f;
+        g_snprintf(size_str, sizeof(size_str), "%.2f", safe_size);
+        settings_set_tool_option(ctx->settings, tool_name, "size", size_str);
+    }
+
+    if (tool_options_flags & TOOL_OPT_OPACITY) {
+        gchar opacity_str[32];
+        gfloat safe_opacity = (opacity_val >= 0.0f && opacity_val <= 1.0f) ? opacity_val : 1.0f;
+        g_snprintf(opacity_str, sizeof(opacity_str), "%.3f", safe_opacity);
+        settings_set_tool_option(ctx->settings, tool_name, "opacity", opacity_str);
+    }
+
+    if (tool_options_flags & TOOL_OPT_HARDNESS) {
+        gchar hardness_str[32];
+        gfloat safe_hardness = (hardness_val >= 0.0f && hardness_val <= 1.0f) ? hardness_val : 1.0f;
+        g_snprintf(hardness_str, sizeof(hardness_str), "%.3f", safe_hardness);
+        settings_set_tool_option(ctx->settings, tool_name, "hardness", hardness_str);
+    }
+
+    if (tool_options_flags & TOOL_OPT_FLOW) {
+        gchar flow_str[32];
+        gfloat safe_flow = (flow_val >= 0.0f && flow_val <= 1.0f) ? flow_val : 1.0f;
+        g_snprintf(flow_str, sizeof(flow_str), "%.3f", safe_flow);
+        settings_set_tool_option(ctx->settings, tool_name, "flow", flow_str);
+    }
+
+    if (tool_options_flags & TOOL_OPT_SPACING) {
+        gchar spacing_str[32];
+        gfloat safe_spacing = (spacing_val >= 0.0f && spacing_val <= 1.0f) ? spacing_val : 0.25f;
+        g_snprintf(spacing_str, sizeof(spacing_str), "%.3f", safe_spacing);
+        settings_set_tool_option(ctx->settings, tool_name, "spacing", spacing_str);
+    }
+
+    /* Paint bucket tool uses tolerance, fill_contiguous, and fill_antialiased */
+    /* These are not in ToolOptionFlags, so check tool type directly */
+    if (tool_type == TOOL_PAINT_BUCKET) {
+        gchar tolerance_str[32];
+        gfloat safe_tolerance = (tolerance_val >= 0.0f && tolerance_val <= 100.0f) ? tolerance_val : 15.0f;
+        g_snprintf(tolerance_str, sizeof(tolerance_str), "%.2f", safe_tolerance);
+        settings_set_tool_option(ctx->settings, tool_name, "tolerance", tolerance_str);
+        settings_set_tool_option(ctx->settings, tool_name, "fill_contiguous", fill_contiguous_val ? "true" : "false");
+        settings_set_tool_option(ctx->settings, tool_name, "fill_antialiased", fill_antialiased_val ? "true" : "false");
+    }
+
+    /* Save settings immediately if requested */
+    if (save_immediately && ctx->app_dir) {
+        settings_save(ctx->settings, ctx->app_dir);
+    }
+
+    /* Save settings immediately if requested */
+    if (save_immediately && ctx->app_dir) {
+        settings_save(ctx->settings, ctx->app_dir);
+    }
+}
+
+/**
+ * Save all tool options to settings (saves all tools at once)
+ */
+void ui_save_all_tool_options_to_settings(AppContext* ctx) {
+    if (!ctx || !ctx->settings || !ctx->tool_registry) {
+        return;
+    }
+
+    /* Save options for each tool type (without saving to file after each one) */
+    /* settings_set_tool_option will create the hash table if needed */
+    /* Tool options should always be saved on app close, even if unchanged */
+    for (int i = 0; i < TOOL_COUNT; i++) {
+        ToolType tool_type = (ToolType)i;
+        ui_save_tool_options_to_settings_internal(ctx, tool_type, FALSE);
+    }
 }

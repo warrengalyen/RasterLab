@@ -1,5 +1,6 @@
 #include "app/autosave.h"
 #include "app/recent_files.h"
+#include "app/settings.h"
 #include "render/layer.h"
 #include "test_widgets.h"
 #include "ui.h"
@@ -12,6 +13,7 @@
  */
 int main(int argc, char* argv[]) {
     AppContext* app;
+    gchar* app_dir;
 
     /* Print GTK version information */
     printf("GTK Version: %d.%d.%d\n",
@@ -22,8 +24,8 @@ int main(int argc, char* argv[]) {
     /* Initialize GTK */
     gtk_init(&argc, &argv);
 
-    /* Initialize recent files system */
-    recent_files_init();
+    /* Get application executable directory */
+    app_dir = settings_get_executable_dir();
 
     /* Initialize autosave system */
     // autosave_init();
@@ -36,11 +38,64 @@ int main(int argc, char* argv[]) {
 
     // test_curves_widget();
 
-    /* Create the main application UI */
+    /* Create the main application UI (will load settings) */
     app = ui_create_main_window();
+    if (app) {
+        /* Store app directory in context */
+        app->app_dir = app_dir;
+
+        /* Load settings */
+        app->settings = settings_load(app_dir);
+        if (app->settings) {
+            /* Connect recent_files system to settings */
+            recent_files_set_settings(app->settings);
+            /* Initialize and load recent files from settings XML */
+            recent_files_init();
+
+            /* Update recent files menu after loading */
+            ui_update_recent_files_menu(app);
+
+            /* Apply canvas background color from settings */
+            gdouble r, g, b;
+            settings_get_canvas_background(app->settings, &r, &g, &b);
+            ui_set_canvas_background_color(app, r, g, b);
+
+            /* Load tool options from settings */
+            ui_load_tool_options_from_settings(app);
+        }
+    } else {
+        g_free(app_dir);
+    }
 
     /* Start GTK main event loop (no initial document) */
+    /* Settings are saved in on_window_delete/on_file_exit handlers before cleanup */
     gtk_main();
+
+    /* Cleanup - settings should already be saved by window delete/exit handlers */
+    /* But if we get here without going through those handlers, try to save */
+    if (app && app->settings && app->app_dir) {
+        /* Sync recent files to settings before saving */
+        recent_files_save();
+
+        /* Save all current tool options to settings */
+        if (app->tool_registry) {
+            ui_save_all_tool_options_to_settings(app);
+        }
+
+        /* Save all settings to file */
+        settings_save(app->settings, app->app_dir);
+    }
+
+    /* Shutdown recent files system */
+    recent_files_shutdown();
+
+    /* Shutdown autosave system */
+    autosave_shutdown();
+
+    /* Cleanup - free context and all resources */
+    if (app) {
+        ui_context_free(app);
+    }
 
     return 0;
 }

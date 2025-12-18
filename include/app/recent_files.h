@@ -19,7 +19,8 @@ typedef struct {
 
 /**
  * Initialize the recent files system
- * Should be called at application startup
+ * Should be called at application startup after settings are loaded
+ * Settings must be set via recent_files_set_settings() before calling this
  */
 void recent_files_init(void);
 
@@ -35,6 +36,15 @@ void recent_files_shutdown(void);
  * @param filepath Absolute or relative path to the file
  */
 void recent_files_add(const gchar* filepath);
+
+/**
+ * Add a file to the recent files list with a specific timestamp
+ * Used when loading from settings to preserve original timestamps
+ * @param filepath Absolute or relative path to the file
+ * @param timestamp The timestamp to use (time_t)
+ * @param check_exists If TRUE, only add files that exist. If FALSE, add regardless of existence.
+ */
+void recent_files_add_with_timestamp(const gchar* filepath, time_t timestamp, gboolean check_exists);
 
 /**
  * Get the list of recent files
@@ -65,5 +75,12 @@ void recent_files_load(void);
  * Called automatically by recent_files_shutdown()
  */
 void recent_files_save(void);
+
+/**
+ * Set the Settings pointer for syncing recent files
+ * Must be called before recent_files_init() to use XML settings storage
+ * @param settings The Settings structure (must not be NULL)
+ */
+void recent_files_set_settings(void* settings);
 
 #endif /* RECENT_FILES_H */

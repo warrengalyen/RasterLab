@@ -132,6 +132,7 @@ set(SOURCES
     render/mipmap.c
     app/recent_files.c
     app/autosave.c
+    app/settings.c
     ${GRESOURCE_FILE}
 )
 
@@ -141,6 +142,9 @@ add_executable(image-editor ${SOURCES})
 # Link GTK3 libraries
 target_link_libraries(image-editor ${GTK3_LIBRARIES})
 
+# Link libxml2
+target_link_libraries(image-editor ${LIBXML2_LIBRARIES})
+
 # Link pthread for tile thread pool
 target_link_libraries(image-editor pthread)
 
@@ -149,4 +153,5 @@ target_link_libraries(image-editor ${CMAKE_SOURCE_DIR}/lib/libocular.a)
 
 # Add compile flags from pkg-config
 target_compile_options(image-editor PRIVATE ${GTK3_CFLAGS_OTHER})
+target_compile_options(image-editor PRIVATE ${LIBXML2_CFLAGS_OTHER})
 

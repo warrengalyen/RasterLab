@@ -1,6 +1,7 @@
 #ifndef UI_H
 #define UI_H
 
+#include "app/settings.h"
 #include "command.h"
 #include "document.h"
 #include "panels.h"
@@ -27,9 +28,8 @@ typedef struct {
     ToolRegistry* tool_registry;          /* Tool registry and management */
     ToolOptionsPanel* tool_options_panel; /* Tool options panel */
     LayersPanel* layers_panel;            /* Layers panel for layer selection */
-    gdouble canvas_bg_r;                  /* Canvas background color (red, 0.0-1.0) */
-    gdouble canvas_bg_g;                  /* Canvas background color (green, 0.0-1.0) */
-    gdouble canvas_bg_b;                  /* Canvas background color (blue, 0.0-1.0) */
+    Settings* settings;                   /* Application settings */
+    gchar* app_dir;                       /* Application executable directory */
 } AppContext;
 
 /**
@@ -127,5 +127,24 @@ void ui_set_canvas_background_color(AppContext* ctx, gdouble r, gdouble g, gdoub
  * @param ctx The application context
  */
 void ui_update_canvas_background_color(AppContext* ctx);
+
+/**
+ * Load tool options from settings
+ * @param ctx The application context
+ */
+void ui_load_tool_options_from_settings(AppContext* ctx);
+
+/**
+ * Save tool options to settings
+ * @param ctx The application context
+ * @param tool_type The tool type
+ */
+void ui_save_tool_options_to_settings(AppContext* ctx, ToolType tool_type);
+
+/**
+ * Save all tool options to settings (saves all tools at once)
+ * @param ctx The application context
+ */
+void ui_save_all_tool_options_to_settings(AppContext* ctx);
 
 #endif /* UI_H */

@@ -163,6 +163,7 @@ void tool_manager_free(ToolRegistry* registry) {
     for (int i = 0; i < TOOL_COUNT; i++) {
         if (registry->tools[i]) {
             tool_free(registry->tools[i]);
+            registry->tools[i] = NULL; /* Prevent double-free */
         }
     }
 

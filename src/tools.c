@@ -55,9 +55,15 @@ void tool_free(Tool* tool) {
         return;
     }
 
-    g_free(tool->name);
+    /* Free name if it exists and appears valid */
+    if (tool->name) {
+        g_free(tool->name);
+        tool->name = NULL; /* Prevent double-free */
+    }
+
     if (tool->cursor) {
         g_object_unref(tool->cursor);
+        tool->cursor = NULL; /* Prevent double-unref */
     }
 
     g_free(tool);
