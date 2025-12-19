@@ -44,6 +44,7 @@ set(SOURCES
     document.c
     panels.c
     ui/widgets/accordion.c
+    ui/widgets/anchor_position_widget.c
     ui/widgets/curves_widget.c
     ui/widgets/filter_preview.c
     ui/widgets/filter_dialog.c

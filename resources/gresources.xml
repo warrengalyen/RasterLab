@@ -18,6 +18,15 @@
     <file preprocess="to-pixdata">icons/visibility-on.png</file>
     <file preprocess="to-pixdata">icons/visibility-off.png</file>
     <file preprocess="to-pixdata">cursors/zoom_cursor.png</file>
+    <file preprocess="xml-stripblanks">icons/anchor-0.svg</file>
+    <file preprocess="xml-stripblanks">icons/anchor-45.svg</file>
+    <file preprocess="xml-stripblanks">icons/anchor-90.svg</file>
+    <file preprocess="xml-stripblanks">icons/anchor-135.svg</file>
+    <file preprocess="xml-stripblanks">icons/anchor-180.svg</file>
+    <file preprocess="xml-stripblanks">icons/anchor-225.svg</file>
+    <file preprocess="xml-stripblanks">icons/anchor-270.svg</file>
+    <file preprocess="xml-stripblanks">icons/anchor-315.svg</file>
+    <file preprocess="xml-stripblanks">icons/anchor-center.svg</file>
     <file>ui/layers_panel.glade</file>
     <file>ui/brush_options.glade</file>
     <file>ui/eraser_options.glade</file>

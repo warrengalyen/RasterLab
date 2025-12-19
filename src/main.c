@@ -24,19 +24,16 @@ int main(int argc, char* argv[]) {
     /* Initialize GTK */
     gtk_init(&argc, &argv);
 
-    /* Get application executable directory */
     app_dir = settings_get_executable_dir();
 
-    /* Initialize autosave system */
     // autosave_init();
 
-    /* Test filter preview widget */
     // test_filter_preview_dialog();
 
-    /* Test filter dialog */
     // test_filter_dialog();
 
     // test_curves_widget();
+    test_anchor_position_widget();
 
     /* Create the main application UI (will load settings) */
     app = ui_create_main_window();

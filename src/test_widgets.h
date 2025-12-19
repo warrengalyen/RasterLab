@@ -1,4 +1,5 @@
 #include "../lib/ocular.h"
+#include "ui/widgets/anchor_position_widget.h"
 #include "ui/widgets/curves_widget.h"
 #include "ui/widgets/filter_dialog.h"
 #include "ui/widgets/filter_preview.h"
@@ -723,4 +724,102 @@ static void test_filter_dialog(void) {
     filter_dialog_free(dialog);
     layer_free(before_layer);
     layer_free(after_layer);
+}
+
+/**
+ * Timeout callback to update anchor info label
+ */
+static gboolean update_anchor_info_timeout(gpointer data) {
+    GtkWidget* label = (GtkWidget*)data;
+    AnchorPositionWidget* widget = (AnchorPositionWidget*)g_object_get_data(G_OBJECT(label), "anchor_widget");
+    if (widget) {
+        CanvasAnchorPosition pos = anchor_position_widget_get_position(widget);
+        const gchar* pos_names[] = {
+            "Top-Left", "Top-Center", "Top-Right",
+            "Middle-Left", "Center", "Middle-Right",
+            "Bottom-Left", "Bottom-Center", "Bottom-Right"};
+        gchar* text = g_strdup_printf("Position: %s", pos >= 0 && pos < 9 ? pos_names[pos] : "None");
+        gtk_label_set_text(GTK_LABEL(label), text);
+        g_free(text);
+    }
+    return G_SOURCE_CONTINUE;
+}
+
+/**
+ * Test anchor position widget
+ */
+static void test_anchor_position_widget(void) {
+    GtkWidget* dialog;
+    GtkWidget* content_area;
+    GtkWidget* vbox;
+    GtkWidget* label;
+    GtkWidget* hbox;
+    GtkWidget* reset_button;
+    GtkWidget* info_label;
+    AnchorPositionWidget* anchor_widget;
+    CanvasAnchorPosition position;
+
+    /* Create dialog */
+    dialog = gtk_dialog_new_with_buttons("Anchor Position Widget Test",
+                                         NULL,
+                                         GTK_DIALOG_MODAL,
+                                         "_Close", GTK_RESPONSE_CLOSE,
+                                         NULL);
+    gtk_window_set_default_size(GTK_WINDOW(dialog), 300, 300);
+
+    content_area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+
+    /* Create vertical box */
+    vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+    gtk_container_set_border_width(GTK_CONTAINER(vbox), 20);
+    gtk_box_pack_start(GTK_BOX(content_area), vbox, TRUE, TRUE, 0);
+
+    /* Add label */
+    label = gtk_label_new("Select anchor position:");
+    gtk_label_set_xalign(GTK_LABEL(label), 0.0);
+    gtk_box_pack_start(GTK_BOX(vbox), label, FALSE, FALSE, 0);
+
+    /* Create anchor position widget */
+    anchor_widget = anchor_position_widget_new();
+    if (!anchor_widget) {
+        g_warning("Failed to create anchor position widget");
+        gtk_widget_destroy(dialog);
+        return;
+    }
+
+    gtk_box_pack_start(GTK_BOX(vbox), anchor_position_widget_get_widget(anchor_widget), FALSE, FALSE, 0);
+
+    /* Create horizontal box for buttons */
+    hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_box_pack_start(GTK_BOX(vbox), hbox, FALSE, FALSE, 0);
+
+    /* Add reset button */
+    reset_button = gtk_button_new_with_label("Reset to Center");
+    g_signal_connect_swapped(reset_button, "clicked", G_CALLBACK(anchor_position_widget_reset), anchor_widget);
+    gtk_box_pack_start(GTK_BOX(hbox), reset_button, FALSE, FALSE, 0);
+
+    /* Add info label */
+    info_label = gtk_label_new("Position: Center");
+    gtk_label_set_xalign(GTK_LABEL(info_label), 0.0);
+    gtk_box_pack_start(GTK_BOX(vbox), info_label, FALSE, FALSE, 0);
+
+    /* Store widget reference in label for update function */
+    g_object_set_data(G_OBJECT(info_label), "anchor_widget", anchor_widget);
+
+    /* Use a timeout to periodically update the label */
+    g_timeout_add(100, update_anchor_info_timeout, info_label);
+
+    /* Show all widgets */
+    gtk_widget_show_all(dialog);
+
+    /* Run dialog */
+    gtk_dialog_run(GTK_DIALOG(dialog));
+
+    /* Get final position */
+    position = anchor_position_widget_get_position(anchor_widget);
+    g_message("Final anchor position: %d", position);
+
+    /* Clean up */
+    anchor_position_widget_free(anchor_widget);
+    gtk_widget_destroy(dialog);
 }
