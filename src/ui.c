@@ -50,6 +50,7 @@ static void on_file_save_as(GtkWidget* widget, gpointer data);
 static void on_file_save_as_response(GtkDialog* dialog, gint response_id, gpointer user_data);
 static void on_file_close(GtkWidget* widget, gpointer data);
 static void on_file_exit(GtkWidget* widget, gpointer data);
+static void on_image_canvas_size(GtkWidget* widget, gpointer data);
 static void on_edit_undo(GtkWidget* widget, gpointer data);
 static void on_edit_redo(GtkWidget* widget, gpointer data);
 static void on_view_zoom_in(GtkWidget* widget, gpointer data);
@@ -69,6 +70,7 @@ static void on_layer_selection_changed(GtkTreeSelection* selection, gpointer use
 static void setup_file_menu(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* accel_group);
 static void setup_edit_menu(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* accel_group);
 static void setup_view_menu(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* accel_group);
+static void setup_image_menu(GtkBuilder* builder, AppContext* ctx);
 static void setup_layer_menu(GtkBuilder* builder, AppContext* ctx);
 static void setup_adjust_menu(GtkBuilder* builder, AppContext* ctx);
 static void setup_effects_menu(GtkBuilder* builder, AppContext* ctx);
@@ -82,11 +84,8 @@ static void on_layer_selection_changed(GtkTreeSelection* selection, gpointer use
     AppContext* ctx = (AppContext*)user_data;
 
     if (!ctx) {
-        // printf("ERROR: on_layer_selection_changed called with NULL ctx\n");
         return;
     }
-
-    // printf("Layer selection changed in tree view\n");
 
     /* Get the currently active document */
     ImageDocument* active_doc = ui_get_active_document(ctx);
@@ -399,6 +398,7 @@ AppContext* ui_create_main_window(void) {
     setup_file_menu(builder, ctx, accel_group);
     setup_edit_menu(builder, ctx, accel_group);
     setup_view_menu(builder, ctx, accel_group);
+    setup_image_menu(builder, ctx);
     setup_layer_menu(builder, ctx);
     setup_adjust_menu(builder, ctx);
     setup_effects_menu(builder, ctx);
@@ -1118,6 +1118,24 @@ static void setup_view_menu(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup*
 }
 
 /**
+ * Setup Image menu from Glade builder
+ */
+static void setup_image_menu(GtkBuilder* builder, AppContext* ctx) {
+    GtkWidget* image_menu = GTK_WIDGET(gtk_builder_get_object(builder, "image_menu"));
+    GtkWidget* image_menu_item = GTK_WIDGET(gtk_builder_get_object(builder, "image_menu_item"));
+
+    if (image_menu && image_menu_item) {
+        gtk_menu_item_set_submenu(GTK_MENU_ITEM(image_menu_item), image_menu);
+    }
+
+    /* Connect Image menu signals */
+    GtkWidget* image_menu_canvas_size = GTK_WIDGET(gtk_builder_get_object(builder, "image_menu_canvas_size"));
+    if (image_menu_canvas_size) {
+        g_signal_connect(image_menu_canvas_size, "activate", G_CALLBACK(on_image_canvas_size), ctx);
+    }
+}
+
+/**
  * Setup Layer menu from Glade builder
  */
 static void setup_layer_menu(GtkBuilder* builder, AppContext* ctx) {
@@ -1707,6 +1725,132 @@ static void on_layer_new(GtkWidget* widget, gpointer data) {
 
     /* Free dialog */
     new_layer_dialog_free(dialog);
+}
+
+/**
+ * Image > Canvas Size callback
+ */
+static void on_image_canvas_size(GtkWidget* widget, gpointer data) {
+    (void)widget; /* Unused */
+
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc = ui_get_active_document(ctx);
+    LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window),
+                                                                "layers_panel");
+    Command* cmd;
+    guint old_width, old_height;
+    guint new_width, new_height;
+    gdouble old_resolution, new_resolution;
+    gint offset_x, offset_y;
+    gint delta_width, delta_height;
+    CanvasAnchorPosition anchor;
+
+    if (!doc) {
+        g_warning("No document open");
+        return;
+    }
+
+    /* For now, use default values (current size, 25.40 PPI, no anchor) */
+    /* Dialog will be implemented later */
+    old_width = doc->width;
+    old_height = doc->height;
+    new_width = (guint)(doc->width * 1.5);
+    new_height = (guint)(doc->height * 1.5);
+    old_resolution = 25.40; /* Default resolution */
+    new_resolution = 25.40;
+    anchor = CANVAS_ANCHOR_CENTER;
+
+    /* If dimensions haven't changed, nothing to do */
+    if (old_width == new_width && old_height == new_height) {
+        return;
+    }
+
+    /* Calculate offsets based on anchor position (same logic as document_resize_canvas) */
+    delta_width = (gint)new_width - (gint)old_width;
+    delta_height = (gint)new_height - (gint)old_height;
+
+    switch (anchor) {
+        case CANVAS_ANCHOR_TOP_LEFT:
+            offset_x = 0;
+            offset_y = 0;
+            break;
+        case CANVAS_ANCHOR_TOP_CENTER:
+            offset_x = delta_width / 2;
+            offset_y = 0;
+            break;
+        case CANVAS_ANCHOR_TOP_RIGHT:
+            offset_x = delta_width;
+            offset_y = 0;
+            break;
+        case CANVAS_ANCHOR_MIDDLE_LEFT:
+            offset_x = 0;
+            offset_y = delta_height / 2;
+            break;
+        case CANVAS_ANCHOR_CENTER:
+            offset_x = delta_width / 2;
+            offset_y = delta_height / 2;
+            break;
+        case CANVAS_ANCHOR_MIDDLE_RIGHT:
+            offset_x = delta_width;
+            offset_y = delta_height / 2;
+            break;
+        case CANVAS_ANCHOR_BOTTOM_LEFT:
+            offset_x = 0;
+            offset_y = delta_height;
+            break;
+        case CANVAS_ANCHOR_BOTTOM_CENTER:
+            offset_x = delta_width / 2;
+            offset_y = delta_height;
+            break;
+        case CANVAS_ANCHOR_BOTTOM_RIGHT:
+            offset_x = delta_width;
+            offset_y = delta_height;
+            break;
+        case CANVAS_ANCHOR_NONE:
+        default:
+            offset_x = 0;
+            offset_y = 0;
+            break;
+    }
+
+    /* Create undo command BEFORE resizing (to capture old state) */
+    cmd = command_create_canvas_resize(old_width, old_height,
+                                       new_width, new_height,
+                                       old_resolution, new_resolution,
+                                       offset_x, offset_y,
+                                       doc);
+
+    if (!cmd) {
+        g_warning("Failed to create canvas size command");
+        return;
+    }
+
+    /* Resize canvas */
+    if (document_resize_canvas(doc, new_width, new_height, new_resolution, anchor)) {
+        /* Push command to undo stack and clear redo stack */
+        if (doc->undo_stack) {
+            command_stack_push(doc->undo_stack, cmd);
+            if (doc->redo_stack) {
+                command_stack_clear(doc->redo_stack);
+            }
+        } else {
+            command_free(cmd);
+        }
+
+        /* Update layers panel */
+        if (layers_panel) {
+            layers_panel_update(layers_panel, doc);
+        }
+
+        /* Update UI state */
+        ui_update_menu_and_button_states(ctx);
+        ui_update_window_title(ctx);
+        ui_update_status_bar(ctx, NULL);
+        doc->modified = TRUE;
+    } else {
+        g_warning("Failed to resize canvas");
+        command_free(cmd);
+    }
 }
 
 /**

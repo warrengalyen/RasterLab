@@ -1,8 +1,8 @@
 #ifndef COMMAND_H
 #define COMMAND_H
 
-#include <glib.h>
 #include <cairo.h>
+#include <glib.h>
 
 /**
  * Forward declarations
@@ -20,6 +20,7 @@ typedef enum {
     COMMAND_ERASE = 2,
     COMMAND_LAYER_EDIT = 3,
     COMMAND_MOVE = 4,
+    COMMAND_CANVAS_RESIZE = 5,
     COMMAND_CUSTOM = 255
 } CommandType;
 
@@ -37,7 +38,8 @@ typedef enum {
     CMD_NAME_DUPLICATE_LAYER,
     CMD_NAME_MOVE_LAYER_UP,
     CMD_NAME_MOVE_LAYER_DOWN,
-    CMD_NAME_COUNT  /* Total number of predefined command names */
+    CMD_NAME_CANVAS_SIZE,
+    CMD_NAME_COUNT /* Total number of predefined command names */
 } CommandName;
 
 /**
@@ -50,22 +52,22 @@ const gchar* command_get_name_string(CommandName name);
 /**
  * Command callbacks
  */
-typedef void (*CommandApplyFunc)(Command *cmd, struct ImageDocument *doc);
-typedef void (*CommandRevertFunc)(Command *cmd, struct ImageDocument *doc);
-typedef void (*CommandDestroyFunc)(Command *cmd);
+typedef void (*CommandApplyFunc)(Command* cmd, struct ImageDocument* doc);
+typedef void (*CommandRevertFunc)(Command* cmd, struct ImageDocument* doc);
+typedef void (*CommandDestroyFunc)(Command* cmd);
 
 /**
  * Command structure
  * Represents a single undoable/redoable action
  */
 typedef struct _Command {
-    gchar *name;                        /* Human-readable command name */
-    CommandType type;                   /* Command type */
-    CommandApplyFunc apply;             /* Apply callback */
-    CommandRevertFunc revert;           /* Revert callback */
-    CommandDestroyFunc destroy;         /* Cleanup callback */
-    gpointer user_data;                 /* Command-specific data */
-    struct ImageDocument *document;     /* Associated document */
+    gchar* name;                    /* Human-readable command name */
+    CommandType type;               /* Command type */
+    CommandApplyFunc apply;         /* Apply callback */
+    CommandRevertFunc revert;       /* Revert callback */
+    CommandDestroyFunc destroy;     /* Cleanup callback */
+    gpointer user_data;             /* Command-specific data */
+    struct ImageDocument* document; /* Associated document */
 } Command;
 
 /**
@@ -77,7 +79,7 @@ typedef struct _Command {
  * @param destroy Cleanup callback (can be NULL)
  * @return Newly created Command, or NULL on failure
  */
-Command* command_new(const gchar *name, 
+Command* command_new(const gchar* name,
                      CommandType type,
                      CommandApplyFunc apply,
                      CommandRevertFunc revert,
@@ -87,29 +89,29 @@ Command* command_new(const gchar *name,
  * Free a command and its resources
  * @param cmd The command to free
  */
-void command_free(Command *cmd);
+void command_free(Command* cmd);
 
 /**
  * Execute a command (apply it)
  * @param cmd The command to execute
  * @param doc The document to execute on
  */
-void command_execute(Command *cmd, struct ImageDocument *doc);
+void command_execute(Command* cmd, struct ImageDocument* doc);
 
 /**
  * Undo a command (revert it)
  * @param cmd The command to undo
  * @param doc The document to undo on
  */
-void command_undo(Command *cmd, struct ImageDocument *doc);
+void command_undo(Command* cmd, struct ImageDocument* doc);
 
 /**
  * Command stack structure
  * Maintains a list of commands
  */
 typedef struct _CommandStack {
-    GList *commands;                    /* List of Command pointers */
-    guint max_depth;                    /* Maximum undo depth (0 = unlimited) */
+    GList* commands; /* List of Command pointers */
+    guint max_depth; /* Maximum undo depth (0 = unlimited) */
 } CommandStack;
 
 /**
@@ -125,56 +127,56 @@ CommandStack* command_stack_new(guint max_depth);
  * @param cmd The command to push
  * @return TRUE on success, FALSE on failure
  */
-gboolean command_stack_push(CommandStack *stack, Command *cmd);
+gboolean command_stack_push(CommandStack* stack, Command* cmd);
 
 /**
  * Pop a command from the stack (and free it)
  * @param stack The command stack
  * @return Popped command (caller must free), or NULL if empty
  */
-Command* command_stack_pop(CommandStack *stack);
+Command* command_stack_pop(CommandStack* stack);
 
 /**
  * Peek at the top command (doesn't remove)
  * @param stack The command stack
  * @return Top command, or NULL if empty
  */
-Command* command_stack_peek(CommandStack *stack);
+Command* command_stack_peek(CommandStack* stack);
 
 /**
  * Check if stack is empty
  * @param stack The command stack
  * @return TRUE if empty, FALSE otherwise
  */
-gboolean command_stack_is_empty(CommandStack *stack);
+gboolean command_stack_is_empty(CommandStack* stack);
 
 /**
  * Get the size of the stack
  * @param stack The command stack
  * @return Number of commands in stack
  */
-guint command_stack_size(CommandStack *stack);
+guint command_stack_size(CommandStack* stack);
 
 /**
  * Clear all commands from the stack (freeing each)
  * @param stack The command stack
  */
-void command_stack_clear(CommandStack *stack);
+void command_stack_clear(CommandStack* stack);
 
 /**
  * Free the command stack and all commands
  * @param stack The command stack to free
  */
-void command_stack_free(CommandStack *stack);
+void command_stack_free(CommandStack* stack);
 
 /**
  * Draw command data structure
  * Stores layer snapshots for undo/redo
  */
 typedef struct {
-    struct ImageLayer *layer;           /* Layer being drawn on */
-    cairo_surface_t *before_snapshot;   /* Surface snapshot before draw (for undo) */
-    cairo_surface_t *after_snapshot;    /* Surface snapshot after draw (for redo) */
+    struct ImageLayer* layer;         /* Layer being drawn on */
+    cairo_surface_t* before_snapshot; /* Surface snapshot before draw (for undo) */
+    cairo_surface_t* after_snapshot;  /* Surface snapshot after draw (for redo) */
 } DrawCommandData;
 
 /**
@@ -183,7 +185,7 @@ typedef struct {
  * @param name The command name (can be NULL for default, or use command_get_name_string for predefined names)
  * @return Newly created Command for drawing, or NULL on failure
  */
-Command* command_create_draw(struct ImageLayer *layer, const gchar *name);
+Command* command_create_draw(struct ImageLayer* layer, const gchar* name);
 
 /**
  * Finalize a draw command by taking snapshot of state after drawing
@@ -191,18 +193,18 @@ Command* command_create_draw(struct ImageLayer *layer, const gchar *name);
  * @param cmd The draw command to finalize
  * @return TRUE on success, FALSE on failure
  */
-gboolean command_finalize_draw(Command *cmd);
+gboolean command_finalize_draw(Command* cmd);
 
 /**
  * Move command data structure
  * Stores layer offset before move for undo
  */
 typedef struct {
-    struct ImageLayer *layer;           /* Layer being moved */
-    gint old_offset_x;                  /* X offset before move */
-    gint old_offset_y;                  /* Y offset before move */
-    gint new_offset_x;                  /* X offset after move */
-    gint new_offset_y;                  /* Y offset after move */
+    struct ImageLayer* layer; /* Layer being moved */
+    gint old_offset_x;        /* X offset before move */
+    gint old_offset_y;        /* Y offset before move */
+    gint new_offset_x;        /* X offset after move */
+    gint new_offset_y;        /* Y offset after move */
 } MoveCommandData;
 
 /**
@@ -214,48 +216,83 @@ typedef struct {
  * @param new_y New Y offset
  * @return Newly created Command for moving, or NULL on failure
  */
-Command* command_create_move(struct ImageLayer *layer, 
+Command* command_create_move(struct ImageLayer* layer,
                              gint old_x, gint old_y,
                              gint new_x, gint new_y);
+
+/**
+ * Canvas resize command data structure
+ * Stores canvas dimensions and layer offset adjustments
+ */
+typedef struct {
+    guint old_width;        /* Canvas width before resize */
+    guint old_height;       /* Canvas height before resize */
+    guint new_width;        /* Canvas width after resize */
+    guint new_height;       /* Canvas height after resize */
+    gdouble old_resolution; /* Resolution before resize */
+    gdouble new_resolution; /* Resolution after resize */
+    gint offset_x;          /* X offset adjustment applied to all layers */
+    gint offset_y;          /* Y offset adjustment applied to all layers */
+    GList* layer_offsets;   /* List of (old_offset_x, old_offset_y) pairs for each layer */
+} CanvasResizeCommandData;
+
+/**
+ * Create a canvas resize command
+ * @param old_width Canvas width before resize
+ * @param old_height Canvas height before resize
+ * @param new_width Canvas width after resize
+ * @param new_height Canvas height after resize
+ * @param old_resolution Resolution before resize
+ * @param new_resolution Resolution after resize
+ * @param offset_x X offset adjustment applied to layers
+ * @param offset_y Y offset adjustment applied to layers
+ * @param doc Document containing layers (to capture current offsets)
+ * @return Newly created Command for canvas resize, or NULL on failure
+ */
+Command* command_create_canvas_resize(guint old_width, guint old_height,
+                                      guint new_width, guint new_height,
+                                      gdouble old_resolution, gdouble new_resolution,
+                                      gint offset_x, gint offset_y,
+                                      struct ImageDocument* doc);
 
 /**
  * Layer operation command data structures
  */
 typedef struct {
-    struct ImageDocument *doc;   /* Document containing the layer */
-    struct ImageLayer *layer;    /* Layer being added */
+    struct ImageDocument* doc; /* Document containing the layer */
+    struct ImageLayer* layer;  /* Layer being added */
 } LayerAddCommandData;
 
 typedef struct {
-    struct ImageDocument *doc;   /* Document containing the layer */
-    struct ImageLayer *layer;    /* Layer being deleted */
-    gint position;               /* Position in layer list before deletion */
-    gchar *layer_name;          /* Layer name for restoration */
-    guint width;                /* Layer width */
-    guint height;               /* Layer height */
-    cairo_surface_t *snapshot;  /* Snapshot of layer content */
-    gfloat opacity;             /* Layer opacity */
-    gint blend_mode;            /* Layer blend mode */
+    struct ImageDocument* doc; /* Document containing the layer */
+    struct ImageLayer* layer;  /* Layer being deleted */
+    gint position;             /* Position in layer list before deletion */
+    gchar* layer_name;         /* Layer name for restoration */
+    guint width;               /* Layer width */
+    guint height;              /* Layer height */
+    cairo_surface_t* snapshot; /* Snapshot of layer content */
+    gfloat opacity;            /* Layer opacity */
+    gint blend_mode;           /* Layer blend mode */
 } LayerDeleteCommandData;
 
 typedef struct {
-    struct ImageDocument *doc;   /* Document containing the layer */
-    struct ImageLayer *source_layer;  /* Source layer */
-    struct ImageLayer *new_layer;     /* Duplicated layer */
+    struct ImageDocument* doc;       /* Document containing the layer */
+    struct ImageLayer* source_layer; /* Source layer */
+    struct ImageLayer* new_layer;    /* Duplicated layer */
 } LayerDuplicateCommandData;
 
 typedef struct {
-    struct ImageDocument *doc;   /* Document containing the layer */
-    struct ImageLayer *layer;    /* Layer being moved */
-    gint old_position;          /* Position before move */
-    gint new_position;          /* Position after move */
+    struct ImageDocument* doc; /* Document containing the layer */
+    struct ImageLayer* layer;  /* Layer being moved */
+    gint old_position;         /* Position before move */
+    gint new_position;         /* Position after move */
 } LayerMoveUpCommandData;
 
 typedef struct {
-    struct ImageDocument *doc;   /* Document containing the layer */
-    struct ImageLayer *layer;    /* Layer being moved */
-    gint old_position;          /* Position before move */
-    gint new_position;          /* Position after move */
+    struct ImageDocument* doc; /* Document containing the layer */
+    struct ImageLayer* layer;  /* Layer being moved */
+    gint old_position;         /* Position before move */
+    gint new_position;         /* Position after move */
 } LayerMoveDownCommandData;
 
 /**
@@ -264,7 +301,7 @@ typedef struct {
  * @param layer The layer being added
  * @return Newly created Command, or NULL on failure
  */
-Command* command_create_layer_add(struct ImageDocument *doc, struct ImageLayer *layer);
+Command* command_create_layer_add(struct ImageDocument* doc, struct ImageLayer* layer);
 
 /**
  * Create a layer delete command
@@ -272,7 +309,7 @@ Command* command_create_layer_add(struct ImageDocument *doc, struct ImageLayer *
  * @param layer The layer being deleted
  * @return Newly created Command, or NULL on failure
  */
-Command* command_create_layer_delete(struct ImageDocument *doc, struct ImageLayer *layer);
+Command* command_create_layer_delete(struct ImageDocument* doc, struct ImageLayer* layer);
 
 /**
  * Create a layer duplicate command
@@ -281,9 +318,9 @@ Command* command_create_layer_delete(struct ImageDocument *doc, struct ImageLaye
  * @param new_layer The duplicated layer
  * @return Newly created Command, or NULL on failure
  */
-Command* command_create_layer_duplicate(struct ImageDocument *doc, 
-                                       struct ImageLayer *source_layer,
-                                       struct ImageLayer *new_layer);
+Command* command_create_layer_duplicate(struct ImageDocument* doc,
+                                        struct ImageLayer* source_layer,
+                                        struct ImageLayer* new_layer);
 
 /**
  * Create a layer move up command
@@ -291,7 +328,7 @@ Command* command_create_layer_duplicate(struct ImageDocument *doc,
  * @param layer The layer being moved
  * @return Newly created Command, or NULL on failure
  */
-Command* command_create_layer_move_up(struct ImageDocument *doc, struct ImageLayer *layer);
+Command* command_create_layer_move_up(struct ImageDocument* doc, struct ImageLayer* layer);
 
 /**
  * Create a layer move down command
@@ -299,7 +336,6 @@ Command* command_create_layer_move_up(struct ImageDocument *doc, struct ImageLay
  * @param layer The layer being moved
  * @return Newly created Command, or NULL on failure
  */
-Command* command_create_layer_move_down(struct ImageDocument *doc, struct ImageLayer *layer);
+Command* command_create_layer_move_down(struct ImageDocument* doc, struct ImageLayer* layer);
 
 #endif /* COMMAND_H */
-

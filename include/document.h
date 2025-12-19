@@ -54,6 +54,23 @@ typedef enum {
     LAYER_POSITION_BOTTOM = 3         /* Bottom of layer stack */
 } LayerPosition;
 
+/**
+ * Anchor position for canvas resize (like Photoshop)
+ * Determines where existing content is pinned when resizing
+ */
+typedef enum {
+    CANVAS_ANCHOR_NONE = -1,         /* No anchor (default - no offset change) */
+    CANVAS_ANCHOR_TOP_LEFT = 0,      /* Top-left corner */
+    CANVAS_ANCHOR_TOP_CENTER = 1,    /* Top-center */
+    CANVAS_ANCHOR_TOP_RIGHT = 2,     /* Top-right corner */
+    CANVAS_ANCHOR_MIDDLE_LEFT = 3,   /* Middle-left */
+    CANVAS_ANCHOR_CENTER = 4,        /* Center */
+    CANVAS_ANCHOR_MIDDLE_RIGHT = 5,  /* Middle-right */
+    CANVAS_ANCHOR_BOTTOM_LEFT = 6,   /* Bottom-left corner */
+    CANVAS_ANCHOR_BOTTOM_CENTER = 7, /* Bottom-center */
+    CANVAS_ANCHOR_BOTTOM_RIGHT = 8   /* Bottom-right corner */
+} CanvasAnchorPosition;
+
 /* Forward declaration */
 struct MipmapPyramid;
 typedef struct MipmapPyramid MipmapPyramid;
@@ -308,6 +325,18 @@ ImageLayer* document_get_selected_layer(ImageDocument* doc);
  * @return The number of layers
  */
 guint document_get_layer_count(ImageDocument* doc);
+
+/**
+ * Resize the canvas
+ * @param doc The document
+ * @param new_width New canvas width in pixels
+ * @param new_height New canvas height in pixels
+ * @param resolution Resolution in PPI (pixels per inch) - for future use
+ * @param anchor Anchor position for resizing (determines where content is pinned)
+ * @return TRUE if successful, FALSE otherwise
+ */
+gboolean document_resize_canvas(ImageDocument* doc, guint new_width, guint new_height,
+                                gdouble resolution, CanvasAnchorPosition anchor);
 
 /**
  * Execute an undo command

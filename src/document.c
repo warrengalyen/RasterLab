@@ -1390,3 +1390,122 @@ void document_zoom_reset(ImageDocument* doc) {
     document_set_zoom(doc, 1.0);
     // printf("Zoom reset: 100%%\n");
 }
+
+/**
+ * Resize the canvas
+ */
+gboolean document_resize_canvas(ImageDocument* doc, guint new_width, guint new_height,
+                                gdouble resolution, CanvasAnchorPosition anchor) {
+    guint old_width, old_height;
+    gint offset_x, offset_y;
+    gint delta_width, delta_height;
+    GList* iter;
+    ImageLayer* layer;
+    cairo_surface_t* new_surface;
+    cairo_t* cr;
+
+    (void)resolution; /* Reserved for future use */
+
+    if (!doc || new_width == 0 || new_height == 0) {
+        return FALSE;
+    }
+
+    old_width = doc->width;
+    old_height = doc->height;
+
+    /* If dimensions haven't changed, nothing to do */
+    if (old_width == new_width && old_height == new_height) {
+        return TRUE;
+    }
+
+    delta_width = (gint)new_width - (gint)old_width;
+    delta_height = (gint)new_height - (gint)old_height;
+
+    /* Calculate offsets based on anchor position */
+    switch (anchor) {
+        case CANVAS_ANCHOR_TOP_LEFT:
+            offset_x = 0;
+            offset_y = 0;
+            break;
+        case CANVAS_ANCHOR_TOP_CENTER:
+            offset_x = delta_width / 2;
+            offset_y = 0;
+            break;
+        case CANVAS_ANCHOR_TOP_RIGHT:
+            offset_x = delta_width;
+            offset_y = 0;
+            break;
+        case CANVAS_ANCHOR_MIDDLE_LEFT:
+            offset_x = 0;
+            offset_y = delta_height / 2;
+            break;
+        case CANVAS_ANCHOR_CENTER:
+            offset_x = delta_width / 2;
+            offset_y = delta_height / 2;
+            break;
+        case CANVAS_ANCHOR_MIDDLE_RIGHT:
+            offset_x = delta_width;
+            offset_y = delta_height / 2;
+            break;
+        case CANVAS_ANCHOR_BOTTOM_LEFT:
+            offset_x = 0;
+            offset_y = delta_height;
+            break;
+        case CANVAS_ANCHOR_BOTTOM_CENTER:
+            offset_x = delta_width / 2;
+            offset_y = delta_height;
+            break;
+        case CANVAS_ANCHOR_BOTTOM_RIGHT:
+            offset_x = delta_width;
+            offset_y = delta_height;
+            break;
+        case CANVAS_ANCHOR_NONE:
+        default:
+            offset_x = 0;
+            offset_y = 0;
+            break;
+    }
+
+    /* Adjust layer offsets based on anchor position */
+    /* Layers keep their original size, only their position on the canvas changes */
+    for (iter = doc->layers; iter; iter = iter->next) {
+        layer = (ImageLayer*)iter->data;
+        if (!layer) {
+            continue;
+        }
+
+        /* Update layer offset to position it correctly on the new canvas */
+        layer->offset_x += offset_x;
+        layer->offset_y += offset_y;
+
+        /* Invalidate layer cache */
+        layer_invalidate_cache(layer);
+    }
+
+    /* Update document dimensions */
+    doc->width = new_width;
+    doc->height = new_height;
+
+    /* Update drawing area size */
+    if (doc->drawing_area) {
+        gint display_width = (gint)(doc->width * doc->zoom_factor);
+        gint display_height = (gint)(doc->height * doc->zoom_factor);
+        gtk_widget_set_size_request(doc->drawing_area, display_width, display_height);
+        gtk_widget_queue_draw(doc->drawing_area);
+    }
+
+    /* Recreate tile grid with new dimensions */
+    if (doc->tile_grid) {
+        tile_grid_free(doc->tile_grid);
+        doc->tile_grid = NULL;
+    }
+    doc->tile_grid = tile_grid_create(new_width, new_height, 128);
+    if (!doc->tile_grid) {
+        g_warning("Failed to create tile grid after canvas resize");
+    }
+
+    /* Invalidate composite */
+    document_invalidate_composite(doc);
+
+    return TRUE;
+}

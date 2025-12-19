@@ -744,6 +744,19 @@
       </object>
     </child>
   </object>
+  <object class="GtkMenu" id="image_menu">
+    <property name="visible">True</property>
+    <property name="can-focus">False</property>
+    <child>
+      <object class="GtkMenuItem" id="image_menu_canvas_size">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Canvas size...</property>
+        <property name="use-underline">True</property>
+        <accelerator key="r" signal="activate" modifiers="GDK_CONTROL_MASK | GDK_MOD1_MASK"/>
+      </object>
+    </child>
+  </object>
   <object class="GtkMenu" id="layer_menu">
     <property name="visible">True</property>
     <property name="can-focus">False</property>
@@ -811,6 +824,14 @@
               </object>
             </child>
             <child>
+              <object class="GtkMenuItem" id="image_menu_item">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">_Image</property>
+                <property name="use-underline">True</property>
+              </object>
+            </child>
+            <child>
               <object class="GtkMenuItem" id="view_menu_item">
                 <property name="visible">True</property>
                 <property name="can-focus">False</property>
@@ -838,7 +859,7 @@
               <object class="GtkMenuItem" id="effects_menu_item">
                 <property name="visible">True</property>
                 <property name="can-focus">False</property>
-                <property name="label" translatable="yes">Effects</property>
+                <property name="label" translatable="yes">_Effects</property>
                 <property name="use-underline">True</property>
               </object>
             </child>

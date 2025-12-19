@@ -420,7 +420,8 @@ const gchar* command_get_name_string(CommandName name) {
         "Delete Layer",
         "Duplicate Layer",
         "Move Layer Up",
-        "Move Layer Down"};
+        "Move Layer Down",
+        "Canvas size"};
 
     if (name < 0 || name >= CMD_NAME_COUNT) {
         return NULL;
@@ -1303,5 +1304,213 @@ Command* command_create_layer_move_down(struct ImageDocument* doc, struct ImageL
     }
 
     cmd->user_data = data;
+    return cmd;
+}
+
+/**
+ * Structure to store old layer offsets for canvas resize undo
+ */
+typedef struct {
+    struct ImageLayer* layer;
+    gint old_offset_x;
+    gint old_offset_y;
+} LayerOffsetPair;
+
+/**
+ * Canvas resize command apply callback (restore to new size)
+ */
+static void canvas_resize_command_apply(Command* cmd, struct ImageDocument* doc) {
+    CanvasResizeCommandData* data;
+    GList* iter;
+    LayerOffsetPair* pair;
+
+    if (!cmd || !cmd->user_data || !doc) {
+        return;
+    }
+
+    data = (CanvasResizeCommandData*)cmd->user_data;
+
+    /* Restore new canvas dimensions */
+    doc->width = data->new_width;
+    doc->height = data->new_height;
+
+    /* Restore layer offsets to new positions */
+    for (iter = data->layer_offsets; iter; iter = iter->next) {
+        pair = (LayerOffsetPair*)iter->data;
+        if (pair && pair->layer) {
+            /* Apply offset adjustment */
+            pair->layer->offset_x = pair->old_offset_x + data->offset_x;
+            pair->layer->offset_y = pair->old_offset_y + data->offset_y;
+            layer_invalidate_cache(pair->layer);
+        }
+    }
+
+    /* Recreate tile grid with new dimensions */
+    if (doc->tile_grid) {
+        tile_grid_free(doc->tile_grid);
+        doc->tile_grid = NULL;
+    }
+    doc->tile_grid = tile_grid_create(data->new_width, data->new_height, 128);
+    if (!doc->tile_grid) {
+        g_warning("Failed to create tile grid after canvas resize redo");
+    }
+
+    /* Update drawing area size */
+    if (doc->drawing_area) {
+        gint display_width = (gint)(doc->width * doc->zoom_factor);
+        gint display_height = (gint)(doc->height * doc->zoom_factor);
+        gtk_widget_set_size_request(doc->drawing_area, display_width, display_height);
+        gtk_widget_queue_draw(doc->drawing_area);
+    }
+
+    /* Invalidate composite */
+    document_invalidate_composite(doc);
+}
+
+/**
+ * Canvas resize command revert callback (restore to old size)
+ */
+static void canvas_resize_command_revert(Command* cmd, struct ImageDocument* doc) {
+    CanvasResizeCommandData* data;
+    GList* iter;
+    LayerOffsetPair* pair;
+
+    if (!cmd || !cmd->user_data || !doc) {
+        return;
+    }
+
+    data = (CanvasResizeCommandData*)cmd->user_data;
+
+    /* Restore old canvas dimensions */
+    doc->width = data->old_width;
+    doc->height = data->old_height;
+
+    /* Restore layer offsets to old positions */
+    for (iter = data->layer_offsets; iter; iter = iter->next) {
+        pair = (LayerOffsetPair*)iter->data;
+        if (pair && pair->layer) {
+            /* Restore old offset */
+            pair->layer->offset_x = pair->old_offset_x;
+            pair->layer->offset_y = pair->old_offset_y;
+            layer_invalidate_cache(pair->layer);
+        }
+    }
+
+    /* Recreate tile grid with old dimensions */
+    if (doc->tile_grid) {
+        tile_grid_free(doc->tile_grid);
+        doc->tile_grid = NULL;
+    }
+    doc->tile_grid = tile_grid_create(data->old_width, data->old_height, 128);
+    if (!doc->tile_grid) {
+        g_warning("Failed to create tile grid after canvas size undo");
+    }
+
+    /* Update drawing area size */
+    if (doc->drawing_area) {
+        gint display_width = (gint)(doc->width * doc->zoom_factor);
+        gint display_height = (gint)(doc->height * doc->zoom_factor);
+        gtk_widget_set_size_request(doc->drawing_area, display_width, display_height);
+        gtk_widget_queue_draw(doc->drawing_area);
+    }
+
+    /* Invalidate composite */
+    document_invalidate_composite(doc);
+}
+
+/**
+ * Canvas resize command destroy callback
+ */
+static void canvas_resize_command_destroy(Command* cmd) {
+    CanvasResizeCommandData* data;
+    GList* iter;
+    LayerOffsetPair* pair;
+
+    if (!cmd || !cmd->user_data) {
+        return;
+    }
+
+    data = (CanvasResizeCommandData*)cmd->user_data;
+
+    /* Free layer offset pairs */
+    if (data->layer_offsets) {
+        for (iter = data->layer_offsets; iter; iter = iter->next) {
+            pair = (LayerOffsetPair*)iter->data;
+            if (pair) {
+                g_free(pair);
+            }
+        }
+        g_list_free(data->layer_offsets);
+    }
+
+    g_free(data);
+}
+
+/**
+ * Create a canvas resize command
+ */
+Command* command_create_canvas_resize(guint old_width, guint old_height,
+                                      guint new_width, guint new_height,
+                                      gdouble old_resolution, gdouble new_resolution,
+                                      gint offset_x, gint offset_y,
+                                      struct ImageDocument* doc) {
+    Command* cmd;
+    CanvasResizeCommandData* data;
+    GList* iter;
+    ImageLayer* layer;
+    LayerOffsetPair* pair;
+
+    if (!doc) {
+        return NULL;
+    }
+
+    /* Create command data */
+    data = (CanvasResizeCommandData*)g_malloc(sizeof(CanvasResizeCommandData));
+    data->old_width = old_width;
+    data->old_height = old_height;
+    data->new_width = new_width;
+    data->new_height = new_height;
+    data->old_resolution = old_resolution;
+    data->new_resolution = new_resolution;
+    data->offset_x = offset_x;
+    data->offset_y = offset_y;
+    data->layer_offsets = NULL;
+
+    /* Store old offsets for all layers */
+    for (iter = doc->layers; iter; iter = iter->next) {
+        layer = (ImageLayer*)iter->data;
+        if (layer) {
+            pair = (LayerOffsetPair*)g_malloc(sizeof(LayerOffsetPair));
+            pair->layer = layer;
+            pair->old_offset_x = layer->offset_x;
+            pair->old_offset_y = layer->offset_y;
+            data->layer_offsets = g_list_append(data->layer_offsets, pair);
+        }
+    }
+
+    /* Create command */
+    cmd = command_new(command_get_name_string(CMD_NAME_CANVAS_SIZE),
+                      COMMAND_CANVAS_RESIZE,
+                      canvas_resize_command_apply,
+                      canvas_resize_command_revert,
+                      canvas_resize_command_destroy);
+
+    if (!cmd) {
+        /* Free layer offset pairs */
+        if (data->layer_offsets) {
+            for (iter = data->layer_offsets; iter; iter = iter->next) {
+                pair = (LayerOffsetPair*)iter->data;
+                if (pair) {
+                    g_free(pair);
+                }
+            }
+            g_list_free(data->layer_offsets);
+        }
+        g_free(data);
+        return NULL;
+    }
+
+    cmd->user_data = data;
+
     return cmd;
 }
