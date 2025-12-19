@@ -27,11 +27,14 @@
     <file preprocess="xml-stripblanks">icons/anchor-270.svg</file>
     <file preprocess="xml-stripblanks">icons/anchor-315.svg</file>
     <file preprocess="xml-stripblanks">icons/anchor-center.svg</file>
+    <file preprocess="xml-stripblanks">icons/padlock-locked.svg</file>
+    <file preprocess="xml-stripblanks">icons/padlock-unlocked.svg</file>
     <file>ui/layers_panel.glade</file>
     <file>ui/brush_options.glade</file>
     <file>ui/eraser_options.glade</file>
     <file>ui/paintbucket_options.glade</file>
     <file>ui/new_layer_dialog.glade</file>
+    <file>ui/canvas_size_dialog.glade</file>
     <file>ui/main_window.glade</file>
   </gresource>
 </gresources>

@@ -33,7 +33,7 @@ int main(int argc, char* argv[]) {
     // test_filter_dialog();
 
     // test_curves_widget();
-    test_anchor_position_widget();
+    // test_anchor_position_widget();
 
     /* Create the main application UI (will load settings) */
     app = ui_create_main_window();

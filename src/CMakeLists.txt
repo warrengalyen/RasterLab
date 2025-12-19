@@ -48,6 +48,7 @@ set(SOURCES
     ui/widgets/curves_widget.c
     ui/widgets/filter_preview.c
     ui/widgets/filter_dialog.c
+    ui/dialogs/canvas_size_dialog.c
     ui/dialogs/clouds_dialog.c
     ui/dialogs/color_balance_dialog.c
     ui/dialogs/gamma_dialog.c

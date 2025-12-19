@@ -9,6 +9,7 @@
 #include "render/layer.h"
 #include "tool_manager.h"
 #include "tool_options.h"
+#include "ui/dialogs/canvas_size_dialog.h"
 #include "ui/dialogs/new_layer_dialog.h"
 #include "ui/dialogs/recovery_dialog.h"
 #include "ui/layers_panel.h"
@@ -1737,6 +1738,8 @@ static void on_image_canvas_size(GtkWidget* widget, gpointer data) {
     ImageDocument* doc = ui_get_active_document(ctx);
     LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window),
                                                                 "layers_panel");
+    CanvasSizeDialog* dialog;
+    CanvasSizeDialogResult* result;
     Command* cmd;
     guint old_width, old_height;
     guint new_width, new_height;
@@ -1744,113 +1747,131 @@ static void on_image_canvas_size(GtkWidget* widget, gpointer data) {
     gint offset_x, offset_y;
     gint delta_width, delta_height;
     CanvasAnchorPosition anchor;
+    gint response;
 
     if (!doc) {
         g_warning("No document open");
         return;
     }
 
-    /* For now, use default values (current size, 25.40 PPI, no anchor) */
-    /* Dialog will be implemented later */
-    old_width = doc->width;
-    old_height = doc->height;
-    new_width = (guint)(doc->width * 1.5);
-    new_height = (guint)(doc->height * 1.5);
-    old_resolution = 25.40; /* Default resolution */
-    new_resolution = 25.40;
-    anchor = CANVAS_ANCHOR_CENTER;
-
-    /* If dimensions haven't changed, nothing to do */
-    if (old_width == new_width && old_height == new_height) {
+    /* Create and show dialog */
+    dialog = canvas_size_dialog_new(doc);
+    if (!dialog) {
+        g_warning("Failed to create canvas size dialog");
         return;
     }
 
-    /* Calculate offsets based on anchor position (same logic as document_resize_canvas) */
-    delta_width = (gint)new_width - (gint)old_width;
-    delta_height = (gint)new_height - (gint)old_height;
+    response = canvas_size_dialog_run(dialog, GTK_WINDOW(ctx->window), &result);
 
-    switch (anchor) {
-        case CANVAS_ANCHOR_TOP_LEFT:
-            offset_x = 0;
-            offset_y = 0;
-            break;
-        case CANVAS_ANCHOR_TOP_CENTER:
-            offset_x = delta_width / 2;
-            offset_y = 0;
-            break;
-        case CANVAS_ANCHOR_TOP_RIGHT:
-            offset_x = delta_width;
-            offset_y = 0;
-            break;
-        case CANVAS_ANCHOR_MIDDLE_LEFT:
-            offset_x = 0;
-            offset_y = delta_height / 2;
-            break;
-        case CANVAS_ANCHOR_CENTER:
-            offset_x = delta_width / 2;
-            offset_y = delta_height / 2;
-            break;
-        case CANVAS_ANCHOR_MIDDLE_RIGHT:
-            offset_x = delta_width;
-            offset_y = delta_height / 2;
-            break;
-        case CANVAS_ANCHOR_BOTTOM_LEFT:
-            offset_x = 0;
-            offset_y = delta_height;
-            break;
-        case CANVAS_ANCHOR_BOTTOM_CENTER:
-            offset_x = delta_width / 2;
-            offset_y = delta_height;
-            break;
-        case CANVAS_ANCHOR_BOTTOM_RIGHT:
-            offset_x = delta_width;
-            offset_y = delta_height;
-            break;
-        case CANVAS_ANCHOR_NONE:
-        default:
-            offset_x = 0;
-            offset_y = 0;
-            break;
-    }
+    if (response == GTK_RESPONSE_OK && result) {
+        old_width = doc->width;
+        old_height = doc->height;
+        new_width = result->width;
+        new_height = result->height;
+        old_resolution = 72.0; /* Default resolution */
+        new_resolution = result->resolution;
+        anchor = result->anchor;
 
-    /* Create undo command BEFORE resizing (to capture old state) */
-    cmd = command_create_canvas_resize(old_width, old_height,
-                                       new_width, new_height,
-                                       old_resolution, new_resolution,
-                                       offset_x, offset_y,
-                                       doc);
+        /* If dimensions haven't changed, nothing to do */
+        if (old_width == new_width && old_height == new_height) {
+            canvas_size_dialog_result_free(result);
+            canvas_size_dialog_free(dialog);
+            return;
+        }
 
-    if (!cmd) {
-        g_warning("Failed to create canvas size command");
-        return;
-    }
+        /* Calculate offsets based on anchor position (same logic as document_resize_canvas) */
+        delta_width = (gint)new_width - (gint)old_width;
+        delta_height = (gint)new_height - (gint)old_height;
 
-    /* Resize canvas */
-    if (document_resize_canvas(doc, new_width, new_height, new_resolution, anchor)) {
-        /* Push command to undo stack and clear redo stack */
-        if (doc->undo_stack) {
-            command_stack_push(doc->undo_stack, cmd);
-            if (doc->redo_stack) {
-                command_stack_clear(doc->redo_stack);
+        switch (anchor) {
+            case CANVAS_ANCHOR_TOP_LEFT:
+                offset_x = 0;
+                offset_y = 0;
+                break;
+            case CANVAS_ANCHOR_TOP_CENTER:
+                offset_x = delta_width / 2;
+                offset_y = 0;
+                break;
+            case CANVAS_ANCHOR_TOP_RIGHT:
+                offset_x = delta_width;
+                offset_y = 0;
+                break;
+            case CANVAS_ANCHOR_MIDDLE_LEFT:
+                offset_x = 0;
+                offset_y = delta_height / 2;
+                break;
+            case CANVAS_ANCHOR_CENTER:
+                offset_x = delta_width / 2;
+                offset_y = delta_height / 2;
+                break;
+            case CANVAS_ANCHOR_MIDDLE_RIGHT:
+                offset_x = delta_width;
+                offset_y = delta_height / 2;
+                break;
+            case CANVAS_ANCHOR_BOTTOM_LEFT:
+                offset_x = 0;
+                offset_y = delta_height;
+                break;
+            case CANVAS_ANCHOR_BOTTOM_CENTER:
+                offset_x = delta_width / 2;
+                offset_y = delta_height;
+                break;
+            case CANVAS_ANCHOR_BOTTOM_RIGHT:
+                offset_x = delta_width;
+                offset_y = delta_height;
+                break;
+            case CANVAS_ANCHOR_NONE:
+            default:
+                offset_x = 0;
+                offset_y = 0;
+                break;
+        }
+
+        /* Create undo command BEFORE resizing (to capture old state) */
+        cmd = command_create_canvas_resize(old_width, old_height,
+                                           new_width, new_height,
+                                           old_resolution, new_resolution,
+                                           offset_x, offset_y,
+                                           doc);
+
+        if (!cmd) {
+            g_warning("Failed to create canvas size command");
+            canvas_size_dialog_result_free(result);
+            canvas_size_dialog_free(dialog);
+            return;
+        }
+
+        /* Resize canvas */
+        if (document_resize_canvas(doc, new_width, new_height, new_resolution, anchor)) {
+            /* Push command to undo stack and clear redo stack */
+            if (doc->undo_stack) {
+                command_stack_push(doc->undo_stack, cmd);
+                if (doc->redo_stack) {
+                    command_stack_clear(doc->redo_stack);
+                }
+            } else {
+                command_free(cmd);
             }
+
+            /* Update layers panel */
+            if (layers_panel) {
+                layers_panel_update(layers_panel, doc);
+            }
+
+            /* Update UI state */
+            ui_update_menu_and_button_states(ctx);
+            ui_update_window_title(ctx);
+            ui_update_status_bar(ctx, NULL);
+            doc->modified = TRUE;
         } else {
+            g_warning("Failed to resize canvas");
             command_free(cmd);
         }
 
-        /* Update layers panel */
-        if (layers_panel) {
-            layers_panel_update(layers_panel, doc);
-        }
-
-        /* Update UI state */
-        ui_update_menu_and_button_states(ctx);
-        ui_update_window_title(ctx);
-        ui_update_status_bar(ctx, NULL);
-        doc->modified = TRUE;
-    } else {
-        g_warning("Failed to resize canvas");
-        command_free(cmd);
+        canvas_size_dialog_result_free(result);
     }
+
+    canvas_size_dialog_free(dialog);
 }
 
 /**
