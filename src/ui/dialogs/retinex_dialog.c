@@ -60,7 +60,8 @@ static cairo_surface_t* apply_retinex_filter_to_viewport_surface(cairo_surface_t
     }
 
     /* Create a temporary layer with the viewport surface */
-    temp_layer = layer_new("TempViewport", width, height, TRUE);
+    temp_layer = layer_new("TempViewport", width, height, TRUE,
+                           LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL);
     if (!temp_layer) {
         return NULL;
     }

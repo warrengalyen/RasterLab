@@ -9,6 +9,7 @@
 #include "render/layer.h"
 #include "tool_manager.h"
 #include "tool_options.h"
+#include "ui/dialogs/new_layer_dialog.h"
 #include "ui/dialogs/recovery_dialog.h"
 #include "ui/layers_panel.h"
 #include "ui/tool_options_panel.h"
@@ -1633,47 +1634,79 @@ static void on_layer_new(GtkWidget* widget, gpointer data) {
     LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window),
                                                                 "layers_panel");
     Command* cmd;
+    NewLayerDialog* dialog;
+    NewLayerDialogResult* result;
+    gint response;
+    ImageLayer* new_layer;
+    const gdouble* custom_color = NULL;
 
     if (!doc) {
         g_warning("No document open");
         return;
     }
 
-    /* Create new layer with auto-generated name */
-    static int layer_count = 1;
-    gchar* layer_name = g_strdup_printf("Layer %d", layer_count++);
-
-    /* Use default values: transparent background, above current layer */
-    ImageLayer* new_layer = document_add_layer(doc, layer_name,
-                                               LAYER_BACKGROUND_TRANSPARENT,
-                                               LAYER_POSITION_ABOVE_CURRENT,
-                                               NULL);
-    g_free(layer_name);
-
-    if (new_layer) {
-        /* Create undo command */
-        cmd = command_create_layer_add(doc, new_layer);
-        if (cmd && doc->undo_stack) {
-            command_stack_push(doc->undo_stack, cmd);
-
-            /* Clear redo stack */
-            if (doc->redo_stack) {
-                command_stack_clear(doc->redo_stack);
-            }
-        } else if (cmd) {
-            command_free(cmd);
-        }
-
-        /* Update layers panel */
-        if (layers_panel) {
-            layers_panel_update(layers_panel, doc);
-        }
-
-        /* Update UI state */
-        ui_update_menu_and_button_states(ctx);
-        ui_update_window_title(ctx);
-        doc->modified = TRUE;
+    /* Create and show new layer dialog */
+    dialog = new_layer_dialog_new();
+    if (!dialog) {
+        g_warning("Failed to create new layer dialog");
+        return;
     }
+
+    response = new_layer_dialog_run(dialog, GTK_WINDOW(ctx->window), &result);
+
+    if (response == GTK_RESPONSE_OK && result) {
+        /* Get custom color if needed */
+        if (result->background == LAYER_BACKGROUND_CUSTOM) {
+            custom_color = result->custom_color;
+        }
+
+        /* Create new layer with dialog parameters */
+        new_layer = document_add_layer(doc, result->name,
+                                       result->background,
+                                       result->position,
+                                       custom_color);
+
+        if (new_layer) {
+            /* Set as active layer if requested */
+            if (result->set_active) {
+                document_set_selected_layer(doc, new_layer);
+            }
+
+            /* Create undo command */
+            cmd = command_create_layer_add(doc, new_layer);
+            if (cmd && doc->undo_stack) {
+                command_stack_push(doc->undo_stack, cmd);
+
+                /* Clear redo stack */
+                if (doc->redo_stack) {
+                    command_stack_clear(doc->redo_stack);
+                }
+            } else if (cmd) {
+                command_free(cmd);
+            }
+
+            /* Update layers panel */
+            if (layers_panel) {
+                layers_panel_update(layers_panel, doc);
+
+                /* Select the new layer if requested */
+                if (result->set_active) {
+                    layers_panel_select_layer(layers_panel, doc, new_layer);
+                }
+            }
+
+            /* Update UI state */
+            ui_update_menu_and_button_states(ctx);
+            ui_update_window_title(ctx);
+            doc->modified = TRUE;
+        }
+
+        /* Free dialog result */
+        new_layer_dialog_result_free(result);
+    }
+
+    /* Free dialog */
+    new_layer_dialog_free(dialog);
 }
 
 /**

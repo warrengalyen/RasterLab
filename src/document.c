@@ -885,7 +885,8 @@ gboolean document_load_image_from_file(ImageDocument* doc, const gchar* file_pat
 
     /* Create base layer from loaded image - always with alpha support
        This allows tools like the eraser to work on any image type */
-    ImageLayer* base_layer = layer_new("Background", doc->width, doc->height, TRUE);
+    ImageLayer* base_layer = layer_new("Background", doc->width, doc->height, TRUE,
+                                       LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL);
 
     /* Convert pixbuf to Cairo surface and copy to layer */
     cairo_surface_t* temp_surface = pixbuf_to_cairo_surface(pixbuf);

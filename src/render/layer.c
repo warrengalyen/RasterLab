@@ -6,10 +6,15 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* Forward declaration */
+static void layer_fill_background(ImageLayer* layer, LayerBackgroundType background, const gdouble* custom_color);
+
 /**
  * Create a new image layer
  */
-ImageLayer* layer_new(const gchar* name, guint width, guint height, gboolean has_alpha) {
+ImageLayer* layer_new(const gchar* name, guint width, guint height, gboolean has_alpha,
+                      LayerBackgroundType background, LayerPosition position,
+                      const gdouble* custom_color) {
     ImageLayer* layer = (ImageLayer*)g_malloc(sizeof(ImageLayer));
 
     layer->name = g_strdup(name);
@@ -18,15 +23,16 @@ ImageLayer* layer_new(const gchar* name, guint width, guint height, gboolean has
     cairo_format_t format = has_alpha ? CAIRO_FORMAT_ARGB32 : CAIRO_FORMAT_RGB24;
     layer->surface = cairo_image_surface_create(format, width, height);
 
-    /* Clear with transparent black if has alpha, white otherwise */
-    cairo_t* cr = cairo_create(layer->surface);
-    if (has_alpha) {
-        cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.0);
-    } else {
-        cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+    /* Use defaults if not specified */
+    if (background < LAYER_BACKGROUND_TRANSPARENT || background > LAYER_BACKGROUND_CUSTOM) {
+        background = LAYER_BACKGROUND_TRANSPARENT;
     }
-    cairo_paint(cr);
-    cairo_destroy(cr);
+    if (position < LAYER_POSITION_ABOVE_CURRENT || position > LAYER_POSITION_BOTTOM) {
+        position = LAYER_POSITION_ABOVE_CURRENT;
+    }
+
+    /* Fill layer with background color */
+    layer_fill_background(layer, background, custom_color);
 
     layer->opacity = 1.0;
     layer->visible = TRUE;
@@ -186,7 +192,7 @@ ImageLayer* document_add_layer(ImageDocument* doc, const gchar* name,
     }
 
     /* Create new layer with document dimensions */
-    layer = layer_new(name, doc->width, doc->height, TRUE);
+    layer = layer_new(name, doc->width, doc->height, TRUE, background, position, custom_color);
 
     if (!layer) {
         return NULL;
@@ -333,7 +339,8 @@ ImageLayer* document_duplicate_layer(ImageDocument* doc, ImageLayer* layer, cons
     }
 
     /* Create new layer */
-    new_layer = layer_new(name, layer->width, layer->height, TRUE);
+    new_layer = layer_new(name, layer->width, layer->height, TRUE,
+                          LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL);
 
     if (!new_layer) {
         return NULL;

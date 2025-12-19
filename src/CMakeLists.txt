@@ -50,6 +50,7 @@ set(SOURCES
     ui/dialogs/clouds_dialog.c
     ui/dialogs/color_balance_dialog.c
     ui/dialogs/gamma_dialog.c
+    ui/dialogs/new_layer_dialog.c
     ui/dialogs/palettize_dialog.c
     ui/dialogs/recovery_dialog.c
     ui/dialogs/retinex_dialog.c

@@ -22,6 +22,7 @@
     <file>ui/brush_options.glade</file>
     <file>ui/eraser_options.glade</file>
     <file>ui/paintbucket_options.glade</file>
+    <file>ui/new_layer_dialog.glade</file>
     <file>ui/main_window.glade</file>
   </gresource>
 </gresources>

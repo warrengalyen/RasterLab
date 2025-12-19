@@ -101,7 +101,8 @@ static cairo_surface_t* apply_filter_to_viewport_surface(cairo_surface_t* viewpo
     }
 
     /* Create a temporary layer with the viewport surface */
-    temp_layer = layer_new("TempViewport", width, height, TRUE);
+    temp_layer = layer_new("TempViewport", width, height, TRUE,
+                           LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL);
     if (!temp_layer) {
         return NULL;
     }
@@ -208,7 +209,8 @@ ImageLayer* ui_filter_utils_create_temp_layer(ImageLayer* source_layer) {
         return NULL;
     }
 
-    temp_layer = layer_new("Temp", source_layer->width, source_layer->height, TRUE);
+    temp_layer = layer_new("Temp", source_layer->width, source_layer->height, TRUE,
+                           LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL);
     if (!temp_layer) {
         return NULL;
     }

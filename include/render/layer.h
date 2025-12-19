@@ -11,9 +11,17 @@
  * @param width Layer width
  * @param height Layer height
  * @param has_alpha Whether layer has alpha channel
+ * @param background Background type for the layer (default: LAYER_BACKGROUND_TRANSPARENT)
+ * @param position Position in layer stack (default: LAYER_POSITION_ABOVE_CURRENT)
+ *                 Note: This parameter is for consistency with callers; layer_new does not add layers to documents
+ * @param custom_color Custom color for background (only used if background is LAYER_BACKGROUND_CUSTOM)
+ *                     Format: RGBA as gdouble array [r, g, b, a] where values are 0.0-1.0
+ *                     Can be NULL if not using custom color
  * @return New layer, or NULL on error. Caller must call layer_free().
  */
-ImageLayer* layer_new(const gchar* name, guint width, guint height, gboolean has_alpha);
+ImageLayer* layer_new(const gchar* name, guint width, guint height, gboolean has_alpha,
+                      LayerBackgroundType background, LayerPosition position,
+                      const gdouble* custom_color);
 
 /**
  * Free an image layer

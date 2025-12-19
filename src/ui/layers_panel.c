@@ -1531,6 +1531,54 @@ void layers_panel_update_selected_thumbnail(LayersPanel* layers_panel) {
 }
 
 /**
+ * Select a specific layer in the layers panel
+ */
+void layers_panel_select_layer(LayersPanel* layers_panel, ImageDocument* doc, ImageLayer* layer) {
+    if (!layers_panel || !doc || !layer || !layers_panel->tree_view || !layers_panel->store) {
+        return;
+    }
+
+    /* Find the layer's index in the document */
+    guint layer_count = document_get_layer_count(doc);
+    guint layer_index = 0;
+    gboolean found = FALSE;
+
+    for (guint i = 0; i < layer_count; i++) {
+        if (document_get_layer(doc, i) == layer) {
+            layer_index = i;
+            found = TRUE;
+            break;
+        }
+    }
+
+    if (!found) {
+        return;
+    }
+
+    /* Select the corresponding row in the tree view */
+    /* Note: layers are displayed in reverse order (index 0 is last row) */
+    GtkTreeSelection* selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(layers_panel->tree_view));
+    GtkTreeIter iter;
+
+    /* Navigate to the row corresponding to layer_index */
+    /* Since layers are displayed in reverse, index 0 is at position (layer_count - 1) */
+    guint row_position = layer_count - 1 - layer_index;
+
+    if (gtk_tree_model_get_iter_first(GTK_TREE_MODEL(layers_panel->store), &iter)) {
+        /* Move to the target row */
+        for (guint i = 0; i < row_position; i++) {
+            if (!gtk_tree_model_iter_next(GTK_TREE_MODEL(layers_panel->store), &iter)) {
+                return;
+            }
+        }
+        gtk_tree_selection_select_iter(selection, &iter);
+    }
+
+    /* Ensure document's selected layer is set */
+    document_set_selected_layer(doc, layer);
+}
+
+/**
  * Get the currently selected layer from the panel
  */
 ImageLayer* layers_panel_get_selected_layer(LayersPanel* layers_panel) {

@@ -182,7 +182,7 @@ gboolean ui_apply_layer_filter(AppContext* ctx,
 
     /* Start timing */
     start_time = start_processing_timer();
-    
+
     /* Apply filter (this is blocking, but progress bar will pulse via timeout) */
     gboolean success = filter_func(layer);
 
@@ -394,7 +394,8 @@ gint ui_show_filter_dialog(AppContext* ctx,
     }
 
     /* Create a copy of the layer for preview */
-    temp_layer = layer_new("Temp", layer->width, layer->height, TRUE);
+    temp_layer = layer_new("Temp", layer->width, layer->height, TRUE,
+                           LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL);
     if (!temp_layer) {
         g_warning("Failed to create temporary layer for preview");
         filter_dialog_free(dialog);
@@ -418,7 +419,7 @@ gint ui_show_filter_dialog(AppContext* ctx,
     /* Set up live preview callback if provided */
     if (preview_callback) {
         filter_dialog_set_preview_callback(dialog, preview_callback, temp_layer);
-        
+
         /* Trigger initial preview update with default values */
         gint total_values = filter_dialog_get_total_values_count(dialog);
         gdouble* default_values = (gdouble*)g_malloc(sizeof(gdouble) * total_values);

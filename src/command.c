@@ -794,7 +794,8 @@ static void layer_delete_command_revert(Command* cmd, struct ImageDocument* doc)
     }
 
     /* Recreate layer */
-    restored_layer = layer_new(data->layer_name, data->width, data->height, TRUE);
+    restored_layer = layer_new(data->layer_name, data->width, data->height, TRUE,
+                               LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL);
     if (!restored_layer) {
         return;
     }
