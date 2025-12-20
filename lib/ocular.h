@@ -167,6 +167,12 @@ typedef struct {
     bool Enable;      /* whether to apply */
 } ocularLevelParams;
 
+/* Parameter for image flip */
+typedef enum {
+    OC_DIRECTION_HORIZONTAL,
+    OC_DIRECTION_VERTICAL
+} OcDirection;
+
 /* Palette structures */
 typedef struct {
     int r;
@@ -468,7 +474,7 @@ OC_STATUS ocularRotateImage(unsigned char* Input, int Width, int Height, int Str
 OC_STATUS ocularCropImage(const unsigned char* Input, int Width, int Height, int srcStride, unsigned char* Output, int cropX,
                           int cropY, int dstWidth, int dstHeight, int dstStride);
 
-OC_STATUS ocularFlipImage(unsigned char* Input, unsigned char* Output, int Width, int Height, int Channels, int type);
+OC_STATUS ocularFlipImage(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, OcDirection direction);
 
 OC_STATUS ocularTransposeImage(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride);
 

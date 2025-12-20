@@ -39,6 +39,9 @@ typedef enum {
     CMD_NAME_MOVE_LAYER_UP,
     CMD_NAME_MOVE_LAYER_DOWN,
     CMD_NAME_CANVAS_SIZE,
+    CMD_NAME_FLIP_HORIZONTAL,
+    CMD_NAME_FLIP_VERTICAL,
+    CMD_NAME_TRANSPOSE,
     CMD_NAME_COUNT /* Total number of predefined command names */
 } CommandName;
 
@@ -337,5 +340,45 @@ Command* command_create_layer_move_up(struct ImageDocument* doc, struct ImageLay
  * @return Newly created Command, or NULL on failure
  */
 Command* command_create_layer_move_down(struct ImageDocument* doc, struct ImageLayer* layer);
+
+/**
+ * Flip/Transpose command data structures
+ */
+typedef struct {
+    struct ImageDocument* doc; /* Document containing the layers */
+    GList* layer_snapshots;    /* List of cairo_surface_t* snapshots (before operation) */
+    GList* layers;             /* List of ImageLayer* pointers */
+} FlipCommandData;
+
+typedef struct {
+    struct ImageDocument* doc; /* Document containing the layers */
+    GList* layer_snapshots;    /* List of cairo_surface_t* snapshots (before operation) */
+    GList* layers;             /* List of ImageLayer* pointers */
+    guint old_width;           /* Document width before transpose */
+    guint old_height;          /* Document height before transpose */
+    guint new_width;           /* Document width after transpose */
+    guint new_height;          /* Document height after transpose */
+} TransposeCommandData;
+
+/**
+ * Create a flip horizontal command
+ * @param doc The document
+ * @return Newly created Command, or NULL on failure
+ */
+Command* command_create_flip_horizontal(struct ImageDocument* doc);
+
+/**
+ * Create a flip vertical command
+ * @param doc The document
+ * @return Newly created Command, or NULL on failure
+ */
+Command* command_create_flip_vertical(struct ImageDocument* doc);
+
+/**
+ * Create a transpose command
+ * @param doc The document
+ * @return Newly created Command, or NULL on failure
+ */
+Command* command_create_transpose(struct ImageDocument* doc);
 
 #endif /* COMMAND_H */

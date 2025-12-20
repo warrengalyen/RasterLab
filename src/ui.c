@@ -4,6 +4,8 @@
 #include "app/settings.h"
 #include "command.h"
 #include "document.h"
+#include "filters.h"
+#include "ocular.h"
 #include "panels.h"
 #include "render/compositor.h"
 #include "render/layer.h"
@@ -57,6 +59,9 @@ static void on_image_canvas_size(GtkWidget* widget, gpointer data);
 static void on_image_duplicate(GtkWidget* widget, gpointer data);
 static void on_image_fit_active_layer(GtkWidget* widget, gpointer data);
 static void on_image_fit_all_layers(GtkWidget* widget, gpointer data);
+static void on_image_flip_horizontal(GtkWidget* widget, gpointer data);
+static void on_image_flip_vertical(GtkWidget* widget, gpointer data);
+static void on_image_transpose(GtkWidget* widget, gpointer data);
 static void on_edit_undo(GtkWidget* widget, gpointer data);
 static void on_edit_redo(GtkWidget* widget, gpointer data);
 static void on_view_zoom_in(GtkWidget* widget, gpointer data);
@@ -1154,6 +1159,21 @@ static void setup_image_menu(GtkBuilder* builder, AppContext* ctx) {
     GtkWidget* image_menu_fit_all_layer = GTK_WIDGET(gtk_builder_get_object(builder, "image_menu_fit_all_layer"));
     if (image_menu_fit_all_layer) {
         g_signal_connect(image_menu_fit_all_layer, "activate", G_CALLBACK(on_image_fit_all_layers), ctx);
+    }
+
+    GtkWidget* image_menu_flip_horizontal = GTK_WIDGET(gtk_builder_get_object(builder, "image_menu_flip_horizontal"));
+    if (image_menu_flip_horizontal) {
+        g_signal_connect(image_menu_flip_horizontal, "activate", G_CALLBACK(on_image_flip_horizontal), ctx);
+    }
+
+    GtkWidget* image_menu_flip_vertical = GTK_WIDGET(gtk_builder_get_object(builder, "image_menu_flip_vertical"));
+    if (image_menu_flip_vertical) {
+        g_signal_connect(image_menu_flip_vertical, "activate", G_CALLBACK(on_image_flip_vertical), ctx);
+    }
+
+    GtkWidget* image_menu_tranpose = GTK_WIDGET(gtk_builder_get_object(builder, "image_menu_tranpose"));
+    if (image_menu_tranpose) {
+        g_signal_connect(image_menu_tranpose, "activate", G_CALLBACK(on_image_transpose), ctx);
     }
 }
 
@@ -2271,6 +2291,326 @@ static void on_image_fit_all_layers(GtkWidget* widget, gpointer data) {
         g_warning("Failed to resize canvas to fit all layers");
         command_free(cmd);
     }
+}
+
+/**
+ * Helper function to flip a layer using Ocular library
+ */
+static gboolean flip_layer(ImageLayer* layer, OcDirection direction) {
+    cairo_surface_t* surface;
+    gint width, height;
+    guchar* rgba_input;
+    guchar* rgba_output;
+    OC_STATUS status;
+
+    if (!layer || !layer->surface) {
+        return FALSE;
+    }
+
+    surface = layer->surface;
+
+    /* Validate surface and get dimensions */
+    if (!adjustments_validate_surface(surface, &width, &height)) {
+        return FALSE;
+    }
+
+    if (width == 0 || height == 0) {
+        return FALSE;
+    }
+
+    /* Allocate buffers for RGBA input and output */
+    rgba_input = (guchar*)g_malloc(width * height * 4);
+    rgba_output = (guchar*)g_malloc(width * height * 4);
+
+    if (!rgba_input || !rgba_output) {
+        g_warning("Flip layer: Failed to allocate memory");
+        g_free(rgba_input);
+        g_free(rgba_output);
+        return FALSE;
+    }
+
+    /* Convert from Cairo ARGB32 to RGBA */
+    if (!adjustments_cairo_to_rgba(surface, rgba_input)) {
+        g_warning("Flip layer: Failed to convert surface to RGBA");
+        g_free(rgba_input);
+        g_free(rgba_output);
+        return FALSE;
+    }
+
+    /* Apply flip using Ocular library (4 channels for RGBA) */
+    status = ocularFlipImage(rgba_input, rgba_output, width, height, 4, direction);
+
+    if (status != OC_STATUS_OK) {
+        g_warning("Flip layer: Ocular flip returned error %d", status);
+        g_free(rgba_input);
+        g_free(rgba_output);
+        return FALSE;
+    }
+
+    /* Convert back from RGBA to Cairo ARGB32 */
+    if (!adjustments_rgba_to_cairo(surface, rgba_output)) {
+        g_warning("Flip layer: Failed to convert RGBA to surface");
+        g_free(rgba_input);
+        g_free(rgba_output);
+        return FALSE;
+    }
+
+    /* Free temporary buffers */
+    g_free(rgba_input);
+    g_free(rgba_output);
+
+    /* Invalidate layer cache */
+    layer_invalidate_cache(layer);
+
+    return TRUE;
+}
+
+/**
+ * Helper function to transpose a layer using Ocular library
+ */
+static gboolean transpose_layer(ImageLayer* layer) {
+    cairo_surface_t* old_surface;
+    cairo_surface_t* new_surface;
+    gint old_width, old_height;
+    gint new_width, new_height;
+    guchar* rgba_input;
+    guchar* rgba_output;
+    OC_STATUS status;
+
+    if (!layer || !layer->surface) {
+        return FALSE;
+    }
+
+    old_surface = layer->surface;
+
+    /* Validate surface and get dimensions */
+    if (!adjustments_validate_surface(old_surface, &old_width, &old_height)) {
+        return FALSE;
+    }
+
+    if (old_width == 0 || old_height == 0) {
+        return FALSE;
+    }
+
+    /* Transpose swaps width and height */
+    new_width = old_height;
+    new_height = old_width;
+
+    /* Allocate buffers for RGBA input and output */
+    rgba_input = (guchar*)g_malloc(old_width * old_height * 4);
+    rgba_output = (guchar*)g_malloc(new_width * new_height * 4);
+
+    if (!rgba_input || !rgba_output) {
+        g_warning("Transpose layer: Failed to allocate memory");
+        g_free(rgba_input);
+        g_free(rgba_output);
+        return FALSE;
+    }
+
+    /* Convert from Cairo ARGB32 to RGBA */
+    if (!adjustments_cairo_to_rgba(old_surface, rgba_input)) {
+        g_warning("Transpose layer: Failed to convert surface to RGBA");
+        g_free(rgba_input);
+        g_free(rgba_output);
+        return FALSE;
+    }
+
+    /* Apply transpose using Ocular library
+       Stride is width * 4 for RGBA format */
+    status = ocularTransposeImage(rgba_input, rgba_output, old_width, old_height, old_width * 4);
+
+    if (status != OC_STATUS_OK) {
+        g_warning("Transpose layer: Ocular transpose returned error %d", status);
+        g_free(rgba_input);
+        g_free(rgba_output);
+        return FALSE;
+    }
+
+    /* Create new surface with swapped dimensions */
+    new_surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, new_width, new_height);
+    if (!new_surface) {
+        g_warning("Transpose layer: Failed to create new surface");
+        g_free(rgba_input);
+        g_free(rgba_output);
+        return FALSE;
+    }
+
+    /* Convert RGBA output to new Cairo surface */
+    if (!adjustments_rgba_to_cairo(new_surface, rgba_output)) {
+        g_warning("Transpose layer: Failed to convert RGBA to new surface");
+        cairo_surface_destroy(new_surface);
+        g_free(rgba_input);
+        g_free(rgba_output);
+        return FALSE;
+    }
+
+    /* Free temporary buffers */
+    g_free(rgba_input);
+    g_free(rgba_output);
+
+    /* Replace old surface with new one */
+    cairo_surface_destroy(layer->surface);
+    layer->surface = new_surface;
+
+    /* Update layer dimensions */
+    layer->width = new_width;
+    layer->height = new_height;
+
+    /* Invalidate layer cache */
+    layer_invalidate_cache(layer);
+
+    return TRUE;
+}
+
+/**
+ * Image > Flip horizontal callback
+ */
+static void on_image_flip_horizontal(GtkWidget* widget, gpointer data) {
+    (void)widget; /* Unused */
+
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc = ui_get_active_document(ctx);
+    LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window),
+                                                                "layers_panel");
+    Command* cmd;
+
+    if (!doc) {
+        g_warning("No document open");
+        return;
+    }
+
+    if (!doc->layers || g_list_length(doc->layers) == 0) {
+        g_warning("Document has no layers");
+        return;
+    }
+
+    /* Create flip horizontal command */
+    cmd = command_create_flip_horizontal(doc);
+    if (!cmd) {
+        g_warning("Failed to create flip horizontal command");
+        return;
+    }
+
+    /* Execute the command */
+    command_execute(cmd, doc);
+
+    /* Push to undo stack */
+    if (doc->undo_stack) {
+        command_stack_push(doc->undo_stack, cmd);
+    } else {
+        command_free(cmd);
+    }
+
+    /* Update layers panel */
+    if (layers_panel) {
+        layers_panel_update(layers_panel, doc);
+    }
+
+    /* Update UI state */
+    ui_update_menu_and_button_states(ctx);
+    ui_update_status_bar(ctx, NULL);
+    doc->modified = TRUE;
+}
+
+/**
+ * Image > Flip vertical callback
+ */
+static void on_image_flip_vertical(GtkWidget* widget, gpointer data) {
+    (void)widget; /* Unused */
+
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc = ui_get_active_document(ctx);
+    LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window),
+                                                                "layers_panel");
+    Command* cmd;
+
+    if (!doc) {
+        g_warning("No document open");
+        return;
+    }
+
+    if (!doc->layers || g_list_length(doc->layers) == 0) {
+        g_warning("Document has no layers");
+        return;
+    }
+
+    /* Create flip vertical command */
+    cmd = command_create_flip_vertical(doc);
+    if (!cmd) {
+        g_warning("Failed to create flip vertical command");
+        return;
+    }
+
+    /* Execute the command */
+    command_execute(cmd, doc);
+
+    /* Push to undo stack */
+    if (doc->undo_stack) {
+        command_stack_push(doc->undo_stack, cmd);
+    } else {
+        command_free(cmd);
+    }
+
+    /* Update layers panel */
+    if (layers_panel) {
+        layers_panel_update(layers_panel, doc);
+    }
+
+    /* Update UI state */
+    ui_update_menu_and_button_states(ctx);
+    ui_update_status_bar(ctx, NULL);
+    doc->modified = TRUE;
+}
+
+/**
+ * Image > Transpose callback
+ */
+static void on_image_transpose(GtkWidget* widget, gpointer data) {
+    (void)widget; /* Unused */
+
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc = ui_get_active_document(ctx);
+    LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window),
+                                                                "layers_panel");
+    Command* cmd;
+
+    if (!doc) {
+        g_warning("No document open");
+        return;
+    }
+
+    if (!doc->layers || g_list_length(doc->layers) == 0) {
+        g_warning("Document has no layers");
+        return;
+    }
+
+    /* Create transpose command */
+    cmd = command_create_transpose(doc);
+    if (!cmd) {
+        g_warning("Failed to create transpose command");
+        return;
+    }
+
+    /* Execute the command */
+    command_execute(cmd, doc);
+
+    /* Push to undo stack */
+    if (doc->undo_stack) {
+        command_stack_push(doc->undo_stack, cmd);
+    } else {
+        command_free(cmd);
+    }
+
+    /* Update layers panel */
+    if (layers_panel) {
+        layers_panel_update(layers_panel, doc);
+    }
+
+    /* Update UI state */
+    ui_update_menu_and_button_states(ctx);
+    ui_update_window_title(ctx);
+    ui_update_status_bar(ctx, NULL);
+    doc->modified = TRUE;
 }
 
 /**

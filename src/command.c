@@ -1,5 +1,7 @@
 #include "command.h"
 #include "document.h"
+#include "filters.h"
+#include "ocular.h"
 #include "render/dirty.h"
 #include "render/layer.h"
 #include "render/tile.h"
@@ -421,7 +423,10 @@ const gchar* command_get_name_string(CommandName name) {
         "Duplicate Layer",
         "Move Layer Up",
         "Move Layer Down",
-        "Canvas size"};
+        "Canvas size",
+        "Flip Horizontal",
+        "Flip Vertical",
+        "Transpose"};
 
     if (name < 0 || name >= CMD_NAME_COUNT) {
         return NULL;
@@ -1505,6 +1510,695 @@ Command* command_create_canvas_resize(guint old_width, guint old_height,
                 }
             }
             g_list_free(data->layer_offsets);
+        }
+        g_free(data);
+        return NULL;
+    }
+
+    cmd->user_data = data;
+
+    return cmd;
+}
+
+/**
+ * Helper function to flip a layer using Ocular library
+ */
+static gboolean flip_layer_impl(struct ImageLayer* layer, OcDirection direction) {
+    cairo_surface_t* surface;
+    gint width, height;
+    guchar* rgba_input;
+    guchar* rgba_output;
+    OC_STATUS status;
+
+    if (!layer || !layer->surface) {
+        return FALSE;
+    }
+
+    surface = layer->surface;
+
+    /* Validate surface and get dimensions */
+    if (!adjustments_validate_surface(surface, &width, &height)) {
+        return FALSE;
+    }
+
+    if (width == 0 || height == 0) {
+        return FALSE;
+    }
+
+    /* Allocate buffers for RGBA input and output */
+    rgba_input = (guchar*)g_malloc(width * height * 4);
+    rgba_output = (guchar*)g_malloc(width * height * 4);
+
+    if (!rgba_input || !rgba_output) {
+        g_warning("Flip layer: Failed to allocate memory");
+        g_free(rgba_input);
+        g_free(rgba_output);
+        return FALSE;
+    }
+
+    /* Convert from Cairo ARGB32 to RGBA */
+    if (!adjustments_cairo_to_rgba(surface, rgba_input)) {
+        g_warning("Flip layer: Failed to convert surface to RGBA");
+        g_free(rgba_input);
+        g_free(rgba_output);
+        return FALSE;
+    }
+
+    /* Apply flip using Ocular library (4 channels for RGBA) */
+    status = ocularFlipImage(rgba_input, rgba_output, width, height, width * 4, direction);
+
+    if (status != OC_STATUS_OK) {
+        g_warning("Flip layer: Ocular flip returned error %d", status);
+        g_free(rgba_input);
+        g_free(rgba_output);
+        return FALSE;
+    }
+
+    /* Convert back from RGBA to Cairo ARGB32 */
+    if (!adjustments_rgba_to_cairo(surface, rgba_output)) {
+        g_warning("Flip layer: Failed to convert RGBA to surface");
+        g_free(rgba_input);
+        g_free(rgba_output);
+        return FALSE;
+    }
+
+    /* Free temporary buffers */
+    g_free(rgba_input);
+    g_free(rgba_output);
+
+    /* Invalidate layer cache */
+    layer_invalidate_cache(layer);
+
+    return TRUE;
+}
+
+/**
+ * Helper function to transpose a layer using Ocular library
+ */
+static gboolean transpose_layer_impl(struct ImageLayer* layer) {
+    cairo_surface_t* old_surface;
+    cairo_surface_t* new_surface;
+    gint old_width, old_height;
+    gint new_width, new_height;
+    guchar* rgba_input;
+    guchar* rgba_output;
+    OC_STATUS status;
+
+    if (!layer || !layer->surface) {
+        return FALSE;
+    }
+
+    old_surface = layer->surface;
+
+    /* Validate surface and get dimensions */
+    if (!adjustments_validate_surface(old_surface, &old_width, &old_height)) {
+        return FALSE;
+    }
+
+    if (old_width == 0 || old_height == 0) {
+        return FALSE;
+    }
+
+    /* Transpose swaps width and height */
+    new_width = old_height;
+    new_height = old_width;
+
+    /* Allocate buffers for RGBA input and output */
+    rgba_input = (guchar*)g_malloc(old_width * old_height * 4);
+    rgba_output = (guchar*)g_malloc(new_width * new_height * 4);
+
+    if (!rgba_input || !rgba_output) {
+        g_warning("Transpose layer: Failed to allocate memory");
+        g_free(rgba_input);
+        g_free(rgba_output);
+        return FALSE;
+    }
+
+    /* Convert from Cairo ARGB32 to RGBA */
+    if (!adjustments_cairo_to_rgba(old_surface, rgba_input)) {
+        g_warning("Transpose layer: Failed to convert surface to RGBA");
+        g_free(rgba_input);
+        g_free(rgba_output);
+        return FALSE;
+    }
+
+    /* Apply transpose using Ocular library
+       Stride is width * 4 for RGBA format */
+    status = ocularTransposeImage(rgba_input, rgba_output, old_width, old_height, old_width * 4);
+
+    if (status != OC_STATUS_OK) {
+        g_warning("Transpose layer: Ocular transpose returned error %d", status);
+        g_free(rgba_input);
+        g_free(rgba_output);
+        return FALSE;
+    }
+
+    /* Create new surface with swapped dimensions */
+    new_surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, new_width, new_height);
+    if (!new_surface) {
+        g_warning("Transpose layer: Failed to create new surface");
+        g_free(rgba_input);
+        g_free(rgba_output);
+        return FALSE;
+    }
+
+    /* Convert RGBA output to new Cairo surface */
+    if (!adjustments_rgba_to_cairo(new_surface, rgba_output)) {
+        g_warning("Transpose layer: Failed to convert RGBA to new surface");
+        cairo_surface_destroy(new_surface);
+        g_free(rgba_input);
+        g_free(rgba_output);
+        return FALSE;
+    }
+
+    /* Free temporary buffers */
+    g_free(rgba_input);
+    g_free(rgba_output);
+
+    /* Replace old surface with new one */
+    cairo_surface_destroy(layer->surface);
+    layer->surface = new_surface;
+
+    /* Update layer dimensions */
+    layer->width = new_width;
+    layer->height = new_height;
+
+    /* Invalidate layer cache */
+    layer_invalidate_cache(layer);
+
+    return TRUE;
+}
+
+/**
+ * Flip command apply callback (apply flip)
+ */
+static void flip_command_apply(Command* cmd, struct ImageDocument* doc) {
+    FlipCommandData* data;
+    GList* iter;
+    struct ImageLayer* layer;
+    OcDirection direction;
+
+    if (!cmd || !cmd->user_data || !doc) {
+        return;
+    }
+
+    data = (FlipCommandData*)cmd->user_data;
+
+    /* Determine direction from command name */
+    if (g_strcmp0(cmd->name, command_get_name_string(CMD_NAME_FLIP_HORIZONTAL)) == 0) {
+        direction = OC_DIRECTION_HORIZONTAL;
+    } else {
+        direction = OC_DIRECTION_VERTICAL;
+    }
+
+    /* Apply flip to all layers */
+    for (iter = data->layers; iter; iter = iter->next) {
+        layer = (struct ImageLayer*)iter->data;
+        if (layer && layer->surface) {
+            if (!flip_layer_impl(layer, direction)) {
+                g_warning("Failed to flip layer: %s", layer->name);
+            }
+        }
+    }
+
+    /* Mark composite as needing re-render */
+    document_invalidate_composite(doc);
+}
+
+/**
+ * Flip command revert callback (restore from snapshots)
+ */
+static void flip_command_revert(Command* cmd, struct ImageDocument* doc) {
+    FlipCommandData* data;
+    GList *layer_iter, *snapshot_iter;
+    struct ImageLayer* layer;
+    cairo_surface_t* snapshot;
+    cairo_t* cr;
+
+    if (!cmd || !cmd->user_data || !doc) {
+        return;
+    }
+
+    data = (FlipCommandData*)cmd->user_data;
+
+    /* Restore all layers from snapshots */
+    layer_iter = data->layers;
+    snapshot_iter = data->layer_snapshots;
+    while (layer_iter && snapshot_iter) {
+        layer = (struct ImageLayer*)layer_iter->data;
+        snapshot = (cairo_surface_t*)snapshot_iter->data;
+
+        if (layer && layer->surface && snapshot) {
+            /* Restore layer from snapshot */
+            cr = cairo_create(layer->surface);
+            cairo_set_source_surface(cr, snapshot, 0, 0);
+            cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+            cairo_paint(cr);
+            cairo_destroy(cr);
+
+            /* Invalidate layer cache */
+            layer_invalidate_cache(layer);
+        }
+
+        layer_iter = layer_iter->next;
+        snapshot_iter = snapshot_iter->next;
+    }
+
+    /* Mark composite as needing re-render */
+    document_invalidate_composite(doc);
+}
+
+/**
+ * Flip command destroy callback
+ */
+static void flip_command_destroy(Command* cmd) {
+    FlipCommandData* data;
+    GList* iter;
+    cairo_surface_t* snapshot;
+
+    if (!cmd || !cmd->user_data) {
+        return;
+    }
+
+    data = (FlipCommandData*)cmd->user_data;
+
+    /* Free all snapshots */
+    if (data->layer_snapshots) {
+        for (iter = data->layer_snapshots; iter; iter = iter->next) {
+            snapshot = (cairo_surface_t*)iter->data;
+            if (snapshot) {
+                cairo_surface_destroy(snapshot);
+            }
+        }
+        g_list_free(data->layer_snapshots);
+    }
+
+    /* Free layers list (but don't free the layers themselves) */
+    if (data->layers) {
+        g_list_free(data->layers);
+    }
+
+    g_free(data);
+}
+
+/**
+ * Transpose command apply callback (apply transpose)
+ */
+static void transpose_command_apply(Command* cmd, struct ImageDocument* doc) {
+    TransposeCommandData* data;
+    GList* iter;
+    struct ImageLayer* layer;
+
+    if (!cmd || !cmd->user_data || !doc) {
+        return;
+    }
+
+    data = (TransposeCommandData*)cmd->user_data;
+
+    /* Apply transpose to all layers */
+    for (iter = data->layers; iter; iter = iter->next) {
+        layer = (struct ImageLayer*)iter->data;
+        if (layer && layer->surface) {
+            if (!transpose_layer_impl(layer)) {
+                g_warning("Failed to transpose layer: %s", layer->name);
+            }
+        }
+    }
+
+    /* Update document dimensions */
+    doc->width = data->new_width;
+    doc->height = data->new_height;
+
+    /* Update drawing area size */
+    if (doc->drawing_area) {
+        gint display_width = (gint)(doc->width * doc->zoom_factor);
+        gint display_height = (gint)(doc->height * doc->zoom_factor);
+        gtk_widget_set_size_request(doc->drawing_area, display_width, display_height);
+        gtk_widget_queue_draw(doc->drawing_area);
+    }
+
+    /* Recreate tile grid with new dimensions */
+    if (doc->tile_grid) {
+        tile_grid_free(doc->tile_grid);
+        doc->tile_grid = NULL;
+    }
+    doc->tile_grid = tile_grid_create(data->new_width, data->new_height, 128);
+    if (!doc->tile_grid) {
+        g_warning("Failed to create tile grid after transpose");
+    }
+
+    /* Mark composite as needing re-render */
+    document_invalidate_composite(doc);
+}
+
+/**
+ * Transpose command revert callback (restore from snapshots)
+ */
+static void transpose_command_revert(Command* cmd, struct ImageDocument* doc) {
+    TransposeCommandData* data;
+    GList *layer_iter, *snapshot_iter;
+    struct ImageLayer* layer;
+    cairo_surface_t* snapshot;
+    cairo_t* cr;
+    gint old_width, old_height;
+
+    if (!cmd || !cmd->user_data || !doc) {
+        return;
+    }
+
+    data = (TransposeCommandData*)cmd->user_data;
+
+    /* Restore all layers from snapshots */
+    layer_iter = data->layers;
+    snapshot_iter = data->layer_snapshots;
+    while (layer_iter && snapshot_iter) {
+        layer = (struct ImageLayer*)layer_iter->data;
+        snapshot = (cairo_surface_t*)snapshot_iter->data;
+
+        if (layer && snapshot) {
+            /* Get original dimensions from snapshot */
+            old_width = cairo_image_surface_get_width(snapshot);
+            old_height = cairo_image_surface_get_height(snapshot);
+
+            /* Destroy current surface and create new one with original dimensions */
+            if (layer->surface) {
+                cairo_surface_destroy(layer->surface);
+            }
+            layer->surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, old_width, old_height);
+            if (layer->surface) {
+                /* Restore layer from snapshot */
+                cr = cairo_create(layer->surface);
+                cairo_set_source_surface(cr, snapshot, 0, 0);
+                cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+                cairo_paint(cr);
+                cairo_destroy(cr);
+
+                /* Update layer dimensions */
+                layer->width = old_width;
+                layer->height = old_height;
+
+                /* Invalidate layer cache */
+                layer_invalidate_cache(layer);
+            }
+        }
+
+        layer_iter = layer_iter->next;
+        snapshot_iter = snapshot_iter->next;
+    }
+
+    /* Restore document dimensions */
+    doc->width = data->old_width;
+    doc->height = data->old_height;
+
+    /* Update drawing area size */
+    if (doc->drawing_area) {
+        gint display_width = (gint)(doc->width * doc->zoom_factor);
+        gint display_height = (gint)(doc->height * doc->zoom_factor);
+        gtk_widget_set_size_request(doc->drawing_area, display_width, display_height);
+        gtk_widget_queue_draw(doc->drawing_area);
+    }
+
+    /* Recreate tile grid with original dimensions */
+    if (doc->tile_grid) {
+        tile_grid_free(doc->tile_grid);
+        doc->tile_grid = NULL;
+    }
+    doc->tile_grid = tile_grid_create(data->old_width, data->old_height, 128);
+    if (!doc->tile_grid) {
+        g_warning("Failed to create tile grid after transpose revert");
+    }
+
+    /* Mark composite as needing re-render */
+    document_invalidate_composite(doc);
+}
+
+/**
+ * Transpose command destroy callback
+ */
+static void transpose_command_destroy(Command* cmd) {
+    TransposeCommandData* data;
+    GList* iter;
+    cairo_surface_t* snapshot;
+
+    if (!cmd || !cmd->user_data) {
+        return;
+    }
+
+    data = (TransposeCommandData*)cmd->user_data;
+
+    /* Free all snapshots */
+    if (data->layer_snapshots) {
+        for (iter = data->layer_snapshots; iter; iter = iter->next) {
+            snapshot = (cairo_surface_t*)iter->data;
+            if (snapshot) {
+                cairo_surface_destroy(snapshot);
+            }
+        }
+        g_list_free(data->layer_snapshots);
+    }
+
+    /* Free layers list (but don't free the layers themselves) */
+    if (data->layers) {
+        g_list_free(data->layers);
+    }
+
+    g_free(data);
+}
+
+/**
+ * Create a flip horizontal command
+ */
+Command* command_create_flip_horizontal(struct ImageDocument* doc) {
+    Command* cmd;
+    FlipCommandData* data;
+    GList* iter;
+    struct ImageLayer* layer;
+    cairo_surface_t* snapshot;
+
+    if (!doc || !doc->layers || g_list_length(doc->layers) == 0) {
+        return NULL;
+    }
+
+    /* Create command data */
+    data = (FlipCommandData*)g_malloc(sizeof(FlipCommandData));
+    data->doc = doc;
+    data->layer_snapshots = NULL;
+    data->layers = NULL;
+
+    /* Create snapshots of all layers */
+    for (iter = doc->layers; iter; iter = iter->next) {
+        layer = (struct ImageLayer*)iter->data;
+        if (layer && layer->surface) {
+            snapshot = cairo_surface_snapshot(layer->surface);
+            if (snapshot) {
+                data->layer_snapshots = g_list_append(data->layer_snapshots, snapshot);
+                data->layers = g_list_append(data->layers, layer);
+            }
+        }
+    }
+
+    if (!data->layers || g_list_length(data->layers) == 0) {
+        /* No valid layers found */
+        if (data->layer_snapshots) {
+            for (iter = data->layer_snapshots; iter; iter = iter->next) {
+                snapshot = (cairo_surface_t*)iter->data;
+                if (snapshot) {
+                    cairo_surface_destroy(snapshot);
+                }
+            }
+            g_list_free(data->layer_snapshots);
+        }
+        if (data->layers) {
+            g_list_free(data->layers);
+        }
+        g_free(data);
+        return NULL;
+    }
+
+    /* Create command */
+    cmd = command_new(command_get_name_string(CMD_NAME_FLIP_HORIZONTAL),
+                      COMMAND_LAYER_EDIT,
+                      flip_command_apply,
+                      flip_command_revert,
+                      flip_command_destroy);
+
+    if (!cmd) {
+        /* Free snapshots */
+        if (data->layer_snapshots) {
+            for (iter = data->layer_snapshots; iter; iter = iter->next) {
+                snapshot = (cairo_surface_t*)iter->data;
+                if (snapshot) {
+                    cairo_surface_destroy(snapshot);
+                }
+            }
+            g_list_free(data->layer_snapshots);
+        }
+        if (data->layers) {
+            g_list_free(data->layers);
+        }
+        g_free(data);
+        return NULL;
+    }
+
+    cmd->user_data = data;
+
+    return cmd;
+}
+
+/**
+ * Create a flip vertical command
+ */
+Command* command_create_flip_vertical(struct ImageDocument* doc) {
+    Command* cmd;
+    FlipCommandData* data;
+    GList* iter;
+    struct ImageLayer* layer;
+    cairo_surface_t* snapshot;
+
+    if (!doc || !doc->layers || g_list_length(doc->layers) == 0) {
+        return NULL;
+    }
+
+    /* Create command data */
+    data = (FlipCommandData*)g_malloc(sizeof(FlipCommandData));
+    data->doc = doc;
+    data->layer_snapshots = NULL;
+    data->layers = NULL;
+
+    /* Create snapshots of all layers */
+    for (iter = doc->layers; iter; iter = iter->next) {
+        layer = (struct ImageLayer*)iter->data;
+        if (layer && layer->surface) {
+            snapshot = cairo_surface_snapshot(layer->surface);
+            if (snapshot) {
+                data->layer_snapshots = g_list_append(data->layer_snapshots, snapshot);
+                data->layers = g_list_append(data->layers, layer);
+            }
+        }
+    }
+
+    if (!data->layers || g_list_length(data->layers) == 0) {
+        /* No valid layers found */
+        if (data->layer_snapshots) {
+            for (iter = data->layer_snapshots; iter; iter = iter->next) {
+                snapshot = (cairo_surface_t*)iter->data;
+                if (snapshot) {
+                    cairo_surface_destroy(snapshot);
+                }
+            }
+            g_list_free(data->layer_snapshots);
+        }
+        if (data->layers) {
+            g_list_free(data->layers);
+        }
+        g_free(data);
+        return NULL;
+    }
+
+    /* Create command */
+    cmd = command_new(command_get_name_string(CMD_NAME_FLIP_VERTICAL),
+                      COMMAND_LAYER_EDIT,
+                      flip_command_apply,
+                      flip_command_revert,
+                      flip_command_destroy);
+
+    if (!cmd) {
+        /* Free snapshots */
+        if (data->layer_snapshots) {
+            for (iter = data->layer_snapshots; iter; iter = iter->next) {
+                snapshot = (cairo_surface_t*)iter->data;
+                if (snapshot) {
+                    cairo_surface_destroy(snapshot);
+                }
+            }
+            g_list_free(data->layer_snapshots);
+        }
+        if (data->layers) {
+            g_list_free(data->layers);
+        }
+        g_free(data);
+        return NULL;
+    }
+
+    cmd->user_data = data;
+
+    return cmd;
+}
+
+/**
+ * Create a transpose command
+ */
+Command* command_create_transpose(struct ImageDocument* doc) {
+    Command* cmd;
+    TransposeCommandData* data;
+    GList* iter;
+    struct ImageLayer* layer;
+    cairo_surface_t* snapshot;
+
+    if (!doc || !doc->layers || g_list_length(doc->layers) == 0) {
+        return NULL;
+    }
+
+    /* Create command data */
+    data = (TransposeCommandData*)g_malloc(sizeof(TransposeCommandData));
+    data->doc = doc;
+    data->layer_snapshots = NULL;
+    data->layers = NULL;
+    data->old_width = doc->width;
+    data->old_height = doc->height;
+    data->new_width = doc->height; /* Transpose swaps width/height */
+    data->new_height = doc->width;
+
+    /* Create snapshots of all layers */
+    for (iter = doc->layers; iter; iter = iter->next) {
+        layer = (struct ImageLayer*)iter->data;
+        if (layer && layer->surface) {
+            snapshot = cairo_surface_snapshot(layer->surface);
+            if (snapshot) {
+                data->layer_snapshots = g_list_append(data->layer_snapshots, snapshot);
+                data->layers = g_list_append(data->layers, layer);
+            }
+        }
+    }
+
+    if (!data->layers || g_list_length(data->layers) == 0) {
+        /* No valid layers found */
+        if (data->layer_snapshots) {
+            for (iter = data->layer_snapshots; iter; iter = iter->next) {
+                snapshot = (cairo_surface_t*)iter->data;
+                if (snapshot) {
+                    cairo_surface_destroy(snapshot);
+                }
+            }
+            g_list_free(data->layer_snapshots);
+        }
+        if (data->layers) {
+            g_list_free(data->layers);
+        }
+        g_free(data);
+        return NULL;
+    }
+
+    /* Create command */
+    cmd = command_new(command_get_name_string(CMD_NAME_TRANSPOSE),
+                      COMMAND_LAYER_EDIT,
+                      transpose_command_apply,
+                      transpose_command_revert,
+                      transpose_command_destroy);
+
+    if (!cmd) {
+        /* Free snapshots */
+        if (data->layer_snapshots) {
+            for (iter = data->layer_snapshots; iter; iter = iter->next) {
+                snapshot = (cairo_surface_t*)iter->data;
+                if (snapshot) {
+                    cairo_surface_destroy(snapshot);
+                }
+            }
+            g_list_free(data->layer_snapshots);
+        }
+        if (data->layers) {
+            g_list_free(data->layers);
         }
         g_free(data);
         return NULL;
