@@ -2,6 +2,7 @@
 #include "document.h"
 #include "filters.h"
 #include "ocular.h"
+#include "render/compositor.h"
 #include "render/dirty.h"
 #include "render/layer.h"
 #include "render/tile.h"
@@ -428,7 +429,9 @@ const gchar* command_get_name_string(CommandName name) {
         "Flip Vertical",
         "Transpose",
         "Fit Canvas to Active Layer",
-        "Fit Canvas to All Layers"};
+        "Fit Canvas to All Layers",
+        "Merge Visible Layers",
+        "Flatten Image"};
 
     if (name < 0 || name >= CMD_NAME_COUNT) {
         return NULL;
@@ -2339,6 +2342,849 @@ Command* command_create_fit_all_layers(guint old_width, guint old_height,
                 }
             }
             g_list_free(data->layer_offsets);
+        }
+        g_free(data);
+        return NULL;
+    }
+
+    cmd->user_data = data;
+
+    return cmd;
+}
+
+/**
+ * Helper function to composite layers into a target surface
+ */
+static void composite_layers_to_surface(cairo_surface_t* target, struct ImageDocument* doc, gboolean only_visible) {
+    cairo_t* cr;
+    GList* iter;
+    struct ImageLayer* layer;
+    gboolean is_first_layer = TRUE;
+
+    if (!target || !doc) {
+        return;
+    }
+
+    cr = cairo_create(target);
+    if (!cr) {
+        return;
+    }
+
+    /* Clear to transparent */
+    cairo_set_operator(cr, CAIRO_OPERATOR_CLEAR);
+    cairo_paint(cr);
+    cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+
+    /* Composite each layer */
+    for (iter = doc->layers; iter; iter = iter->next) {
+        layer = (struct ImageLayer*)iter->data;
+
+        if (!layer || !layer->surface) {
+            continue;
+        }
+
+        /* Skip invisible layers if only merging visible */
+        if (only_visible && (!layer->visible || layer->opacity <= 0.0)) {
+            continue;
+        }
+
+        /* Ensure layer cache is up to date */
+        if (!layer_ensure_cache(layer)) {
+            continue;
+        }
+
+        /* Draw layer with offset */
+        cairo_save(cr);
+        cairo_translate(cr, layer->offset_x, layer->offset_y);
+        cairo_set_source_surface(cr, layer->cache_surface, 0, 0);
+
+        /* Set operator based on layer's blend mode */
+        cairo_operator_t op;
+        if (is_first_layer) {
+            op = CAIRO_OPERATOR_OVER;
+            is_first_layer = FALSE;
+        } else {
+            op = blend_mode_to_cairo_operator(layer->blend_mode);
+        }
+        cairo_set_operator(cr, op);
+        cairo_paint(cr);
+        cairo_restore(cr);
+    }
+
+    cairo_destroy(cr);
+    cairo_surface_flush(target);
+}
+
+/**
+ * Helper function to composite layers into a target surface without clearing it first
+ * Used for flatten operation where we want to composite into an existing layer
+ */
+static void composite_layers_onto_surface(cairo_surface_t* target, struct ImageDocument* doc, struct ImageLayer* skip_layer) {
+    cairo_t* cr;
+    GList* iter;
+    struct ImageLayer* layer;
+
+    if (!target || !doc) {
+        return;
+    }
+
+    cr = cairo_create(target);
+    if (!cr) {
+        return;
+    }
+
+    /* Don't clear - composite on top of existing content */
+
+    /* Composite each layer */
+    for (iter = doc->layers; iter; iter = iter->next) {
+        layer = (struct ImageLayer*)iter->data;
+
+        if (!layer || !layer->surface || layer == skip_layer) {
+            continue;
+        }
+
+        /* Skip invisible layers */
+        if (!layer->visible || layer->opacity <= 0.0) {
+            continue;
+        }
+
+        /* Ensure layer cache is up to date */
+        if (!layer_ensure_cache(layer)) {
+            continue;
+        }
+
+        /* Draw layer with offset */
+        cairo_save(cr);
+        cairo_translate(cr, layer->offset_x, layer->offset_y);
+        cairo_set_source_surface(cr, layer->cache_surface, 0, 0);
+
+        /* Set operator based on layer's blend mode */
+        cairo_operator_t op = blend_mode_to_cairo_operator(layer->blend_mode);
+        cairo_set_operator(cr, op);
+        cairo_paint(cr);
+        cairo_restore(cr);
+    }
+
+    cairo_destroy(cr);
+    cairo_surface_flush(target);
+}
+
+/**
+ * Merge visible command apply callback (merge visible layers)
+ */
+static void merge_visible_command_apply(Command* cmd, struct ImageDocument* doc) {
+    MergeCommandData* data;
+    GList* iter;
+    struct ImageLayer* layer;
+
+    if (!cmd || !cmd->user_data || !doc) {
+        return;
+    }
+
+    data = (MergeCommandData*)cmd->user_data;
+
+    if (!data->merged_layer || !data->merged_layer->surface) {
+        return;
+    }
+
+    /* Composite visible layers into merged layer */
+    composite_layers_to_surface(data->merged_layer->surface, doc, TRUE);
+
+    /* Delete all visible layers except the merged layer */
+    iter = doc->layers;
+    while (iter) {
+        layer = (struct ImageLayer*)iter->data;
+        GList* next = iter->next;
+
+        if (layer && layer != data->merged_layer && layer->visible && layer->opacity > 0.0) {
+            /* Remove from document */
+            doc->layers = g_list_remove(doc->layers, layer);
+
+            /* Update selected layer if needed */
+            if (doc->selected_layer == layer) {
+                doc->selected_layer = data->merged_layer;
+            }
+
+            /* Free the layer */
+            layer_free(layer);
+        }
+
+        iter = next;
+    }
+
+    /* Add merged layer to document at the position where first visible layer was */
+    if (!g_list_find(doc->layers, data->merged_layer)) {
+        /* Recalculate position after deletions - count non-visible layers before original position */
+        gint insert_pos = 0;
+        GList* current = doc->layers;
+        gint pos = 0;
+        while (current && pos < data->merged_layer_position) {
+            layer = (struct ImageLayer*)current->data;
+            if (layer && (!layer->visible || layer->opacity <= 0.0)) {
+                insert_pos++;
+            }
+            current = current->next;
+            pos++;
+        }
+
+        GList* insert_point = g_list_nth(doc->layers, insert_pos);
+        if (insert_point) {
+            doc->layers = g_list_insert_before(doc->layers, insert_point, data->merged_layer);
+        } else {
+            doc->layers = g_list_append(doc->layers, data->merged_layer);
+        }
+        doc->selected_layer = data->merged_layer;
+    }
+
+    /* Mark composite as needing re-render */
+    document_invalidate_composite(doc);
+}
+
+/**
+ * Merge visible command revert callback (restore deleted layers)
+ */
+static void merge_visible_command_revert(Command* cmd, struct ImageDocument* doc) {
+    MergeCommandData* data;
+    GList* info_iter;
+    MergedLayerInfo* info;
+    struct ImageLayer* restored_layer;
+    cairo_t* cr;
+    GList* insert_point;
+
+    if (!cmd || !cmd->user_data || !doc) {
+        return;
+    }
+
+    data = (MergeCommandData*)cmd->user_data;
+
+    /* Remove merged layer from document */
+    if (data->merged_layer && g_list_find(doc->layers, data->merged_layer)) {
+        doc->layers = g_list_remove(doc->layers, data->merged_layer);
+
+        /* Update selected layer if needed */
+        if (doc->selected_layer == data->merged_layer) {
+            if (doc->layers && doc->layers->data) {
+                doc->selected_layer = (struct ImageLayer*)doc->layers->data;
+            } else {
+                doc->selected_layer = NULL;
+            }
+        }
+    }
+
+    /* Restore deleted layers from stored metadata and snapshots */
+    if (data->layer_infos) {
+        /* Sort by position (descending) to insert from back to front */
+        GList* sorted_infos = NULL;
+        for (info_iter = data->layer_infos; info_iter; info_iter = info_iter->next) {
+            info = (MergedLayerInfo*)info_iter->data;
+            if (info) {
+                /* Insert in position order (highest position first) */
+                GList* insert = sorted_infos;
+                GList* prev = NULL;
+                while (insert) {
+                    MergedLayerInfo* existing = (MergedLayerInfo*)insert->data;
+                    if (existing && existing->position < info->position) {
+                        break;
+                    }
+                    prev = insert;
+                    insert = insert->next;
+                }
+                if (prev) {
+                    sorted_infos = g_list_insert_before(sorted_infos, insert, info);
+                } else {
+                    sorted_infos = g_list_prepend(sorted_infos, info);
+                }
+            }
+        }
+
+        /* Restore layers in reverse position order (from highest to lowest)
+         * This way, each insertion doesn't affect subsequent insertions */
+        for (info_iter = sorted_infos; info_iter; info_iter = info_iter->next) {
+            info = (MergedLayerInfo*)info_iter->data;
+            if (!info || !info->snapshot) {
+                continue;
+            }
+
+            /* Recreate layer */
+            restored_layer = layer_new(info->layer_name, info->width, info->height, TRUE,
+                                       LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL);
+            if (!restored_layer) {
+                continue;
+            }
+
+            /* Restore content from snapshot */
+            cr = cairo_create(restored_layer->surface);
+            cairo_set_source_surface(cr, info->snapshot, 0, 0);
+            cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+            cairo_paint(cr);
+            cairo_destroy(cr);
+
+            /* Flush the restored layer surface */
+            if (restored_layer->surface) {
+                cairo_surface_flush(restored_layer->surface);
+            }
+
+            /* Restore properties */
+            restored_layer->opacity = info->opacity;
+            restored_layer->blend_mode = info->blend_mode;
+            restored_layer->offset_x = info->offset_x;
+            restored_layer->offset_y = info->offset_y;
+            restored_layer->visible = info->visible;
+
+            /* Invalidate layer cache */
+            layer_invalidate_cache(restored_layer);
+
+            /* Calculate insertion position.
+             * After removing merged layer, layers originally after merged_layer_position
+             * have shifted down by 1. Since we're inserting in descending order,
+             * we can use the original position directly (adjusted for the removed merged layer). */
+            gint insert_pos = info->position;
+            if (info->position > data->merged_layer_position) {
+                /* This layer was originally after the merged layer position,
+                 * so after removing merged layer, it should be at position-1 */
+                insert_pos = info->position - 1;
+            }
+            /* Layers originally at or before merged_layer_position use their original position */
+
+            /* Insert at calculated position */
+            insert_point = g_list_nth(doc->layers, insert_pos);
+            if (insert_point) {
+                doc->layers = g_list_insert_before(doc->layers, insert_point, restored_layer);
+            } else {
+                doc->layers = g_list_append(doc->layers, restored_layer);
+            }
+
+            /* Update info with restored layer pointer */
+            info->layer = restored_layer;
+        }
+
+        g_list_free(sorted_infos);
+    }
+
+    /* Mark composite as needing re-render */
+    document_invalidate_composite(doc);
+}
+
+/**
+ * Flatten command apply callback (merge all layers into bottom)
+ */
+static void flatten_command_apply(Command* cmd, struct ImageDocument* doc) {
+    MergeCommandData* data;
+    GList* iter;
+    struct ImageLayer* layer;
+    struct ImageLayer* bottom_layer;
+
+    if (!cmd || !cmd->user_data || !doc) {
+        return;
+    }
+
+    data = (MergeCommandData*)cmd->user_data;
+
+    if (!data->merged_layer || !data->merged_layer->surface) {
+        return;
+    }
+
+    bottom_layer = data->merged_layer;
+
+    /* Composite all layers onto bottom layer (don't clear bottom layer first) */
+    composite_layers_onto_surface(bottom_layer->surface, doc, bottom_layer);
+
+    /* Invalidate bottom layer cache so thumbnail updates */
+    layer_invalidate_cache(bottom_layer);
+
+    /* Delete all layers except the bottom layer */
+    iter = doc->layers;
+    while (iter) {
+        layer = (struct ImageLayer*)iter->data;
+        GList* next = iter->next;
+
+        if (layer && layer != bottom_layer) {
+            /* Remove from document */
+            doc->layers = g_list_remove(doc->layers, layer);
+
+            /* Update selected layer if needed */
+            if (doc->selected_layer == layer) {
+                doc->selected_layer = bottom_layer;
+            }
+
+            /* Free the layer */
+            layer_free(layer);
+        }
+
+        iter = next;
+    }
+
+    /* Mark composite as needing re-render */
+    document_invalidate_composite(doc);
+}
+
+/**
+ * Flatten command revert callback (restore deleted layers)
+ */
+static void flatten_command_revert(Command* cmd, struct ImageDocument* doc) {
+    MergeCommandData* data;
+    GList* info_iter;
+    MergedLayerInfo* info;
+    struct ImageLayer* restored_layer;
+    cairo_t* cr;
+    GList* insert_point;
+
+    if (!cmd || !cmd->user_data || !doc) {
+        return;
+    }
+
+    data = (MergeCommandData*)cmd->user_data;
+
+    /* Restore bottom layer from first layer info (if it exists) */
+    if (data->merged_layer && data->layer_infos) {
+        info = (MergedLayerInfo*)g_list_nth_data(data->layer_infos, 0);
+        if (info && info->snapshot && data->merged_layer->surface) {
+            cr = cairo_create(data->merged_layer->surface);
+            cairo_set_source_surface(cr, info->snapshot, 0, 0);
+            cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+            cairo_paint(cr);
+            cairo_destroy(cr);
+
+            /* Restore bottom layer properties */
+            if (info) {
+                data->merged_layer->opacity = info->opacity;
+                data->merged_layer->blend_mode = info->blend_mode;
+                data->merged_layer->offset_x = info->offset_x;
+                data->merged_layer->offset_y = info->offset_y;
+                data->merged_layer->visible = info->visible;
+            }
+
+            layer_invalidate_cache(data->merged_layer);
+        }
+    }
+
+    /* Restore deleted layers from layer infos (skip first which is bottom layer) */
+    if (data->layer_infos) {
+        /* Sort by position (descending) to insert from back to front, so positions don't shift */
+        GList* sorted_infos = NULL;
+        for (info_iter = g_list_next(data->layer_infos); info_iter; info_iter = info_iter->next) {
+            info = (MergedLayerInfo*)info_iter->data;
+            if (info) {
+                /* Insert in position order (highest position first) */
+                GList* insert = sorted_infos;
+                GList* prev = NULL;
+                while (insert) {
+                    MergedLayerInfo* existing = (MergedLayerInfo*)insert->data;
+                    if (existing && existing->position < info->position) {
+                        break;
+                    }
+                    prev = insert;
+                    insert = insert->next;
+                }
+                if (prev) {
+                    sorted_infos = g_list_insert_before(sorted_infos, insert, info);
+                } else {
+                    sorted_infos = g_list_prepend(sorted_infos, info);
+                }
+            }
+        }
+
+        /* Restore layers in position order */
+        for (info_iter = sorted_infos; info_iter; info_iter = info_iter->next) {
+            info = (MergedLayerInfo*)info_iter->data;
+            if (!info || !info->snapshot) {
+                continue;
+            }
+
+            /* Recreate layer */
+            restored_layer = layer_new(info->layer_name, info->width, info->height, TRUE,
+                                       LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL);
+            if (!restored_layer) {
+                continue;
+            }
+
+            /* Restore content from snapshot */
+            cr = cairo_create(restored_layer->surface);
+            cairo_set_source_surface(cr, info->snapshot, 0, 0);
+            cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+            cairo_paint(cr);
+            cairo_destroy(cr);
+
+            /* Flush the restored layer surface */
+            if (restored_layer->surface) {
+                cairo_surface_flush(restored_layer->surface);
+            }
+
+            /* Restore properties */
+            restored_layer->opacity = info->opacity;
+            restored_layer->blend_mode = info->blend_mode;
+            restored_layer->offset_x = info->offset_x;
+            restored_layer->offset_y = info->offset_y;
+            restored_layer->visible = info->visible;
+
+            /* Invalidate layer cache */
+            layer_invalidate_cache(restored_layer);
+
+            /* Insert at original position */
+            insert_point = g_list_nth(doc->layers, info->position);
+            if (insert_point) {
+                doc->layers = g_list_insert_before(doc->layers, insert_point, restored_layer);
+            } else {
+                doc->layers = g_list_append(doc->layers, restored_layer);
+            }
+
+            /* Update info with restored layer pointer */
+            info->layer = restored_layer;
+        }
+
+        g_list_free(sorted_infos);
+    }
+
+    /* Mark composite as needing re-render */
+    document_invalidate_composite(doc);
+}
+
+/**
+ * Merge command destroy callback
+ */
+static void merge_command_destroy(Command* cmd) {
+    MergeCommandData* data;
+    GList* iter;
+    MergedLayerInfo* info;
+
+    if (!cmd || !cmd->user_data) {
+        return;
+    }
+
+    data = (MergeCommandData*)cmd->user_data;
+
+    /* Free all layer info structures */
+    if (data->layer_infos) {
+        for (iter = data->layer_infos; iter; iter = iter->next) {
+            info = (MergedLayerInfo*)iter->data;
+            if (info) {
+                if (info->snapshot) {
+                    cairo_surface_destroy(info->snapshot);
+                }
+                if (info->layer_name) {
+                    g_free(info->layer_name);
+                }
+                /* Free layer if it's not in the document
+                 * IMPORTANT: If doc->layers is NULL, the document is being freed and
+                 * document_free() will handle freeing all layers. Don't free here to avoid double-free. */
+                if (info->layer) {
+                    if (!data->doc) {
+                        /* Document pointer is NULL - document was already freed, free the layer */
+                        layer_free(info->layer);
+                    } else if (!data->doc->layers) {
+                        /* Document is being freed (layers list is NULL) - DON'T free the layer here.
+                         * document_free() will free all layers. Freeing here would cause double-free. */
+                    } else {
+                        /* Document still exists - only free if layer is not in the list */
+                        GList* found = g_list_find(data->doc->layers, info->layer);
+                        if (!found) {
+                            layer_free(info->layer);
+                        }
+                    }
+                }
+                g_free(info);
+            }
+        }
+        g_list_free(data->layer_infos);
+    }
+
+    /* Free merged layer if it's not in the document
+     * IMPORTANT: If doc->layers is NULL, the document is being freed and
+     * document_free() will handle freeing all layers. Don't free here to avoid double-free. */
+    if (data->merged_layer) {
+        if (!data->doc) {
+            /* Document pointer is NULL - document was already freed, free the layer */
+            layer_free(data->merged_layer);
+        } else if (!data->doc->layers) {
+            /* Document is being freed (layers list is NULL) - DON'T free the layer here.
+             * document_free() will free all layers. Freeing here would cause double-free. */
+        } else {
+            /* Document still exists - only free if layer is not in the list */
+            GList* found = g_list_find(data->doc->layers, data->merged_layer);
+            if (!found) {
+                layer_free(data->merged_layer);
+            }
+        }
+    }
+
+    g_free(data);
+}
+
+/**
+ * Create a merge visible layers command
+ */
+Command* command_create_merge_visible(struct ImageDocument* doc) {
+    Command* cmd;
+    MergeCommandData* data;
+    GList* iter;
+    struct ImageLayer* layer;
+    struct ImageLayer* merged_layer;
+    cairo_surface_t* snapshot;
+    gint visible_count = 0;
+    gint merged_position = 0;
+
+    if (!doc || !doc->layers || g_list_length(doc->layers) == 0) {
+        return NULL;
+    }
+
+    /* Count visible layers */
+    for (iter = doc->layers; iter; iter = iter->next) {
+        layer = (struct ImageLayer*)iter->data;
+        if (layer && layer->visible && layer->opacity > 0.0) {
+            visible_count++;
+        }
+    }
+
+    if (visible_count == 0) {
+        g_warning("No visible layers to merge");
+        return NULL;
+    }
+
+    if (visible_count == 1) {
+        g_warning("Only one visible layer, nothing to merge");
+        return NULL;
+    }
+
+    /* Create command data */
+    data = (MergeCommandData*)g_malloc(sizeof(MergeCommandData));
+    data->doc = doc;
+    data->merged_layer = NULL;
+    data->layer_infos = NULL;
+    data->merged_layer_position = 0;
+
+    /* Create layer info structures for visible layers */
+    for (iter = doc->layers; iter; iter = iter->next) {
+        layer = (struct ImageLayer*)iter->data;
+        if (layer && layer->visible && layer->opacity > 0.0) {
+            gint position = g_list_position(doc->layers, iter);
+            snapshot = cairo_surface_snapshot(layer->surface);
+            if (snapshot) {
+                MergedLayerInfo* info = (MergedLayerInfo*)g_malloc(sizeof(MergedLayerInfo));
+                info->layer = layer;
+                info->position = position;
+                info->layer_name = g_strdup(layer->name);
+                info->width = layer->width;
+                info->height = layer->height;
+                info->snapshot = snapshot;
+                info->opacity = layer->opacity;
+                info->blend_mode = layer->blend_mode;
+                info->offset_x = layer->offset_x;
+                info->offset_y = layer->offset_y;
+                info->visible = layer->visible;
+
+                data->layer_infos = g_list_append(data->layer_infos, info);
+            }
+            if (merged_position == 0) {
+                merged_position = position;
+            }
+        }
+    }
+
+    if (!data->layer_infos || g_list_length(data->layer_infos) == 0) {
+        /* Free layer infos */
+        if (data->layer_infos) {
+            for (iter = data->layer_infos; iter; iter = iter->next) {
+                MergedLayerInfo* info = (MergedLayerInfo*)iter->data;
+                if (info) {
+                    if (info->snapshot) {
+                        cairo_surface_destroy(info->snapshot);
+                    }
+                    if (info->layer_name) {
+                        g_free(info->layer_name);
+                    }
+                    g_free(info);
+                }
+            }
+            g_list_free(data->layer_infos);
+        }
+        g_free(data);
+        return NULL;
+    }
+
+    data->merged_layer_position = merged_position;
+
+    /* Create new merged layer */
+    merged_layer = layer_new("Merged layers", doc->width, doc->height, TRUE,
+                             LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL);
+    if (!merged_layer) {
+        /* Free layer infos */
+        if (data->layer_infos) {
+            for (iter = data->layer_infos; iter; iter = iter->next) {
+                MergedLayerInfo* info = (MergedLayerInfo*)iter->data;
+                if (info) {
+                    if (info->snapshot) {
+                        cairo_surface_destroy(info->snapshot);
+                    }
+                    if (info->layer_name) {
+                        g_free(info->layer_name);
+                    }
+                    g_free(info);
+                }
+            }
+            g_list_free(data->layer_infos);
+        }
+        g_free(data);
+        return NULL;
+    }
+
+    data->merged_layer = merged_layer;
+
+    /* Create command */
+    cmd = command_new(command_get_name_string(CMD_NAME_MERGE_VISIBLE),
+                      COMMAND_LAYER_EDIT,
+                      merge_visible_command_apply,
+                      merge_visible_command_revert,
+                      merge_command_destroy);
+
+    if (!cmd) {
+        /* Free merged layer */
+        layer_free(merged_layer);
+        /* Free layer infos */
+        if (data->layer_infos) {
+            for (iter = data->layer_infos; iter; iter = iter->next) {
+                MergedLayerInfo* info = (MergedLayerInfo*)iter->data;
+                if (info) {
+                    if (info->snapshot) {
+                        cairo_surface_destroy(info->snapshot);
+                    }
+                    if (info->layer_name) {
+                        g_free(info->layer_name);
+                    }
+                    g_free(info);
+                }
+            }
+            g_list_free(data->layer_infos);
+        }
+        g_free(data);
+        return NULL;
+    }
+
+    cmd->user_data = data;
+
+    return cmd;
+}
+
+/**
+ * Create a flatten image command
+ */
+Command* command_create_flatten(struct ImageDocument* doc) {
+    Command* cmd;
+    MergeCommandData* data;
+    GList* iter;
+    struct ImageLayer* layer;
+    struct ImageLayer* bottom_layer;
+    cairo_surface_t* snapshot;
+
+    if (!doc || !doc->layers || g_list_length(doc->layers) == 0) {
+        return NULL;
+    }
+
+    if (g_list_length(doc->layers) == 1) {
+        g_warning("Only one layer, nothing to flatten");
+        return NULL;
+    }
+
+    /* Get bottom layer */
+    bottom_layer = (struct ImageLayer*)g_list_nth_data(doc->layers, 0);
+    if (!bottom_layer) {
+        return NULL;
+    }
+
+    /* Create command data */
+    data = (MergeCommandData*)g_malloc(sizeof(MergeCommandData));
+    data->doc = doc;
+    data->merged_layer = bottom_layer;
+    data->layer_infos = NULL;
+    data->merged_layer_position = 0;
+
+    /* Create layer info for bottom layer (first in list) */
+    snapshot = cairo_surface_snapshot(bottom_layer->surface);
+    if (snapshot) {
+        MergedLayerInfo* info = (MergedLayerInfo*)g_malloc(sizeof(MergedLayerInfo));
+        info->layer = bottom_layer;
+        info->position = 0;
+        info->layer_name = g_strdup(bottom_layer->name);
+        info->width = bottom_layer->width;
+        info->height = bottom_layer->height;
+        info->snapshot = snapshot;
+        info->opacity = bottom_layer->opacity;
+        info->blend_mode = bottom_layer->blend_mode;
+        info->offset_x = bottom_layer->offset_x;
+        info->offset_y = bottom_layer->offset_y;
+        info->visible = bottom_layer->visible;
+
+        data->layer_infos = g_list_append(data->layer_infos, info);
+    }
+
+    /* Create layer info structures for all other layers */
+    for (iter = g_list_next(doc->layers); iter; iter = iter->next) {
+        layer = (struct ImageLayer*)iter->data;
+        if (layer) {
+            gint position = g_list_position(doc->layers, iter);
+            snapshot = cairo_surface_snapshot(layer->surface);
+            if (snapshot) {
+                MergedLayerInfo* info = (MergedLayerInfo*)g_malloc(sizeof(MergedLayerInfo));
+                info->layer = layer;
+                info->position = position;
+                info->layer_name = g_strdup(layer->name);
+                info->width = layer->width;
+                info->height = layer->height;
+                info->snapshot = snapshot;
+                info->opacity = layer->opacity;
+                info->blend_mode = layer->blend_mode;
+                info->offset_x = layer->offset_x;
+                info->offset_y = layer->offset_y;
+                info->visible = layer->visible;
+
+                data->layer_infos = g_list_append(data->layer_infos, info);
+            }
+        }
+    }
+
+    if (!data->layer_infos || g_list_length(data->layer_infos) < 2) {
+        /* Need at least bottom layer + one other layer */
+        if (data->layer_infos) {
+            for (iter = data->layer_infos; iter; iter = iter->next) {
+                MergedLayerInfo* info = (MergedLayerInfo*)iter->data;
+                if (info) {
+                    if (info->snapshot) {
+                        cairo_surface_destroy(info->snapshot);
+                    }
+                    if (info->layer_name) {
+                        g_free(info->layer_name);
+                    }
+                    g_free(info);
+                }
+            }
+            g_list_free(data->layer_infos);
+        }
+        g_free(data);
+        return NULL;
+    }
+
+    /* Create command */
+    cmd = command_new(command_get_name_string(CMD_NAME_FLATTEN),
+                      COMMAND_LAYER_EDIT,
+                      flatten_command_apply,
+                      flatten_command_revert,
+                      merge_command_destroy);
+
+    if (!cmd) {
+        /* Free layer infos */
+        if (data->layer_infos) {
+            for (iter = data->layer_infos; iter; iter = iter->next) {
+                MergedLayerInfo* info = (MergedLayerInfo*)iter->data;
+                if (info) {
+                    if (info->snapshot) {
+                        cairo_surface_destroy(info->snapshot);
+                    }
+                    if (info->layer_name) {
+                        g_free(info->layer_name);
+                    }
+                    g_free(info);
+                }
+            }
+            g_list_free(data->layer_infos);
         }
         g_free(data);
         return NULL;

@@ -44,6 +44,8 @@ typedef enum {
     CMD_NAME_TRANSPOSE,
     CMD_NAME_FIT_ACTIVE_LAYER,
     CMD_NAME_FIT_ALL_LAYERS,
+    CMD_NAME_MERGE_VISIBLE,
+    CMD_NAME_FLATTEN,
     CMD_NAME_COUNT /* Total number of predefined command names */
 } CommandName;
 
@@ -420,5 +422,43 @@ Command* command_create_fit_all_layers(guint old_width, guint old_height,
                                        gdouble old_resolution, gdouble new_resolution,
                                        gint offset_x, gint offset_y,
                                        struct ImageDocument* doc);
+
+/**
+ * Merge/Flatten command data structures
+ */
+typedef struct {
+    struct ImageLayer* layer;  /* Layer that was deleted */
+    gint position;             /* Position in layer list before deletion */
+    gchar* layer_name;         /* Layer name for restoration */
+    guint width;               /* Layer width */
+    guint height;              /* Layer height */
+    cairo_surface_t* snapshot; /* Snapshot of layer content */
+    gfloat opacity;            /* Layer opacity */
+    gint blend_mode;           /* Layer blend mode */
+    gint offset_x;             /* Layer offset X */
+    gint offset_y;             /* Layer offset Y */
+    gboolean visible;          /* Layer visibility state */
+} MergedLayerInfo;
+
+typedef struct {
+    struct ImageDocument* doc;       /* Document containing the layers */
+    struct ImageLayer* merged_layer; /* New merged layer (for merge visible) or bottom layer (for flatten) */
+    GList* layer_infos;              /* List of MergedLayerInfo* for deleted layers */
+    gint merged_layer_position;      /* Position where merged layer was inserted (for merge visible) */
+} MergeCommandData;
+
+/**
+ * Create a merge visible layers command
+ * @param doc The document
+ * @return Newly created Command, or NULL on failure
+ */
+Command* command_create_merge_visible(struct ImageDocument* doc);
+
+/**
+ * Create a flatten image command
+ * @param doc The document
+ * @return Newly created Command, or NULL on failure
+ */
+Command* command_create_flatten(struct ImageDocument* doc);
 
 #endif /* COMMAND_H */

@@ -62,6 +62,8 @@ static void on_image_fit_all_layers(GtkWidget* widget, gpointer data);
 static void on_image_flip_horizontal(GtkWidget* widget, gpointer data);
 static void on_image_flip_vertical(GtkWidget* widget, gpointer data);
 static void on_image_transpose(GtkWidget* widget, gpointer data);
+static void on_image_merge_visible(GtkWidget* widget, gpointer data);
+static void on_image_flatten(GtkWidget* widget, gpointer data);
 static void on_edit_undo(GtkWidget* widget, gpointer data);
 static void on_edit_redo(GtkWidget* widget, gpointer data);
 static void on_view_zoom_in(GtkWidget* widget, gpointer data);
@@ -1174,6 +1176,16 @@ static void setup_image_menu(GtkBuilder* builder, AppContext* ctx) {
     GtkWidget* image_menu_tranpose = GTK_WIDGET(gtk_builder_get_object(builder, "image_menu_tranpose"));
     if (image_menu_tranpose) {
         g_signal_connect(image_menu_tranpose, "activate", G_CALLBACK(on_image_transpose), ctx);
+    }
+
+    GtkWidget* image_menu_merge_visible = GTK_WIDGET(gtk_builder_get_object(builder, "image_menu_merge_visible"));
+    if (image_menu_merge_visible) {
+        g_signal_connect(image_menu_merge_visible, "activate", G_CALLBACK(on_image_merge_visible), ctx);
+    }
+
+    GtkWidget* image_menu_flatten = GTK_WIDGET(gtk_builder_get_object(builder, "image_menu_flatten"));
+    if (image_menu_flatten) {
+        g_signal_connect(image_menu_flatten, "activate", G_CALLBACK(on_image_flatten), ctx);
     }
 }
 
@@ -2609,6 +2621,117 @@ static void on_image_transpose(GtkWidget* widget, gpointer data) {
     /* Update UI state */
     ui_update_menu_and_button_states(ctx);
     ui_update_window_title(ctx);
+    ui_update_status_bar(ctx, NULL);
+    doc->modified = TRUE;
+}
+
+/**
+ * Image > Merge visible layers callback
+ */
+static void on_image_merge_visible(GtkWidget* widget, gpointer data) {
+    (void)widget; /* Unused */
+
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc = ui_get_active_document(ctx);
+    LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window),
+                                                                "layers_panel");
+    Command* cmd;
+
+    if (!doc) {
+        g_warning("No document open");
+        return;
+    }
+
+    if (!doc->layers || g_list_length(doc->layers) == 0) {
+        g_warning("Document has no layers");
+        return;
+    }
+
+    /* Create merge visible command */
+    cmd = command_create_merge_visible(doc);
+    if (!cmd) {
+        g_warning("Failed to create merge visible command");
+        return;
+    }
+
+    /* Execute the command */
+    command_execute(cmd, doc);
+
+    /* Push to undo stack */
+    if (doc->undo_stack) {
+        command_stack_push(doc->undo_stack, cmd);
+        if (doc->redo_stack) {
+            command_stack_clear(doc->redo_stack);
+        }
+    } else {
+        command_free(cmd);
+    }
+
+    /* Update layers panel */
+    if (layers_panel) {
+        layers_panel_update(layers_panel, doc);
+    }
+
+    /* Update UI state */
+    ui_update_menu_and_button_states(ctx);
+    ui_update_status_bar(ctx, NULL);
+    doc->modified = TRUE;
+}
+
+/**
+ * Image > Flatten image callback
+ */
+static void on_image_flatten(GtkWidget* widget, gpointer data) {
+    (void)widget; /* Unused */
+
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc = ui_get_active_document(ctx);
+    LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window),
+                                                                "layers_panel");
+    Command* cmd;
+
+    if (!doc) {
+        g_warning("No document open");
+        return;
+    }
+
+    if (!doc->layers || g_list_length(doc->layers) == 0) {
+        g_warning("Document has no layers");
+        return;
+    }
+
+    if (g_list_length(doc->layers) == 1) {
+        g_warning("Only one layer, nothing to flatten");
+        return;
+    }
+
+    /* Create flatten command */
+    cmd = command_create_flatten(doc);
+    if (!cmd) {
+        g_warning("Failed to create flatten command");
+        return;
+    }
+
+    /* Execute the command */
+    command_execute(cmd, doc);
+
+    /* Push to undo stack */
+    if (doc->undo_stack) {
+        command_stack_push(doc->undo_stack, cmd);
+        if (doc->redo_stack) {
+            command_stack_clear(doc->redo_stack);
+        }
+    } else {
+        command_free(cmd);
+    }
+
+    /* Update layers panel */
+    if (layers_panel) {
+        layers_panel_update(layers_panel, doc);
+    }
+
+    /* Update UI state */
+    ui_update_menu_and_button_states(ctx);
     ui_update_status_bar(ctx, NULL);
     doc->modified = TRUE;
 }
