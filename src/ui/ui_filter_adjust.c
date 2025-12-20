@@ -5,6 +5,7 @@
 #include "render/layer.h"
 #include "ui.h"
 #include "ui/dialogs/color_balance_dialog.h"
+#include "ui/dialogs/curves_dialog.h"
 #include "ui/dialogs/gamma_dialog.h"
 #include "ui/dialogs/palettize_dialog.h"
 #include "ui/dialogs/retinex_dialog.h"
@@ -18,6 +19,7 @@
 #include "ui/filters/filter_chroma_key.h"
 #include "ui/filters/filter_color_invert.h"
 #include "ui/filters/filter_colorbalance.h"
+#include "ui/filters/filter_curves.h"
 #include "ui/filters/filter_dehaze.h"
 #include "ui/filters/filter_equalize.h"
 #include "ui/filters/filter_exposure.h"
@@ -509,6 +511,147 @@ static void on_adjust_gamma(GtkWidget* widget, gpointer data) {
     g_object_set_data(G_OBJECT(gamma_dialog_get_window(dialog)), "original_layer", NULL);
     g_object_set_data(G_OBJECT(gamma_dialog_get_window(dialog)), "gamma_dialog", NULL);
     gamma_dialog_free(dialog);
+    layer_free(temp_layer);
+}
+
+/**
+ * Curves filter preview update callback
+ * Called when control values change to update the preview
+ */
+static gboolean on_curves_preview_update(void* dialog_ptr,
+                                         gpointer user_data) {
+    CurvesDialog* dialog = (CurvesDialog*)dialog_ptr;
+    ImageLayer* temp_layer = (ImageLayer*)user_data;
+    ImageLayer* original_layer;
+    CurvesWidget* curves;
+
+    if (!dialog || !temp_layer) {
+        return FALSE;
+    }
+
+    /* Get original layer from dialog window */
+    original_layer = (ImageLayer*)g_object_get_data(G_OBJECT(curves_dialog_get_window(dialog)), "original_layer");
+    if (!original_layer) {
+        return FALSE;
+    }
+
+    /* Get curves widget from dialog */
+    curves = curves_dialog_get_curves_widget(dialog);
+    if (!curves) {
+        return FALSE;
+    }
+
+    /* Copy original layer to temp layer */
+    if (!ui_filter_utils_copy_layer_surface(temp_layer, original_layer)) {
+        return FALSE;
+    }
+
+    /* Apply curves filter to temp layer */
+    if (!filter_curves_apply(temp_layer, curves)) {
+        return FALSE;
+    }
+
+    /* Update preview */
+    curves_dialog_update_after_layer(dialog, temp_layer);
+
+    return TRUE;
+}
+
+/**
+ * Adjustments > Curves callback
+ */
+static void on_adjust_curves(GtkWidget* widget, gpointer data) {
+    (void)widget; /* Unused */
+
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc;
+    ImageLayer* layer;
+    CurvesDialog* dialog;
+    ImageLayer* temp_layer;
+    gint response;
+
+    if (!ctx) {
+        return;
+    }
+
+    doc = ui_get_active_document(ctx);
+    if (!doc) {
+        g_warning("No document open");
+        return;
+    }
+
+    /* Get the currently selected layer */
+    layer = document_get_selected_layer(doc);
+    if (!layer) {
+        g_warning("No layer selected");
+        return;
+    }
+
+    /* Create curves dialog */
+    dialog = curves_dialog_new("Curves");
+    if (!dialog) {
+        g_warning("Failed to create curves dialog");
+        return;
+    }
+
+    /* Create a copy of the layer for preview */
+    temp_layer = ui_filter_utils_create_temp_layer(layer);
+    if (!temp_layer) {
+        g_warning("Failed to create temporary layer for preview");
+        curves_dialog_free(dialog);
+        return;
+    }
+
+    /* Set layers in dialog */
+    curves_dialog_set_layers(dialog, layer, temp_layer);
+
+    /* Store original layer reference for preview callback */
+    g_object_set_data(G_OBJECT(curves_dialog_get_window(dialog)), "original_layer", layer);
+
+    /* Set up live preview callback */
+    curves_dialog_set_preview_callback(dialog, on_curves_preview_update, temp_layer);
+
+    /* Set dialog as transient for main window */
+    if (ctx->window) {
+        gtk_window_set_transient_for(curves_dialog_get_window(dialog), GTK_WINDOW(ctx->window));
+    }
+
+    /* Run dialog */
+    response = curves_dialog_run(dialog, GTK_WINDOW(ctx->window));
+
+    if (response == GTK_RESPONSE_OK) {
+        /* Apply curves filter */
+        CurvesWidget* curves = curves_dialog_get_curves_widget(dialog);
+        if (curves) {
+            /* Create a draw command for undo/redo */
+            Command* cmd = command_create_draw(layer, "Curves");
+            if (cmd) {
+                /* Apply filter */
+                if (filter_curves_apply(layer, curves)) {
+                    command_finalize_draw(cmd);
+                    if (doc->undo_stack) {
+                        command_stack_push(doc->undo_stack, cmd);
+                        if (doc->redo_stack) {
+                            command_stack_clear(doc->redo_stack);
+                        }
+                    } else {
+                        command_free(cmd);
+                    }
+                    layer_invalidate_cache(layer);
+                    doc->modified = TRUE;
+                    document_invalidate_composite(doc);
+                    ui_update_window_title(ctx);
+                    ui_update_menu_and_button_states(ctx);
+                } else {
+                    command_free(cmd);
+                }
+            }
+        }
+    }
+
+    /* Clean up */
+    g_object_set_data(G_OBJECT(curves_dialog_get_window(dialog)), "original_layer", NULL);
+    curves_dialog_free(dialog);
     layer_free(temp_layer);
 }
 
@@ -1718,6 +1861,11 @@ void ui_filter_adjust_setup_menu(GtkBuilder* builder, AppContext* ctx) {
     GtkWidget* adjust_menu_gamma = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_gamma"));
     if (adjust_menu_gamma) {
         g_signal_connect(adjust_menu_gamma, "activate", G_CALLBACK(on_adjust_gamma), ctx);
+    }
+
+    GtkWidget* adjust_menu_curves = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_curves"));
+    if (adjust_menu_curves) {
+        g_signal_connect(adjust_menu_curves, "activate", G_CALLBACK(on_adjust_curves), ctx);
     }
 
     GtkWidget* adjust_menu_colorbalance = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_colorbalance"));

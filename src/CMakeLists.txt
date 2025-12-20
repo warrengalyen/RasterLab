@@ -51,6 +51,7 @@ set(SOURCES
     ui/dialogs/canvas_size_dialog.c
     ui/dialogs/clouds_dialog.c
     ui/dialogs/color_balance_dialog.c
+    ui/dialogs/curves_dialog.c
     ui/dialogs/gamma_dialog.c
     ui/dialogs/new_layer_dialog.c
     ui/dialogs/palettize_dialog.c
@@ -80,6 +81,7 @@ set(SOURCES
     ui/filters/filter_sepia.c
     ui/filters/filter_gamma.c
     ui/filters/filter_colorbalance.c
+    ui/filters/filter_curves.c
     ui/filters/filter_exposure.c
     ui/filters/filter_color_invert.c
     ui/filters/filter_highlight_shadow_tint.c

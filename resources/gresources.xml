@@ -29,6 +29,10 @@
     <file preprocess="xml-stripblanks">icons/anchor-center.svg</file>
     <file preprocess="xml-stripblanks">icons/padlock-locked.svg</file>
     <file preprocess="xml-stripblanks">icons/padlock-unlocked.svg</file>
+    <file preprocess="to-pixdata">icons/channel-rgb.png</file>
+    <file preprocess="to-pixdata">icons/channel-red.png</file>
+    <file preprocess="to-pixdata">icons/channel-green.png</file>
+    <file preprocess="to-pixdata">icons/channel-blue.png</file>
     <file>ui/layers_panel.glade</file>
     <file>ui/brush_options.glade</file>
     <file>ui/eraser_options.glade</file>

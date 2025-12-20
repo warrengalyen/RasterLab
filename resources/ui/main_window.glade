@@ -197,6 +197,14 @@
               </object>
             </child>
             <child>
+              <object class="GtkMenuItem" id="adjust_menu_curves">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">Curves</property>
+                <property name="use-underline">True</property>
+              </object>
+            </child>
+            <child>
               <object class="GtkMenuItem" id="adjust_menu_dehaze">
                 <property name="visible">True</property>
                 <property name="can-focus">False</property>
