@@ -55,6 +55,8 @@ static void on_file_close(GtkWidget* widget, gpointer data);
 static void on_file_exit(GtkWidget* widget, gpointer data);
 static void on_image_canvas_size(GtkWidget* widget, gpointer data);
 static void on_image_duplicate(GtkWidget* widget, gpointer data);
+static void on_image_fit_active_layer(GtkWidget* widget, gpointer data);
+static void on_image_fit_all_layers(GtkWidget* widget, gpointer data);
 static void on_edit_undo(GtkWidget* widget, gpointer data);
 static void on_edit_redo(GtkWidget* widget, gpointer data);
 static void on_view_zoom_in(GtkWidget* widget, gpointer data);
@@ -1143,6 +1145,16 @@ static void setup_image_menu(GtkBuilder* builder, AppContext* ctx) {
     if (image_menu_duplicate) {
         g_signal_connect(image_menu_duplicate, "activate", G_CALLBACK(on_image_duplicate), ctx);
     }
+
+    GtkWidget* image_menu_fit_active_layer = GTK_WIDGET(gtk_builder_get_object(builder, "image_menu_fit_active_layer"));
+    if (image_menu_fit_active_layer) {
+        g_signal_connect(image_menu_fit_active_layer, "activate", G_CALLBACK(on_image_fit_active_layer), ctx);
+    }
+
+    GtkWidget* image_menu_fit_all_layer = GTK_WIDGET(gtk_builder_get_object(builder, "image_menu_fit_all_layer"));
+    if (image_menu_fit_all_layer) {
+        g_signal_connect(image_menu_fit_all_layer, "activate", G_CALLBACK(on_image_fit_all_layers), ctx);
+    }
 }
 
 /**
@@ -2013,6 +2025,252 @@ static void on_image_duplicate(GtkWidget* widget, gpointer data) {
 
     /* Mark new document as modified */
     new_doc->modified = TRUE;
+}
+
+/**
+ * Image > Fit canvas to active layer callback
+ */
+static void on_image_fit_active_layer(GtkWidget* widget, gpointer data) {
+    (void)widget; /* Unused */
+
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc = ui_get_active_document(ctx);
+    LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window),
+                                                                "layers_panel");
+    ImageLayer* active_layer;
+    guint old_width, old_height;
+    guint new_width, new_height;
+    gint offset_x, offset_y;
+    GList* iter;
+    Command* cmd;
+    gdouble old_resolution = 72.0; /* Default resolution */
+    gdouble new_resolution = 72.0;
+
+    if (!doc) {
+        g_warning("No document open");
+        return;
+    }
+
+    /* Get the active/selected layer */
+    active_layer = document_get_selected_layer(doc);
+    if (!active_layer) {
+        g_warning("No active layer to fit canvas to");
+        return;
+    }
+
+    /* Get layer dimensions */
+    new_width = active_layer->width;
+    new_height = active_layer->height;
+
+    if (new_width == 0 || new_height == 0) {
+        g_warning("Active layer has invalid dimensions");
+        return;
+    }
+
+    old_width = doc->width;
+    old_height = doc->height;
+
+    /* If canvas already matches layer size and layer is at (0,0), nothing to do */
+    if (old_width == new_width && old_height == new_height &&
+        active_layer->offset_x == 0 && active_layer->offset_y == 0) {
+        return;
+    }
+
+    /* Calculate offset adjustment: move active layer to (0,0) */
+    offset_x = -active_layer->offset_x;
+    offset_y = -active_layer->offset_y;
+
+    /* Create undo command BEFORE resizing (to capture old state) */
+    cmd = command_create_canvas_resize(old_width, old_height,
+                                       new_width, new_height,
+                                       old_resolution, new_resolution,
+                                       offset_x, offset_y,
+                                       doc);
+
+    if (!cmd) {
+        g_warning("Failed to create canvas resize command");
+        return;
+    }
+
+    /* Resize canvas to layer dimensions using TOP_LEFT anchor (no offset change from resize) */
+    if (document_resize_canvas(doc, new_width, new_height, new_resolution, CANVAS_ANCHOR_TOP_LEFT)) {
+        /* Adjust all layer offsets to move active layer to (0,0) */
+        for (iter = doc->layers; iter; iter = iter->next) {
+            ImageLayer* layer = (ImageLayer*)iter->data;
+            if (layer) {
+                layer->offset_x += offset_x;
+                layer->offset_y += offset_y;
+                layer_invalidate_cache(layer);
+            }
+        }
+
+        /* Push command to undo stack and clear redo stack */
+        if (doc->undo_stack) {
+            command_stack_push(doc->undo_stack, cmd);
+            if (doc->redo_stack) {
+                command_stack_clear(doc->redo_stack);
+            }
+        } else {
+            command_free(cmd);
+        }
+
+        /* Update layers panel */
+        if (layers_panel) {
+            layers_panel_update(layers_panel, doc);
+        }
+
+        /* Update UI state */
+        ui_update_menu_and_button_states(ctx);
+        ui_update_window_title(ctx);
+        ui_update_status_bar(ctx, NULL);
+        doc->modified = TRUE;
+    } else {
+        g_warning("Failed to resize canvas to fit active layer");
+        command_free(cmd);
+    }
+}
+
+/**
+ * Image > Fit canvas around all layers callback
+ */
+static void on_image_fit_all_layers(GtkWidget* widget, gpointer data) {
+    (void)widget; /* Unused */
+
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc = ui_get_active_document(ctx);
+    LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window),
+                                                                "layers_panel");
+    GList* iter;
+    ImageLayer* layer;
+    guint old_width, old_height;
+    guint new_width, new_height;
+    gint min_x, min_y, max_x, max_y;
+    gint offset_x, offset_y;
+    gboolean has_layers = FALSE;
+    Command* cmd;
+    gdouble old_resolution = 72.0; /* Default resolution */
+    gdouble new_resolution = 72.0;
+
+    if (!doc) {
+        g_warning("No document open");
+        return;
+    }
+
+    if (!doc->layers || g_list_length(doc->layers) == 0) {
+        g_warning("Document has no layers");
+        return;
+    }
+
+    /* Calculate bounding box of all layers */
+    min_x = G_MAXINT;
+    min_y = G_MAXINT;
+    max_x = G_MININT;
+    max_y = G_MININT;
+
+    for (iter = doc->layers; iter; iter = iter->next) {
+        layer = (ImageLayer*)iter->data;
+        if (!layer || layer->width == 0 || layer->height == 0) {
+            continue;
+        }
+
+        has_layers = TRUE;
+
+        /* Calculate layer bounds */
+        gint layer_left = layer->offset_x;
+        gint layer_top = layer->offset_y;
+        gint layer_right = layer->offset_x + (gint)layer->width;
+        gint layer_bottom = layer->offset_y + (gint)layer->height;
+
+        /* Update bounding box */
+        if (layer_left < min_x) {
+            min_x = layer_left;
+        }
+        if (layer_top < min_y) {
+            min_y = layer_top;
+        }
+        if (layer_right > max_x) {
+            max_x = layer_right;
+        }
+        if (layer_bottom > max_y) {
+            max_y = layer_bottom;
+        }
+    }
+
+    if (!has_layers) {
+        g_warning("No valid layers to fit canvas around");
+        return;
+    }
+
+    /* Calculate new canvas dimensions */
+    new_width = (guint)(max_x - min_x);
+    new_height = (guint)(max_y - min_y);
+
+    if (new_width == 0 || new_height == 0) {
+        g_warning("Calculated canvas size is invalid");
+        return;
+    }
+
+    old_width = doc->width;
+    old_height = doc->height;
+
+    /* Calculate offset adjustment: move content so top-left is at (0,0) */
+    offset_x = -min_x;
+    offset_y = -min_y;
+
+    /* If canvas already matches and layers are already at correct positions, nothing to do */
+    if (old_width == new_width && old_height == new_height &&
+        min_x == 0 && min_y == 0) {
+        return;
+    }
+
+    /* Create undo command BEFORE resizing (to capture old state) */
+    cmd = command_create_canvas_resize(old_width, old_height,
+                                       new_width, new_height,
+                                       old_resolution, new_resolution,
+                                       offset_x, offset_y,
+                                       doc);
+
+    if (!cmd) {
+        g_warning("Failed to create canvas resize command");
+        return;
+    }
+
+    /* Resize canvas using TOP_LEFT anchor (no offset change from resize) */
+    if (document_resize_canvas(doc, new_width, new_height, new_resolution, CANVAS_ANCHOR_TOP_LEFT)) {
+        /* Adjust all layer offsets to move content to start at (0,0) */
+        for (iter = doc->layers; iter; iter = iter->next) {
+            layer = (ImageLayer*)iter->data;
+            if (layer) {
+                layer->offset_x += offset_x;
+                layer->offset_y += offset_y;
+                layer_invalidate_cache(layer);
+            }
+        }
+
+        /* Push command to undo stack and clear redo stack */
+        if (doc->undo_stack) {
+            command_stack_push(doc->undo_stack, cmd);
+            if (doc->redo_stack) {
+                command_stack_clear(doc->redo_stack);
+            }
+        } else {
+            command_free(cmd);
+        }
+
+        /* Update layers panel */
+        if (layers_panel) {
+            layers_panel_update(layers_panel, doc);
+        }
+
+        /* Update UI state */
+        ui_update_menu_and_button_states(ctx);
+        ui_update_window_title(ctx);
+        ui_update_status_bar(ctx, NULL);
+        doc->modified = TRUE;
+    } else {
+        g_warning("Failed to resize canvas to fit all layers");
+        command_free(cmd);
+    }
 }
 
 /**
