@@ -525,7 +525,8 @@ ImageDocument* autosave_load_document(const gchar* autosave_path) {
         filename = g_strdup("Recovered");
     }
 
-    ImageDocument* doc = document_new(filename);
+    /* Create document with worker pool for on-screen rendering */
+    ImageDocument* doc = document_new(filename, TRUE);
     g_free(filename);
 
     if (!doc) {

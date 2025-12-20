@@ -132,9 +132,10 @@ typedef struct ImageDocument {
 /**
  * Create a new image document
  * @param filename The filename for the document
+ * @param create_worker_pool If TRUE, create tile worker pool for on-screen rendering
  * @return Newly allocated ImageDocument
  */
-ImageDocument* document_new(const gchar* filename);
+ImageDocument* document_new(const gchar* filename, gboolean create_worker_pool);
 
 /**
  * Free an image document

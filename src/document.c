@@ -568,7 +568,7 @@ static gboolean on_viewport_motion_notify(GtkWidget* widget, GdkEventMotion* eve
 /**
  * Create a new image document
  */
-ImageDocument* document_new(const gchar* filename) {
+ImageDocument* document_new(const gchar* filename, gboolean create_worker_pool) {
     ImageDocument* doc = (ImageDocument*)g_malloc(sizeof(ImageDocument));
 
     doc->filename = g_strdup(filename);
@@ -594,6 +594,16 @@ ImageDocument* document_new(const gchar* filename) {
     doc->tile_grid = NULL;        /* Will be created when image is loaded */
     doc->tile_thread_pool = NULL; /* Will be created when image is loaded */
     doc->zoom_factor = 1.0;
+
+    /* Create tile worker pool if requested (for on-screen rendering) */
+    if (create_worker_pool) {
+        doc->tile_worker_pool = tile_worker_pool_create(0);
+        if (!doc->tile_worker_pool) {
+            g_warning("Failed to create tile worker pool, will use single-threaded compositing");
+        }
+    } else {
+        doc->tile_worker_pool = NULL;
+    }
 
     /* Initialize undo/redo stacks (max 50 undo steps) */
     doc->undo_stack = command_stack_new(50);
@@ -864,13 +874,15 @@ gboolean document_load_image_from_file(ImageDocument* doc, const gchar* file_pat
         return FALSE;
     }
 
-    /* Create Cairo-safe tile worker pool for asynchronous rendering */
+    /* Create Cairo-safe tile worker pool for asynchronous rendering if not already created */
     /* Workers composite into pixel buffers only, main thread handles Cairo surfaces */
-    doc->tile_worker_pool = tile_worker_pool_create(0);
     if (!doc->tile_worker_pool) {
-        g_warning("Failed to create tile worker pool, will use single-threaded compositing");
-    } else {
-        g_message("Tile compositing: Using worker threads (Cairo-safe pixel buffer approach)");
+        doc->tile_worker_pool = tile_worker_pool_create(0);
+        if (!doc->tile_worker_pool) {
+            g_warning("Failed to create tile worker pool, will use single-threaded compositing");
+        } else {
+            g_message("Tile compositing: Using worker threads (Cairo-safe pixel buffer approach)");
+        }
     }
 
     /* Legacy thread pool (disabled - kept for reference) */

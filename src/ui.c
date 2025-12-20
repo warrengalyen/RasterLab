@@ -7,6 +7,8 @@
 #include "panels.h"
 #include "render/compositor.h"
 #include "render/layer.h"
+#include "render/tile.h"
+#include "render/tile_worker.h"
 #include "tool_manager.h"
 #include "tool_options.h"
 #include "ui/dialogs/canvas_size_dialog.h"
@@ -52,6 +54,7 @@ static void on_file_save_as_response(GtkDialog* dialog, gint response_id, gpoint
 static void on_file_close(GtkWidget* widget, gpointer data);
 static void on_file_exit(GtkWidget* widget, gpointer data);
 static void on_image_canvas_size(GtkWidget* widget, gpointer data);
+static void on_image_duplicate(GtkWidget* widget, gpointer data);
 static void on_edit_undo(GtkWidget* widget, gpointer data);
 static void on_edit_redo(GtkWidget* widget, gpointer data);
 static void on_view_zoom_in(GtkWidget* widget, gpointer data);
@@ -495,8 +498,8 @@ ImageDocument* ui_create_document_tab(AppContext* ctx, const gchar* filename) {
     GtkWidget* close_button;
     gint page_num;
 
-    /* Create the document */
-    doc = document_new(filename);
+    /* Create the document with worker pool for on-screen rendering */
+    doc = document_new(filename, TRUE);
 
     /* Create the drawing area (scrolled window with drawing area) */
     page_content = document_create_drawing_area(doc);
@@ -639,11 +642,12 @@ static void ui_close_document_tab_internal(AppContext* ctx, ImageDocument* doc) 
         /* Update status bar and menu/button states */
         ui_update_status_bar(ctx, NULL);
 
-        /* Clear layers panel if no documents remain */
+        /* Update layers panel - show active document if one exists, otherwise clear */
         LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window),
                                                                     "layers_panel");
         if (layers_panel) {
-            layers_panel_update(layers_panel, NULL);
+            ImageDocument* active_doc = ui_get_active_document(ctx);
+            layers_panel_update(layers_panel, active_doc);
         }
 
         ui_update_menu_and_button_states(ctx);
@@ -1133,6 +1137,11 @@ static void setup_image_menu(GtkBuilder* builder, AppContext* ctx) {
     GtkWidget* image_menu_canvas_size = GTK_WIDGET(gtk_builder_get_object(builder, "image_menu_canvas_size"));
     if (image_menu_canvas_size) {
         g_signal_connect(image_menu_canvas_size, "activate", G_CALLBACK(on_image_canvas_size), ctx);
+    }
+
+    GtkWidget* image_menu_duplicate = GTK_WIDGET(gtk_builder_get_object(builder, "image_menu_duplicate"));
+    if (image_menu_duplicate) {
+        g_signal_connect(image_menu_duplicate, "activate", G_CALLBACK(on_image_duplicate), ctx);
     }
 }
 
@@ -1872,6 +1881,138 @@ static void on_image_canvas_size(GtkWidget* widget, gpointer data) {
     }
 
     canvas_size_dialog_free(dialog);
+}
+
+/**
+ * Image > Duplicate callback
+ */
+static void on_image_duplicate(GtkWidget* widget, gpointer data) {
+    (void)widget; /* Unused */
+
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* source_doc = ui_get_active_document(ctx);
+    LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window),
+                                                                "layers_panel");
+
+    if (!source_doc) {
+        g_warning("No document open");
+        return;
+    }
+
+    if (!source_doc->layers || g_list_length(source_doc->layers) == 0) {
+        g_warning("Document has no layers to duplicate");
+        return;
+    }
+
+    /* Generate duplicate filename */
+    gchar* duplicate_filename;
+    if (source_doc->filename) {
+        duplicate_filename = g_strdup_printf("%s copy", source_doc->filename);
+    } else {
+        duplicate_filename = g_strdup("Untitled copy");
+    }
+
+    /* Create new document tab */
+    ImageDocument* new_doc = ui_create_document_tab(ctx, duplicate_filename);
+    g_free(duplicate_filename);
+
+    if (!new_doc) {
+        g_warning("Failed to create duplicate document");
+        return;
+    }
+
+    /* Copy document properties */
+    new_doc->width = source_doc->width;
+    new_doc->height = source_doc->height;
+    new_doc->channels = source_doc->channels;
+    new_doc->bit_depth = source_doc->bit_depth;
+    new_doc->has_alpha = source_doc->has_alpha;
+    new_doc->zoom_factor = source_doc->zoom_factor;
+
+    /* Create tile grid for the new document */
+    if (new_doc->width > 0 && new_doc->height > 0) {
+        if (new_doc->tile_grid) {
+            tile_grid_free(new_doc->tile_grid);
+        }
+        new_doc->tile_grid = tile_grid_create(new_doc->width, new_doc->height, 128);
+    }
+    /* Note: tile_worker_pool is already created by document_new() with create_worker_pool=TRUE */
+
+    /* Update drawing area size to match document dimensions */
+    if (new_doc->drawing_area) {
+        gint display_width = (gint)(new_doc->width * new_doc->zoom_factor);
+        gint display_height = (gint)(new_doc->height * new_doc->zoom_factor);
+        gtk_widget_set_size_request(new_doc->drawing_area, display_width, display_height);
+        gtk_widget_queue_draw(new_doc->drawing_area);
+    }
+
+    /* Copy all layers from source document */
+    ImageLayer* source_selected_layer = source_doc->selected_layer;
+    ImageLayer* new_selected_layer = NULL;
+
+    for (GList* iter = source_doc->layers; iter; iter = iter->next) {
+        ImageLayer* source_layer = (ImageLayer*)iter->data;
+        if (!source_layer) {
+            continue;
+        }
+
+        /* Create new layer with same dimensions */
+        ImageLayer* new_layer = layer_new(source_layer->name, source_layer->width,
+                                          source_layer->height, TRUE,
+                                          LAYER_BACKGROUND_TRANSPARENT,
+                                          LAYER_POSITION_ABOVE_CURRENT, NULL);
+
+        if (!new_layer) {
+            g_warning("Failed to create duplicate layer: %s", source_layer->name);
+            continue;
+        }
+
+        /* Copy layer surface content */
+        cairo_t* cr = cairo_create(new_layer->surface);
+        cairo_set_source_surface(cr, source_layer->surface, 0, 0);
+        cairo_paint(cr);
+        cairo_destroy(cr);
+
+        /* Copy all layer properties */
+        new_layer->opacity = source_layer->opacity;
+        new_layer->visible = source_layer->visible;
+        new_layer->blend_mode = source_layer->blend_mode;
+        new_layer->offset_x = source_layer->offset_x;
+        new_layer->offset_y = source_layer->offset_y;
+
+        /* Add layer to new document */
+        new_doc->layers = g_list_append(new_doc->layers, new_layer);
+
+        /* Track selected layer */
+        if (source_layer == source_selected_layer) {
+            new_selected_layer = new_layer;
+        }
+    }
+
+    /* Set selected layer in new document */
+    if (new_selected_layer) {
+        document_set_selected_layer(new_doc, new_selected_layer);
+    } else if (new_doc->layers) {
+        /* Fallback to first layer if no match found */
+        ImageLayer* first_layer = (ImageLayer*)g_list_first(new_doc->layers)->data;
+        document_set_selected_layer(new_doc, first_layer);
+    }
+
+    /* Mark composite as needing re-render */
+    document_invalidate_composite(new_doc);
+
+    /* Update layers panel */
+    if (layers_panel) {
+        layers_panel_update(layers_panel, new_doc);
+    }
+
+    /* Update UI state */
+    ui_update_menu_and_button_states(ctx);
+    ui_update_window_title(ctx);
+    ui_update_status_bar(ctx, NULL);
+
+    /* Mark new document as modified */
+    new_doc->modified = TRUE;
 }
 
 /**
