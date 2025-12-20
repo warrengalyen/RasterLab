@@ -42,6 +42,8 @@ typedef enum {
     CMD_NAME_FLIP_HORIZONTAL,
     CMD_NAME_FLIP_VERTICAL,
     CMD_NAME_TRANSPOSE,
+    CMD_NAME_FIT_ACTIVE_LAYER,
+    CMD_NAME_FIT_ALL_LAYERS,
     CMD_NAME_COUNT /* Total number of predefined command names */
 } CommandName;
 
@@ -380,5 +382,43 @@ Command* command_create_flip_vertical(struct ImageDocument* doc);
  * @return Newly created Command, or NULL on failure
  */
 Command* command_create_transpose(struct ImageDocument* doc);
+
+/**
+ * Create a fit canvas to active layer command
+ * @param old_width Canvas width before resize
+ * @param old_height Canvas height before resize
+ * @param new_width Canvas width after resize
+ * @param new_height Canvas height after resize
+ * @param old_resolution Resolution before resize
+ * @param new_resolution Resolution after resize
+ * @param offset_x X offset adjustment applied to layers
+ * @param offset_y Y offset adjustment applied to layers
+ * @param doc Document containing layers (to capture current offsets)
+ * @return Newly created Command, or NULL on failure
+ */
+Command* command_create_fit_active_layer(guint old_width, guint old_height,
+                                         guint new_width, guint new_height,
+                                         gdouble old_resolution, gdouble new_resolution,
+                                         gint offset_x, gint offset_y,
+                                         struct ImageDocument* doc);
+
+/**
+ * Create a fit canvas to all layers command
+ * @param old_width Canvas width before resize
+ * @param old_height Canvas height before resize
+ * @param new_width Canvas width after resize
+ * @param new_height Canvas height after resize
+ * @param old_resolution Resolution before resize
+ * @param new_resolution Resolution after resize
+ * @param offset_x X offset adjustment applied to layers
+ * @param offset_y Y offset adjustment applied to layers
+ * @param doc Document containing layers (to capture current offsets)
+ * @return Newly created Command, or NULL on failure
+ */
+Command* command_create_fit_all_layers(guint old_width, guint old_height,
+                                       guint new_width, guint new_height,
+                                       gdouble old_resolution, gdouble new_resolution,
+                                       gint offset_x, gint offset_y,
+                                       struct ImageDocument* doc);
 
 #endif /* COMMAND_H */

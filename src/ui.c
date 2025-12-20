@@ -2101,14 +2101,14 @@ static void on_image_fit_active_layer(GtkWidget* widget, gpointer data) {
     offset_y = -active_layer->offset_y;
 
     /* Create undo command BEFORE resizing (to capture old state) */
-    cmd = command_create_canvas_resize(old_width, old_height,
-                                       new_width, new_height,
-                                       old_resolution, new_resolution,
-                                       offset_x, offset_y,
-                                       doc);
+    cmd = command_create_fit_active_layer(old_width, old_height,
+                                          new_width, new_height,
+                                          old_resolution, new_resolution,
+                                          offset_x, offset_y,
+                                          doc);
 
     if (!cmd) {
-        g_warning("Failed to create canvas resize command");
+        g_warning("Failed to create fit active layer command");
         return;
     }
 
@@ -2244,14 +2244,14 @@ static void on_image_fit_all_layers(GtkWidget* widget, gpointer data) {
     }
 
     /* Create undo command BEFORE resizing (to capture old state) */
-    cmd = command_create_canvas_resize(old_width, old_height,
-                                       new_width, new_height,
-                                       old_resolution, new_resolution,
-                                       offset_x, offset_y,
-                                       doc);
+    cmd = command_create_fit_all_layers(old_width, old_height,
+                                        new_width, new_height,
+                                        old_resolution, new_resolution,
+                                        offset_x, offset_y,
+                                        doc);
 
     if (!cmd) {
-        g_warning("Failed to create canvas resize command");
+        g_warning("Failed to create fit all layers command");
         return;
     }
 

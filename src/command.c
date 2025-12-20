@@ -426,7 +426,9 @@ const gchar* command_get_name_string(CommandName name) {
         "Canvas size",
         "Flip Horizontal",
         "Flip Vertical",
-        "Transpose"};
+        "Transpose",
+        "Fit Canvas to Active Layer",
+        "Fit Canvas to All Layers"};
 
     if (name < 0 || name >= CMD_NAME_COUNT) {
         return NULL;
@@ -2199,6 +2201,144 @@ Command* command_create_transpose(struct ImageDocument* doc) {
         }
         if (data->layers) {
             g_list_free(data->layers);
+        }
+        g_free(data);
+        return NULL;
+    }
+
+    cmd->user_data = data;
+
+    return cmd;
+}
+
+/**
+ * Create a fit canvas to active layer command
+ */
+Command* command_create_fit_active_layer(guint old_width, guint old_height,
+                                         guint new_width, guint new_height,
+                                         gdouble old_resolution, gdouble new_resolution,
+                                         gint offset_x, gint offset_y,
+                                         struct ImageDocument* doc) {
+    Command* cmd;
+    CanvasResizeCommandData* data;
+    GList* iter;
+    ImageLayer* layer;
+    LayerOffsetPair* pair;
+
+    if (!doc) {
+        return NULL;
+    }
+
+    /* Create command data (same structure as canvas resize) */
+    data = (CanvasResizeCommandData*)g_malloc(sizeof(CanvasResizeCommandData));
+    data->old_width = old_width;
+    data->old_height = old_height;
+    data->new_width = new_width;
+    data->new_height = new_height;
+    data->old_resolution = old_resolution;
+    data->new_resolution = new_resolution;
+    data->offset_x = offset_x;
+    data->offset_y = offset_y;
+    data->layer_offsets = NULL;
+
+    /* Store old offsets for all layers */
+    for (iter = doc->layers; iter; iter = iter->next) {
+        layer = (ImageLayer*)iter->data;
+        if (layer) {
+            pair = (LayerOffsetPair*)g_malloc(sizeof(LayerOffsetPair));
+            pair->layer = layer;
+            pair->old_offset_x = layer->offset_x;
+            pair->old_offset_y = layer->offset_y;
+            data->layer_offsets = g_list_append(data->layer_offsets, pair);
+        }
+    }
+
+    /* Create command with specific name but reuse canvas resize callbacks */
+    cmd = command_new(command_get_name_string(CMD_NAME_FIT_ACTIVE_LAYER),
+                      COMMAND_CANVAS_RESIZE,
+                      canvas_resize_command_apply,
+                      canvas_resize_command_revert,
+                      canvas_resize_command_destroy);
+
+    if (!cmd) {
+        /* Free layer offset pairs */
+        if (data->layer_offsets) {
+            for (iter = data->layer_offsets; iter; iter = iter->next) {
+                pair = (LayerOffsetPair*)iter->data;
+                if (pair) {
+                    g_free(pair);
+                }
+            }
+            g_list_free(data->layer_offsets);
+        }
+        g_free(data);
+        return NULL;
+    }
+
+    cmd->user_data = data;
+
+    return cmd;
+}
+
+/**
+ * Create a fit canvas to all layers command
+ */
+Command* command_create_fit_all_layers(guint old_width, guint old_height,
+                                       guint new_width, guint new_height,
+                                       gdouble old_resolution, gdouble new_resolution,
+                                       gint offset_x, gint offset_y,
+                                       struct ImageDocument* doc) {
+    Command* cmd;
+    CanvasResizeCommandData* data;
+    GList* iter;
+    ImageLayer* layer;
+    LayerOffsetPair* pair;
+
+    if (!doc) {
+        return NULL;
+    }
+
+    /* Create command data (same structure as canvas resize) */
+    data = (CanvasResizeCommandData*)g_malloc(sizeof(CanvasResizeCommandData));
+    data->old_width = old_width;
+    data->old_height = old_height;
+    data->new_width = new_width;
+    data->new_height = new_height;
+    data->old_resolution = old_resolution;
+    data->new_resolution = new_resolution;
+    data->offset_x = offset_x;
+    data->offset_y = offset_y;
+    data->layer_offsets = NULL;
+
+    /* Store old offsets for all layers */
+    for (iter = doc->layers; iter; iter = iter->next) {
+        layer = (ImageLayer*)iter->data;
+        if (layer) {
+            pair = (LayerOffsetPair*)g_malloc(sizeof(LayerOffsetPair));
+            pair->layer = layer;
+            pair->old_offset_x = layer->offset_x;
+            pair->old_offset_y = layer->offset_y;
+            data->layer_offsets = g_list_append(data->layer_offsets, pair);
+        }
+    }
+
+    /* Create command with specific name but reuse canvas resize callbacks */
+    cmd = command_new(command_get_name_string(CMD_NAME_FIT_ALL_LAYERS),
+                      COMMAND_CANVAS_RESIZE,
+                      canvas_resize_command_apply,
+                      canvas_resize_command_revert,
+                      canvas_resize_command_destroy);
+
+    if (!cmd) {
+        /* Free layer offset pairs */
+        if (data->layer_offsets) {
+            for (iter = data->layer_offsets; iter; iter = iter->next) {
+                pair = (LayerOffsetPair*)iter->data;
+                if (pair) {
+                    g_free(pair);
+                }
+            }
+            g_list_free(data->layer_offsets);
         }
         g_free(data);
         return NULL;
