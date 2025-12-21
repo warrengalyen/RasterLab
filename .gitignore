@@ -1,4 +1,5 @@
 build/
+bin/
 *.md
 !README.md
 !TODO.md
