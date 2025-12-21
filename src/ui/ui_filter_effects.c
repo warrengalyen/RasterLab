@@ -10,14 +10,19 @@
 #include "ui/filters/filter_canny_edge.h"
 #include "ui/filters/filter_color_halftone.h"
 #include "ui/filters/filter_crystallize.h"
+#include "ui/filters/filter_dilate.h"
+#include "ui/filters/filter_erode.h"
 #include "ui/filters/filter_exponential_blur.h"
 #include "ui/filters/filter_film_grain.h"
 #include "ui/filters/filter_fragment.h"
 #include "ui/filters/filter_frosted_glass.h"
 #include "ui/filters/filter_gaussian_blur.h"
 #include "ui/filters/filter_gradient_edge.h"
+#include "ui/filters/filter_highpass.h"
 #include "ui/filters/filter_laplacian_edge.h"
+#include "ui/filters/filter_max.h"
 #include "ui/filters/filter_median_blur.h"
+#include "ui/filters/filter_min.h"
 #include "ui/filters/filter_mosaic.h"
 #include "ui/filters/filter_motion_blur.h"
 #include "ui/filters/filter_oil_paint.h"
@@ -788,6 +793,251 @@ static void on_effects_unsharp(GtkWidget* widget, gpointer data) {
         if (ui_filter_utils_scale_values(values, filter_values, controls, 3)) {
             ui_apply_layer_filter_with_value(ctx, filter_unsharp_apply,
                                              "Unsharp Mask", filter_values, 3);
+        }
+    }
+}
+
+/**
+ * Dilate filter preview update callback
+ */
+static gboolean on_dilate_preview_update(FilterDialog* dialog,
+                                         const gdouble* values,
+                                         gint num_values,
+                                         gpointer user_data) {
+    static FilterApplyFuncData func_data = {
+        .filter_apply_func = (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_dilate_apply,
+        .num_values = 1};
+    return ui_filter_utils_preview_update_scaled(dialog, values, num_values, &func_data);
+}
+
+/**
+ * Effects > Morphological > Dilate callback
+ */
+static void on_effects_dilate(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    FilterControlParam controls[1];
+    gdouble values[1];
+    gint response;
+    gfloat filter_values[1];
+
+    if (!ctx)
+        return;
+
+    controls[0].type = FILTER_CONTROL_DOUBLE;
+    controls[0].label = "radius";
+    controls[0].min_value = 1.0;
+    controls[0].max_value = 500.0;
+    controls[0].default_value = 3.0;
+    controls[0].step = 1.0;
+    controls[0].decimals = 0;
+    controls[0].filter_min = 1.0;
+    controls[0].filter_max = 500.0;
+
+    response = ui_show_filter_dialog(ctx, "Dilate", controls, 1,
+                                     on_dilate_preview_update, values);
+
+    if (response == GTK_RESPONSE_OK) {
+        /* Scale UI value to filter range and apply filter */
+        if (ui_filter_utils_scale_values(values, filter_values, controls, 1)) {
+            ui_apply_layer_filter_with_value(ctx, filter_dilate_apply,
+                                             "Dilate", filter_values, 1);
+        }
+    }
+}
+
+/**
+ * Erode filter preview update callback
+ */
+static gboolean on_erode_preview_update(FilterDialog* dialog,
+                                        const gdouble* values,
+                                        gint num_values,
+                                        gpointer user_data) {
+    static FilterApplyFuncData func_data = {
+        .filter_apply_func = (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_erode_apply,
+        .num_values = 1};
+    return ui_filter_utils_preview_update_scaled(dialog, values, num_values, &func_data);
+}
+
+/**
+ * Effects > Morphological > Erode callback
+ */
+static void on_effects_erode(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    FilterControlParam controls[1];
+    gdouble values[1];
+    gint response;
+    gfloat filter_values[1];
+
+    if (!ctx)
+        return;
+
+    controls[0].type = FILTER_CONTROL_DOUBLE;
+    controls[0].label = "radius";
+    controls[0].min_value = 1.0;
+    controls[0].max_value = 500.0;
+    controls[0].default_value = 3.0;
+    controls[0].step = 1.0;
+    controls[0].decimals = 0;
+    controls[0].filter_min = 1.0;
+    controls[0].filter_max = 500.0;
+
+    response = ui_show_filter_dialog(ctx, "Erode", controls, 1,
+                                     on_erode_preview_update, values);
+
+    if (response == GTK_RESPONSE_OK) {
+        /* Scale UI value to filter range and apply filter */
+        if (ui_filter_utils_scale_values(values, filter_values, controls, 1)) {
+            ui_apply_layer_filter_with_value(ctx, filter_erode_apply,
+                                             "Erode", filter_values, 1);
+        }
+    }
+}
+
+/**
+ * Highpass filter preview update callback
+ */
+static gboolean on_highpass_preview_update(FilterDialog* dialog,
+                                           const gdouble* values,
+                                           gint num_values,
+                                           gpointer user_data) {
+    static FilterApplyFuncData func_data = {
+        .filter_apply_func = (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_highpass_apply,
+        .num_values = 1};
+    return ui_filter_utils_preview_update_scaled(dialog, values, num_values, &func_data);
+}
+
+/**
+ * Effects > Sharpen > Highpass callback
+ */
+static void on_effects_highpass(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    FilterControlParam controls[1];
+    gdouble values[1];
+    gint response;
+    gfloat filter_values[1];
+
+    if (!ctx)
+        return;
+
+    controls[0].type = FILTER_CONTROL_DOUBLE;
+    controls[0].label = "radius";
+    controls[0].min_value = 1.0;
+    controls[0].max_value = 512.0;
+    controls[0].default_value = 3.0;
+    controls[0].step = 1.0;
+    controls[0].decimals = 0;
+    controls[0].filter_min = 1.0;
+    controls[0].filter_max = 512.0;
+
+    response = ui_show_filter_dialog(ctx, "Highpass", controls, 1,
+                                     on_highpass_preview_update, values);
+
+    if (response == GTK_RESPONSE_OK) {
+        /* Scale UI value to filter range and apply filter */
+        if (ui_filter_utils_scale_values(values, filter_values, controls, 1)) {
+            ui_apply_layer_filter_with_value(ctx, filter_highpass_apply,
+                                             "Highpass", filter_values, 1);
+        }
+    }
+}
+
+/**
+ * Min filter preview update callback
+ */
+static gboolean on_min_preview_update(FilterDialog* dialog,
+                                      const gdouble* values,
+                                      gint num_values,
+                                      gpointer user_data) {
+    static FilterApplyFuncData func_data = {
+        .filter_apply_func = (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_min_apply,
+        .num_values = 1};
+    return ui_filter_utils_preview_update_scaled(dialog, values, num_values, &func_data);
+}
+
+/**
+ * Effects > Morphological > Min callback
+ */
+static void on_effects_min(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    FilterControlParam controls[1];
+    gdouble values[1];
+    gint response;
+    gfloat filter_values[1];
+
+    if (!ctx)
+        return;
+
+    controls[0].type = FILTER_CONTROL_DOUBLE;
+    controls[0].label = "radius";
+    controls[0].min_value = 1.0;
+    controls[0].max_value = 256.0;
+    controls[0].default_value = 3.0;
+    controls[0].step = 1.0;
+    controls[0].decimals = 0;
+    controls[0].filter_min = 1.0;
+    controls[0].filter_max = 256.0;
+
+    response = ui_show_filter_dialog(ctx, "Min", controls, 1,
+                                     on_min_preview_update, values);
+
+    if (response == GTK_RESPONSE_OK) {
+        /* Scale UI value to filter range and apply filter */
+        if (ui_filter_utils_scale_values(values, filter_values, controls, 1)) {
+            ui_apply_layer_filter_with_value(ctx, filter_min_apply,
+                                             "Min", filter_values, 1);
+        }
+    }
+}
+
+/**
+ * Max filter preview update callback
+ */
+static gboolean on_max_preview_update(FilterDialog* dialog,
+                                      const gdouble* values,
+                                      gint num_values,
+                                      gpointer user_data) {
+    static FilterApplyFuncData func_data = {
+        .filter_apply_func = (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_max_apply,
+        .num_values = 1};
+    return ui_filter_utils_preview_update_scaled(dialog, values, num_values, &func_data);
+}
+
+/**
+ * Effects > Morphological > Max callback
+ */
+static void on_effects_max(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    FilterControlParam controls[1];
+    gdouble values[1];
+    gint response;
+    gfloat filter_values[1];
+
+    if (!ctx)
+        return;
+
+    controls[0].type = FILTER_CONTROL_DOUBLE;
+    controls[0].label = "radius";
+    controls[0].min_value = 1.0;
+    controls[0].max_value = 256.0;
+    controls[0].default_value = 3.0;
+    controls[0].step = 1.0;
+    controls[0].decimals = 0;
+    controls[0].filter_min = 1.0;
+    controls[0].filter_max = 256.0;
+
+    response = ui_show_filter_dialog(ctx, "Max", controls, 1,
+                                     on_max_preview_update, values);
+
+    if (response == GTK_RESPONSE_OK) {
+        /* Scale UI value to filter range and apply filter */
+        if (ui_filter_utils_scale_values(values, filter_values, controls, 1)) {
+            ui_apply_layer_filter_with_value(ctx, filter_max_apply,
+                                             "Max", filter_values, 1);
         }
     }
 }
@@ -1578,6 +1828,32 @@ void ui_filter_effects_setup_menu(GtkBuilder* builder, AppContext* ctx) {
     GtkWidget* effects_menu_unsharp = GTK_WIDGET(gtk_builder_get_object(builder, "effects_menu_unsharp"));
     if (effects_menu_unsharp) {
         g_signal_connect(effects_menu_unsharp, "activate", G_CALLBACK(on_effects_unsharp), ctx);
+    }
+
+    GtkWidget* effects_menu_highpass = GTK_WIDGET(gtk_builder_get_object(builder, "effects_menu_highpass"));
+    if (effects_menu_highpass) {
+        g_signal_connect(effects_menu_highpass, "activate", G_CALLBACK(on_effects_highpass), ctx);
+    }
+
+    /* Connect Morphological submenu signals */
+    GtkWidget* effects_menu_dilate = GTK_WIDGET(gtk_builder_get_object(builder, "effects_menu_dilate"));
+    if (effects_menu_dilate) {
+        g_signal_connect(effects_menu_dilate, "activate", G_CALLBACK(on_effects_dilate), ctx);
+    }
+
+    GtkWidget* effects_menu_erode = GTK_WIDGET(gtk_builder_get_object(builder, "effects_menu_erode"));
+    if (effects_menu_erode) {
+        g_signal_connect(effects_menu_erode, "activate", G_CALLBACK(on_effects_erode), ctx);
+    }
+
+    GtkWidget* effects_menu_min = GTK_WIDGET(gtk_builder_get_object(builder, "effects_menu_min"));
+    if (effects_menu_min) {
+        g_signal_connect(effects_menu_min, "activate", G_CALLBACK(on_effects_min), ctx);
+    }
+
+    GtkWidget* effects_menu_max = GTK_WIDGET(gtk_builder_get_object(builder, "effects_menu_max"));
+    if (effects_menu_max) {
+        g_signal_connect(effects_menu_max, "activate", G_CALLBACK(on_effects_max), ctx);
     }
 
     /* Connect Artistic submenu signals */

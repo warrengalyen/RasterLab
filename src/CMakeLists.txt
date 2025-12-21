@@ -100,6 +100,8 @@ set(SOURCES
     ui/filters/filter_auto_level.c
     ui/filters/filter_auto_threshold.c
     ui/filters/filter_dehaze.c
+    ui/filters/filter_dilate.c
+    ui/filters/filter_erode.c
     ui/filters/filter_average_blur.c
     ui/filters/filter_gaussian_blur.c
     ui/filters/filter_box_blur.c
@@ -118,8 +120,11 @@ set(SOURCES
     ui/filters/filter_crystallize.c
     ui/filters/filter_fragment.c
     ui/filters/filter_gradient_edge.c
+    ui/filters/filter_highpass.c
     ui/filters/filter_laplacian_edge.c
+    ui/filters/filter_max.c
     ui/filters/filter_mosaic.c
+    ui/filters/filter_min.c
     ui/filters/filter_prewitt_edge.c
     ui/filters/filter_radial_blur.c
     ui/filters/filter_relief.c
