@@ -6,6 +6,7 @@
 #include "ui.h"
 #include "ui/dialogs/clouds_dialog.h"
 #include "ui/filters/filter_average_blur.h"
+#include "ui/filters/filter_bilateral.h"
 #include "ui/filters/filter_box_blur.h"
 #include "ui/filters/filter_canny_edge.h"
 #include "ui/filters/filter_color_halftone.h"
@@ -1105,6 +1106,67 @@ static void on_effects_despeckle(GtkWidget* widget, gpointer data) {
 }
 
 /**
+ * Bilateral filter preview update callback
+ */
+static gboolean on_bilateral_preview_update(FilterDialog* dialog,
+                                            const gdouble* values,
+                                            gint num_values,
+                                            gpointer user_data) {
+    static FilterApplyFuncData func_data = {
+        .filter_apply_func = (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_bilateral_apply,
+        .num_values = 2};
+    return ui_filter_utils_preview_update_scaled(dialog, values, num_values, &func_data);
+}
+
+/**
+ * Effects > Denoise > Bilateral callback
+ */
+static void on_effects_bilateral(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    FilterControlParam controls[2];
+    gdouble values[2];
+    gint response;
+    gfloat filter_values[2];
+
+    if (!ctx)
+        return;
+
+    /* Sigma Spatial control: UI 0-100, Filter 0.0-1.0 */
+    controls[0].type = FILTER_CONTROL_DOUBLE;
+    controls[0].label = "smoothness";
+    controls[0].min_value = 0.0;
+    controls[0].max_value = 100.0;
+    controls[0].default_value = 8.0;
+    controls[0].step = 1.0;
+    controls[0].decimals = 0;
+    controls[0].filter_min = 0.0;
+    controls[0].filter_max = 1.0;
+
+    /* Sigma Range control: UI 0-100, Filter 0.0-1.0 */
+    controls[1].type = FILTER_CONTROL_DOUBLE;
+    controls[1].label = "edge preservation";
+    controls[1].min_value = 0.0;
+    controls[1].max_value = 100.0;
+    controls[1].default_value = 12.0;
+    controls[1].step = 1.0;
+    controls[1].decimals = 0;
+    controls[1].filter_min = 0.0;
+    controls[1].filter_max = 1.0;
+
+    response = ui_show_filter_dialog(ctx, "Bilateral", controls, 2,
+                                     on_bilateral_preview_update, values);
+
+    if (response == GTK_RESPONSE_OK) {
+        /* Scale UI values to filter range and apply filter */
+        if (ui_filter_utils_scale_values(values, filter_values, controls, 2)) {
+            ui_apply_layer_filter_with_value(ctx, filter_bilateral_apply,
+                                             "Bilateral", filter_values, 2);
+        }
+    }
+}
+
+/**
  * Film grain filter preview update callback
  */
 static gboolean on_film_grain_preview_update(FilterDialog* dialog,
@@ -1922,6 +1984,11 @@ void ui_filter_effects_setup_menu(GtkBuilder* builder, AppContext* ctx) {
     GtkWidget* effects_menu_despeckle = GTK_WIDGET(gtk_builder_get_object(builder, "effects_menu_despeckle"));
     if (effects_menu_despeckle) {
         g_signal_connect(effects_menu_despeckle, "activate", G_CALLBACK(on_effects_despeckle), ctx);
+    }
+
+    GtkWidget* effects_menu_bilateral = GTK_WIDGET(gtk_builder_get_object(builder, "effects_menu_bilateral"));
+    if (effects_menu_bilateral) {
+        g_signal_connect(effects_menu_bilateral, "activate", G_CALLBACK(on_effects_bilateral), ctx);
     }
 
     /* Connect Artistic submenu signals */

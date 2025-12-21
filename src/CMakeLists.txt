@@ -104,6 +104,7 @@ set(SOURCES
     ui/filters/filter_dilate.c
     ui/filters/filter_erode.c
     ui/filters/filter_average_blur.c
+    ui/filters/filter_bilateral.c
     ui/filters/filter_gaussian_blur.c
     ui/filters/filter_box_blur.c
     ui/filters/filter_median_blur.c
