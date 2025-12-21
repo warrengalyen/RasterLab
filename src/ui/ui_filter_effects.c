@@ -27,8 +27,10 @@
 #include "ui/filters/filter_relief.h"
 #include "ui/filters/filter_render_clouds.h"
 #include "ui/filters/filter_roberts_edge.h"
+#include "ui/filters/filter_sharpen.h"
 #include "ui/filters/filter_sobel_edge.h"
 #include "ui/filters/filter_surface_blur.h"
+#include "ui/filters/filter_unsharp.h"
 #include "ui/filters/filter_zoom_blur.h"
 #include "ui/ui_filter.h"
 #include "ui/ui_filter_utils.h"
@@ -665,6 +667,127 @@ static void on_effects_zoom_blur(GtkWidget* widget, gpointer data) {
             filter_values[3] = (gfloat)center_y;
             ui_apply_layer_filter_with_value(ctx, filter_zoom_blur_apply,
                                              "Zoom Blur", filter_values, 4);
+        }
+    }
+}
+
+/**
+ * Sharpen filter preview update callback
+ */
+static gboolean on_sharpen_preview_update(FilterDialog* dialog,
+                                          const gdouble* values,
+                                          gint num_values,
+                                          gpointer user_data) {
+    static FilterApplyFuncData func_data = {
+        .filter_apply_func = (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_sharpen_apply,
+        .num_values = 1};
+    return ui_filter_utils_preview_update_scaled(dialog, values, num_values, &func_data);
+}
+
+/**
+ * Effects > Sharpen > Sharpen callback
+ */
+static void on_effects_sharpen(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    FilterControlParam controls[1];
+    gdouble values[1];
+    gint response;
+    gfloat filter_values[1];
+
+    if (!ctx)
+        return;
+
+    controls[0].type = FILTER_CONTROL_DOUBLE;
+    controls[0].label = "strength";
+    controls[0].min_value = 0.1;
+    controls[0].max_value = 10.0;
+    controls[0].default_value = 1.0;
+    controls[0].step = 0.1;
+    controls[0].decimals = 1;
+    controls[0].filter_min = 0.1;
+    controls[0].filter_max = 10.0;
+
+    response = ui_show_filter_dialog(ctx, "Sharpen", controls, 1,
+                                     on_sharpen_preview_update, values);
+
+    if (response == GTK_RESPONSE_OK) {
+        /* Scale UI value to filter range and apply filter */
+        if (ui_filter_utils_scale_values(values, filter_values, controls, 1)) {
+            ui_apply_layer_filter_with_value(ctx, filter_sharpen_apply,
+                                             "Sharpen", filter_values, 1);
+        }
+    }
+}
+
+/**
+ * Unsharp mask filter preview update callback
+ */
+static gboolean on_unsharp_preview_update(FilterDialog* dialog,
+                                          const gdouble* values,
+                                          gint num_values,
+                                          gpointer user_data) {
+    static FilterApplyFuncData func_data = {
+        .filter_apply_func = (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_unsharp_apply,
+        .num_values = 3};
+    return ui_filter_utils_preview_update_scaled(dialog, values, num_values, &func_data);
+}
+
+/**
+ * Effects > Sharpen > Unsharp Mask callback
+ */
+static void on_effects_unsharp(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    FilterControlParam controls[3];
+    gdouble values[3];
+    gint response;
+    gfloat filter_values[3];
+
+    if (!ctx)
+        return;
+
+    /* Radius control: 0.1-200.0 */
+    controls[0].type = FILTER_CONTROL_DOUBLE;
+    controls[0].label = "radius";
+    controls[0].min_value = 0.1;
+    controls[0].max_value = 200.0;
+    controls[0].default_value = 1.0;
+    controls[0].step = 0.1;
+    controls[0].decimals = 1;
+    controls[0].filter_min = 0.1;
+    controls[0].filter_max = 200.0;
+
+    /* Intensity control: 0.1-4.0 */
+    controls[1].type = FILTER_CONTROL_DOUBLE;
+    controls[1].label = "intensity";
+    controls[1].min_value = 0.1;
+    controls[1].max_value = 4.0;
+    controls[1].default_value = 1.0;
+    controls[1].step = 0.1;
+    controls[1].decimals = 1;
+    controls[1].filter_min = 0.1;
+    controls[1].filter_max = 4.0;
+
+    /* Threshold control: 0-100 */
+    controls[2].type = FILTER_CONTROL_DOUBLE;
+    controls[2].label = "threshold";
+    controls[2].min_value = 0.0;
+    controls[2].max_value = 100.0;
+    controls[2].default_value = 0.0;
+    controls[2].step = 1.0;
+    controls[2].decimals = 0;
+    controls[2].filter_min = 0.0;
+    controls[2].filter_max = 100.0;
+
+    response = ui_show_filter_dialog(ctx, "Unsharp Mask", controls, 3,
+                                     on_unsharp_preview_update, values);
+
+    if (response == GTK_RESPONSE_OK) {
+        /* Scale UI values to filter range and apply filter */
+        if (ui_filter_utils_scale_values(values, filter_values, controls, 3)) {
+            ui_apply_layer_filter_with_value(ctx, filter_unsharp_apply,
+                                             "Unsharp Mask", filter_values, 3);
         }
     }
 }
@@ -1444,6 +1567,17 @@ void ui_filter_effects_setup_menu(GtkBuilder* builder, AppContext* ctx) {
     GtkWidget* blur_menu_zoom_blur = GTK_WIDGET(gtk_builder_get_object(builder, "blur_menu_zoom_blur"));
     if (blur_menu_zoom_blur) {
         g_signal_connect(blur_menu_zoom_blur, "activate", G_CALLBACK(on_effects_zoom_blur), ctx);
+    }
+
+    /* Connect Sharpen submenu signals */
+    GtkWidget* effects_menu_sharpen = GTK_WIDGET(gtk_builder_get_object(builder, "effects_menu_sharpen"));
+    if (effects_menu_sharpen) {
+        g_signal_connect(effects_menu_sharpen, "activate", G_CALLBACK(on_effects_sharpen), ctx);
+    }
+
+    GtkWidget* effects_menu_unsharp = GTK_WIDGET(gtk_builder_get_object(builder, "effects_menu_unsharp"));
+    if (effects_menu_unsharp) {
+        g_signal_connect(effects_menu_unsharp, "activate", G_CALLBACK(on_effects_unsharp), ctx);
     }
 
     /* Connect Artistic submenu signals */
