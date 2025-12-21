@@ -60,9 +60,19 @@ struct _FilterPreview {
 
     /* Flag to prevent recursive signal handling */
     gboolean updating_buttons;
+
+    /* Property: allow zoom/pan (1:1 mode) */
+    gboolean allow_zoom_pan;
 };
 
 G_DEFINE_TYPE(FilterPreview, filter_preview, GTK_TYPE_BOX)
+
+/* Property IDs */
+enum {
+    PROP_0,
+    PROP_ALLOW_ZOOM_PAN,
+    N_PROPERTIES
+};
 
 /* Forward declarations for button click handlers */
 static void on_before_clicked(GtkWidget* widget, gpointer user_data);
@@ -72,6 +82,11 @@ static void on_one_to_one_clicked(GtkWidget* widget, gpointer user_data);
 
 /* Forward declarations for viewport update functions */
 static void request_viewport_update(FilterPreview* preview);
+static gdouble calculate_fit_scale(gint img_width, gint img_height,
+                                   gint container_width, gint container_height);
+static gboolean on_preview_size_allocate(GtkWidget* widget, GdkRectangle* allocation, gpointer user_data);
+static void on_preview_realize(GtkWidget* widget, gpointer user_data);
+static gboolean trigger_viewport_update_idle(gpointer user_data);
 
 /**
  * Calculate the viewport rectangle in image coordinates
@@ -107,7 +122,41 @@ static ViewportRect calculate_viewport(FilterPreview* preview) {
     gint widget_width = gtk_widget_get_allocated_width(preview->preview_area);
     gint widget_height = gtk_widget_get_allocated_height(preview->preview_area);
 
-    if (preview->mode == FILTER_PREVIEW_MODE_FIT) {
+    /* If widget isn't allocated yet, use size request as fallback */
+    if (widget_width <= 0 || widget_height <= 0) {
+        gtk_widget_get_size_request(preview->preview_area, &widget_width, &widget_height);
+        if (widget_width <= 0 || widget_height <= 0) {
+            /* Default size if no size request set */
+            widget_width = 375;
+            widget_height = 338;
+        }
+    }
+
+    /* If zoom/pan is disabled, use scaled-down dimensions for performance */
+    if (!preview->allow_zoom_pan) {
+        /* Ensure we have valid original dimensions */
+        if (preview->original_width > 0 && preview->original_height > 0) {
+            /* Calculate scaled dimensions that fit in the widget */
+            gdouble scale = calculate_fit_scale(preview->original_width, preview->original_height,
+                                                widget_width, widget_height);
+            viewport.x = 0;
+            viewport.y = 0;
+            viewport.width = (gint)(preview->original_width * scale);
+            viewport.height = (gint)(preview->original_height * scale);
+
+            /* Ensure minimum dimensions */
+            if (viewport.width <= 0)
+                viewport.width = widget_width;
+            if (viewport.height <= 0)
+                viewport.height = widget_height;
+        } else {
+            /* Fallback to widget size if original dimensions not set yet */
+            viewport.x = 0;
+            viewport.y = 0;
+            viewport.width = widget_width;
+            viewport.height = widget_height;
+        }
+    } else if (preview->mode == FILTER_PREVIEW_MODE_FIT) {
         /* In fit mode, entire image is visible */
         viewport.x = 0;
         viewport.y = 0;
@@ -172,6 +221,46 @@ static gboolean viewport_changed(FilterPreview* preview,
     }
 
     return FALSE;
+}
+
+/**
+ * Create a scaled-down version of the source surface
+ */
+static cairo_surface_t* scale_surface(cairo_surface_t* source,
+                                      gint target_width, gint target_height) {
+    if (!source || target_width <= 0 || target_height <= 0) {
+        return NULL;
+    }
+
+    gint source_width = cairo_image_surface_get_width(source);
+    gint source_height = cairo_image_surface_get_height(source);
+
+    if (source_width <= 0 || source_height <= 0) {
+        return NULL;
+    }
+
+    /* Create scaled surface */
+    cairo_surface_t* scaled = cairo_image_surface_create(
+        CAIRO_FORMAT_ARGB32, target_width, target_height);
+
+    if (cairo_surface_status(scaled) != CAIRO_STATUS_SUCCESS) {
+        return NULL;
+    }
+
+    cairo_t* cr = cairo_create(scaled);
+
+    /* Scale and copy the source */
+    gdouble scale_x = (gdouble)target_width / (gdouble)source_width;
+    gdouble scale_y = (gdouble)target_height / (gdouble)source_height;
+
+    cairo_scale(cr, scale_x, scale_y);
+    cairo_set_source_surface(cr, source, 0, 0);
+    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_BILINEAR);
+    cairo_paint(cr);
+
+    cairo_destroy(cr);
+
+    return scaled;
 }
 
 static cairo_surface_t* extract_viewport(cairo_surface_t* source,
@@ -300,16 +389,36 @@ static void request_viewport_update(FilterPreview* preview) {
         return;
     }
 
+    /* Ensure we have a before surface to work with */
+    if (!preview->before_surface_full) {
+        return;
+    }
+
     ViewportRect viewport = calculate_viewport(preview);
+
+    /* Validate viewport dimensions */
+    if (viewport.width <= 0 || viewport.height <= 0) {
+        return;
+    }
 
     /* Check if update is needed */
     if (!viewport_changed(preview, viewport)) {
         return;
     }
 
-    /* Extract viewport from full resolution image */
-    cairo_surface_t* viewport_input =
-        extract_viewport(preview->before_surface_full, viewport);
+    /* Extract or scale viewport from full resolution image */
+    cairo_surface_t* viewport_input = NULL;
+
+    if (!preview->allow_zoom_pan) {
+        /* When zoom/pan is disabled, use scaled-down version for performance */
+        if (viewport.width > 0 && viewport.height > 0) {
+            viewport_input = scale_surface(preview->before_surface_full,
+                                           viewport.width, viewport.height);
+        }
+    } else {
+        /* Extract viewport from full resolution image */
+        viewport_input = extract_viewport(preview->before_surface_full, viewport);
+    }
 
     if (!viewport_input) {
         return;
@@ -469,7 +578,8 @@ static gboolean on_preview_draw(GtkWidget* widget, cairo_t* cr,
                     cairo_restore(cr);
                 }
 
-                /* Draw loading indicator overlay */
+                /* Draw loading indicator overlay - TEMPORARILY DISABLED */
+                /*
                 cairo_set_source_rgba(cr, 0, 0, 0, 0.5);
                 cairo_paint(cr);
 
@@ -479,6 +589,7 @@ static gboolean on_preview_draw(GtkWidget* widget, cairo_t* cr,
                 cairo_set_font_size(cr, 20);
                 cairo_move_to(cr, widget_width / 2 - 50, widget_height / 2);
                 cairo_show_text(cr, "Processing...");
+                */
 
                 return FALSE;
             }
@@ -495,9 +606,13 @@ static gboolean on_preview_draw(GtkWidget* widget, cairo_t* cr,
     if (preview->mode == FILTER_PREVIEW_MODE_FIT) {
         /* Fit mode: scale to fit container */
         gint img_width, img_height;
+        gboolean is_scaled_cache = FALSE;
+
         if (preview->view == FILTER_PREVIEW_VIEW_AFTER && preview->filter_apply_func) {
             img_width = preview->cache_width;
             img_height = preview->cache_height;
+            /* If zoom/pan is disabled, cache is already at scaled size, no need to scale again */
+            is_scaled_cache = !preview->allow_zoom_pan;
         } else if (preview->view == FILTER_PREVIEW_VIEW_AFTER && preview->after_surface_full) {
             get_surface_size(preview->after_surface_full, &img_width, &img_height);
         } else {
@@ -505,21 +620,33 @@ static gboolean on_preview_draw(GtkWidget* widget, cairo_t* cr,
             img_height = preview->original_height;
         }
 
-        scale =
-            calculate_fit_scale(img_width, img_height, widget_width, widget_height);
+        if (is_scaled_cache) {
+            /* Cache is already scaled to fit widget, draw at 1:1 */
+            draw_x = (widget_width - img_width) / 2.0;
+            draw_y = (widget_height - img_height) / 2.0;
 
-        gdouble scaled_width = img_width * scale;
-        gdouble scaled_height = img_height * scale;
+            cairo_save(cr);
+            cairo_translate(cr, draw_x, draw_y);
+            cairo_set_source_surface(cr, surface, 0, 0);
+            cairo_paint(cr);
+            cairo_restore(cr);
+        } else {
+            /* Calculate scale to fit */
+            scale = calculate_fit_scale(img_width, img_height, widget_width, widget_height);
 
-        draw_x = (widget_width - scaled_width) / 2.0;
-        draw_y = (widget_height - scaled_height) / 2.0;
+            gdouble scaled_width = img_width * scale;
+            gdouble scaled_height = img_height * scale;
 
-        cairo_save(cr);
-        cairo_translate(cr, draw_x, draw_y);
-        cairo_scale(cr, scale, scale);
-        cairo_set_source_surface(cr, surface, 0, 0);
-        cairo_paint(cr);
-        cairo_restore(cr);
+            draw_x = (widget_width - scaled_width) / 2.0;
+            draw_y = (widget_height - scaled_height) / 2.0;
+
+            cairo_save(cr);
+            cairo_translate(cr, draw_x, draw_y);
+            cairo_scale(cr, scale, scale);
+            cairo_set_source_surface(cr, surface, 0, 0);
+            cairo_paint(cr);
+            cairo_restore(cr);
+        }
 
         if (preview->view == FILTER_PREVIEW_VIEW_AFTER && preview->filter_apply_func) {
             g_mutex_unlock(&preview->cache_mutex);
@@ -569,8 +696,8 @@ static gboolean on_preview_button_press(GtkWidget* widget,
         return FALSE;
     }
 
-    /* Only allow panning in 1:1 mode */
-    if (preview->mode != FILTER_PREVIEW_MODE_1TO1) {
+    /* Only allow panning in 1:1 mode and if zoom/pan is enabled */
+    if (preview->mode != FILTER_PREVIEW_MODE_1TO1 || !preview->allow_zoom_pan) {
         return FALSE;
     }
 
@@ -687,6 +814,112 @@ static gboolean on_preview_leave_notify(GtkWidget* widget,
     GdkWindow* window = gtk_widget_get_window(widget);
     if (window) {
         gdk_window_set_cursor(window, NULL);
+    }
+
+    return FALSE;
+}
+
+/**
+ * Realize handler - trigger update when widget is first realized
+ */
+static void on_preview_realize(GtkWidget* widget, gpointer user_data) {
+    FilterPreview* preview = FILTER_PREVIEW(user_data);
+
+    if (!preview || !widget) {
+        return;
+    }
+
+    /* If we have a filter function and need an update, trigger it now that widget is realized */
+    if (preview->filter_apply_func && preview->view == FILTER_PREVIEW_VIEW_AFTER &&
+        preview->before_surface_full) {
+        g_mutex_lock(&preview->cache_mutex);
+        gboolean has_cache = (preview->viewport_cache != NULL);
+        g_mutex_unlock(&preview->cache_mutex);
+
+        if (!has_cache || preview->needs_update) {
+            preview->force_update = TRUE;
+            preview->needs_update = FALSE;
+
+            /* Check if widget is allocated - if so, update directly, otherwise use idle callback */
+            gint widget_width = gtk_widget_get_allocated_width(widget);
+            if (widget_width > 0) {
+                request_viewport_update(preview);
+            } else {
+                /* Widget not allocated yet - use idle callback */
+                g_idle_add(trigger_viewport_update_idle, preview);
+            }
+        }
+    }
+}
+
+/**
+ * Size allocate handler - trigger update when widget is first allocated
+ */
+static gboolean on_preview_size_allocate(GtkWidget* widget, GdkRectangle* allocation, gpointer user_data) {
+    FilterPreview* preview = FILTER_PREVIEW(user_data);
+    gboolean* first_allocate_done;
+
+    (void)allocation;
+
+    if (!preview || !widget) {
+        return FALSE;
+    }
+
+    /* Get or create flag to track if we've handled first allocation */
+    first_allocate_done = (gboolean*)g_object_get_data(G_OBJECT(preview), "first_allocate_done");
+    if (!first_allocate_done) {
+        gboolean* flag = g_new(gboolean, 1);
+        *flag = FALSE;
+        g_object_set_data_full(G_OBJECT(preview), "first_allocate_done", flag, g_free);
+        first_allocate_done = flag;
+    }
+
+    gint widget_width = gtk_widget_get_allocated_width(widget);
+    gint widget_height = gtk_widget_get_allocated_height(widget);
+
+    /* If widget is now allocated and we need an update, trigger it */
+    if (!*first_allocate_done && preview->before_surface_full) {
+        if (widget_width > 0 && widget_height > 0) {
+            /* Always trigger update on first allocation if filter function is set and we're in AFTER view */
+            if (preview->filter_apply_func && preview->view == FILTER_PREVIEW_VIEW_AFTER) {
+                g_mutex_lock(&preview->cache_mutex);
+                gboolean has_cache = (preview->viewport_cache != NULL);
+                gint cached_width = preview->cache_width;
+                gint cached_height = preview->cache_height;
+                g_mutex_unlock(&preview->cache_mutex);
+
+                /* If zoom/pan is disabled, invalidate cache if it was created with wrong widget size */
+                if (has_cache && !preview->allow_zoom_pan) {
+                    /* Calculate what the viewport should be with current widget size */
+                    ViewportRect expected_viewport = calculate_viewport(preview);
+                    if (cached_width != expected_viewport.width || cached_height != expected_viewport.height) {
+                        g_mutex_lock(&preview->cache_mutex);
+                        if (preview->viewport_cache) {
+                            cairo_surface_destroy(preview->viewport_cache);
+                            preview->viewport_cache = NULL;
+                        }
+                        has_cache = FALSE;
+                        g_mutex_unlock(&preview->cache_mutex);
+                    }
+                }
+
+                if (preview->needs_update || !has_cache) {
+                    /* Widget is now allocated, trigger the update */
+                    preview->force_update = TRUE;
+                    preview->needs_update = FALSE;
+                    request_viewport_update(preview);
+                }
+            }
+            *first_allocate_done = TRUE;
+        }
+    } else if (*first_allocate_done && preview->needs_update && preview->filter_apply_func &&
+               preview->view == FILTER_PREVIEW_VIEW_AFTER && preview->before_surface_full) {
+        /* Handle deferred update that was scheduled before first allocation */
+        if (widget_width > 0 && widget_height > 0) {
+            preview->force_update = TRUE;
+            preview->needs_update = FALSE;
+            request_viewport_update(preview);
+        }
     }
 
     return FALSE;
@@ -821,7 +1054,7 @@ static void on_one_to_one_clicked(GtkWidget* widget, gpointer user_data) {
 }
 
 /**
- * Update button states
+ * Update button states and visibility
  */
 static void update_button_states(FilterPreview* preview) {
     if (!preview) {
@@ -832,22 +1065,26 @@ static void update_button_states(FilterPreview* preview) {
     if (preview->before_button) {
         gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(preview->before_button),
                                      preview->view == FILTER_PREVIEW_VIEW_BEFORE);
+        gtk_widget_set_visible(preview->before_button, TRUE);
     }
 
     if (preview->after_button) {
         gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(preview->after_button),
                                      preview->view == FILTER_PREVIEW_VIEW_AFTER);
+        gtk_widget_set_visible(preview->after_button, TRUE);
     }
 
-    /* Update fit/1:1 radio buttons */
+    /* Update fit/1:1 radio buttons - only show if allow_zoom_pan is enabled */
     if (preview->fit_button) {
         gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(preview->fit_button),
                                      preview->mode == FILTER_PREVIEW_MODE_FIT);
+        gtk_widget_set_visible(preview->fit_button, preview->allow_zoom_pan);
     }
 
     if (preview->one_to_one_button) {
         gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(preview->one_to_one_button),
                                      preview->mode == FILTER_PREVIEW_MODE_1TO1);
+        gtk_widget_set_visible(preview->one_to_one_button, preview->allow_zoom_pan);
     }
 }
 
@@ -887,6 +1124,7 @@ static void filter_preview_init(FilterPreview* preview) {
     preview->pan_y = 0.0;
     preview->is_dragging = FALSE;
     preview->updating_buttons = FALSE;
+    preview->allow_zoom_pan = TRUE; /* Default: enabled */
 
     /* Initialize as a vertical box - set orientation during construction */
     gtk_orientable_set_orientation(GTK_ORIENTABLE(preview),
@@ -915,6 +1153,10 @@ static void filter_preview_init(FilterPreview* preview) {
     /* Connect signals */
     g_signal_connect(preview->preview_area, "draw", G_CALLBACK(on_preview_draw),
                      preview);
+    g_signal_connect(preview->preview_area, "realize",
+                     G_CALLBACK(on_preview_realize), preview);
+    g_signal_connect(preview->preview_area, "size-allocate",
+                     G_CALLBACK(on_preview_size_allocate), preview);
     g_signal_connect(preview->preview_area, "button-press-event",
                      G_CALLBACK(on_preview_button_press), preview);
     g_signal_connect(preview->preview_area, "button-release-event",
@@ -1037,6 +1279,52 @@ static void filter_preview_finalize(GObject* object) {
 }
 
 /**
+ * Get property handler
+ */
+static void filter_preview_get_property(GObject* object, guint property_id,
+                                        GValue* value, GParamSpec* pspec) {
+    FilterPreview* preview = FILTER_PREVIEW(object);
+
+    switch (property_id) {
+        case PROP_ALLOW_ZOOM_PAN:
+            g_value_set_boolean(value, preview->allow_zoom_pan);
+            break;
+        default:
+            G_OBJECT_WARN_INVALID_PROPERTY_ID(object, property_id, pspec);
+            break;
+    }
+}
+
+/**
+ * Set property handler
+ */
+static void filter_preview_set_property(GObject* object, guint property_id,
+                                        const GValue* value, GParamSpec* pspec) {
+    FilterPreview* preview = FILTER_PREVIEW(object);
+
+    switch (property_id) {
+        case PROP_ALLOW_ZOOM_PAN: {
+            gboolean new_value = g_value_get_boolean(value);
+            if (preview->allow_zoom_pan != new_value) {
+                preview->allow_zoom_pan = new_value;
+
+                /* If disabling zoom/pan, force FIT mode */
+                if (!new_value && preview->mode == FILTER_PREVIEW_MODE_1TO1) {
+                    filter_preview_set_mode(preview, FILTER_PREVIEW_MODE_FIT);
+                }
+
+                /* Update button visibility */
+                update_button_states(preview);
+            }
+            break;
+        }
+        default:
+            G_OBJECT_WARN_INVALID_PROPERTY_ID(object, property_id, pspec);
+            break;
+    }
+}
+
+/**
  * Class initialization
  */
 static void filter_preview_class_init(FilterPreviewClass* klass) {
@@ -1044,6 +1332,16 @@ static void filter_preview_class_init(FilterPreviewClass* klass) {
 
     object_class->dispose = filter_preview_dispose;
     object_class->finalize = filter_preview_finalize;
+    object_class->get_property = filter_preview_get_property;
+    object_class->set_property = filter_preview_set_property;
+
+    /* Install allow_zoom_pan property */
+    g_object_class_install_property(
+        object_class, PROP_ALLOW_ZOOM_PAN,
+        g_param_spec_boolean("allow-zoom-pan", "Allow Zoom/Pan",
+                             "Allow zoom and pan (1:1 mode) in filter preview",
+                             TRUE, /* Default: enabled */
+                             G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 }
 
 /**
@@ -1072,9 +1370,35 @@ void filter_preview_set_before_surface(FilterPreview* preview, cairo_surface_t* 
         preview->original_height = cairo_image_surface_get_height(surface);
     } else {
         preview->before_surface_full = NULL;
+        preview->original_width = 0;
+        preview->original_height = 0;
     }
 
-    gtk_widget_queue_draw(preview->preview_area);
+    /* Force immediate redraw - use show_all to ensure widget is allocated if needed */
+    if (preview->preview_area) {
+        if (!gtk_widget_get_visible(preview->preview_area)) {
+            gtk_widget_show_all(GTK_WIDGET(preview));
+        }
+        gtk_widget_queue_draw(preview->preview_area);
+    }
+
+    /* If we have a filter function set and we're in AFTER view, trigger viewport update */
+    if (preview->filter_apply_func && preview->view == FILTER_PREVIEW_VIEW_AFTER && surface) {
+        /* Invalidate cache to force update */
+        if (preview->viewport_cache) {
+            cairo_surface_destroy(preview->viewport_cache);
+            preview->viewport_cache = NULL;
+        }
+        preview->force_update = TRUE;
+
+        /* Try to update immediately if widget is allocated, otherwise schedule for later */
+        if (preview->preview_area && gtk_widget_get_allocated_width(preview->preview_area) > 0) {
+            request_viewport_update(preview);
+        } else {
+            preview->needs_update = TRUE;
+            g_idle_add(trigger_viewport_update_idle, preview);
+        }
+    }
 }
 
 /**
@@ -1105,6 +1429,11 @@ void filter_preview_set_after_surface(FilterPreview* preview,
 void filter_preview_set_mode(FilterPreview* preview, FilterPreviewMode mode) {
     if (!preview) {
         return;
+    }
+
+    /* Prevent switching to 1:1 mode if zoom/pan is disabled */
+    if (mode == FILTER_PREVIEW_MODE_1TO1 && !preview->allow_zoom_pan) {
+        mode = FILTER_PREVIEW_MODE_FIT;
     }
 
     preview->mode = mode;
@@ -1197,6 +1526,53 @@ void filter_preview_refresh(FilterPreview* preview) {
 /**
  * Set the filter function to apply
  */
+/**
+ * Timeout callback to trigger viewport update when widget is ready
+ * Uses a small delay to ensure dialog is shown and widget is allocated
+ */
+static gboolean trigger_viewport_update_timeout(gpointer user_data) {
+    FilterPreview* preview = FILTER_PREVIEW(user_data);
+
+    if (preview && preview->filter_apply_func && preview->view == FILTER_PREVIEW_VIEW_AFTER &&
+        preview->before_surface_full) {
+        /* Force update - widget should be allocated by now */
+        preview->force_update = TRUE;
+        preview->needs_update = FALSE;
+        request_viewport_update(preview);
+    }
+    return G_SOURCE_REMOVE;
+}
+
+/**
+ * Idle callback to trigger viewport update when widget is ready
+ */
+static gboolean trigger_viewport_update_idle(gpointer user_data) {
+    FilterPreview* preview = FILTER_PREVIEW(user_data);
+
+    if (preview && preview->filter_apply_func && preview->view == FILTER_PREVIEW_VIEW_AFTER &&
+        preview->before_surface_full) {
+        /* Check if widget is now allocated */
+        gint widget_width = 0;
+        if (preview->preview_area) {
+            widget_width = gtk_widget_get_allocated_width(preview->preview_area);
+        }
+
+        if (widget_width > 0) {
+            /* Widget is allocated, trigger update */
+            preview->force_update = TRUE;
+            preview->needs_update = FALSE;
+            request_viewport_update(preview);
+            return G_SOURCE_REMOVE;
+        } else {
+            /* Widget still not allocated, use timeout as fallback */
+            preview->needs_update = TRUE;
+            g_timeout_add(100, trigger_viewport_update_timeout, preview);
+            return G_SOURCE_REMOVE;
+        }
+    }
+    return G_SOURCE_REMOVE;
+}
+
 void filter_preview_set_filter_function(FilterPreview* preview,
                                         FilterApplyFunc filter_func,
                                         gpointer params) {
@@ -1216,6 +1592,40 @@ void filter_preview_set_filter_function(FilterPreview* preview,
     /* Force update even if viewport rectangle hasn't changed */
     preview->force_update = TRUE;
 
-    /* Request immediate update */
-    request_viewport_update(preview);
+    /* Check widget allocation status */
+    gint widget_width = 0;
+    if (preview->preview_area) {
+        widget_width = gtk_widget_get_allocated_width(preview->preview_area);
+    }
+
+    /* Request immediate update - try now, and if widget isn't ready, schedule for later */
+    if (preview->preview_area && widget_width > 0 &&
+        preview->before_surface_full) {
+        request_viewport_update(preview);
+    } else {
+        /* Widget not allocated yet or no before surface - schedule update for when ready */
+        preview->needs_update = TRUE;
+        /* Use idle callback to try again once GTK has processed pending events */
+        g_idle_add(trigger_viewport_update_idle, preview);
+    }
+}
+
+/**
+ * Get allow_zoom_pan property
+ */
+gboolean filter_preview_get_allow_zoom_pan(FilterPreview* preview) {
+    if (!preview) {
+        return TRUE; /* Default */
+    }
+    return preview->allow_zoom_pan;
+}
+
+/**
+ * Set allow_zoom_pan property
+ */
+void filter_preview_set_allow_zoom_pan(FilterPreview* preview, gboolean allow) {
+    if (!preview) {
+        return;
+    }
+    g_object_set(G_OBJECT(preview), "allow-zoom-pan", allow, NULL);
 }

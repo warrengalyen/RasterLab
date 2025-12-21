@@ -101,4 +101,20 @@ void filter_preview_set_filter_function(FilterPreview* preview,
                                         FilterApplyFunc filter_func,
                                         gpointer params);
 
+/**
+ * Get allow_zoom_pan property
+ * @param preview The filter preview widget
+ * @return TRUE if zoom/pan (1:1 mode) is allowed, FALSE otherwise
+ */
+gboolean filter_preview_get_allow_zoom_pan(FilterPreview* preview);
+
+/**
+ * Set allow_zoom_pan property
+ * When disabled, only FIT mode is available and only Before/After buttons are shown.
+ * This is useful for CPU-intensive filters to avoid long update times.
+ * @param preview The filter preview widget
+ * @param allow TRUE to allow zoom/pan, FALSE to disable it
+ */
+void filter_preview_set_allow_zoom_pan(FilterPreview* preview, gboolean allow);
+
 #endif /* FILTER_PREVIEW_H */

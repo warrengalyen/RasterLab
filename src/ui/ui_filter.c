@@ -355,12 +355,32 @@ gboolean ui_apply_layer_filter_with_value(AppContext* ctx,
 /**
  * Show a filter dialog and get user values
  */
+/* Forward declaration */
+gint ui_show_filter_dialog_with_zoom_pan(AppContext* ctx,
+                                         const gchar* title,
+                                         FilterControlParam* controls,
+                                         gint num_controls,
+                                         FilterDialogPreviewCallback preview_callback,
+                                         gdouble* values,
+                                         gboolean allow_zoom_pan);
+
 gint ui_show_filter_dialog(AppContext* ctx,
                            const gchar* title,
                            FilterControlParam* controls,
                            gint num_controls,
                            FilterDialogPreviewCallback preview_callback,
                            gdouble* values) {
+    return ui_show_filter_dialog_with_zoom_pan(ctx, title, controls, num_controls,
+                                               preview_callback, values, TRUE);
+}
+
+gint ui_show_filter_dialog_with_zoom_pan(AppContext* ctx,
+                                         const gchar* title,
+                                         FilterControlParam* controls,
+                                         gint num_controls,
+                                         FilterDialogPreviewCallback preview_callback,
+                                         gdouble* values,
+                                         gboolean allow_zoom_pan) {
     ImageDocument* doc;
     ImageLayer* layer;
     FilterDialog* dialog;
@@ -391,6 +411,12 @@ gint ui_show_filter_dialog(AppContext* ctx,
     if (!dialog) {
         g_warning("Failed to create filter dialog");
         return GTK_RESPONSE_CANCEL;
+    }
+
+    /* Set allow_zoom_pan property on preview widget */
+    FilterPreview* preview = filter_dialog_get_preview(dialog);
+    if (preview) {
+        filter_preview_set_allow_zoom_pan(preview, allow_zoom_pan);
     }
 
     /* Create a copy of the layer for preview */
