@@ -177,8 +177,30 @@ void command_stack_clear(CommandStack* stack);
 void command_stack_free(CommandStack* stack);
 
 /**
+ * Tile undo delta structure
+ * Stores before/after snapshots for a single tile-sized region of a layer
+ */
+typedef struct {
+    gint tile_x;             /* Tile X coordinate (grid position) */
+    gint tile_y;             /* Tile Y coordinate (grid position) */
+    cairo_surface_t* before; /* Snapshot of tile region before modification */
+    cairo_surface_t* after;  /* Snapshot of tile region after modification */
+} TileUndoDelta;
+
+/**
+ * Tile undo command data structure
+ * Stores tile-level deltas for delta-based undo/redo
+ * This replaces full layer snapshots with region-based snapshots for memory efficiency
+ */
+typedef struct {
+    struct ImageLayer* layer; /* Layer being modified */
+    gint tile_size;           /* Tile size used for region division */
+    GPtrArray* tile_deltas;   /* Array of TileUndoDelta* pointers */
+} TileUndoCommandData;
+
+/**
  * Draw command data structure
- * Stores layer snapshots for undo/redo
+ * Stores layer snapshots for undo/redo (legacy, used by filters that modify entire layers)
  */
 typedef struct {
     struct ImageLayer* layer;         /* Layer being drawn on */
@@ -187,7 +209,51 @@ typedef struct {
 } DrawCommandData;
 
 /**
- * Create a draw command
+ * Tile undo transaction state (internal, for tracking modifications during a stroke)
+ */
+typedef struct _TileUndoTransaction TileUndoTransaction;
+
+/**
+ * Begin a tile-based undo transaction
+ * Tracks which tile regions are modified during a drawing operation
+ * @param layer The layer being modified
+ * @param doc The document (for tile_size)
+ * @param name The command name
+ * @return Transaction handle, or NULL on failure
+ */
+TileUndoTransaction* tile_undo_transaction_begin(struct ImageLayer* layer,
+                                                 struct ImageDocument* doc,
+                                                 const gchar* name);
+
+/**
+ * Register a tile region as modified (captures "before" state on first call)
+ * @param transaction Transaction handle
+ * @param doc The document (for tile_size)
+ * @param layer_x X coordinate in layer space
+ * @param layer_y Y coordinate in layer space
+ * @return TRUE if successful, FALSE on error
+ */
+gboolean tile_undo_transaction_register_tile(TileUndoTransaction* transaction,
+                                             struct ImageDocument* doc,
+                                             gint layer_x,
+                                             gint layer_y);
+
+/**
+ * Commit a tile-based undo transaction (captures "after" state and creates command)
+ * @param transaction Transaction handle
+ * @return Created Command, or NULL on failure. Transaction is invalid after this call.
+ */
+Command* tile_undo_transaction_commit(TileUndoTransaction* transaction);
+
+/**
+ * Cancel a tile-based undo transaction (frees resources without creating command)
+ * @param transaction Transaction handle
+ */
+void tile_undo_transaction_cancel(TileUndoTransaction* transaction);
+
+/**
+ * Create a draw command (legacy, uses full layer snapshots)
+ * Used for filters and operations that modify entire layers
  * @param layer The layer being drawn on
  * @param name The command name (can be NULL for default, or use command_get_name_string for predefined names)
  * @return Newly created Command for drawing, or NULL on failure

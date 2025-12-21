@@ -4,6 +4,7 @@
 #include "render/compositor.h"
 #include "render/dirty.h"
 #include "render/layer.h"
+#include "render/tile.h"
 #include "tool_options.h"
 #include <math.h>
 #include <stdio.h>
@@ -18,11 +19,11 @@ extern void ui_update_window_title(AppContext* ctx);
  * Eraser Tool state
  */
 typedef struct {
-    gboolean is_erasing;             /* Currently erasing? */
-    gint last_x;                     /* Last mouse X position */
-    gint last_y;                     /* Last mouse Y position */
-    struct ImageLayer* active_layer; /* Layer being erased from */
-    Command* current_command;        /* Current erase command for undo */
+    gboolean is_erasing;              /* Currently erasing? */
+    gint last_x;                      /* Last mouse X position */
+    gint last_y;                      /* Last mouse Y position */
+    struct ImageLayer* active_layer;  /* Layer being erased from */
+    TileUndoTransaction* transaction; /* Tile-based undo transaction */
 } EraserToolState;
 
 /**
@@ -136,6 +137,55 @@ static void eraser_erase_line(cairo_surface_t* surface, gdouble x1, gdouble y1,
 }
 
 /**
+ * Register all tiles that an eraser stroke bounding box intersects
+ * Helper function to ensure all affected tiles are captured for undo
+ */
+static void eraser_register_tiles_for_bounding_box(TileUndoTransaction* transaction,
+                                                   struct ImageDocument* doc,
+                                                   struct ImageLayer* layer,
+                                                   gint layer_x1, gint layer_y1,
+                                                   gint layer_x2, gint layer_y2,
+                                                   gfloat eraser_size) {
+    if (!transaction || !doc || !layer) {
+        return;
+    }
+
+    gint tile_size = doc->tile_grid ? doc->tile_grid->tile_size : 128;
+    gdouble radius = eraser_size / 2.0;
+
+    /* Calculate bounding box of stroke accounting for eraser radius */
+    gint min_x = ((layer_x1 < layer_x2) ? layer_x1 : layer_x2) - (gint)radius - 1;
+    gint max_x = ((layer_x1 > layer_x2) ? layer_x1 : layer_x2) + (gint)radius + 1;
+    gint min_y = ((layer_y1 < layer_y2) ? layer_y1 : layer_y2) - (gint)radius - 1;
+    gint max_y = ((layer_y1 > layer_y2) ? layer_y1 : layer_y2) + (gint)radius + 1;
+
+    /* Clamp to layer bounds */
+    if (min_x < 0)
+        min_x = 0;
+    if (min_y < 0)
+        min_y = 0;
+    if (max_x >= (gint)layer->width)
+        max_x = layer->width - 1;
+    if (max_y >= (gint)layer->height)
+        max_y = layer->height - 1;
+
+    /* Calculate tile bounds */
+    gint start_tile_x = min_x / tile_size;
+    gint start_tile_y = min_y / tile_size;
+    gint end_tile_x = max_x / tile_size;
+    gint end_tile_y = max_y / tile_size;
+
+    /* Register all tiles in the bounding box */
+    for (gint ty = start_tile_y; ty <= end_tile_y; ty++) {
+        for (gint tx = start_tile_x; tx <= end_tile_x; tx++) {
+            gint sample_x = tx * tile_size + tile_size / 2;
+            gint sample_y = ty * tile_size + tile_size / 2;
+            tile_undo_transaction_register_tile(transaction, doc, sample_x, sample_y);
+        }
+    }
+}
+
+/**
  * Erase a single dot (for initial mouse down)
  */
 static void eraser_erase_dot(cairo_surface_t* surface, gint x, gint y) {
@@ -194,13 +244,26 @@ static void eraser_tool_mouse_down(Tool* tool, struct ImageDocument* doc, MouseE
     state->last_y = event->y;
     state->active_layer = active_layer;
 
-    /* CRITICAL: Create erase command BEFORE any erasing - captures the "before" state */
-    state->current_command = command_create_draw(active_layer,
-                                                 command_get_name_string(CMD_NAME_ERASE));
+    /* CRITICAL: Begin tile-based undo transaction BEFORE any erasing */
+    state->transaction = tile_undo_transaction_begin(active_layer,
+                                                     doc,
+                                                     command_get_name_string(CMD_NAME_ERASE));
+    if (!state->transaction) {
+        state->is_erasing = FALSE;
+        return;
+    }
 
     /* Erase initial dot at mouse down position */
     gint layer_x = event->x - active_layer->offset_x;
     gint layer_y = event->y - active_layer->offset_y;
+
+    /* Register all tiles that the initial eraser dot will affect */
+    ToolOptions* opts = tool_options_get_for_tool(tool->type);
+    gfloat eraser_size = opts ? opts->size : 5.0f;
+    eraser_register_tiles_for_bounding_box(state->transaction, doc, active_layer,
+                                           layer_x, layer_y,
+                                           layer_x, layer_y,
+                                           eraser_size);
 
     eraser_erase_dot(active_layer->surface, layer_x, layer_y);
 
@@ -211,8 +274,7 @@ static void eraser_tool_mouse_down(Tool* tool, struct ImageDocument* doc, MouseE
     active_layer->cache_dirty = TRUE;
 
     /* Mark initial dot area as dirty */
-    ToolOptions* opts = tool_options_get_for_tool(tool->type);
-    gfloat eraser_size = opts ? opts->size : 5.0f;
+    /* opts and eraser_size already declared above */
     gint margin = (gint)(eraser_size / 2.0f) + 3;
     DirtyRect dirty_rect;
     dirty_rect_set(&dirty_rect, event->x - margin, event->y - margin,
@@ -246,19 +308,36 @@ static void eraser_tool_mouse_move(Tool* tool, struct ImageDocument* doc,
     active_layer = document_get_selected_layer(doc);
     if (!active_layer || !active_layer->surface) {
         // printf("Eraser tool: selected layer deleted during erasing\n");
+        /* Cancel transaction if layer was deleted */
+        if (state->transaction) {
+            tile_undo_transaction_cancel(state->transaction);
+            state->transaction = NULL;
+        }
         state->is_erasing = FALSE;
         return;
     }
 
     /* Erase line from last position to current,
        adjusted for layer offset */
-    gdouble layer_x1 = (gdouble)(state->last_x - active_layer->offset_x);
-    gdouble layer_y1 = (gdouble)(state->last_y - active_layer->offset_y);
-    gdouble layer_x2 = (gdouble)(event->x - active_layer->offset_x);
-    gdouble layer_y2 = (gdouble)(event->y - active_layer->offset_y);
+    gint layer_x1 = state->last_x - active_layer->offset_x;
+    gint layer_y1 = state->last_y - active_layer->offset_y;
+    gint layer_x2 = event->x - active_layer->offset_x;
+    gint layer_y2 = event->y - active_layer->offset_y;
 
-    eraser_erase_line(active_layer->surface, layer_x1, layer_y1, layer_x2,
-                      layer_y2);
+    /* Get eraser size for tile registration and dirty rect calculation */
+    ToolOptions* opts = tool_options_get_for_tool(tool->type);
+    gfloat eraser_size = opts ? opts->size : 5.0f;
+
+    /* Register all tiles that this stroke segment will affect */
+    if (state->transaction) {
+        eraser_register_tiles_for_bounding_box(state->transaction, doc, active_layer,
+                                               layer_x1, layer_y1,
+                                               layer_x2, layer_y2,
+                                               eraser_size);
+    }
+
+    eraser_erase_line(active_layer->surface, (gdouble)layer_x1, (gdouble)layer_y1,
+                      (gdouble)layer_x2, (gdouble)layer_y2);
 
     /* CRITICAL: Flush Cairo surface to ensure drawing is written to pixel buffer
        Worker threads will read the raw pixels, so we must flush first */
@@ -271,8 +350,7 @@ static void eraser_tool_mouse_move(Tool* tool, struct ImageDocument* doc,
 
     /* Calculate dirty rectangle BEFORE updating last_x/y
        Use the previous position and current position */
-    ToolOptions* opts = tool_options_get_for_tool(tool->type);
-    gfloat eraser_size = opts ? opts->size : 5.0f;
+    /* eraser_size already declared above */
     gint margin = (gint)(eraser_size / 2.0f) + 3; /* Add margin for anti-aliasing */
 
     /* Calculate bounding box of stroke in document coordinates
@@ -320,15 +398,16 @@ static void eraser_tool_mouse_up(Tool* tool, struct ImageDocument* doc, MouseEve
         return;
     }
 
-    /* Finalize erase command - captures the "after" state */
-    if (state->current_command) {
-        command_finalize_draw(state->current_command);
+    /* Commit tile-based undo transaction (captures "after" state and creates command) */
+    Command* cmd = NULL;
+    if (state->transaction) {
+        cmd = tile_undo_transaction_commit(state->transaction);
+        state->transaction = NULL;
     }
 
-    /* Push erase command to undo stack */
-    if (state->current_command && doc->undo_stack) {
-        command_stack_push(doc->undo_stack, state->current_command);
-        // printf("Eraser tool: erase command pushed to undo stack\n");
+    /* Push command to undo stack */
+    if (cmd && doc->undo_stack) {
+        command_stack_push(doc->undo_stack, cmd);
 
         /* Clear redo stack */
         if (doc->redo_stack) {
@@ -341,13 +420,15 @@ static void eraser_tool_mouse_up(Tool* tool, struct ImageDocument* doc, MouseEve
             ui_update_menu_and_button_states(ctx);
             ui_update_window_title(ctx);
         }
+    } else if (cmd) {
+        /* No undo stack, free the command */
+        command_free(cmd);
     }
 
     /* Mark document as modified */
     doc->modified = TRUE;
 
     state->is_erasing = FALSE;
-    state->current_command = NULL;
     state->active_layer = NULL;
 
     // printf("Eraser tool: finished erasing\n");

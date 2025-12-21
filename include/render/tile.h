@@ -128,4 +128,48 @@ void tile_mark_dirty_for_thread_pool(Tile* tile);
  */
 gboolean tile_apply_completed_result(Tile* tile, cairo_surface_t* new_surface, guint generation_id);
 
+/**
+ * Tile snapshot helpers for delta-based undo system
+ * These functions work with tile-sized regions of layer surfaces
+ */
+
+/**
+ * Create a snapshot of a tile-sized region from a layer surface
+ * Used for delta-based undo to capture "before" or "after" state of a modified region
+ * @param layer_surface The layer surface to snapshot from
+ * @param tile_x Tile X coordinate (grid position)
+ * @param tile_y Tile Y coordinate (grid position)
+ * @param tile_size Size of each tile
+ * @param layer_width Width of the layer (for bounds checking)
+ * @param layer_height Height of the layer (for bounds checking)
+ * @return New Cairo surface containing the snapshot, or NULL on error
+ *         Caller must call cairo_surface_destroy() when done.
+ */
+cairo_surface_t* tile_snapshot_create(cairo_surface_t* layer_surface,
+                                      gint tile_x,
+                                      gint tile_y,
+                                      gint tile_size,
+                                      guint layer_width,
+                                      guint layer_height);
+
+/**
+ * Apply a tile snapshot to a layer surface (restore region from snapshot)
+ * Used for undo/redo operations to restore a tile-sized region
+ * @param layer_surface The layer surface to restore to
+ * @param snapshot The snapshot surface to restore from
+ * @param tile_x Tile X coordinate (grid position)
+ * @param tile_y Tile Y coordinate (grid position)
+ * @param tile_size Size of each tile
+ * @param layer_width Width of the layer (for bounds checking)
+ * @param layer_height Height of the layer (for bounds checking)
+ * @return TRUE on success, FALSE on error
+ */
+gboolean tile_snapshot_apply(cairo_surface_t* layer_surface,
+                             cairo_surface_t* snapshot,
+                             gint tile_x,
+                             gint tile_y,
+                             gint tile_size,
+                             guint layer_width,
+                             guint layer_height);
+
 #endif /* TILE_H */

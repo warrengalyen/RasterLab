@@ -386,3 +386,129 @@ gboolean tile_apply_completed_result(Tile* tile, cairo_surface_t* new_surface, g
 
     return TRUE;
 }
+
+/**
+ * Tile snapshot helpers for delta-based undo system
+ * These functions work with tile-sized regions of layer surfaces
+ */
+
+/**
+ * Create a snapshot of a tile-sized region from a layer surface
+ * Used for delta-based undo to capture "before" or "after" state of a modified region
+ */
+cairo_surface_t* tile_snapshot_create(cairo_surface_t* layer_surface,
+                                      gint tile_x,
+                                      gint tile_y,
+                                      gint tile_size,
+                                      guint layer_width,
+                                      guint layer_height) {
+    gint src_x, src_y;
+    gint region_w, region_h;
+    cairo_surface_t* snapshot;
+    cairo_t* cr;
+    cairo_format_t format;
+
+    if (!layer_surface || tile_size <= 0) {
+        return NULL;
+    }
+
+    /* Calculate source coordinates in layer space */
+    src_x = tile_x * tile_size;
+    src_y = tile_y * tile_size;
+
+    /* Calculate actual region size (may be smaller at edges) */
+    region_w = (src_x + tile_size > (gint)layer_width) ? ((gint)layer_width - src_x) : tile_size;
+    region_h = (src_y + tile_size > (gint)layer_height) ? ((gint)layer_height - src_y) : tile_size;
+
+    /* Bounds check */
+    if (src_x < 0 || src_y < 0 || region_w <= 0 || region_h <= 0 ||
+        src_x >= (gint)layer_width || src_y >= (gint)layer_height) {
+        return NULL;
+    }
+
+    /* Get format from source surface */
+    format = cairo_image_surface_get_format(layer_surface);
+    if (format != CAIRO_FORMAT_ARGB32 && format != CAIRO_FORMAT_RGB24) {
+        format = CAIRO_FORMAT_ARGB32; /* Default to ARGB32 */
+    }
+
+    /* Create snapshot surface with the same format */
+    snapshot = cairo_image_surface_create(format, region_w, region_h);
+    if (cairo_surface_status(snapshot) != CAIRO_STATUS_SUCCESS) {
+        cairo_surface_destroy(snapshot);
+        return NULL;
+    }
+
+    /* Copy the region from layer surface to snapshot */
+    cr = cairo_create(snapshot);
+    if (!cr) {
+        cairo_surface_destroy(snapshot);
+        return NULL;
+    }
+
+    /* Set source to the layer surface, offset to the tile region */
+    cairo_set_source_surface(cr, layer_surface, -src_x, -src_y);
+    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+    cairo_paint(cr);
+    cairo_destroy(cr);
+
+    /* Flush to ensure all operations are complete */
+    cairo_surface_flush(snapshot);
+
+    return snapshot;
+}
+
+/**
+ * Apply a tile snapshot to a layer surface (restore region from snapshot)
+ * Used for undo/redo operations to restore a tile-sized region
+ */
+gboolean tile_snapshot_apply(cairo_surface_t* layer_surface,
+                             cairo_surface_t* snapshot,
+                             gint tile_x,
+                             gint tile_y,
+                             gint tile_size,
+                             guint layer_width,
+                             guint layer_height) {
+    gint dest_x, dest_y;
+    gint snapshot_w, snapshot_h;
+    cairo_t* cr;
+
+    if (!layer_surface || !snapshot || tile_size <= 0) {
+        return FALSE;
+    }
+
+    /* Calculate destination coordinates in layer space */
+    dest_x = tile_x * tile_size;
+    dest_y = tile_y * tile_size;
+
+    /* Get snapshot dimensions */
+    snapshot_w = cairo_image_surface_get_width(snapshot);
+    snapshot_h = cairo_image_surface_get_height(snapshot);
+
+    /* Bounds check */
+    if (dest_x < 0 || dest_y < 0 ||
+        dest_x >= (gint)layer_width || dest_y >= (gint)layer_height) {
+        return FALSE;
+    }
+
+    /* Create Cairo context for layer surface */
+    cr = cairo_create(layer_surface);
+    if (!cr) {
+        return FALSE;
+    }
+
+    /* Copy snapshot to the tile region in layer surface */
+    cairo_set_source_surface(cr, snapshot, dest_x, dest_y);
+    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+
+    /* Paint only the valid region (may be smaller at edges) */
+    cairo_rectangle(cr, dest_x, dest_y, snapshot_w, snapshot_h);
+    cairo_fill(cr);
+
+    cairo_destroy(cr);
+
+    /* Flush to ensure all operations are complete */
+    cairo_surface_flush(layer_surface);
+
+    return TRUE;
+}

@@ -519,6 +519,423 @@ gboolean command_finalize_draw(Command* cmd) {
 }
 
 /**
+ * Tile undo transaction structure (internal)
+ * Tracks which tile regions are modified during a drawing operation
+ */
+struct _TileUndoTransaction {
+    struct ImageLayer* layer;   /* Layer being modified */
+    struct ImageDocument* doc;  /* Document (for tile_size) */
+    gint tile_size;             /* Tile size for region division */
+    gchar* name;                /* Command name */
+    GHashTable* modified_tiles; /* Hash table: (tile_x << 16 | tile_y) -> TileUndoDelta* */
+                                /* Tracks which tiles have been touched (first time only) */
+};
+
+/**
+ * Hash function for tile coordinates
+ */
+static guint tile_coord_hash(gconstpointer key) {
+    return GPOINTER_TO_UINT(key);
+}
+
+/**
+ * Equality function for tile coordinates
+ */
+static gboolean tile_coord_equal(gconstpointer a, gconstpointer b) {
+    return a == b;
+}
+
+/**
+ * Tile undo command apply callback (restore to "after" state for redo)
+ */
+static void tile_undo_command_apply(Command* cmd, struct ImageDocument* doc) {
+    TileUndoCommandData* data;
+    gboolean layer_found = FALSE;
+    guint i;
+
+    if (!cmd || !cmd->user_data || !doc) {
+        return;
+    }
+
+    data = (TileUndoCommandData*)cmd->user_data;
+
+    if (!data->layer || !data->layer->surface || !data->tile_deltas) {
+        return;
+    }
+
+    /* Verify that the layer still exists in the document */
+    if (doc->layers) {
+        for (GList* iter = doc->layers; iter; iter = iter->next) {
+            if (iter->data == data->layer) {
+                layer_found = TRUE;
+                break;
+            }
+        }
+    }
+
+    if (!layer_found) {
+        return;
+    }
+
+    /* Apply "after" snapshot to each modified tile region */
+    for (i = 0; i < data->tile_deltas->len; i++) {
+        TileUndoDelta* delta = (TileUndoDelta*)g_ptr_array_index(data->tile_deltas, i);
+        if (delta && delta->after) {
+            tile_snapshot_apply(data->layer->surface,
+                                delta->after,
+                                delta->tile_x,
+                                delta->tile_y,
+                                data->tile_size,
+                                data->layer->width,
+                                data->layer->height);
+        }
+    }
+
+    /* Mark layer cache as dirty since pixels changed */
+    layer_invalidate_cache(data->layer);
+
+    /* Mark composite as dirty and invalidate affected tiles */
+    if (doc && doc->tile_grid && data->layer) {
+        for (i = 0; i < data->tile_deltas->len; i++) {
+            TileUndoDelta* delta = (TileUndoDelta*)g_ptr_array_index(data->tile_deltas, i);
+            if (delta) {
+                /* Convert layer tile coordinates to document coordinates */
+                gint doc_x = data->layer->offset_x + (delta->tile_x * data->tile_size);
+                gint doc_y = data->layer->offset_y + (delta->tile_y * data->tile_size);
+                tile_grid_mark_rect_dirty(doc->tile_grid, doc_x, doc_y,
+                                          data->tile_size, data->tile_size);
+            }
+        }
+        doc->composite_dirty = TRUE;
+    }
+}
+
+/**
+ * Tile undo command revert callback (restore to "before" state for undo)
+ */
+static void tile_undo_command_revert(Command* cmd, struct ImageDocument* doc) {
+    TileUndoCommandData* data;
+    gboolean layer_found = FALSE;
+    guint i;
+
+    if (!cmd || !cmd->user_data || !doc) {
+        return;
+    }
+
+    data = (TileUndoCommandData*)cmd->user_data;
+
+    if (!data->layer || !data->layer->surface || !data->tile_deltas) {
+        return;
+    }
+
+    /* Verify that the layer still exists in the document */
+    if (doc->layers) {
+        for (GList* iter = doc->layers; iter; iter = iter->next) {
+            if (iter->data == data->layer) {
+                layer_found = TRUE;
+                break;
+            }
+        }
+    }
+
+    if (!layer_found) {
+        return;
+    }
+
+    /* Apply "before" snapshot to each modified tile region */
+    for (i = 0; i < data->tile_deltas->len; i++) {
+        TileUndoDelta* delta = (TileUndoDelta*)g_ptr_array_index(data->tile_deltas, i);
+        if (delta && delta->before) {
+            tile_snapshot_apply(data->layer->surface,
+                                delta->before,
+                                delta->tile_x,
+                                delta->tile_y,
+                                data->tile_size,
+                                data->layer->width,
+                                data->layer->height);
+        }
+    }
+
+    /* Mark layer cache as dirty since pixels changed */
+    layer_invalidate_cache(data->layer);
+
+    /* Mark composite as dirty and invalidate affected tiles */
+    if (doc && doc->tile_grid && data->layer) {
+        for (i = 0; i < data->tile_deltas->len; i++) {
+            TileUndoDelta* delta = (TileUndoDelta*)g_ptr_array_index(data->tile_deltas, i);
+            if (delta) {
+                /* Convert layer tile coordinates to document coordinates */
+                gint doc_x = data->layer->offset_x + (delta->tile_x * data->tile_size);
+                gint doc_y = data->layer->offset_y + (delta->tile_y * data->tile_size);
+                tile_grid_mark_rect_dirty(doc->tile_grid, doc_x, doc_y,
+                                          data->tile_size, data->tile_size);
+            }
+        }
+        doc->composite_dirty = TRUE;
+    }
+}
+
+/**
+ * Tile undo command destroy callback
+ */
+static void tile_undo_command_destroy(Command* cmd) {
+    TileUndoCommandData* data;
+    guint i;
+
+    if (!cmd || !cmd->user_data) {
+        return;
+    }
+
+    data = (TileUndoCommandData*)cmd->user_data;
+
+    /* Free all tile deltas */
+    if (data->tile_deltas) {
+        for (i = 0; i < data->tile_deltas->len; i++) {
+            TileUndoDelta* delta = (TileUndoDelta*)g_ptr_array_index(data->tile_deltas, i);
+            if (delta) {
+                if (delta->before) {
+                    cairo_surface_destroy(delta->before);
+                }
+                if (delta->after) {
+                    cairo_surface_destroy(delta->after);
+                }
+                g_free(delta);
+            }
+        }
+        g_ptr_array_free(data->tile_deltas, TRUE);
+    }
+
+    g_free(data);
+}
+
+/**
+ * Begin a tile-based undo transaction
+ */
+TileUndoTransaction* tile_undo_transaction_begin(struct ImageLayer* layer,
+                                                 struct ImageDocument* doc,
+                                                 const gchar* name) {
+    TileUndoTransaction* transaction;
+
+    if (!layer || !layer->surface || !doc) {
+        return NULL;
+    }
+
+    /* Get tile size from document (use default if no tile grid exists yet) */
+    gint tile_size = doc->tile_grid ? doc->tile_grid->tile_size : 128;
+
+    transaction = (TileUndoTransaction*)g_malloc0(sizeof(TileUndoTransaction));
+    transaction->layer = layer;
+    transaction->doc = doc;
+    transaction->tile_size = tile_size;
+    transaction->name = g_strdup(name ? name : command_get_name_string(CMD_NAME_DRAW_BRUSH_STROKE));
+
+    /* Create hash table to track modified tiles */
+    transaction->modified_tiles = g_hash_table_new_full(
+        tile_coord_hash,
+        tile_coord_equal,
+        NULL,                    /* key destroy func (not needed, keys are integers) */
+        (GDestroyNotify)g_free); /* value destroy func (TileUndoDelta*) */
+
+    return transaction;
+}
+
+/**
+ * Register a tile region as modified (captures "before" state on first call)
+ */
+gboolean tile_undo_transaction_register_tile(TileUndoTransaction* transaction,
+                                             struct ImageDocument* doc,
+                                             gint layer_x,
+                                             gint layer_y) {
+    gint tile_x, tile_y;
+    guint tile_key;
+    TileUndoDelta* delta;
+
+    if (!transaction || !transaction->layer || !transaction->layer->surface) {
+        return FALSE;
+    }
+
+    /* Convert layer pixel coordinates to tile coordinates */
+    tile_x = layer_x / transaction->tile_size;
+    tile_y = layer_y / transaction->tile_size;
+
+    /* Create hash key from tile coordinates */
+    tile_key = (guint)((tile_x << 16) | (tile_y & 0xFFFF));
+    gpointer key = GUINT_TO_POINTER(tile_key);
+
+    /* Check if this tile has already been registered */
+    if (g_hash_table_contains(transaction->modified_tiles, key)) {
+        return TRUE; /* Already registered, no need to capture again */
+    }
+
+    /* Create new delta and capture "before" snapshot */
+    delta = (TileUndoDelta*)g_malloc0(sizeof(TileUndoDelta));
+    delta->tile_x = tile_x;
+    delta->tile_y = tile_y;
+    delta->before = tile_snapshot_create(transaction->layer->surface,
+                                         tile_x,
+                                         tile_y,
+                                         transaction->tile_size,
+                                         transaction->layer->width,
+                                         transaction->layer->height);
+    delta->after = NULL; /* Will be set on commit */
+
+    if (!delta->before) {
+        g_free(delta);
+        return FALSE;
+    }
+
+    /* Store in hash table */
+    g_hash_table_insert(transaction->modified_tiles, key, delta);
+
+    return TRUE;
+}
+
+/**
+ * Commit a tile-based undo transaction (captures "after" state and creates command)
+ */
+Command* tile_undo_transaction_commit(TileUndoTransaction* transaction) {
+    TileUndoCommandData* data;
+    Command* cmd;
+    GHashTableIter iter;
+    gpointer key, value;
+    TileUndoDelta* delta;
+
+    if (!transaction || !transaction->layer || !transaction->layer->surface) {
+        if (transaction) {
+            tile_undo_transaction_cancel(transaction);
+        }
+        return NULL;
+    }
+
+    /* Create command data */
+    data = (TileUndoCommandData*)g_malloc0(sizeof(TileUndoCommandData));
+    data->layer = transaction->layer;
+    data->tile_size = transaction->tile_size;
+    data->tile_deltas = g_ptr_array_new();
+
+    /* Collect all deltas first, then process them */
+    GList* all_deltas = NULL;
+    g_hash_table_iter_init(&iter, transaction->modified_tiles);
+    while (g_hash_table_iter_next(&iter, &key, &value)) {
+        delta = (TileUndoDelta*)value;
+        if (delta) {
+            all_deltas = g_list_prepend(all_deltas, delta);
+        }
+    }
+
+    /* Process each delta: capture "after" snapshot and add to command */
+    for (GList* l = all_deltas; l; l = l->next) {
+        delta = (TileUndoDelta*)l->data;
+        if (delta) {
+            /* Capture "after" snapshot */
+            delta->after = tile_snapshot_create(transaction->layer->surface,
+                                                delta->tile_x,
+                                                delta->tile_y,
+                                                transaction->tile_size,
+                                                transaction->layer->width,
+                                                transaction->layer->height);
+
+            if (delta->after) {
+                /* Add to deltas array */
+                g_ptr_array_add(data->tile_deltas, delta);
+            } else {
+                /* Failed to capture after snapshot, free this delta */
+                if (delta->before) {
+                    cairo_surface_destroy(delta->before);
+                }
+                g_free(delta);
+            }
+        }
+    }
+    g_list_free(all_deltas);
+
+    /* If no valid deltas were captured, free and return NULL */
+    if (data->tile_deltas->len == 0) {
+        g_ptr_array_free(data->tile_deltas, TRUE);
+        g_free(data);
+        tile_undo_transaction_cancel(transaction);
+        return NULL;
+    }
+
+    /* Create command */
+    cmd = command_new(transaction->name,
+                      COMMAND_DRAW,
+                      tile_undo_command_apply,
+                      tile_undo_command_revert,
+                      tile_undo_command_destroy);
+    if (!cmd) {
+        /* Free all deltas */
+        guint i;
+        for (i = 0; i < data->tile_deltas->len; i++) {
+            delta = (TileUndoDelta*)g_ptr_array_index(data->tile_deltas, i);
+            if (delta) {
+                if (delta->before)
+                    cairo_surface_destroy(delta->before);
+                if (delta->after)
+                    cairo_surface_destroy(delta->after);
+                g_free(delta);
+            }
+        }
+        g_ptr_array_free(data->tile_deltas, TRUE);
+        g_free(data);
+        tile_undo_transaction_cancel(transaction);
+        return NULL;
+    }
+
+    cmd->user_data = data;
+
+    /* Free transaction structure (deltas have been transferred to command) */
+    /* Steal all items from hash table without calling destroy function (ownership transferred) */
+    if (transaction->modified_tiles) {
+        g_hash_table_steal_all(transaction->modified_tiles);
+        g_hash_table_destroy(transaction->modified_tiles);
+    }
+    if (transaction->name) {
+        g_free(transaction->name);
+    }
+    g_free(transaction);
+
+    return cmd;
+}
+
+/**
+ * Cancel a tile-based undo transaction (frees resources without creating command)
+ */
+void tile_undo_transaction_cancel(TileUndoTransaction* transaction) {
+    if (!transaction) {
+        return;
+    }
+
+    /* Free all deltas in hash table */
+    if (transaction->modified_tiles) {
+        GHashTableIter iter;
+        gpointer key, value;
+        TileUndoDelta* delta;
+
+        g_hash_table_iter_init(&iter, transaction->modified_tiles);
+        while (g_hash_table_iter_next(&iter, &key, &value)) {
+            delta = (TileUndoDelta*)value;
+            if (delta) {
+                if (delta->before) {
+                    cairo_surface_destroy(delta->before);
+                }
+                if (delta->after) {
+                    cairo_surface_destroy(delta->after);
+                }
+                g_free(delta);
+            }
+        }
+        g_hash_table_destroy(transaction->modified_tiles);
+    }
+
+    if (transaction->name) {
+        g_free(transaction->name);
+    }
+
+    g_free(transaction);
+}
+
+/**
  * Move command apply callback (restore to new position)
  */
 static void move_command_apply(Command* cmd, struct ImageDocument* doc) {

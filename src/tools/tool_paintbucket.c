@@ -3,6 +3,7 @@
 #include "render/compositor.h"
 #include "render/dirty.h"
 #include "render/layer.h"
+#include "render/tile.h"
 #include "tool_options.h"
 #include "tools/tool_fill.h"
 #include "ui/tools_panel.h"
@@ -20,8 +21,8 @@ extern void ui_update_window_title(AppContext* ctx);
  * Fill Tool state
  */
 typedef struct {
-    struct ImageLayer* active_layer; /* Layer being filled */
-    Command* current_command;        /* Current fill command for undo */
+    struct ImageLayer* active_layer;  /* Layer being filled */
+    TileUndoTransaction* transaction; /* Tile-based undo transaction */
 } PaintBucketToolState;
 
 /**
@@ -358,9 +359,26 @@ static void paint_bucket_tool_mouse_down(Tool* tool, struct ImageDocument* doc, 
         return;
     }
 
-    /* Create a draw command for undo/redo */
-    state->current_command = command_create_draw(active_layer,
-                                                 command_get_name_string(CMD_NAME_FILL));
+    /* Begin tile-based undo transaction */
+    state->transaction = tile_undo_transaction_begin(active_layer,
+                                                     doc,
+                                                     command_get_name_string(CMD_NAME_FILL));
+    if (!state->transaction) {
+        return;
+    }
+
+    /* Register all tiles in the layer before fill (fill can affect entire layer) */
+    gint tile_size = doc->tile_grid ? doc->tile_grid->tile_size : 128;
+    gint tiles_x = (active_layer->width + tile_size - 1) / tile_size;
+    gint tiles_y = (active_layer->height + tile_size - 1) / tile_size;
+
+    for (gint ty = 0; ty < tiles_y; ty++) {
+        for (gint tx = 0; tx < tiles_x; tx++) {
+            gint sample_x = tx * tile_size + tile_size / 2;
+            gint sample_y = ty * tile_size + tile_size / 2;
+            tile_undo_transaction_register_tile(state->transaction, doc, sample_x, sample_y);
+        }
+    }
 
     /* Perform the fill at the clicked position,
        adjusted for layer offset */
@@ -375,15 +393,16 @@ static void paint_bucket_tool_mouse_down(Tool* tool, struct ImageDocument* doc, 
 
     paint_bucket_flood_fill(active_layer->surface, layer_x, layer_y, tolerance, contiguous, antialiased);
 
-    /* Finalize draw command by taking snapshot of state after fill */
-    if (state->current_command) {
-        command_finalize_draw(state->current_command);
+    /* Commit tile-based undo transaction (captures "after" state and creates command) */
+    Command* cmd = NULL;
+    if (state->transaction) {
+        cmd = tile_undo_transaction_commit(state->transaction);
+        state->transaction = NULL;
     }
 
-    /* Push fill command to undo stack */
-    if (state->current_command && doc->undo_stack) {
-        command_stack_push(doc->undo_stack, state->current_command);
-        // printf("Fill tool: fill command pushed to undo stack\n");
+    /* Push command to undo stack */
+    if (cmd && doc->undo_stack) {
+        command_stack_push(doc->undo_stack, cmd);
 
         /* Clear redo stack */
         if (doc->redo_stack) {
@@ -396,6 +415,9 @@ static void paint_bucket_tool_mouse_down(Tool* tool, struct ImageDocument* doc, 
             ui_update_menu_and_button_states(ctx);
             ui_update_window_title(ctx);
         }
+    } else if (cmd) {
+        /* No undo stack, free the command */
+        command_free(cmd);
     }
 
     /* Invalidate layer cache since pixels changed */
