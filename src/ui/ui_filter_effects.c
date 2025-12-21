@@ -22,6 +22,7 @@
 #include "ui/filters/filter_frosted_glass.h"
 #include "ui/filters/filter_gaussian_blur.h"
 #include "ui/filters/filter_gradient_edge.h"
+#include "ui/filters/filter_guided.h"
 #include "ui/filters/filter_highpass.h"
 #include "ui/filters/filter_laplacian_edge.h"
 #include "ui/filters/filter_max.h"
@@ -45,6 +46,7 @@
 #include "ui/ui_filter_utils.h"
 #include "ui/widgets/filter_dialog.h"
 #include <glib.h>
+#include <math.h>
 
 /* Filter wrapper functions moved to ui_filter_utils.c */
 
@@ -1169,6 +1171,98 @@ static void on_effects_bilateral(GtkWidget* widget, gpointer data) {
 }
 
 /**
+ * Guided filter preview update callback
+ * Uses custom logarithmic conversion for epsilon parameter
+ */
+static gboolean on_guided_preview_update(FilterDialog* dialog,
+                                         const gdouble* values,
+                                         gint num_values,
+                                         gpointer user_data) {
+    gfloat* filter_values;
+    gdouble slider_value;
+    gfloat epsilon;
+
+    if (!dialog || !values || num_values < 2) {
+        return FALSE;
+    }
+
+    /* Allocate array for filter values */
+    filter_values = (gfloat*)g_malloc(sizeof(gfloat) * 2);
+    if (!filter_values) {
+        return FALSE;
+    }
+
+    /* Radius: direct conversion (already an integer) */
+    filter_values[0] = (gfloat)values[0];
+
+    /* Epsilon: logarithmic conversion using formula: epsilon = 0.001 * pow(400, (100 - slider_value) / 100) */
+    slider_value = values[1];
+    epsilon = (gfloat)(0.001 * pow(400.0, (100.0 - slider_value) / 100.0));
+    filter_values[1] = epsilon;
+
+    /* Set up viewport-based filter */
+    ui_filter_utils_setup_viewport_filter(dialog,
+                                          (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_guided_apply,
+                                          filter_values, 2);
+
+    g_free(filter_values);
+    return TRUE;
+}
+
+/**
+ * Effects > Denoise > Guided callback
+ */
+static void on_effects_guided(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    FilterControlParam controls[2];
+    gdouble values[2];
+    gint response;
+    gfloat filter_values[2];
+
+    if (!ctx)
+        return;
+
+    /* Radius control: 1-64 */
+    controls[0].type = FILTER_CONTROL_DOUBLE;
+    controls[0].label = "radius";
+    controls[0].min_value = 1.0;
+    controls[0].max_value = 64.0;
+    controls[0].default_value = 6.0;
+    controls[0].step = 1.0;
+    controls[0].decimals = 0;
+    controls[0].filter_min = 1.0;
+    controls[0].filter_max = 64.0;
+
+    /* Epsilon control: UI 0.1-40.0, Filter 0.001-4.0 */
+    controls[1].type = FILTER_CONTROL_DOUBLE;
+    controls[1].label = "edge sharpness";
+    controls[1].min_value = 0;
+    controls[1].max_value = 100;
+    controls[1].default_value = 70;
+    controls[1].step = 1.0;
+    controls[1].decimals = 1;
+    controls[1].filter_min = 0.001;
+    controls[1].filter_max = 4.0;
+
+    response = ui_show_filter_dialog(ctx, "Guided", controls, 2,
+                                     on_guided_preview_update, values);
+
+    if (response == GTK_RESPONSE_OK) {
+        /* Convert radius directly */
+        filter_values[0] = (gfloat)values[0];
+
+        /* Convert epsilon using logarithmic formula: epsilon = 0.001 * pow(400, (100 - slider_value) / 100) */
+        gdouble slider_value = values[1];
+        filter_values[1] = (gfloat)(0.001 * pow(400.0, (100.0 - slider_value) / 100.0));
+
+        /* Apply filter */
+        ui_apply_layer_filter_with_value(ctx, filter_guided_apply,
+                                         "Guided", filter_values, 2);
+    }
+}
+
+/**
  * Film grain filter preview update callback
  */
 static gboolean on_film_grain_preview_update(FilterDialog* dialog,
@@ -2098,6 +2192,11 @@ void ui_filter_effects_setup_menu(GtkBuilder* builder, AppContext* ctx) {
     GtkWidget* effects_menu_beeps = GTK_WIDGET(gtk_builder_get_object(builder, "effects_menu_beeps"));
     if (effects_menu_beeps) {
         g_signal_connect(effects_menu_beeps, "activate", G_CALLBACK(on_effects_beeps), ctx);
+    }
+
+    GtkWidget* effects_menu_guided = GTK_WIDGET(gtk_builder_get_object(builder, "effects_menu_guided"));
+    if (effects_menu_guided) {
+        g_signal_connect(effects_menu_guided, "activate", G_CALLBACK(on_effects_guided), ctx);
     }
 
     /* Connect Artistic submenu signals */

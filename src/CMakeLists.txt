@@ -124,6 +124,7 @@ set(SOURCES
     ui/filters/filter_crystallize.c
     ui/filters/filter_fragment.c
     ui/filters/filter_gradient_edge.c
+    ui/filters/filter_guided.c
     ui/filters/filter_highpass.c
     ui/filters/filter_laplacian_edge.c
     ui/filters/filter_max.c
