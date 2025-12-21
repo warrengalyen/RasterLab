@@ -138,6 +138,7 @@ set(SOURCES
     ui/filters/filter_roberts_edge.c
     ui/filters/filter_sobel_edge.c
     ui/filters/filter_sharpen.c
+    ui/filters/filter_skin_smooth.c
     ui/filters/filter_unsharp.c
     render/render_utils.c
     render/layer.c
