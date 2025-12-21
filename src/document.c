@@ -1,4 +1,5 @@
 #include "document.h"
+#include "app/settings.h"
 #include "command.h"
 #include "render/compositor.h"
 #include "render/layer.h"
@@ -9,6 +10,7 @@
 #include "tool_manager.h"
 #include "tools.h"
 #include "ui/layers_panel.h"
+#include "undo/undo_disk.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -608,6 +610,7 @@ ImageDocument* document_new(const gchar* filename, gboolean create_worker_pool) 
     /* Initialize undo/redo stacks (max 50 undo steps) */
     doc->undo_stack = command_stack_new(50);
     doc->redo_stack = command_stack_new(50);
+    doc->undo_journal = NULL; /* Will be created when settings are available */
 
     return doc;
 }
@@ -632,6 +635,12 @@ void document_free(ImageDocument* doc) {
      * This allows command destroy callbacks to detect that the document is being freed */
     GList* layers_to_free = doc->layers;
     doc->layers = NULL;
+
+    /* Free undo journal BEFORE freeing undo stacks */
+    if (doc->undo_journal) {
+        undo_journal_free(doc->undo_journal);
+        doc->undo_journal = NULL;
+    }
 
     /* Free undo/redo stacks BEFORE freeing layers
      * This ensures command destroy callbacks can safely check layer ownership
@@ -1053,6 +1062,11 @@ gboolean document_undo(ImageDocument* doc) {
 
     /* Push to redo stack */
     command_stack_push(doc->redo_stack, cmd);
+
+    /* Clear journal's redo stack if it exists (since we're creating a new branch) */
+    if (doc->undo_journal) {
+        undo_journal_clear_redo(doc->undo_journal);
+    }
 
     /* Mark composite for redraw */
     if (doc->drawing_area) {

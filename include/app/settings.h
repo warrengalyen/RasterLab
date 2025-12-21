@@ -20,6 +20,10 @@ typedef struct {
 
     /* Maximum number of recent files */
     guint max_recent_files;
+
+    /* Undo/redo disk settings */
+    gint undo_compression_level; /* LZ4 compression level (1-9, default 1) */
+    gchar* undo_temp_directory;  /* Root directory for undo journal files (NULL = system temp) */
 } Settings;
 
 /**
@@ -115,5 +119,33 @@ gfloat settings_get_default_tool_spacing(void);
 gfloat settings_get_default_tool_tolerance(void);
 gboolean settings_get_default_tool_fill_contiguous(void);
 gboolean settings_get_default_tool_fill_antialiased(void);
+
+/**
+ * Get undo compression level
+ * @param settings The settings structure
+ * @return Compression level (1-9)
+ */
+gint settings_get_undo_compression_level(Settings* settings);
+
+/**
+ * Set undo compression level
+ * @param settings The settings structure
+ * @param level Compression level (1-9, clamped if out of range)
+ */
+void settings_set_undo_compression_level(Settings* settings, gint level);
+
+/**
+ * Get undo temp directory
+ * @param settings The settings structure
+ * @return Temp directory path, or NULL to use system default
+ */
+const gchar* settings_get_undo_temp_directory(Settings* settings);
+
+/**
+ * Set undo temp directory
+ * @param settings The settings structure
+ * @param directory Temp directory path (NULL = use system default)
+ */
+void settings_set_undo_temp_directory(Settings* settings, const gchar* directory);
 
 #endif /* SETTINGS_H */

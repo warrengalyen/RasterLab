@@ -22,6 +22,7 @@
 #define DEFAULT_CANVAS_BG_G (160.0 / 255.0)
 #define DEFAULT_CANVAS_BG_B (160.0 / 255.0)
 #define DEFAULT_MAX_RECENT_FILES 10
+#define DEFAULT_UNDO_COMPRESSION_LEVEL 1 /* LZ4 fast compression */
 
 /* Default tool option values */
 #define DEFAULT_TOOL_SIZE 5.0f              /* 5px brush size */
@@ -67,6 +68,8 @@ static Settings* settings_create_default(void) {
     settings->tool_options = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, tool_options_hash_table_free);
     settings->recent_files = NULL;
     settings->max_recent_files = DEFAULT_MAX_RECENT_FILES;
+    settings->undo_compression_level = DEFAULT_UNDO_COMPRESSION_LEVEL;
+    settings->undo_temp_directory = NULL; /* NULL = use system temp directory */
 
     return settings;
 }
@@ -228,6 +231,16 @@ static void settings_load_tools(Settings* settings, xmlNode* tools_node) {
 }
 
 /**
+ * Load undo settings from XML (forward declaration)
+ */
+static void settings_load_undo(Settings* settings, xmlNode* undo_node);
+
+/**
+ * Save undo settings to XML (forward declaration)
+ */
+static void settings_save_undo(xmlTextWriterPtr writer, Settings* settings);
+
+/**
  * Load recent files from XML
  * Stores RecentFile* entries in Settings->recent_files (includes path and timestamp)
  */
@@ -320,6 +333,8 @@ Settings* settings_load(const char* app_dir) {
             settings_load_tools(settings, cur);
         } else if (xmlStrcmp(cur->name, (const xmlChar*)"recent_files") == 0) {
             settings_load_recent_files(settings, cur);
+        } else if (xmlStrcmp(cur->name, (const xmlChar*)"undo") == 0) {
+            settings_load_undo(settings, cur);
         }
     }
 
@@ -327,6 +342,53 @@ Settings* settings_load(const char* app_dir) {
     g_free(file_path);
 
     return settings;
+}
+
+/**
+ * Load undo settings from XML
+ */
+static void settings_load_undo(Settings* settings, xmlNode* undo_node) {
+    if (!settings || !undo_node) {
+        return;
+    }
+
+    /* Load compression level */
+    xmlChar* compression_attr = xmlGetProp(undo_node, (const xmlChar*)"compression_level");
+    if (compression_attr) {
+        gint level = (gint)strtol((const char*)compression_attr, NULL, 10);
+        settings_set_undo_compression_level(settings, level);
+        xmlFree(compression_attr);
+    }
+
+    /* Load temp directory */
+    xmlChar* temp_dir_attr = xmlGetProp(undo_node, (const xmlChar*)"temp_directory");
+    if (temp_dir_attr) {
+        settings_set_undo_temp_directory(settings, (const char*)temp_dir_attr);
+        xmlFree(temp_dir_attr);
+    }
+}
+
+/**
+ * Save undo settings to XML
+ */
+static void settings_save_undo(xmlTextWriterPtr writer, Settings* settings) {
+    if (!writer || !settings) {
+        return;
+    }
+
+    xmlTextWriterStartElement(writer, (const xmlChar*)"undo");
+
+    /* Save compression level */
+    gchar level_str[16];
+    g_snprintf(level_str, sizeof(level_str), "%d", settings->undo_compression_level);
+    xmlTextWriterWriteAttribute(writer, (const xmlChar*)"compression_level", (const xmlChar*)level_str);
+
+    /* Save temp directory if set */
+    if (settings->undo_temp_directory) {
+        xmlTextWriterWriteAttribute(writer, (const xmlChar*)"temp_directory", (const xmlChar*)settings->undo_temp_directory);
+    }
+
+    xmlTextWriterEndElement(writer); /* undo */
 }
 
 /**
@@ -502,6 +564,9 @@ gboolean settings_save(Settings* settings, const char* app_dir) {
     /* Write recent files */
     settings_save_recent_files(writer, settings);
 
+    /* Write undo settings */
+    settings_save_undo(writer, settings);
+
     /* Close root element */
     xmlTextWriterEndElement(writer); /* app_settings */
 
@@ -544,6 +609,10 @@ void settings_free(Settings* settings) {
 
     if (settings->recent_files) {
         g_list_free_full(settings->recent_files, recent_file_free);
+    }
+
+    if (settings->undo_temp_directory) {
+        g_free(settings->undo_temp_directory);
     }
 
     g_free(settings);
@@ -770,4 +839,53 @@ gboolean settings_get_default_tool_fill_contiguous(void) {
 
 gboolean settings_get_default_tool_fill_antialiased(void) {
     return DEFAULT_TOOL_FILL_ANTIALIASED;
+}
+
+/**
+ * Get undo compression level
+ */
+gint settings_get_undo_compression_level(Settings* settings) {
+    if (!settings) {
+        return DEFAULT_UNDO_COMPRESSION_LEVEL;
+    }
+    return settings->undo_compression_level;
+}
+
+/**
+ * Set undo compression level
+ */
+void settings_set_undo_compression_level(Settings* settings, gint level) {
+    if (!settings) {
+        return;
+    }
+    /* Clamp to valid range */
+    if (level < 1) {
+        level = 1;
+    } else if (level > 9) {
+        level = 9;
+    }
+    settings->undo_compression_level = level;
+}
+
+/**
+ * Get undo temp directory
+ */
+const gchar* settings_get_undo_temp_directory(Settings* settings) {
+    if (!settings) {
+        return NULL;
+    }
+    return settings->undo_temp_directory;
+}
+
+/**
+ * Set undo temp directory
+ */
+void settings_set_undo_temp_directory(Settings* settings, const gchar* directory) {
+    if (!settings) {
+        return;
+    }
+    if (settings->undo_temp_directory) {
+        g_free(settings->undo_temp_directory);
+    }
+    settings->undo_temp_directory = directory ? g_strdup(directory) : NULL;
 }

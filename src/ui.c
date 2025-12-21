@@ -22,6 +22,7 @@
 #include "ui/ui_filter.h"
 #include "ui/ui_filter_adjust.h"
 #include "ui/ui_filter_effects.h"
+#include "undo/undo_disk.h"
 #include <glib.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -509,6 +510,16 @@ ImageDocument* ui_create_document_tab(AppContext* ctx, const gchar* filename) {
 
     /* Create the document with worker pool for on-screen rendering */
     doc = document_new(filename, TRUE);
+
+    /* Create disk-backed undo journal if settings are available */
+    if (ctx && ctx->settings && doc) {
+        gint compression_level = settings_get_undo_compression_level(ctx->settings);
+        const gchar* temp_dir = settings_get_undo_temp_directory(ctx->settings);
+        doc->undo_journal = undo_journal_create((struct ImageDocument*)doc, temp_dir, compression_level);
+        if (!doc->undo_journal) {
+            g_warning("Failed to create undo journal, falling back to in-memory undo");
+        }
+    }
 
     /* Create the drawing area (scrolled window with drawing area) */
     page_content = document_create_drawing_area(doc);

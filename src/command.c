@@ -6,6 +6,7 @@
 #include "render/dirty.h"
 #include "render/layer.h"
 #include "render/tile.h"
+#include "undo/undo_disk.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -550,8 +551,6 @@ static gboolean tile_coord_equal(gconstpointer a, gconstpointer b) {
  */
 static void tile_undo_command_apply(Command* cmd, struct ImageDocument* doc) {
     TileUndoCommandData* data;
-    gboolean layer_found = FALSE;
-    guint i;
 
     if (!cmd || !cmd->user_data || !doc) {
         return;
@@ -559,10 +558,25 @@ static void tile_undo_command_apply(Command* cmd, struct ImageDocument* doc) {
 
     data = (TileUndoCommandData*)cmd->user_data;
 
-    if (!data->layer || !data->layer->surface || !data->tile_deltas) {
+    if (!data->layer || !data->layer->surface) {
         return;
     }
 
+    /* If entry is on disk, read from disk journal */
+    if (data->entry_index && doc->undo_journal) {
+        if (undo_journal_read_redo(doc->undo_journal, data->entry_index, doc)) {
+            /* Successfully read and applied from disk */
+            return;
+        }
+        /* Fall through to in-memory path if disk read failed */
+    }
+
+    /* In-memory path: apply from tile_deltas */
+    if (!data->tile_deltas) {
+        return;
+    }
+
+    gboolean layer_found = FALSE;
     /* Verify that the layer still exists in the document */
     if (doc->layers) {
         for (GList* iter = doc->layers; iter; iter = iter->next) {
@@ -578,7 +592,7 @@ static void tile_undo_command_apply(Command* cmd, struct ImageDocument* doc) {
     }
 
     /* Apply "after" snapshot to each modified tile region */
-    for (i = 0; i < data->tile_deltas->len; i++) {
+    for (guint i = 0; i < data->tile_deltas->len; i++) {
         TileUndoDelta* delta = (TileUndoDelta*)g_ptr_array_index(data->tile_deltas, i);
         if (delta && delta->after) {
             tile_snapshot_apply(data->layer->surface,
@@ -596,7 +610,7 @@ static void tile_undo_command_apply(Command* cmd, struct ImageDocument* doc) {
 
     /* Mark composite as dirty and invalidate affected tiles */
     if (doc && doc->tile_grid && data->layer) {
-        for (i = 0; i < data->tile_deltas->len; i++) {
+        for (guint i = 0; i < data->tile_deltas->len; i++) {
             TileUndoDelta* delta = (TileUndoDelta*)g_ptr_array_index(data->tile_deltas, i);
             if (delta) {
                 /* Convert layer tile coordinates to document coordinates */
@@ -615,8 +629,6 @@ static void tile_undo_command_apply(Command* cmd, struct ImageDocument* doc) {
  */
 static void tile_undo_command_revert(Command* cmd, struct ImageDocument* doc) {
     TileUndoCommandData* data;
-    gboolean layer_found = FALSE;
-    guint i;
 
     if (!cmd || !cmd->user_data || !doc) {
         return;
@@ -624,10 +636,25 @@ static void tile_undo_command_revert(Command* cmd, struct ImageDocument* doc) {
 
     data = (TileUndoCommandData*)cmd->user_data;
 
-    if (!data->layer || !data->layer->surface || !data->tile_deltas) {
+    if (!data->layer || !data->layer->surface) {
         return;
     }
 
+    /* If entry is on disk, read from disk journal */
+    if (data->entry_index && doc->undo_journal) {
+        if (undo_journal_read_undo(doc->undo_journal, data->entry_index, doc)) {
+            /* Successfully read and applied from disk */
+            return;
+        }
+        /* Fall through to in-memory path if disk read failed */
+    }
+
+    /* In-memory path: apply from tile_deltas */
+    if (!data->tile_deltas) {
+        return;
+    }
+
+    gboolean layer_found = FALSE;
     /* Verify that the layer still exists in the document */
     if (doc->layers) {
         for (GList* iter = doc->layers; iter; iter = iter->next) {
@@ -643,7 +670,7 @@ static void tile_undo_command_revert(Command* cmd, struct ImageDocument* doc) {
     }
 
     /* Apply "before" snapshot to each modified tile region */
-    for (i = 0; i < data->tile_deltas->len; i++) {
+    for (guint i = 0; i < data->tile_deltas->len; i++) {
         TileUndoDelta* delta = (TileUndoDelta*)g_ptr_array_index(data->tile_deltas, i);
         if (delta && delta->before) {
             tile_snapshot_apply(data->layer->surface,
@@ -661,7 +688,7 @@ static void tile_undo_command_revert(Command* cmd, struct ImageDocument* doc) {
 
     /* Mark composite as dirty and invalidate affected tiles */
     if (doc && doc->tile_grid && data->layer) {
-        for (i = 0; i < data->tile_deltas->len; i++) {
+        for (guint i = 0; i < data->tile_deltas->len; i++) {
             TileUndoDelta* delta = (TileUndoDelta*)g_ptr_array_index(data->tile_deltas, i);
             if (delta) {
                 /* Convert layer tile coordinates to document coordinates */
@@ -688,7 +715,7 @@ static void tile_undo_command_destroy(Command* cmd) {
 
     data = (TileUndoCommandData*)cmd->user_data;
 
-    /* Free all tile deltas */
+    /* Free all tile deltas (may be empty if on disk) */
     if (data->tile_deltas) {
         for (i = 0; i < data->tile_deltas->len; i++) {
             TileUndoDelta* delta = (TileUndoDelta*)g_ptr_array_index(data->tile_deltas, i);
@@ -704,6 +731,8 @@ static void tile_undo_command_destroy(Command* cmd) {
         }
         g_ptr_array_free(data->tile_deltas, TRUE);
     }
+
+    /* Note: entry_index is owned by the journal, not freed here */
 
     g_free(data);
 }
@@ -812,6 +841,7 @@ Command* tile_undo_transaction_commit(TileUndoTransaction* transaction) {
     data->layer = transaction->layer;
     data->tile_size = transaction->tile_size;
     data->tile_deltas = g_ptr_array_new();
+    data->entry_index = NULL; /* Will be set if written to disk */
 
     /* Collect all deltas first, then process them */
     GList* all_deltas = NULL;
@@ -894,6 +924,28 @@ Command* tile_undo_transaction_commit(TileUndoTransaction* transaction) {
         g_free(transaction->name);
     }
     g_free(transaction);
+
+    /* If document has a disk journal, write command to disk and free in-memory deltas */
+    struct ImageDocument* doc = transaction->doc;
+    if (doc && doc->undo_journal) {
+        /* Write to disk - this will create an entry_index and store it in cmd->user_data */
+        if (undo_journal_write_tile_command(doc->undo_journal, cmd)) {
+            /* Free in-memory pixel data since it's now on disk */
+            for (guint i = 0; i < data->tile_deltas->len; i++) {
+                TileUndoDelta* delta = (TileUndoDelta*)g_ptr_array_index(data->tile_deltas, i);
+                if (delta) {
+                    if (delta->before) {
+                        cairo_surface_destroy(delta->before);
+                        delta->before = NULL;
+                    }
+                    if (delta->after) {
+                        cairo_surface_destroy(delta->after);
+                        delta->after = NULL;
+                    }
+                }
+            }
+        }
+    }
 
     return cmd;
 }

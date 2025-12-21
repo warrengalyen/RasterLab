@@ -24,6 +24,9 @@ typedef struct TileThreadPool TileThreadPool;
 struct TileWorkerPool;
 typedef struct TileWorkerPool TileWorkerPool;
 
+/* Forward declaration for undo journal - full definition in undo/undo_disk.h */
+typedef struct _UndoJournal UndoJournal;
+
 /**
  * Blend modes for layers
  */
@@ -125,8 +128,9 @@ typedef struct ImageDocument {
     gdouble zoom_factor; /* Current zoom level (1.0 = 100%) */
 
     /* Undo/redo system */
-    CommandStack* undo_stack; /* Stack of undoable commands */
-    CommandStack* redo_stack; /* Stack of redoable commands */
+    CommandStack* undo_stack;  /* Stack of undoable commands (legacy, for non-pixel ops) */
+    CommandStack* redo_stack;  /* Stack of redoable commands (legacy, for non-pixel ops) */
+    UndoJournal* undo_journal; /* Disk-backed undo journal (for pixel operations) */
 } ImageDocument;
 
 /**

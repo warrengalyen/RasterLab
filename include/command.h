@@ -187,15 +187,22 @@ typedef struct {
     cairo_surface_t* after;  /* Snapshot of tile region after modification */
 } TileUndoDelta;
 
+/* Forward declaration */
+typedef struct _UndoEntryIndex UndoEntryIndex;
+
 /**
  * Tile undo command data structure
  * Stores tile-level deltas for delta-based undo/redo
  * This replaces full layer snapshots with region-based snapshots for memory efficiency
+ *
+ * For disk-backed undo: If entry_index is set, pixel data is on disk and tile_deltas
+ * may be empty or contain only metadata. If entry_index is NULL, pixel data is in memory.
  */
 typedef struct {
-    struct ImageLayer* layer; /* Layer being modified */
-    gint tile_size;           /* Tile size used for region division */
-    GPtrArray* tile_deltas;   /* Array of TileUndoDelta* pointers */
+    struct ImageLayer* layer;    /* Layer being modified */
+    gint tile_size;              /* Tile size used for region division */
+    GPtrArray* tile_deltas;      /* Array of TileUndoDelta* pointers (may be empty if on disk) */
+    UndoEntryIndex* entry_index; /* Disk journal entry index (NULL if in-memory only) */
 } TileUndoCommandData;
 
 /**
