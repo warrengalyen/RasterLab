@@ -174,12 +174,12 @@ GtkWidget* tools_panel_initialize_from_builder(GtkBuilder* builder, ToolRegistry
 
             /* Resize icon to 24x24 by loading resource, scaling, and replacing */
             const gchar* icon_resources[] = {
-                "/icons/hand.png",
-                "/icons/zoom.png",
-                "/icons/move.png",
-                "/icons/paintbrush.png",
-                "/icons/eraser.png",
-                "/icons/flood-fill.png",
+                "/icons/tool-hand.png",
+                "/icons/tool-zoom.png",
+                "/icons/tool-move.png",
+                "/icons/tool-paintbrush.png",
+                "/icons/tool-eraser.png",
+                "/icons/tool-paintbucket.png",
             };
             if (i < 6) {
                 GError* error = NULL;

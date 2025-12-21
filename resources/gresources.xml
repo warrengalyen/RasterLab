@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <gresources>
   <gresource prefix="/">
-    <file preprocess="to-pixdata">icons/hand.png</file>
-    <file preprocess="to-pixdata">icons/zoom.png</file>
-    <file preprocess="to-pixdata">icons/move.png</file>
-    <file preprocess="to-pixdata">icons/paintbrush.png</file>
-    <file preprocess="to-pixdata">icons/eraser.png</file>
-    <file preprocess="to-pixdata">icons/flood-fill.png</file>
+    <file preprocess="to-pixdata">icons/tool-hand.png</file>
+    <file preprocess="to-pixdata">icons/tool-zoom.png</file>
+    <file preprocess="to-pixdata">icons/tool-move.png</file>
+    <file preprocess="to-pixdata">icons/tool-paintbrush.png</file>
+    <file preprocess="to-pixdata">icons/tool-eraser.png</file>
+    <file preprocess="to-pixdata">icons/tool-paintbucket.png</file>
     <file preprocess="to-pixdata">icons/chevron.png</file>
     <file preprocess="xml-stripblanks">icons/layer-add.svg</file>
     <file preprocess="xml-stripblanks">icons/layer-delete.svg</file>

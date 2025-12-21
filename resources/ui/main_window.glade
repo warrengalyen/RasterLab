@@ -1215,7 +1215,7 @@
                         <property name="visible">True</property>
                         <property name="can-focus">False</property>
                         <property name="pixel-size">24</property>
-                        <property name="resource">/icons/hand.png</property>
+                        <property name="resource">/icons/tool-hand.png</property>
                       </object>
                     </child>
                   </object>
@@ -1238,7 +1238,7 @@
                         <property name="visible">True</property>
                         <property name="can-focus">False</property>
                         <property name="pixel-size">24</property>
-                        <property name="resource">/icons/zoom.png</property>
+                        <property name="resource">/icons/tool-zoom.png</property>
                       </object>
                     </child>
                   </object>
@@ -1261,7 +1261,7 @@
                         <property name="visible">True</property>
                         <property name="can-focus">False</property>
                         <property name="pixel-size">24</property>
-                        <property name="resource">/icons/move.png</property>
+                        <property name="resource">/icons/tool-move.png</property>
                       </object>
                     </child>
                   </object>
@@ -1284,7 +1284,7 @@
                         <property name="visible">True</property>
                         <property name="can-focus">False</property>
                         <property name="pixel-size">24</property>
-                        <property name="resource">/icons/eraser.png</property>
+                        <property name="resource">/icons/tool-eraser.png</property>
                       </object>
                     </child>
                   </object>
@@ -1307,7 +1307,7 @@
                         <property name="visible">True</property>
                         <property name="can-focus">False</property>
                         <property name="pixel-size">24</property>
-                        <property name="resource">/icons/paintbrush.png</property>
+                        <property name="resource">/icons/tool-paintbrush.png</property>
                       </object>
                     </child>
                   </object>
@@ -1330,7 +1330,7 @@
                         <property name="visible">True</property>
                         <property name="can-focus">False</property>
                         <property name="pixel-size">24</property>
-                        <property name="resource">/icons/flood-fill.png</property>
+                        <property name="resource">/icons/tool-paintbucket.png</property>
                       </object>
                     </child>
                   </object>
