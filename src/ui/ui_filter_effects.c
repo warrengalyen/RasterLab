@@ -10,6 +10,7 @@
 #include "ui/filters/filter_canny_edge.h"
 #include "ui/filters/filter_color_halftone.h"
 #include "ui/filters/filter_crystallize.h"
+#include "ui/filters/filter_despeckle.h"
 #include "ui/filters/filter_dilate.h"
 #include "ui/filters/filter_erode.h"
 #include "ui/filters/filter_exponential_blur.h"
@@ -1043,6 +1044,67 @@ static void on_effects_max(GtkWidget* widget, gpointer data) {
 }
 
 /**
+ * Despeckle filter preview update callback
+ */
+static gboolean on_despeckle_preview_update(FilterDialog* dialog,
+                                            const gdouble* values,
+                                            gint num_values,
+                                            gpointer user_data) {
+    static FilterApplyFuncData func_data = {
+        .filter_apply_func = (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_despeckle_apply,
+        .num_values = 2};
+    return ui_filter_utils_preview_update_scaled(dialog, values, num_values, &func_data);
+}
+
+/**
+ * Effects > Denoise > Despeckle callback
+ */
+static void on_effects_despeckle(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    FilterControlParam controls[2];
+    gdouble values[2];
+    gint response;
+    gfloat filter_values[2];
+
+    if (!ctx)
+        return;
+
+    /* Window size control: 1-127 */
+    controls[0].type = FILTER_CONTROL_DOUBLE;
+    controls[0].label = "radius";
+    controls[0].min_value = 1.0;
+    controls[0].max_value = 127.0;
+    controls[0].default_value = 7.0;
+    controls[0].step = 1.0;
+    controls[0].decimals = 0;
+    controls[0].filter_min = 1.0;
+    controls[0].filter_max = 127.0;
+
+    /* Threshold control: 2-255 */
+    controls[1].type = FILTER_CONTROL_DOUBLE;
+    controls[1].label = "threshold";
+    controls[1].min_value = 2.0;
+    controls[1].max_value = 255.0;
+    controls[1].default_value = 30.0;
+    controls[1].step = 1.0;
+    controls[1].decimals = 0;
+    controls[1].filter_min = 2.0;
+    controls[1].filter_max = 255.0;
+
+    response = ui_show_filter_dialog(ctx, "Despeckle", controls, 2,
+                                     on_despeckle_preview_update, values);
+
+    if (response == GTK_RESPONSE_OK) {
+        /* Scale UI values to filter range and apply filter */
+        if (ui_filter_utils_scale_values(values, filter_values, controls, 2)) {
+            ui_apply_layer_filter_with_value(ctx, filter_despeckle_apply,
+                                             "Despeckle", filter_values, 2);
+        }
+    }
+}
+
+/**
  * Film grain filter preview update callback
  */
 static gboolean on_film_grain_preview_update(FilterDialog* dialog,
@@ -1854,6 +1916,12 @@ void ui_filter_effects_setup_menu(GtkBuilder* builder, AppContext* ctx) {
     GtkWidget* effects_menu_max = GTK_WIDGET(gtk_builder_get_object(builder, "effects_menu_max"));
     if (effects_menu_max) {
         g_signal_connect(effects_menu_max, "activate", G_CALLBACK(on_effects_max), ctx);
+    }
+
+    /* Connect Denoise submenu signals */
+    GtkWidget* effects_menu_despeckle = GTK_WIDGET(gtk_builder_get_object(builder, "effects_menu_despeckle"));
+    if (effects_menu_despeckle) {
+        g_signal_connect(effects_menu_despeckle, "activate", G_CALLBACK(on_effects_despeckle), ctx);
     }
 
     /* Connect Artistic submenu signals */

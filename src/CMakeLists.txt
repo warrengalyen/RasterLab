@@ -100,6 +100,7 @@ set(SOURCES
     ui/filters/filter_auto_level.c
     ui/filters/filter_auto_threshold.c
     ui/filters/filter_dehaze.c
+    ui/filters/filter_despeckle.c
     ui/filters/filter_dilate.c
     ui/filters/filter_erode.c
     ui/filters/filter_average_blur.c
