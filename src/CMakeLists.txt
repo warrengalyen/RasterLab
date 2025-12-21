@@ -48,6 +48,7 @@ set(SOURCES
     ui/widgets/curves_widget.c
     ui/widgets/filter_preview.c
     ui/widgets/filter_dialog.c
+    ui/dialogs/beeps_dialog.c
     ui/dialogs/canvas_size_dialog.c
     ui/dialogs/clouds_dialog.c
     ui/dialogs/color_balance_dialog.c
@@ -104,6 +105,7 @@ set(SOURCES
     ui/filters/filter_dilate.c
     ui/filters/filter_erode.c
     ui/filters/filter_average_blur.c
+    ui/filters/filter_beeps.c
     ui/filters/filter_bilateral.c
     ui/filters/filter_gaussian_blur.c
     ui/filters/filter_box_blur.c

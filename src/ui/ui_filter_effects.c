@@ -4,8 +4,10 @@
 #include "filters.h"
 #include "render/layer.h"
 #include "ui.h"
+#include "ui/dialogs/beeps_dialog.h"
 #include "ui/dialogs/clouds_dialog.h"
 #include "ui/filters/filter_average_blur.h"
+#include "ui/filters/filter_beeps.h"
 #include "ui/filters/filter_bilateral.h"
 #include "ui/filters/filter_box_blur.h"
 #include "ui/filters/filter_canny_edge.h"
@@ -1887,6 +1889,108 @@ static void on_render_clouds(GtkWidget* widget, gpointer data) {
 }
 
 /**
+ * Effects > Denoise > BEEPS callback
+ */
+static void on_effects_beeps(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc;
+    ImageLayer* layer;
+    BEEPSDialog* dialog;
+    ImageLayer* temp_layer;
+    cairo_t* cr;
+    gint response;
+    BEEPSParams params;
+
+    if (!ctx) {
+        return;
+    }
+
+    doc = ui_get_active_document(ctx);
+    if (!doc) {
+        g_warning("No document open");
+        return;
+    }
+
+    layer = document_get_selected_layer(doc);
+    if (!layer) {
+        g_warning("No layer selected");
+        return;
+    }
+
+    /* Create BEEPS dialog */
+    dialog = beeps_dialog_new("BEEPS");
+    if (!dialog) {
+        g_warning("Failed to create BEEPS dialog");
+        return;
+    }
+
+    /* Create a copy of the layer for preview */
+    temp_layer = ui_filter_utils_create_temp_layer(layer);
+    if (!temp_layer) {
+        g_warning("Failed to create temporary layer for preview");
+        beeps_dialog_free(dialog);
+        return;
+    }
+
+    /* Set layers in dialog */
+    beeps_dialog_set_layers(dialog, layer, temp_layer);
+
+    /* Store original layer reference for preview callback */
+    g_object_set_data(G_OBJECT(beeps_dialog_get_window(dialog)), "original_layer", layer);
+
+    /* Set dialog as transient for main window */
+    if (ctx->window) {
+        gtk_window_set_transient_for(beeps_dialog_get_window(dialog), GTK_WINDOW(ctx->window));
+    }
+
+    /* Run dialog */
+    response = beeps_dialog_run(dialog, GTK_WINDOW(ctx->window), &params);
+
+    if (response == GTK_RESPONSE_OK) {
+        /* Apply BEEPS filter directly */
+        Command* cmd = command_create_draw(layer, "BEEPS");
+        if (cmd) {
+            /* Start timing */
+            gint64 start_time = g_get_monotonic_time();
+
+            gboolean success = filter_beeps_apply(layer, params.photometric_std_dev,
+                                                  params.spatial_decay, params.range_filter);
+
+            if (success) {
+                /* Get processing time */
+                gint64 current_time = g_get_monotonic_time();
+                gdouble processing_time = (gdouble)(current_time - start_time) / 1000000.0;
+
+                command_finalize_draw(cmd);
+                if (doc->undo_stack) {
+                    command_stack_push(doc->undo_stack, cmd);
+                    if (doc->redo_stack) {
+                        command_stack_clear(doc->redo_stack);
+                    }
+                } else {
+                    command_free(cmd);
+                }
+                layer_invalidate_cache(layer);
+                doc->modified = TRUE;
+                document_invalidate_composite(doc);
+                ui_update_status_bar_time(ctx, processing_time);
+                ui_update_window_title(ctx);
+                ui_update_menu_and_button_states(ctx);
+            } else {
+                command_free(cmd);
+            }
+        }
+    }
+
+    /* Clean up */
+    g_object_set_data(G_OBJECT(beeps_dialog_get_window(dialog)), "original_layer", NULL);
+    g_object_set_data(G_OBJECT(beeps_dialog_get_window(dialog)), "beeps_params", NULL);
+    beeps_dialog_free(dialog);
+    layer_free(temp_layer);
+}
+
+/**
  * Setup Effects menu from Glade builder
  */
 void ui_filter_effects_setup_menu(GtkBuilder* builder, AppContext* ctx) {
@@ -1989,6 +2093,11 @@ void ui_filter_effects_setup_menu(GtkBuilder* builder, AppContext* ctx) {
     GtkWidget* effects_menu_bilateral = GTK_WIDGET(gtk_builder_get_object(builder, "effects_menu_bilateral"));
     if (effects_menu_bilateral) {
         g_signal_connect(effects_menu_bilateral, "activate", G_CALLBACK(on_effects_bilateral), ctx);
+    }
+
+    GtkWidget* effects_menu_beeps = GTK_WIDGET(gtk_builder_get_object(builder, "effects_menu_beeps"));
+    if (effects_menu_beeps) {
+        g_signal_connect(effects_menu_beeps, "activate", G_CALLBACK(on_effects_beeps), ctx);
     }
 
     /* Connect Artistic submenu signals */
