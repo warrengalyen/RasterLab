@@ -15,12 +15,26 @@ cairo_operator_t blend_mode_to_cairo_operator(BlendMode blend_mode) {
     switch (blend_mode) {
         case BLEND_MODE_NORMAL:
             return CAIRO_OPERATOR_OVER;
+        case BLEND_MODE_DARKEN:
+            return CAIRO_OPERATOR_DARKEN;
         case BLEND_MODE_MULTIPLY:
             return CAIRO_OPERATOR_MULTIPLY;
+        case BLEND_MODE_COLOR_BURN:
+            return CAIRO_OPERATOR_COLOR_BURN;
+        case BLEND_MODE_LIGHTEN:
+            return CAIRO_OPERATOR_LIGHTEN;
         case BLEND_MODE_SCREEN:
             return CAIRO_OPERATOR_SCREEN;
+        case BLEND_MODE_COLOR_DODGE:
+            return CAIRO_OPERATOR_COLOR_DODGE;
         case BLEND_MODE_OVERLAY:
             return CAIRO_OPERATOR_OVERLAY;
+        case BLEND_MODE_SOFT_LIGHT:
+            return CAIRO_OPERATOR_SOFT_LIGHT;
+        case BLEND_MODE_HARD_LIGHT:
+            return CAIRO_OPERATOR_HARD_LIGHT;
+        case BLEND_MODE_DIFFERENCE:
+            return CAIRO_OPERATOR_DIFFERENCE;
         default:
             return CAIRO_OPERATOR_OVER;
     }

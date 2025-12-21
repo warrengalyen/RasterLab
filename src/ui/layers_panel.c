@@ -148,13 +148,34 @@ static void on_blend_mode_changed(GtkComboBox* combo, gpointer user_data) {
             blend_mode = BLEND_MODE_NORMAL;
             break;
         case 1:
-            blend_mode = BLEND_MODE_MULTIPLY;
+            blend_mode = BLEND_MODE_DARKEN;
             break;
         case 2:
-            blend_mode = BLEND_MODE_SCREEN;
+            blend_mode = BLEND_MODE_MULTIPLY;
             break;
         case 3:
+            blend_mode = BLEND_MODE_COLOR_BURN;
+            break;
+        case 4:
+            blend_mode = BLEND_MODE_LIGHTEN;
+            break;
+        case 5:
+            blend_mode = BLEND_MODE_SCREEN;
+            break;
+        case 6:
+            blend_mode = BLEND_MODE_COLOR_DODGE;
+            break;
+        case 7:
             blend_mode = BLEND_MODE_OVERLAY;
+            break;
+        case 8:
+            blend_mode = BLEND_MODE_SOFT_LIGHT;
+            break;
+        case 9:
+            blend_mode = BLEND_MODE_HARD_LIGHT;
+            break;
+        case 10:
+            blend_mode = BLEND_MODE_DIFFERENCE;
             break;
         default:
             blend_mode = BLEND_MODE_NORMAL;
@@ -1266,17 +1287,24 @@ LayersPanel* create_layers_panel(void) {
         GtkTreeIter iter;
 
         /* Add blend mode options */
-        gtk_list_store_append(blend_store, &iter);
-        gtk_list_store_set(blend_store, &iter, 0, "Normal", -1);
+        const char* blend_modes[] = {
+            "Normal",      /* 0 */
+            "Darken",      /* 1 */
+            "Multiply",    /* 2 */
+            "Color burn",  /* 3 */
+            "Lighten",     /* 4 */
+            "Screen",      /* 5 */
+            "Color dodge", /* 6 */
+            "Overlay",     /* 7 */
+            "Soft light",  /* 8 */
+            "Hard light",  /* 9 */
+            "Difference"   /* 10 */
+        };
 
-        gtk_list_store_append(blend_store, &iter);
-        gtk_list_store_set(blend_store, &iter, 0, "Multiply", -1);
-
-        gtk_list_store_append(blend_store, &iter);
-        gtk_list_store_set(blend_store, &iter, 0, "Screen", -1);
-
-        gtk_list_store_append(blend_store, &iter);
-        gtk_list_store_set(blend_store, &iter, 0, "Overlay", -1);
+        for (int i = 0; i < 11; i++) {
+            gtk_list_store_append(blend_store, &iter);
+            gtk_list_store_set(blend_store, &iter, 0, blend_modes[i], -1);
+        }
 
         /* Set the model */
         gtk_combo_box_set_model(GTK_COMBO_BOX(layers_panel->combo_blend), GTK_TREE_MODEL(blend_store));
@@ -1683,14 +1711,35 @@ void layers_panel_update_opacity_controls(LayersPanel* layers_panel) {
                 case BLEND_MODE_NORMAL:
                     blend_index = 0;
                     break;
-                case BLEND_MODE_MULTIPLY:
+                case BLEND_MODE_DARKEN:
                     blend_index = 1;
                     break;
-                case BLEND_MODE_SCREEN:
+                case BLEND_MODE_MULTIPLY:
                     blend_index = 2;
                     break;
-                case BLEND_MODE_OVERLAY:
+                case BLEND_MODE_COLOR_BURN:
                     blend_index = 3;
+                    break;
+                case BLEND_MODE_LIGHTEN:
+                    blend_index = 4;
+                    break;
+                case BLEND_MODE_SCREEN:
+                    blend_index = 5;
+                    break;
+                case BLEND_MODE_COLOR_DODGE:
+                    blend_index = 6;
+                    break;
+                case BLEND_MODE_OVERLAY:
+                    blend_index = 7;
+                    break;
+                case BLEND_MODE_SOFT_LIGHT:
+                    blend_index = 8;
+                    break;
+                case BLEND_MODE_HARD_LIGHT:
+                    blend_index = 9;
+                    break;
+                case BLEND_MODE_DIFFERENCE:
+                    blend_index = 10;
                     break;
                 default:
                     blend_index = 0;

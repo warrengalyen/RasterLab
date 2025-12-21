@@ -29,9 +29,16 @@ typedef struct TileWorkerPool TileWorkerPool;
  */
 typedef enum {
     BLEND_MODE_NORMAL = 0,
-    BLEND_MODE_MULTIPLY = 1,
-    BLEND_MODE_SCREEN = 2,
-    BLEND_MODE_OVERLAY = 3,
+    BLEND_MODE_DARKEN = 1,
+    BLEND_MODE_MULTIPLY = 2,
+    BLEND_MODE_COLOR_BURN = 3,
+    BLEND_MODE_LIGHTEN = 4,
+    BLEND_MODE_SCREEN = 5,
+    BLEND_MODE_COLOR_DODGE = 6,
+    BLEND_MODE_OVERLAY = 7,
+    BLEND_MODE_SOFT_LIGHT = 8,
+    BLEND_MODE_HARD_LIGHT = 9,
+    BLEND_MODE_DIFFERENCE = 10,
 } BlendMode;
 
 /**
