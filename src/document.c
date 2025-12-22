@@ -226,9 +226,33 @@ static void draw_rect_select_preview(ImageDocument* doc, cairo_t* cr, gdouble zo
             cairo_scale(cr, zoom, zoom);
         }
 
-        /* Draw marching ants outline (same style as finalized selection) */
-        gdouble animation_offset = state->is_editing ? (gdouble)state->animation_phase : 0.0;
-        selection_draw_marching_ants(cr, rect_x, rect_y, rect_w, rect_h, 0.0, animation_offset);
+        /* If feathering is enabled, draw feathered outline from temporary mask */
+        if (state->smooth_mode == SELECTION_SMOOTH_FEATHERED && state->feather_radius > 0.0f) {
+            SelectionMask* preview_mask = selection_mask_new(doc->width, doc->height);
+
+            /* Fill rectangle into preview mask (hard edge) */
+            for (int row = rect_y; row < rect_y + rect_h && row < doc->height; row++) {
+                for (int col = rect_x; col < rect_x + rect_w && col < doc->width; col++) {
+                    preview_mask->base_mask[row * preview_mask->stride + col] = 255;
+                }
+            }
+
+            /* Apply feathering to preview mask */
+            preview_mask->feather_radius = state->feather_radius;
+            preview_mask->feather_dirty = TRUE;
+
+            /* Ensure feathering is computed by triggering surface rebuild */
+            selection_mask_get_surface(preview_mask);
+
+            /* Compute and render feathered outline */
+            selection_mask_render_outline(cr, preview_mask, state->animation_phase, zoom);
+
+            selection_mask_free(preview_mask);
+        } else {
+            /* Draw marching ants outline (same style as finalized selection) */
+            gdouble animation_offset = state->is_editing ? (gdouble)state->animation_phase : 0.0;
+            selection_draw_marching_ants(cr, rect_x, rect_y, rect_w, rect_h, 0.0, animation_offset);
+        }
 
         /* Draw corner resize handles only in edit mode */
         if (state->is_editing) {
