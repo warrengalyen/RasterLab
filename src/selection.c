@@ -2,16 +2,15 @@
 #include <math.h>
 #include <string.h>
 
-/* Selection animation constants */
-#define ANT_DASH_SIZE 4.0f       /* Marching ants dash length in pixels */
-#define ANT_DASH_SPEED_SLOW 200  /* Frame time in ms (5 fps) */
-#define ANT_DASH_SPEED_NORMAL 67 /* Frame time in ms (15 fps) */
-#define ANT_DASH_SPEED_FAST 33   /* Frame time in ms (30 fps) */
-#define ANT_DASH_SPEED_MIN 16    /* Frame time in ms (60 fps) */
-
 /**
- * Draw marching ants outline for a rectangle
+ * Draw marching ants outline for a rectangle using alternating pixels
  * Used by both selection preview and final selection rendering
+ * @param cr Cairo context to draw on
+ * @param x Rectangle x position
+ * @param y Rectangle y position
+ * @param width Rectangle width
+ * @param height Rectangle height
+ * @param dash_phase Animation phase (0-3) for marching effect
  */
 void selection_draw_marching_ants(cairo_t* cr, gdouble x, gdouble y,
                                   gdouble width, gdouble height,
@@ -20,24 +19,43 @@ void selection_draw_marching_ants(cairo_t* cr, gdouble x, gdouble y,
         return;
     }
 
-    /* Draw rectangle outline */
-    cairo_rectangle(cr, x, y, width, height);
+    gint x_start = (gint)x;
+    gint y_start = (gint)y;
+    gint x_end = (gint)(x + width);
+    gint y_end = (gint)(y + height);
+    gint dash_phase = (gint)animation_phase;
 
-    /* Set line style - alternating black/white dashed (marching ants) */
-    cairo_set_line_width(cr, line_width);
+    (void)line_width; /* Unused parameter - kept for API compatibility */
 
-    /* Create dashed pattern */
-    gdouble dashes[] = {ANT_DASH_SIZE, ANT_DASH_SIZE};
+    /* Draw top and bottom edges */
+    for (gint px = x_start; px <= x_end; px++) {
+        /* Top edge - shift pattern by dash_phase for animation */
+        int pattern = ((px + y_start) / (int)ANT_DASH_SIZE + dash_phase) % 2;
+        cairo_set_source_rgb(cr, pattern ? 0.0 : 1.0, pattern ? 0.0 : 1.0, pattern ? 0.0 : 1.0);
+        cairo_rectangle(cr, px, y_start, 1.0, 1.0);
+        cairo_fill(cr);
 
-    /* Draw with white (background) */
-    cairo_set_dash(cr, dashes, 2, animation_phase);
-    cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
-    cairo_stroke_preserve(cr);
+        /* Bottom edge */
+        pattern = ((px + y_end) / (int)ANT_DASH_SIZE + dash_phase) % 2;
+        cairo_set_source_rgb(cr, pattern ? 0.0 : 1.0, pattern ? 0.0 : 1.0, pattern ? 0.0 : 1.0);
+        cairo_rectangle(cr, px, y_end, 1.0, 1.0);
+        cairo_fill(cr);
+    }
 
-    /* Draw with black (foreground) offset by dash width */
-    cairo_set_dash(cr, dashes, 2, animation_phase + ANT_DASH_SIZE);
-    cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
-    cairo_stroke(cr);
+    /* Draw left and right edges */
+    for (gint py = y_start; py <= y_end; py++) {
+        /* Left edge */
+        int pattern = ((x_start + py) / (int)ANT_DASH_SIZE + dash_phase) % 2;
+        cairo_set_source_rgb(cr, pattern ? 0.0 : 1.0, pattern ? 0.0 : 1.0, pattern ? 0.0 : 1.0);
+        cairo_rectangle(cr, x_start, py, 1.0, 1.0);
+        cairo_fill(cr);
+
+        /* Right edge */
+        pattern = ((x_end + py) / (int)ANT_DASH_SIZE + dash_phase) % 2;
+        cairo_set_source_rgb(cr, pattern ? 0.0 : 1.0, pattern ? 0.0 : 1.0, pattern ? 0.0 : 1.0);
+        cairo_rectangle(cr, x_end, py, 1.0, 1.0);
+        cairo_fill(cr);
+    }
 }
 
 /**

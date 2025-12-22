@@ -70,6 +70,7 @@ set(SOURCES
     tool_options.c
     command.c
     selection.c
+    selection/selection_mask.c
     ui/tools_panel.c
     ui/tool_options_panel.c
     ui/layers_panel.c

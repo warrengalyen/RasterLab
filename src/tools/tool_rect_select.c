@@ -1,6 +1,7 @@
 #include "tools/tool_rect_select.h"
 #include "document.h"
 #include "selection.h"
+#include "selection/selection_mask.h"
 #include "tool_manager.h"
 #include "tool_options.h"
 #include <gdk/gdk.h>
@@ -8,11 +9,6 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
-
-/* Selection animation constant */
-#define ANT_DASH_SPEED_NORMAL 67 /* Frame time in ms (15 fps) */
-#define ANT_DASH_SPEED_FAST 33   /* Frame time in ms (30 fps) */
-#define ANT_DASH_SPEED_MIN 16    /* Frame time in ms (60 fps) */
 
 /* Forward declaration */
 static gboolean on_rect_select_tool_animation_timer(gpointer user_data);
@@ -107,21 +103,36 @@ static void rect_select_tool_mouse_down(Tool* tool, struct ImageDocument* doc, M
         }
 
         /* Clicking outside - finalize and start new selection */
-        /* Create a finalized Selection object from the current edit selection */
-        if (state->selection_w > 0 && state->selection_h > 0) {
-            if (doc->selection) {
-                selection_free(doc->selection);
+        /* Apply current edit selection to mask-based selection */
+        if (state->selection_w > 0 && state->selection_h > 0 && doc->selection_mask) {
+            SelectionCombineMode combine = SELECTION_COMBINE_NEW;
+
+            /* Map tool combine mode to mask combine mode if needed */
+            switch (state->combine_mode) {
+                case SELECTION_COMBINE_NEW:
+                    combine = SELECTION_COMBINE_NEW;
+                    break;
+                case SELECTION_COMBINE_ADD:
+                    combine = SELECTION_COMBINE_ADD;
+                    break;
+                case SELECTION_COMBINE_SUBTRACT:
+                    combine = SELECTION_COMBINE_SUBTRACT;
+                    break;
+                case SELECTION_COMBINE_INTERSECT:
+                    combine = SELECTION_COMBINE_INTERSECT;
+                    break;
             }
-            doc->selection = selection_create_rectangle(
+
+            /* Fill rectangle into mask with current smoothing settings */
+            selection_mask_fill_rect(
+                doc->selection_mask,
                 state->selection_x,
                 state->selection_y,
                 state->selection_w,
                 state->selection_h,
+                combine,
                 state->smooth_mode,
                 state->feather_radius);
-            if (doc->selection) {
-                selection_set_animated(doc->selection, TRUE);
-            }
         }
 
         state->is_editing = FALSE;
@@ -143,10 +154,10 @@ static void rect_select_tool_mouse_down(Tool* tool, struct ImageDocument* doc, M
     /* Get current tool options for selection */
     ToolOptions* opts = tool_options_get_for_tool(TOOL_RECT_SELECT);
     if (opts) {
-        /* Note: For now we use fixed defaults. These will be configurable via tool options panel */
-        state->combine_mode = SELECTION_COMBINE_NEW;
-        state->smooth_mode = SELECTION_SMOOTH_NONE;
-        state->feather_radius = 0;
+        /* Read selection options from tool options panel */
+        state->combine_mode = tool_options_get_rect_select_combine(opts);
+        state->smooth_mode = tool_options_get_rect_select_smooth(opts);
+        state->feather_radius = (gint)tool_options_get_rect_select_feather(opts);
     } else {
         state->combine_mode = SELECTION_COMBINE_NEW;
         state->smooth_mode = SELECTION_SMOOTH_NONE;
@@ -495,9 +506,12 @@ static void rect_select_tool_mouse_up(Tool* tool, struct ImageDocument* doc, Mou
         state->hovered_handle = -1;
         state->animation_phase = 0; /* Start animation */
 
-        /* Start animation timer if not already running */
-        if (state->animation_timer_id == 0) {
-            state->animation_timer_id = g_timeout_add(ANT_DASH_SPEED_NORMAL,
+        /* Start animation timer if not already running and animation is enabled */
+        ToolOptions* opts = tool_options_get_for_tool(TOOL_RECT_SELECT);
+        gboolean should_animate = opts ? tool_options_get_rect_select_animate(opts) : TRUE;
+
+        if (state->animation_timer_id == 0 && should_animate) {
+            state->animation_timer_id = g_timeout_add(ANT_DASH_SPEED_SLOW,
                                                       on_rect_select_tool_animation_timer,
                                                       (gpointer)doc);
         }

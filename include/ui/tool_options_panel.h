@@ -26,6 +26,7 @@ typedef struct {
     GtkWidget* rect_animate_checkbox; /* Animate checkbox (rect select only) */
     GtkWidget* rect_combine_combo;    /* Combine mode combo (rect select only) */
     GtkWidget* rect_smooth_combo;     /* Smoothing mode combo (rect select only) */
+    GtkWidget* rect_feather_scale;    /* Feather radius slider (rect select only) */
     ToolType current_tool_type;       /* Currently displayed tool type */
     ToolRegistry* tool_registry;      /* Tool registry for cursor updates */
 } ToolOptionsPanel;

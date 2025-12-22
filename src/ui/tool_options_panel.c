@@ -366,6 +366,77 @@ static GtkWidget* load_panel_from_glade(const gchar* resource_path, const gchar*
     return panel;
 }
 
+/**
+ * Signal handler for rectangle select combine mode changes
+ */
+static void on_rect_select_combine_changed(GtkComboBox* combo_box, gpointer user_data) {
+    (void)user_data; /* Unused */
+
+    gint active = gtk_combo_box_get_active(combo_box);
+    if (active < 0 || active >= 4) {
+        return;
+    }
+
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_RECT_SELECT);
+    if (!opts) {
+        return;
+    }
+
+    tool_options_set_rect_select_combine(opts, (SelectionCombineMode)active);
+}
+
+/**
+ * Signal handler for rectangle select smoothing mode changes
+ */
+static void on_rect_select_smooth_changed(GtkComboBox* combo_box, gpointer user_data) {
+    (void)user_data; /* Unused */
+
+    gint active = gtk_combo_box_get_active(combo_box);
+    if (active < 0 || active >= 3) {
+        return;
+    }
+
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_RECT_SELECT);
+    if (!opts) {
+        return;
+    }
+
+    tool_options_set_rect_select_smooth(opts, (SelectionSmoothingMode)active);
+}
+
+/**
+ * Signal handler for rectangle select feather radius changes
+ */
+static void on_rect_select_feather_changed(GtkRange* range, gpointer user_data) {
+    (void)user_data; /* Unused */
+
+    gdouble value = gtk_range_get_value(range);
+    gint feather_radius = (gint)value;
+
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_RECT_SELECT);
+    if (!opts) {
+        return;
+    }
+
+    tool_options_set_rect_select_feather(opts, (gfloat)feather_radius);
+}
+
+/**
+ * Signal handler for rectangle select animation checkbox
+ */
+static void on_rect_select_animate_toggled(GtkToggleButton* button, gpointer user_data) {
+    (void)user_data; /* Unused */
+
+    gboolean active = gtk_toggle_button_get_active(button);
+
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_RECT_SELECT);
+    if (!opts) {
+        return;
+    }
+
+    tool_options_set_rect_select_animate(opts, active);
+}
+
 ToolOptionsPanel* create_tool_options_panel(void) {
     ToolOptionsPanel* tool_opts_panel = (ToolOptionsPanel*)g_malloc(sizeof(ToolOptionsPanel));
 
@@ -392,6 +463,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
     tool_opts_panel->rect_animate_checkbox = NULL;
     tool_opts_panel->rect_combine_combo = NULL;
     tool_opts_panel->rect_smooth_combo = NULL;
+    tool_opts_panel->rect_feather_scale = NULL;
     tool_opts_panel->current_tool_type = TOOL_MOVE; /* Start with no tool selected */
 
     /* Create container to hold the current panel */
@@ -557,6 +629,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
     GtkWidget* rect_select_animate = NULL;
     GtkWidget* rect_select_combine = NULL;
     GtkWidget* rect_select_smooth = NULL;
+    GtkWidget* rect_select_feather = NULL;
 
     if (gtk_builder_add_from_resource(rect_select_builder, "/ui/rect_select_options.glade", &rect_select_error)) {
         tool_opts_panel->rect_select_panel = GTK_WIDGET(gtk_builder_get_object(rect_select_builder, "rect_select_options_panel"));
@@ -568,6 +641,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
             rect_select_animate = GTK_WIDGET(gtk_builder_get_object(rect_select_builder, "rect_select_animate_checkbox"));
             rect_select_combine = GTK_WIDGET(gtk_builder_get_object(rect_select_builder, "rect_select_combine_combo"));
             rect_select_smooth = GTK_WIDGET(gtk_builder_get_object(rect_select_builder, "rect_select_smooth_combo"));
+            rect_select_feather = GTK_WIDGET(gtk_builder_get_object(rect_select_builder, "rect_select_feather_scale"));
 
             /* Populate combo boxes */
             if (rect_select_combine) {
@@ -578,21 +652,42 @@ ToolOptionsPanel* create_tool_options_panel(void) {
                 gtk_combo_box_set_active(GTK_COMBO_BOX(rect_select_combine), 0);
                 g_object_set_data(G_OBJECT(tool_opts_panel->rect_select_panel), "combine_combo", rect_select_combine);
                 tool_opts_panel->rect_combine_combo = rect_select_combine;
+
+                /* Connect signal to update tool options when changed */
+                g_signal_connect(rect_select_combine, "changed",
+                                 G_CALLBACK(on_rect_select_combine_changed), NULL);
             }
 
             if (rect_select_smooth) {
                 gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(rect_select_smooth), "None");
                 gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(rect_select_smooth), "Antialiased");
                 gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(rect_select_smooth), "Feathered");
-                gtk_combo_box_set_active(GTK_COMBO_BOX(rect_select_smooth), 0);
+                gtk_combo_box_set_active(GTK_COMBO_BOX(rect_select_smooth), 1);
                 g_object_set_data(G_OBJECT(tool_opts_panel->rect_select_panel), "smooth_combo", rect_select_smooth);
                 tool_opts_panel->rect_smooth_combo = rect_select_smooth;
+
+                /* Connect signal to update tool options when changed */
+                g_signal_connect(rect_select_smooth, "changed",
+                                 G_CALLBACK(on_rect_select_smooth_changed), NULL);
+            }
+
+            if (rect_select_feather) {
+                g_object_set_data(G_OBJECT(tool_opts_panel->rect_select_panel), "feather_scale", rect_select_feather);
+                tool_opts_panel->rect_feather_scale = rect_select_feather;
+
+                /* Connect signal to update tool options when changed */
+                g_signal_connect(rect_select_feather, "value-changed",
+                                 G_CALLBACK(on_rect_select_feather_changed), NULL);
             }
 
             if (rect_select_animate) {
                 g_object_set_data(G_OBJECT(tool_opts_panel->rect_select_panel), "animate_checkbox", rect_select_animate);
                 tool_opts_panel->rect_animate_checkbox = rect_select_animate;
                 gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(rect_select_animate), TRUE);
+
+                /* Connect signal to update tool options when changed */
+                g_signal_connect(rect_select_animate, "toggled",
+                                 G_CALLBACK(on_rect_select_animate_toggled), NULL);
             }
 
             /* Hide rect select panel initially */

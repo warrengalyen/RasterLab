@@ -24,9 +24,13 @@ typedef struct TileThreadPool TileThreadPool;
 struct TileWorkerPool;
 typedef struct TileWorkerPool TileWorkerPool;
 
-/* Forward declaration for Selection */
+/* Forward declaration for old Selection (deprecated) */
 struct Selection;
 typedef struct Selection Selection;
+
+/* Forward declaration for new mask-based Selection */
+struct SelectionMask;
+typedef struct SelectionMask SelectionMask;
 
 /**
  * Blend modes for layers
@@ -135,7 +139,11 @@ typedef struct ImageDocument {
     /* Viewport and zoom */
     gdouble zoom_factor; /* Current zoom level (1.0 = 100%) */
 
-    /* Selection */
+    /* Selection - mask-based (new) */
+    SelectionMask* selection_mask;  /* Pixel-based selection mask */
+    gint selection_animation_phase; /* Animation phase for marching ants (0-3) */
+
+    /* Selection - deprecated (old geometry-based) */
     Selection* selection; /* Current selection (NULL if none) */
 
     /* Undo/redo system */

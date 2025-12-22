@@ -7,7 +7,9 @@
 #include "render/tile_thread_pool.h"
 #include "render/tile_worker.h"
 #include "selection.h"
+#include "selection/selection_mask.h"
 #include "tool_manager.h"
+#include "tool_options.h"
 #include "tools.h"
 #include "tools/tool_rect_select.h"
 #include "ui/layers_panel.h"
@@ -27,24 +29,36 @@ static void draw_rect_select_preview(ImageDocument* doc, cairo_t* cr, gdouble zo
 
 /**
  * Animation timer callback - updates selection marching ants
- * Called every ~100ms to animate the selection outline
  */
 static gboolean on_selection_animation_timer(gpointer user_data) {
     ImageDocument* doc = (ImageDocument*)user_data;
 
-    if (!doc || !doc->selection) {
-        return FALSE; /* Stop timer if document or selection is gone */
+    if (!doc) {
+        return FALSE; /* Stop timer if document is gone */
     }
 
-    /* Update animation phase */
-    selection_update_animation(doc->selection);
+    /* Check if animation is enabled for rect select tool */
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_RECT_SELECT);
+    gboolean animate_enabled = opts ? tool_options_get_rect_select_animate(opts) : TRUE;
+
+    /* Update animation for mask-based selection if animation is enabled */
+    if (animate_enabled && doc->selection_mask && !selection_mask_is_empty(doc->selection_mask)) {
+        /* Advance animation phase (0-3 for 4-pixel dashes) */
+        doc->selection_animation_phase = (doc->selection_animation_phase + 1) % 4;
+    }
+
+    /* Update animation for old selection (deprecated) */
+    if (doc->selection && !selection_is_empty(doc->selection)) {
+        selection_update_animation(doc->selection);
+    }
 
     /* Queue redraw to show animation */
     if (doc->drawing_area) {
         gtk_widget_queue_draw(doc->drawing_area);
     }
 
-    return TRUE; /* Keep timer running */
+    /* Keep timer running - it needs to stay active for when selections are created */
+    return TRUE;
 }
 
 /**
@@ -147,14 +161,6 @@ static gboolean on_drawing_area_enter_notify(GtkWidget* widget, GdkEventCrossing
 /**
  * Draw rect select tool preview during drag
  */
-
-/* Selection animation constants */
-#define ANT_DASH_SIZE 4.0f       /* Marching ants dash length in pixels */
-#define ANT_DASH_SPEED_SLOW 200  /* Frame time in ms (5 fps) */
-#define ANT_DASH_SPEED_NORMAL 67 /* Frame time in ms (15 fps) */
-#define ANT_DASH_SPEED_FAST 33   /* Frame time in ms (30 fps) */
-#define ANT_DASH_SPEED_MIN 16    /* Frame time in ms (60 fps) */
-
 static void draw_rect_select_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom) {
     if (!doc || !doc->drawing_area || !cr) {
         return;
@@ -220,14 +226,9 @@ static void draw_rect_select_preview(ImageDocument* doc, cairo_t* cr, gdouble zo
             cairo_scale(cr, zoom, zoom);
         }
 
-        /* Determine animation phase: no animation while dragging, animate while editing */
+        /* Draw marching ants outline (same style as finalized selection) */
         gdouble animation_offset = state->is_editing ? (gdouble)state->animation_phase : 0.0;
-
-        /* Draw marching ants outline using shared function */
-        gdouble line_width = 0.75 / zoom;
-        selection_draw_marching_ants(cr, (double)rect_x, (double)rect_y,
-                                     (double)rect_w, (double)rect_h,
-                                     line_width, animation_offset);
+        selection_draw_marching_ants(cr, rect_x, rect_y, rect_w, rect_h, 0.0, animation_offset);
 
         /* Draw corner resize handles only in edit mode */
         if (state->is_editing) {
@@ -448,9 +449,16 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
     /* Draw rect select tool preview during drag */
     draw_rect_select_preview(doc, cr, zoom);
 
-    /* Render selection overlay after all content is drawn (unzoomed) */
+    /* Render selection overlays after all content is drawn (unzoomed) */
+
+    /* Render mask-based selection (new) */
+    if (doc->selection_mask && !selection_mask_is_empty(doc->selection_mask)) {
+        selection_mask_render_outline(cr, doc->selection_mask,
+                                      doc->selection_animation_phase, zoom);
+    }
+
+    /* Render old geometry-based selection (deprecated) */
     if (doc->selection && !selection_is_empty(doc->selection)) {
-        /* Draw selection overlay (marching ants) */
         selection_render_overlay(doc->selection, cr, zoom);
     }
 
@@ -808,8 +816,13 @@ ImageDocument* document_new(const gchar* filename, gboolean create_worker_pool) 
     doc->tile_thread_pool = NULL; /* Will be created when image is loaded */
     doc->zoom_factor = 1.0;
 
-    /* Initialize selection (empty) */
-    doc->selection = NULL; /* Will be created when needed */
+    /* Initialize mask-based selection (empty) */
+    /* Will be allocated when document dimensions are known */
+    doc->selection_mask = NULL;
+    doc->selection_animation_phase = 0;
+
+    /* Initialize old selection (deprecated, kept for compatibility) */
+    doc->selection = NULL;
 
     /* Create tile worker pool if requested (for on-screen rendering) */
     if (create_worker_pool) {
@@ -895,7 +908,13 @@ void document_free(ImageDocument* doc) {
         doc->tile_thread_pool = NULL;
     }
 
-    /* Free selection if it exists */
+    /* Free selection mask if it exists */
+    if (doc->selection_mask) {
+        selection_mask_free(doc->selection_mask);
+        doc->selection_mask = NULL;
+    }
+
+    /* Free old selection if it exists (deprecated) */
     if (doc->selection) {
         selection_free(doc->selection);
         doc->selection = NULL;
@@ -1002,8 +1021,8 @@ GtkWidget* document_create_drawing_area(ImageDocument* doc) {
     doc->drawing_area = drawing_area;
     doc->scrolled_window = scrolled_window;
 
-    /* Start animation timer for selection marching ants (100ms interval) */
-    g_timeout_add(100, on_selection_animation_timer, doc);
+    /* Start animation timer for selection marching ants (using standard speed) */
+    g_timeout_add(ANT_DASH_SPEED_SLOW, on_selection_animation_timer, doc);
 
     /* Connect to scroll adjustment signals to trigger redraws when scrolling */
     /* Note: Adjustments might be NULL initially, so we'll connect when they're created */
@@ -1095,6 +1114,17 @@ gboolean document_load_image_from_file(ImageDocument* doc, const gchar* file_pat
     doc->tile_grid = tile_grid_create(doc->width, doc->height, 128);
     if (!doc->tile_grid) {
         g_warning("Failed to create tile grid");
+        g_object_unref(pixbuf);
+        return FALSE;
+    }
+
+    /* Create mask-based selection (initially empty) */
+    if (doc->selection_mask) {
+        selection_mask_free(doc->selection_mask);
+    }
+    doc->selection_mask = selection_mask_new(doc->width, doc->height);
+    if (!doc->selection_mask) {
+        g_warning("Failed to create selection mask");
         g_object_unref(pixbuf);
         return FALSE;
     }

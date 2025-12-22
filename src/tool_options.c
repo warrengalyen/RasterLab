@@ -28,6 +28,12 @@ ToolOptions* tool_options_new(void) {
     opts->fill_contiguous = settings_get_default_tool_fill_contiguous();
     opts->fill_antialiased = settings_get_default_tool_fill_antialiased();
 
+    /* Initialize rectangle select tool options */
+    opts->rect_select_combine = SELECTION_COMBINE_NEW;
+    opts->rect_select_smooth = SELECTION_SMOOTH_ANTIALIASED;
+    opts->rect_select_feather = 0.0f;
+    opts->rect_select_animate = TRUE;
+
     return opts;
 }
 
@@ -140,6 +146,86 @@ void tool_options_set_fill_antialiased(ToolOptions* opts, gboolean antialiased) 
     }
 
     opts->fill_antialiased = antialiased ? TRUE : FALSE;
+}
+
+/**
+ * Set rectangle select combine mode
+ */
+void tool_options_set_rect_select_combine(ToolOptions* opts, SelectionCombineMode combine) {
+    if (!opts) {
+        return;
+    }
+    opts->rect_select_combine = combine;
+}
+
+/**
+ * Get rectangle select combine mode
+ */
+SelectionCombineMode tool_options_get_rect_select_combine(ToolOptions* opts) {
+    if (!opts) {
+        return SELECTION_COMBINE_NEW;
+    }
+    return opts->rect_select_combine;
+}
+
+/**
+ * Set rectangle select smoothing mode
+ */
+void tool_options_set_rect_select_smooth(ToolOptions* opts, SelectionSmoothingMode smooth) {
+    if (!opts) {
+        return;
+    }
+    opts->rect_select_smooth = smooth;
+}
+
+/**
+ * Get rectangle select smoothing mode
+ */
+SelectionSmoothingMode tool_options_get_rect_select_smooth(ToolOptions* opts) {
+    if (!opts) {
+        return SELECTION_SMOOTH_NONE;
+    }
+    return opts->rect_select_smooth;
+}
+
+/**
+ * Set rectangle select feather radius
+ */
+void tool_options_set_rect_select_feather(ToolOptions* opts, gfloat feather) {
+    if (!opts) {
+        return;
+    }
+    opts->rect_select_feather = (feather < 0.0f) ? 0.0f : feather;
+}
+
+/**
+ * Get rectangle select feather radius
+ */
+gfloat tool_options_get_rect_select_feather(ToolOptions* opts) {
+    if (!opts) {
+        return 0.0f;
+    }
+    return opts->rect_select_feather;
+}
+
+/**
+ * Set rectangle select animation
+ */
+void tool_options_set_rect_select_animate(ToolOptions* opts, gboolean animate) {
+    if (!opts) {
+        return;
+    }
+    opts->rect_select_animate = animate ? TRUE : FALSE;
+}
+
+/**
+ * Get rectangle select animation
+ */
+gboolean tool_options_get_rect_select_animate(ToolOptions* opts) {
+    if (!opts) {
+        return TRUE; /* Default to animated */
+    }
+    return opts->rect_select_animate;
 }
 
 /**
