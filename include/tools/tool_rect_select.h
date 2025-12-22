@@ -4,6 +4,9 @@
 #include "selection.h"
 #include "tools.h"
 
+/* Forward declaration */
+typedef struct ImageDocument ImageDocument;
+
 /**
  * Rectangular Selection Tool state and options
  */
@@ -32,5 +35,21 @@ typedef struct {
  * @return Newly created Tool, or NULL on failure
  */
 Tool* tool_rect_select_create(void);
+
+/**
+ * Draw rectangular selection preview during editing/dragging
+ * @param doc The active image document
+ * @param cr Cairo context to draw on
+ * @param zoom Current zoom level
+ */
+void tool_rect_select_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom);
+
+/**
+ * Animation timer callback for rectangular selection tool preview
+ * Updates the marching ants animation phase
+ * @param user_data Pointer to ImageDocument
+ * @return TRUE to keep timer running, FALSE to stop
+ */
+gboolean tool_rect_select_animation_timer(gpointer user_data);
 
 #endif /* TOOL_RECT_SELECT_H */

@@ -25,7 +25,6 @@ static void on_scrolled_window_adjustment_notify(GObject* object, GParamSpec* ps
 static gboolean on_viewport_button_press(GtkWidget* widget, GdkEventButton* event, gpointer user_data);
 static gboolean on_viewport_button_release(GtkWidget* widget, GdkEventButton* event, gpointer user_data);
 static gboolean on_viewport_motion_notify(GtkWidget* widget, GdkEventMotion* event, gpointer user_data);
-static void draw_rect_select_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom);
 
 /**
  * Animation timer callback - updates selection marching ants
@@ -59,43 +58,6 @@ static gboolean on_selection_animation_timer(gpointer user_data) {
 
     /* Keep timer running - it needs to stay active for when selections are created */
     return TRUE;
-}
-
-/**
- * Animation timer callback - updates rect select tool preview animation
- * Called every ~100ms to animate marching ants during selection editing
- */
-static gboolean on_rect_select_animation_timer(gpointer user_data) {
-    ImageDocument* doc = (ImageDocument*)user_data;
-
-    if (!doc || !doc->drawing_area) {
-        return FALSE;
-    }
-
-    ToolRegistry* tool_registry = (ToolRegistry*)g_object_get_data(G_OBJECT(doc->drawing_area), "tool_registry");
-    if (!tool_registry) {
-        return FALSE;
-    }
-
-    Tool* active_tool = tool_manager_get_active(tool_registry);
-    if (!active_tool || active_tool->type != TOOL_RECT_SELECT || !active_tool->user_data) {
-        return FALSE;
-    }
-
-    RectSelectToolState* state = (RectSelectToolState*)active_tool->user_data;
-
-    /* Only animate if editing */
-    if (!state->is_editing) {
-        return FALSE; /* Stop timer if not editing */
-    }
-
-    /* Update animation phase (cycle 0-3 for 4-pixel dash) */
-    state->animation_phase = (state->animation_phase + 1) % 4;
-
-    /* Queue redraw */
-    gtk_widget_queue_draw(doc->drawing_area);
-
-    return TRUE; /* Keep timer running */
 }
 
 /**
@@ -157,168 +119,6 @@ static gboolean on_drawing_area_button_press(GtkWidget* widget, GdkEventButton* 
 static gboolean on_drawing_area_button_release(GtkWidget* widget, GdkEventButton* event, gpointer user_data);
 static gboolean on_drawing_area_motion_notify(GtkWidget* widget, GdkEventMotion* event, gpointer user_data);
 static gboolean on_drawing_area_enter_notify(GtkWidget* widget, GdkEventCrossing* event, gpointer user_data);
-
-/**
- * Draw rect select tool preview during drag
- */
-static void draw_rect_select_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom) {
-    if (!doc || !doc->drawing_area || !cr) {
-        return;
-    }
-
-    if (doc->layers && g_list_length(doc->layers) > 0) {
-        ToolRegistry* tool_registry = (ToolRegistry*)g_object_get_data(G_OBJECT(doc->drawing_area), "tool_registry");
-        if (!tool_registry) {
-            return;
-        }
-
-        Tool* active_tool = tool_manager_get_active(tool_registry);
-        if (!active_tool || active_tool->type != TOOL_RECT_SELECT || !active_tool->user_data) {
-            return;
-        }
-
-        RectSelectToolState* state = (RectSelectToolState*)active_tool->user_data;
-
-        /* Draw if dragging OR editing */
-        gboolean should_draw = state->is_dragging || state->is_editing;
-        if (!should_draw) {
-            return;
-        }
-
-        /* Determine rectangle to draw */
-        gint rect_x, rect_y, rect_w, rect_h;
-
-        /* Check if this is a new selection drag (dragging_handle == -2)
-         * Otherwise use stored bounds for move/resize/edit */
-        if (state->is_dragging && state->dragging_handle == -2) {
-            /* Drawing new selection - calculate from drag state */
-            rect_x = state->anchor_x;
-            rect_y = state->anchor_y;
-            rect_w = state->current_x - state->anchor_x;
-            rect_h = state->current_y - state->anchor_y;
-
-            /* Normalize */
-            if (rect_w < 0) {
-                rect_x += rect_w;
-                rect_w = -rect_w;
-            }
-            if (rect_h < 0) {
-                rect_y += rect_h;
-                rect_h = -rect_h;
-            }
-        } else {
-            /* Move/resize/edit - use stored bounds */
-            rect_x = state->selection_x;
-            rect_y = state->selection_y;
-            rect_w = state->selection_w;
-            rect_h = state->selection_h;
-        }
-
-        if (rect_w <= 0 || rect_h <= 0) {
-            return;
-        }
-
-        /* Save Cairo state to draw preview in zoomed space */
-        cairo_save(cr);
-
-        /* Apply zoom transform for preview rectangle */
-        if (zoom != 1.0) {
-            cairo_scale(cr, zoom, zoom);
-        }
-
-        /* Update smoothing mode and feather radius from current tool options (allows real-time updates) */
-        ToolOptions* current_opts = tool_options_get_for_tool(TOOL_RECT_SELECT);
-        if (current_opts) {
-            state->smooth_mode = current_opts->rect_select_smooth;
-            state->feather_radius = current_opts->rect_select_feather;
-        }
-
-        /* Determine if we should show feathered outline
-           Only show feathering after mouse is released (not dragging) to improve performance */
-        gboolean show_feathered = (state->smooth_mode == SELECTION_SMOOTH_FEATHERED &&
-                                   state->feather_radius > 0.0f &&
-                                   !state->is_dragging);
-
-        if (show_feathered) {
-            /* Draw feathered outline from temporary mask (only when not actively dragging) */
-            SelectionMask* preview_mask = selection_mask_new(doc->width, doc->height);
-
-            /* Fill rectangle into preview mask (hard edge) */
-            for (int row = rect_y; row < rect_y + rect_h && row < doc->height; row++) {
-                for (int col = rect_x; col < rect_x + rect_w && col < doc->width; col++) {
-                    preview_mask->base_mask[row * preview_mask->stride + col] = 255;
-                }
-            }
-
-            /* Apply feathering to preview mask */
-            preview_mask->feather_radius = state->feather_radius;
-            preview_mask->feather_dirty = TRUE;
-
-            /* Ensure feathering is computed by triggering surface rebuild */
-            selection_mask_get_surface(preview_mask);
-
-            /* Compute and render feathered outline with animation phase if enabled */
-            int animation_phase = (current_opts && current_opts->rect_select_animate) ? state->animation_phase : 0;
-            selection_mask_render_outline(cr, preview_mask, animation_phase, zoom);
-
-            selection_mask_free(preview_mask);
-        } else {
-            /* Draw hard outline (no feathering) - faster for active dragging */
-            int animation_phase = (state->is_editing && current_opts && current_opts->rect_select_animate) ? state->animation_phase : 0;
-            gdouble animation_offset = (gdouble)animation_phase;
-            selection_draw_marching_ants(cr, rect_x, rect_y, rect_w, rect_h, 0.0, animation_offset);
-        }
-
-        /* Draw corner resize handles only in edit mode */
-        if (state->is_editing) {
-            gdouble handle_size = 12.0 / zoom; /* Increased from 8.0 */
-            gdouble half_handle = handle_size / 2.0;
-            gdouble handle_line_width = 1.0 / zoom;
-
-            /* Reset dash pattern for solid handles */
-            cairo_set_dash(cr, NULL, 0, 0);
-
-            /* Corner positions: top-left, top-right, bottom-left, bottom-right */
-            gdouble corners[4][2] = {
-                {rect_x, rect_y},                  /* top-left */
-                {rect_x + rect_w, rect_y},         /* top-right */
-                {rect_x, rect_y + rect_h},         /* bottom-left */
-                {rect_x + rect_w, rect_y + rect_h} /* bottom-right */
-            };
-
-            for (gint i = 0; i < 4; i++) {
-                gdouble cx = corners[i][0];
-                gdouble cy = corners[i][1];
-
-                /* Draw filled area with blue if this handle is hovered */
-                if (state->hovered_handle == i) {
-                    gdouble inset = handle_line_width * 1.5;
-                    cairo_rectangle(cr, cx - half_handle + inset, cy - half_handle + inset,
-                                    handle_size - (inset * 2), handle_size - (inset * 2));
-                    cairo_set_source_rgba(cr, 0.0, 0.5, 1.0, 0.6); /* Blue with transparency */
-                    cairo_fill(cr);
-                }
-
-                /* Draw outer black line (full size) - solid */
-                cairo_rectangle(cr, cx - half_handle, cy - half_handle,
-                                handle_size, handle_size);
-                cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
-                cairo_set_line_width(cr, handle_line_width);
-                cairo_stroke(cr);
-
-                /* Draw inner white line (smaller, inset) - solid */
-                gdouble inset = handle_line_width * 1.5;
-                cairo_rectangle(cr, cx - half_handle + inset, cy - half_handle + inset,
-                                handle_size - (inset * 2), handle_size - (inset * 2));
-                cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
-                cairo_set_line_width(cr, handle_line_width);
-                cairo_stroke(cr);
-            }
-        }
-
-        cairo_restore(cr);
-    }
-}
 
 /**
  * Drawing area draw callback
@@ -486,7 +286,7 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
     }
 
     /* Draw rect select tool preview during drag */
-    draw_rect_select_preview(doc, cr, zoom);
+    tool_rect_select_draw_preview(doc, cr, zoom);
 
     /* Render selection overlays after all content is drawn (unzoomed) */
 
