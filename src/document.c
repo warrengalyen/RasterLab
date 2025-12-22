@@ -226,6 +226,13 @@ static void draw_rect_select_preview(ImageDocument* doc, cairo_t* cr, gdouble zo
             cairo_scale(cr, zoom, zoom);
         }
 
+        /* Update smoothing mode and feather radius from current tool options (allows real-time updates) */
+        ToolOptions* current_opts = tool_options_get_for_tool(TOOL_RECT_SELECT);
+        if (current_opts) {
+            state->smooth_mode = current_opts->rect_select_smooth;
+            state->feather_radius = current_opts->rect_select_feather;
+        }
+
         /* Determine if we should show feathered outline
            Only show feathering after mouse is released (not dragging) to improve performance */
         gboolean show_feathered = (state->smooth_mode == SELECTION_SMOOTH_FEATHERED &&

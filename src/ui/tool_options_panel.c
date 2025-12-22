@@ -389,7 +389,7 @@ static void on_rect_select_combine_changed(GtkComboBox* combo_box, gpointer user
  * Signal handler for rectangle select smoothing mode changes
  */
 static void on_rect_select_smooth_changed(GtkComboBox* combo_box, gpointer user_data) {
-    (void)user_data; /* Unused */
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
 
     gint active = gtk_combo_box_get_active(combo_box);
     if (active < 0 || active >= 3) {
@@ -402,13 +402,27 @@ static void on_rect_select_smooth_changed(GtkComboBox* combo_box, gpointer user_
     }
 
     tool_options_set_rect_select_smooth(opts, (SelectionSmoothingMode)active);
+
+    /* Trigger canvas redraw to update preview with new smoothing mode */
+    if (panel && panel->panel) {
+        GtkWidget* window = gtk_widget_get_toplevel(panel->panel);
+        if (window) {
+            AppContext* ctx = (AppContext*)g_object_get_data(G_OBJECT(window), "app_context");
+            if (ctx) {
+                ImageDocument* doc = ui_get_active_document(ctx);
+                if (doc && doc->drawing_area) {
+                    gtk_widget_queue_draw(doc->drawing_area);
+                }
+            }
+        }
+    }
 }
 
 /**
  * Signal handler for rectangle select feather radius changes
  */
 static void on_rect_select_feather_changed(GtkRange* range, gpointer user_data) {
-    (void)user_data; /* Unused */
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
 
     gdouble value = gtk_range_get_value(range);
     gint feather_radius = (gint)value;
@@ -419,6 +433,20 @@ static void on_rect_select_feather_changed(GtkRange* range, gpointer user_data) 
     }
 
     tool_options_set_rect_select_feather(opts, (gfloat)feather_radius);
+
+    /* Trigger canvas redraw to update preview with new feather radius */
+    if (panel && panel->panel) {
+        GtkWidget* window = gtk_widget_get_toplevel(panel->panel);
+        if (window) {
+            AppContext* ctx = (AppContext*)g_object_get_data(G_OBJECT(window), "app_context");
+            if (ctx) {
+                ImageDocument* doc = ui_get_active_document(ctx);
+                if (doc && doc->drawing_area) {
+                    gtk_widget_queue_draw(doc->drawing_area);
+                }
+            }
+        }
+    }
 }
 
 /**
@@ -668,7 +696,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
 
                 /* Connect signal to update tool options when changed */
                 g_signal_connect(rect_select_smooth, "changed",
-                                 G_CALLBACK(on_rect_select_smooth_changed), NULL);
+                                 G_CALLBACK(on_rect_select_smooth_changed), tool_opts_panel);
             }
 
             if (rect_select_feather) {
@@ -677,7 +705,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
 
                 /* Connect signal to update tool options when changed */
                 g_signal_connect(rect_select_feather, "value-changed",
-                                 G_CALLBACK(on_rect_select_feather_changed), NULL);
+                                 G_CALLBACK(on_rect_select_feather_changed), tool_opts_panel);
             }
 
             if (rect_select_animate) {
