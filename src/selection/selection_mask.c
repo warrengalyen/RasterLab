@@ -245,9 +245,8 @@ void selection_mask_apply(
 }
 
 /**
- * Compute feathering effect for preview rendering
- * Creates an outward-expanding feathered edge from the base mask
- * Uses distance field approach: pixels outside base selection get feathering gradient
+ * Compute feathering effect for preview rendering using fast separable distance transform
+ * O(n*r) performance, accurate Euclidean distances
  */
 static void compute_preview_feather_mask(SelectionMask* mask) {
     if (!mask || !mask->base_mask || mask->feather_radius <= 0.0f) {
@@ -276,10 +275,72 @@ static void compute_preview_feather_mask(SelectionMask* mask) {
         return;
     }
 
-    /* Apply feathering: expand selected regions outward with gradient falloff
-       For each unselected pixel within feather_radius of a selected pixel,
-       apply gradient based on distance */
+    /* Two-pass separable distance transform
+       Pass 1: Horizontal distance per row
+       Pass 2: Vertical distance per column, combining with horizontal */
+    float* dist = g_malloc(mask->stride * mask->height * sizeof(float));
 
+    /* Initialize: 0 for selected, large value for unselected */
+    float large_val = (float)(radius + 1);
+    for (int i = 0; i < mask->height * mask->stride; i++) {
+        dist[i] = (mask->base_mask[i] > 0) ? 0.0f : large_val;
+    }
+
+    /* Pass 1: Horizontal - find nearest selected pixel in each row */
+    for (int y = 0; y < mask->height; y++) {
+        /* Forward pass: propagate distance from left */
+        for (int x = 1; x < mask->width; x++) {
+            if (dist[y * mask->stride + x - 1] < large_val) {
+                float candidate = dist[y * mask->stride + x - 1] + 1.0f;
+                dist[y * mask->stride + x] = fminf(dist[y * mask->stride + x], candidate);
+            }
+        }
+
+        /* Backward pass: propagate distance from right */
+        for (int x = mask->width - 2; x >= 0; x--) {
+            if (dist[y * mask->stride + x + 1] < large_val) {
+                float candidate = dist[y * mask->stride + x + 1] + 1.0f;
+                dist[y * mask->stride + x] = fminf(dist[y * mask->stride + x], candidate);
+            }
+        }
+    }
+
+    /* Pass 2: Vertical - combine with vertical distance
+       For each column, check pixels within radius vertically
+       Combine horizontal distance from those pixels with vertical offset */
+    for (int x = 0; x < mask->width; x++) {
+        float* temp = g_malloc(mask->height * sizeof(float));
+        memset(temp, 0, mask->height * sizeof(float));
+
+        for (int y = 0; y < mask->height; y++) {
+            float min_dist = large_val;
+
+            /* Check all pixels within vertical radius */
+            for (int dy = -radius; dy <= radius; dy++) {
+                int ny = y + dy;
+                if (ny >= 0 && ny < mask->height) {
+                    float h_dist = dist[ny * mask->stride + x];
+                    if (h_dist < large_val) {
+                        /* Euclidean distance combining horizontal and vertical offset */
+                        float euclidean_sq = h_dist * h_dist + (float)(dy * dy);
+                        float euclidean = sqrtf(euclidean_sq);
+                        min_dist = fminf(min_dist, euclidean);
+                    }
+                }
+            }
+
+            temp[y] = min_dist;
+        }
+
+        /* Copy temp back to dist for this column */
+        for (int y = 0; y < mask->height; y++) {
+            dist[y * mask->stride + x] = temp[y];
+        }
+
+        g_free(temp);
+    }
+
+    /* Apply feathering gradient based on distance field */
     for (int y = 0; y < mask->height; y++) {
         for (int x = 0; x < mask->width; x++) {
             uint8_t center = mask->base_mask[y * mask->stride + x];
@@ -288,39 +349,19 @@ static void compute_preview_feather_mask(SelectionMask* mask) {
             if (center > 0)
                 continue;
 
-            /* Find minimum distance to any selected pixel */
-            float min_dist = (float)(radius + 1);
-
-            /* Search within radius box */
-            for (int dy = -radius; dy <= radius; dy++) {
-                int ny = y + dy;
-                if (ny < 0 || ny >= mask->height)
-                    continue;
-
-                for (int dx = -radius; dx <= radius; dx++) {
-                    int nx = x + dx;
-                    if (nx < 0 || nx >= mask->width)
-                        continue;
-
-                    if (mask->base_mask[ny * mask->stride + nx] > 0) {
-                        /* Found a selected pixel, calculate Euclidean distance */
-                        float dist = sqrtf((float)(dx * dx + dy * dy));
-                        if (dist < min_dist) {
-                            min_dist = dist;
-                        }
-                    }
-                }
-            }
+            float d = dist[y * mask->stride + x];
 
             /* Apply feathering gradient if within feather radius */
-            if (min_dist <= (float)radius) {
+            if (d > 0.0f && d <= (float)radius) {
                 /* Create smooth falloff: fully transparent at radius, fully opaque at 0 */
-                float t = min_dist / (float)radius;
+                float t = d / (float)radius;
                 uint8_t alpha = (uint8_t)(255.0f * (1.0f - t * t)); /* Quadratic falloff */
                 mask->preview_feather_mask[y * mask->stride + x] = alpha;
             }
         }
     }
+
+    g_free(dist);
 
     /* Use preview feather mask for rendering */
     mask->data = mask->preview_feather_mask;
