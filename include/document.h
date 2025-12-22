@@ -24,6 +24,10 @@ typedef struct TileThreadPool TileThreadPool;
 struct TileWorkerPool;
 typedef struct TileWorkerPool TileWorkerPool;
 
+/* Forward declaration for Selection */
+struct Selection;
+typedef struct Selection Selection;
+
 /**
  * Blend modes for layers
  */
@@ -130,6 +134,9 @@ typedef struct ImageDocument {
 
     /* Viewport and zoom */
     gdouble zoom_factor; /* Current zoom level (1.0 = 100%) */
+
+    /* Selection */
+    Selection* selection; /* Current selection (NULL if none) */
 
     /* Undo/redo system */
     CommandStack* undo_stack; /* Stack of undoable commands */

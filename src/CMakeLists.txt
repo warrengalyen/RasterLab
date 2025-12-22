@@ -66,8 +66,10 @@ set(SOURCES
     tools/tool_brush.c
     tools/tool_eraser.c
     tools/tool_paintbucket.c
+    tools/tool_rect_select.c
     tool_options.c
     command.c
+    selection.c
     ui/tools_panel.c
     ui/tool_options_panel.c
     ui/layers_panel.c

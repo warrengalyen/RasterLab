@@ -7,6 +7,7 @@
     <file preprocess="to-pixdata">icons/tool-paintbrush.png</file>
     <file preprocess="to-pixdata">icons/tool-eraser.png</file>
     <file preprocess="to-pixdata">icons/tool-paintbucket.png</file>
+    <file preprocess="to-pixdata">icons/tool-rect-select.png</file>
     <file preprocess="to-pixdata">icons/chevron.png</file>
     <file preprocess="xml-stripblanks">icons/layer-add.svg</file>
     <file preprocess="xml-stripblanks">icons/layer-delete.svg</file>
@@ -37,6 +38,7 @@
     <file>ui/brush_options.glade</file>
     <file>ui/eraser_options.glade</file>
     <file>ui/paintbucket_options.glade</file>
+    <file>ui/rect_select_options.glade</file>
     <file>ui/new_layer_dialog.glade</file>
     <file>ui/canvas_size_dialog.glade</file>
     <file>ui/main_window.glade</file>

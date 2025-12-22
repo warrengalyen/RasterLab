@@ -5,6 +5,7 @@
 #include "tools/tool_fill.h"
 #include "tools/tool_hand.h"
 #include "tools/tool_move.h"
+#include "tools/tool_rect_select.h"
 #include "tools/tool_zoom.h"
 
 #include <stdio.h>
@@ -77,6 +78,13 @@ gboolean tool_manager_init_defaults(ToolRegistry* registry) {
         return FALSE;
     }
     tool_manager_register(registry, tool, TOOL_PAINT_BUCKET);
+
+    /* Create Rectangular Selection tool */
+    tool = tool_rect_select_create();
+    if (!tool) {
+        return FALSE;
+    }
+    tool_manager_register(registry, tool, TOOL_RECT_SELECT);
 
     /* Activate Hand tool by default */
     tool_manager_activate(registry, TOOL_HAND);

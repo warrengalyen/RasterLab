@@ -6,8 +6,10 @@
 #include "render/tile.h"
 #include "render/tile_thread_pool.h"
 #include "render/tile_worker.h"
+#include "selection.h"
 #include "tool_manager.h"
 #include "tools.h"
+#include "tools/tool_rect_select.h"
 #include "ui/layers_panel.h"
 #include <math.h>
 #include <stdio.h>
@@ -21,6 +23,66 @@ static void on_scrolled_window_adjustment_notify(GObject* object, GParamSpec* ps
 static gboolean on_viewport_button_press(GtkWidget* widget, GdkEventButton* event, gpointer user_data);
 static gboolean on_viewport_button_release(GtkWidget* widget, GdkEventButton* event, gpointer user_data);
 static gboolean on_viewport_motion_notify(GtkWidget* widget, GdkEventMotion* event, gpointer user_data);
+static void draw_rect_select_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom);
+
+/**
+ * Animation timer callback - updates selection marching ants
+ * Called every ~100ms to animate the selection outline
+ */
+static gboolean on_selection_animation_timer(gpointer user_data) {
+    ImageDocument* doc = (ImageDocument*)user_data;
+
+    if (!doc || !doc->selection) {
+        return FALSE; /* Stop timer if document or selection is gone */
+    }
+
+    /* Update animation phase */
+    selection_update_animation(doc->selection);
+
+    /* Queue redraw to show animation */
+    if (doc->drawing_area) {
+        gtk_widget_queue_draw(doc->drawing_area);
+    }
+
+    return TRUE; /* Keep timer running */
+}
+
+/**
+ * Animation timer callback - updates rect select tool preview animation
+ * Called every ~100ms to animate marching ants during selection editing
+ */
+static gboolean on_rect_select_animation_timer(gpointer user_data) {
+    ImageDocument* doc = (ImageDocument*)user_data;
+
+    if (!doc || !doc->drawing_area) {
+        return FALSE;
+    }
+
+    ToolRegistry* tool_registry = (ToolRegistry*)g_object_get_data(G_OBJECT(doc->drawing_area), "tool_registry");
+    if (!tool_registry) {
+        return FALSE;
+    }
+
+    Tool* active_tool = tool_manager_get_active(tool_registry);
+    if (!active_tool || active_tool->type != TOOL_RECT_SELECT || !active_tool->user_data) {
+        return FALSE;
+    }
+
+    RectSelectToolState* state = (RectSelectToolState*)active_tool->user_data;
+
+    /* Only animate if editing */
+    if (!state->is_editing) {
+        return FALSE; /* Stop timer if not editing */
+    }
+
+    /* Update animation phase (cycle 0-3 for 4-pixel dash) */
+    state->animation_phase = (state->animation_phase + 1) % 4;
+
+    /* Queue redraw */
+    gtk_widget_queue_draw(doc->drawing_area);
+
+    return TRUE; /* Keep timer running */
+}
 
 /**
  * Callback for scroll adjustment changes - triggers redraw
@@ -81,6 +143,142 @@ static gboolean on_drawing_area_button_press(GtkWidget* widget, GdkEventButton* 
 static gboolean on_drawing_area_button_release(GtkWidget* widget, GdkEventButton* event, gpointer user_data);
 static gboolean on_drawing_area_motion_notify(GtkWidget* widget, GdkEventMotion* event, gpointer user_data);
 static gboolean on_drawing_area_enter_notify(GtkWidget* widget, GdkEventCrossing* event, gpointer user_data);
+
+/**
+ * Draw rect select tool preview during drag
+ */
+
+/* Selection animation constants */
+#define ANT_DASH_SIZE 4.0f       /* Marching ants dash length in pixels */
+#define ANT_DASH_SPEED_SLOW 200  /* Frame time in ms (5 fps) */
+#define ANT_DASH_SPEED_NORMAL 67 /* Frame time in ms (15 fps) */
+#define ANT_DASH_SPEED_FAST 33   /* Frame time in ms (30 fps) */
+#define ANT_DASH_SPEED_MIN 16    /* Frame time in ms (60 fps) */
+
+static void draw_rect_select_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom) {
+    if (!doc || !doc->drawing_area || !cr) {
+        return;
+    }
+
+    if (doc->layers && g_list_length(doc->layers) > 0) {
+        ToolRegistry* tool_registry = (ToolRegistry*)g_object_get_data(G_OBJECT(doc->drawing_area), "tool_registry");
+        if (!tool_registry) {
+            return;
+        }
+
+        Tool* active_tool = tool_manager_get_active(tool_registry);
+        if (!active_tool || active_tool->type != TOOL_RECT_SELECT || !active_tool->user_data) {
+            return;
+        }
+
+        RectSelectToolState* state = (RectSelectToolState*)active_tool->user_data;
+
+        /* Draw if dragging OR editing */
+        gboolean should_draw = state->is_dragging || state->is_editing;
+        if (!should_draw) {
+            return;
+        }
+
+        /* Determine rectangle to draw */
+        gint rect_x, rect_y, rect_w, rect_h;
+
+        /* Check if this is a new selection drag (dragging_handle == -2)
+         * Otherwise use stored bounds for move/resize/edit */
+        if (state->is_dragging && state->dragging_handle == -2) {
+            /* Drawing new selection - calculate from drag state */
+            rect_x = state->anchor_x;
+            rect_y = state->anchor_y;
+            rect_w = state->current_x - state->anchor_x;
+            rect_h = state->current_y - state->anchor_y;
+
+            /* Normalize */
+            if (rect_w < 0) {
+                rect_x += rect_w;
+                rect_w = -rect_w;
+            }
+            if (rect_h < 0) {
+                rect_y += rect_h;
+                rect_h = -rect_h;
+            }
+        } else {
+            /* Move/resize/edit - use stored bounds */
+            rect_x = state->selection_x;
+            rect_y = state->selection_y;
+            rect_w = state->selection_w;
+            rect_h = state->selection_h;
+        }
+
+        if (rect_w <= 0 || rect_h <= 0) {
+            return;
+        }
+
+        /* Save Cairo state to draw preview in zoomed space */
+        cairo_save(cr);
+
+        /* Apply zoom transform for preview rectangle */
+        if (zoom != 1.0) {
+            cairo_scale(cr, zoom, zoom);
+        }
+
+        /* Determine animation phase: no animation while dragging, animate while editing */
+        gdouble animation_offset = state->is_editing ? (gdouble)state->animation_phase : 0.0;
+
+        /* Draw marching ants outline using shared function */
+        gdouble line_width = 0.75 / zoom;
+        selection_draw_marching_ants(cr, (double)rect_x, (double)rect_y,
+                                     (double)rect_w, (double)rect_h,
+                                     line_width, animation_offset);
+
+        /* Draw corner resize handles only in edit mode */
+        if (state->is_editing) {
+            gdouble handle_size = 12.0 / zoom; /* Increased from 8.0 */
+            gdouble half_handle = handle_size / 2.0;
+            gdouble handle_line_width = 1.0 / zoom;
+
+            /* Reset dash pattern for solid handles */
+            cairo_set_dash(cr, NULL, 0, 0);
+
+            /* Corner positions: top-left, top-right, bottom-left, bottom-right */
+            gdouble corners[4][2] = {
+                {rect_x, rect_y},                  /* top-left */
+                {rect_x + rect_w, rect_y},         /* top-right */
+                {rect_x, rect_y + rect_h},         /* bottom-left */
+                {rect_x + rect_w, rect_y + rect_h} /* bottom-right */
+            };
+
+            for (gint i = 0; i < 4; i++) {
+                gdouble cx = corners[i][0];
+                gdouble cy = corners[i][1];
+
+                /* Draw filled area with blue if this handle is hovered */
+                if (state->hovered_handle == i) {
+                    gdouble inset = handle_line_width * 1.5;
+                    cairo_rectangle(cr, cx - half_handle + inset, cy - half_handle + inset,
+                                    handle_size - (inset * 2), handle_size - (inset * 2));
+                    cairo_set_source_rgba(cr, 0.0, 0.5, 1.0, 0.6); /* Blue with transparency */
+                    cairo_fill(cr);
+                }
+
+                /* Draw outer black line (full size) - solid */
+                cairo_rectangle(cr, cx - half_handle, cy - half_handle,
+                                handle_size, handle_size);
+                cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
+                cairo_set_line_width(cr, handle_line_width);
+                cairo_stroke(cr);
+
+                /* Draw inner white line (smaller, inset) - solid */
+                gdouble inset = handle_line_width * 1.5;
+                cairo_rectangle(cr, cx - half_handle + inset, cy - half_handle + inset,
+                                handle_size - (inset * 2), handle_size - (inset * 2));
+                cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+                cairo_set_line_width(cr, handle_line_width);
+                cairo_stroke(cr);
+            }
+        }
+
+        cairo_restore(cr);
+    }
+}
 
 /**
  * Drawing area draw callback
@@ -189,6 +387,9 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
         viewport_w = (gint)(round((x2 - x1) / zoom));
         viewport_h = (gint)(round((y2 - y1) / zoom));
 
+        /* Save Cairo state before applying zoom transform */
+        cairo_save(cr);
+
         /* Apply zoom transform */
         if (zoom != 1.0) {
             cairo_scale(cr, zoom, zoom);
@@ -236,9 +437,21 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
                 }
             }
         }
+
+        /* Restore Cairo state after layer rendering (undoes zoom transform) */
+        cairo_restore(cr);
     } else {
         /* Draw checkered background for empty canvas */
         draw_checkered_background(cr, clip_width, clip_height);
+    }
+
+    /* Draw rect select tool preview during drag */
+    draw_rect_select_preview(doc, cr, zoom);
+
+    /* Render selection overlay after all content is drawn (unzoomed) */
+    if (doc->selection && !selection_is_empty(doc->selection)) {
+        /* Draw selection overlay (marching ants) */
+        selection_render_overlay(doc->selection, cr, zoom);
     }
 
     return FALSE;
@@ -595,6 +808,9 @@ ImageDocument* document_new(const gchar* filename, gboolean create_worker_pool) 
     doc->tile_thread_pool = NULL; /* Will be created when image is loaded */
     doc->zoom_factor = 1.0;
 
+    /* Initialize selection (empty) */
+    doc->selection = NULL; /* Will be created when needed */
+
     /* Create tile worker pool if requested (for on-screen rendering) */
     if (create_worker_pool) {
         doc->tile_worker_pool = tile_worker_pool_create(0);
@@ -677,6 +893,12 @@ void document_free(ImageDocument* doc) {
         g_message("Shutting down legacy tile thread pool...");
         tile_thread_pool_destroy(doc->tile_thread_pool);
         doc->tile_thread_pool = NULL;
+    }
+
+    /* Free selection if it exists */
+    if (doc->selection) {
+        selection_free(doc->selection);
+        doc->selection = NULL;
     }
 
     g_free(doc);
@@ -779,6 +1001,9 @@ GtkWidget* document_create_drawing_area(ImageDocument* doc) {
     /* Store references in document */
     doc->drawing_area = drawing_area;
     doc->scrolled_window = scrolled_window;
+
+    /* Start animation timer for selection marching ants (100ms interval) */
+    g_timeout_add(100, on_selection_animation_timer, doc);
 
     /* Connect to scroll adjustment signals to trigger redraws when scrolling */
     /* Note: Adjustments might be NULL initially, so we'll connect when they're created */

@@ -19,7 +19,8 @@ typedef enum {
     TOOL_BRUSH = 3,
     TOOL_ERASER = 4,
     TOOL_PAINT_BUCKET = 5,
-    TOOL_COUNT = 6 /* Total number of tools */
+    TOOL_RECT_SELECT = 6,
+    TOOL_COUNT = 7 /* Total number of tools */
 } ToolType;
 
 /**
@@ -27,11 +28,13 @@ typedef enum {
  */
 typedef enum {
     TOOL_OPT_NONE = 0,
-    TOOL_OPT_SIZE = (1 << 0),     /* Tool supports size parameter */
-    TOOL_OPT_OPACITY = (1 << 1),  /* Tool supports opacity parameter */
-    TOOL_OPT_HARDNESS = (1 << 2), /* Tool supports hardness parameter */
-    TOOL_OPT_FLOW = (1 << 3),     /* Tool supports flow parameter */
-    TOOL_OPT_SPACING = (1 << 4),  /* Tool supports spacing parameter */
+    TOOL_OPT_SIZE = (1 << 0),             /* Tool supports size parameter */
+    TOOL_OPT_OPACITY = (1 << 1),          /* Tool supports opacity parameter */
+    TOOL_OPT_HARDNESS = (1 << 2),         /* Tool supports hardness parameter */
+    TOOL_OPT_FLOW = (1 << 3),             /* Tool supports flow parameter */
+    TOOL_OPT_SPACING = (1 << 4),          /* Tool supports spacing parameter */
+    TOOL_OPT_SELECTION_MODE = (1 << 5),   /* Tool supports selection combine modes */
+    TOOL_OPT_SELECTION_SMOOTH = (1 << 6), /* Tool supports selection smoothing modes */
 } ToolOptionFlags;
 
 /**

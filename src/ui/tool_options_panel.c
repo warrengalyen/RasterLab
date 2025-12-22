@@ -379,6 +379,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
     tool_opts_panel->brush_panel = NULL;
     tool_opts_panel->eraser_panel = NULL;
     tool_opts_panel->paintbucket_panel = NULL;
+    tool_opts_panel->rect_select_panel = NULL;
     tool_opts_panel->title_label = NULL;
     tool_opts_panel->size_scale = NULL;
     tool_opts_panel->opacity_scale = NULL;
@@ -388,6 +389,9 @@ ToolOptionsPanel* create_tool_options_panel(void) {
     tool_opts_panel->tolerance_scale = NULL;
     tool_opts_panel->contiguous_radio = NULL;
     tool_opts_panel->global_radio = NULL;
+    tool_opts_panel->rect_animate_checkbox = NULL;
+    tool_opts_panel->rect_combine_combo = NULL;
+    tool_opts_panel->rect_smooth_combo = NULL;
     tool_opts_panel->current_tool_type = TOOL_MOVE; /* Start with no tool selected */
 
     /* Create container to hold the current panel */
@@ -546,6 +550,66 @@ ToolOptionsPanel* create_tool_options_panel(void) {
         }
     }
 
+    /* Load rectangular select panel from Glade */
+    GtkBuilder* rect_select_builder = gtk_builder_new();
+    GError* rect_select_error = NULL;
+    GtkWidget* rect_select_title = NULL;
+    GtkWidget* rect_select_animate = NULL;
+    GtkWidget* rect_select_combine = NULL;
+    GtkWidget* rect_select_smooth = NULL;
+
+    if (gtk_builder_add_from_resource(rect_select_builder, "/ui/rect_select_options.glade", &rect_select_error)) {
+        tool_opts_panel->rect_select_panel = GTK_WIDGET(gtk_builder_get_object(rect_select_builder, "rect_select_options_panel"));
+        if (tool_opts_panel->rect_select_panel) {
+            gtk_container_add(GTK_CONTAINER(container), tool_opts_panel->rect_select_panel);
+
+            /* Get widgets */
+            rect_select_title = GTK_WIDGET(gtk_builder_get_object(rect_select_builder, "rect_select_title_label"));
+            rect_select_animate = GTK_WIDGET(gtk_builder_get_object(rect_select_builder, "rect_select_animate_checkbox"));
+            rect_select_combine = GTK_WIDGET(gtk_builder_get_object(rect_select_builder, "rect_select_combine_combo"));
+            rect_select_smooth = GTK_WIDGET(gtk_builder_get_object(rect_select_builder, "rect_select_smooth_combo"));
+
+            /* Populate combo boxes */
+            if (rect_select_combine) {
+                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(rect_select_combine), "New");
+                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(rect_select_combine), "Add");
+                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(rect_select_combine), "Subtract");
+                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(rect_select_combine), "Intersect");
+                gtk_combo_box_set_active(GTK_COMBO_BOX(rect_select_combine), 0);
+                g_object_set_data(G_OBJECT(tool_opts_panel->rect_select_panel), "combine_combo", rect_select_combine);
+                tool_opts_panel->rect_combine_combo = rect_select_combine;
+            }
+
+            if (rect_select_smooth) {
+                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(rect_select_smooth), "None");
+                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(rect_select_smooth), "Antialiased");
+                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(rect_select_smooth), "Feathered");
+                gtk_combo_box_set_active(GTK_COMBO_BOX(rect_select_smooth), 0);
+                g_object_set_data(G_OBJECT(tool_opts_panel->rect_select_panel), "smooth_combo", rect_select_smooth);
+                tool_opts_panel->rect_smooth_combo = rect_select_smooth;
+            }
+
+            if (rect_select_animate) {
+                g_object_set_data(G_OBJECT(tool_opts_panel->rect_select_panel), "animate_checkbox", rect_select_animate);
+                tool_opts_panel->rect_animate_checkbox = rect_select_animate;
+                gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(rect_select_animate), TRUE);
+            }
+
+            /* Hide rect select panel initially */
+            gtk_widget_set_visible(tool_opts_panel->rect_select_panel, FALSE);
+            gtk_widget_set_no_show_all(tool_opts_panel->rect_select_panel, TRUE);
+        }
+        g_object_unref(rect_select_builder);
+    } else {
+        g_warning("Failed to load rectangular select options panel: %s", rect_select_error ? rect_select_error->message : "Unknown error");
+        if (rect_select_error) {
+            g_error_free(rect_select_error);
+        }
+        if (rect_select_builder) {
+            g_object_unref(rect_select_builder);
+        }
+    }
+
     /* Hide the container initially - will be shown when a tool with options is selected */
     gtk_widget_set_visible(container, FALSE);
 
@@ -568,6 +632,8 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
         new_tool_type = TOOL_BRUSH;
     } else if (g_strcmp0(tool_name, "Paint Bucket") == 0) {
         new_tool_type = TOOL_PAINT_BUCKET;
+    } else if (g_strcmp0(tool_name, "Rectangular Select") == 0) {
+        new_tool_type = TOOL_RECT_SELECT;
     }
 
     /* Update current tool type */
@@ -582,6 +648,22 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
     }
     if (panel->paintbucket_panel) {
         gtk_widget_set_visible(panel->paintbucket_panel, FALSE);
+    }
+    if (panel->rect_select_panel) {
+        gtk_widget_set_visible(panel->rect_select_panel, FALSE);
+    }
+
+    /* For rect select tool, show the options panel */
+    if (new_tool_type == TOOL_RECT_SELECT && panel->rect_select_panel) {
+        /* Show main panel container */
+        if (panel->panel) {
+            gtk_widget_set_visible(panel->panel, TRUE);
+        }
+        /* Show rect select panel */
+        gtk_widget_set_no_show_all(panel->rect_select_panel, FALSE);
+        gtk_widget_set_visible(panel->rect_select_panel, TRUE);
+        gtk_widget_show_all(panel->rect_select_panel);
+        return;
     }
 
     /* Show appropriate panel if tool has options */

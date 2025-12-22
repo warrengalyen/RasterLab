@@ -634,7 +634,6 @@ void document_render_layers_at_zoom(ImageDocument* doc, cairo_t* cr,
                         cairo_paint(cr);
 
                         cairo_restore(cr);
-                        cairo_restore(cr);
                         continue;
                     }
                 }

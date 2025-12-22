@@ -133,23 +133,25 @@ GtkWidget* tools_panel_initialize_from_builder(GtkBuilder* builder, ToolRegistry
         return gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     }
 
-    /* Tool button IDs and types */
+    /* Tool button IDs and types - MUST match glade file order */
     const gchar* button_ids[] = {
         "tool_button_hand",
         "tool_button_zoom",
         "tool_button_move",
-        "tool_button_brush",
         "tool_button_eraser",
+        "tool_button_brush",
         "tool_button_fill",
+        "tool_button_rect_select",
     };
 
     const ToolType tool_types[] = {
         TOOL_HAND,
         TOOL_ZOOM,
         TOOL_MOVE,
-        TOOL_BRUSH,
         TOOL_ERASER,
+        TOOL_BRUSH,
         TOOL_PAINT_BUCKET,
+        TOOL_RECT_SELECT,
     };
 
     /* Set up tool buttons with callbacks */
@@ -180,8 +182,9 @@ GtkWidget* tools_panel_initialize_from_builder(GtkBuilder* builder, ToolRegistry
                 "/icons/tool-paintbrush.png",
                 "/icons/tool-eraser.png",
                 "/icons/tool-paintbucket.png",
+                "/icons/tool-rect-select.png",
             };
-            if (i < 6) {
+            if (i < 7) {
                 GError* error = NULL;
                 GdkPixbuf* pixbuf = gdk_pixbuf_new_from_resource(icon_resources[i], &error);
                 if (pixbuf) {
