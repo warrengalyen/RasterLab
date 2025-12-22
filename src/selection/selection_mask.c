@@ -246,7 +246,8 @@ void selection_mask_apply(
 
 /**
  * Compute feathering effect for preview rendering
- * Applies Gaussian blur to base_mask to create feathering gradient
+ * Creates an outward-expanding feathered edge from the base mask
+ * Uses distance field approach: pixels outside base selection get feathering gradient
  */
 static void compute_preview_feather_mask(SelectionMask* mask) {
     if (!mask || !mask->base_mask || mask->feather_radius <= 0.0f) {
@@ -265,47 +266,60 @@ static void compute_preview_feather_mask(SelectionMask* mask) {
         mask->preview_feather_mask = g_malloc0(mask->stride * mask->height);
     }
 
-    /* Copy base mask to preview */
+    /* Copy base mask to preview (keep hard interior) */
     memcpy(mask->preview_feather_mask, mask->base_mask, mask->stride * mask->height);
 
-    /* Apply simple box blur for feathering (multiple passes for Gaussian-like effect) */
     int radius = (int)mask->feather_radius;
-    if (radius > 0) {
-        uint8_t* temp = g_malloc0(mask->stride * mask->height);
+    if (radius <= 0) {
+        mask->data = mask->preview_feather_mask;
+        mask->feather_dirty = FALSE;
+        return;
+    }
 
-        /* Horizontal blur pass */
-        for (int y = 0; y < mask->height; y++) {
-            for (int x = 0; x < mask->width; x++) {
-                int sum = 0;
-                int count = 0;
+    /* Apply feathering: expand selected regions outward with gradient falloff
+       For each unselected pixel within feather_radius of a selected pixel,
+       apply gradient based on distance */
+
+    for (int y = 0; y < mask->height; y++) {
+        for (int x = 0; x < mask->width; x++) {
+            uint8_t center = mask->base_mask[y * mask->stride + x];
+
+            /* Already selected - keep as is */
+            if (center > 0)
+                continue;
+
+            /* Find minimum distance to any selected pixel */
+            float min_dist = (float)(radius + 1);
+
+            /* Search within radius box */
+            for (int dy = -radius; dy <= radius; dy++) {
+                int ny = y + dy;
+                if (ny < 0 || ny >= mask->height)
+                    continue;
+
                 for (int dx = -radius; dx <= radius; dx++) {
                     int nx = x + dx;
-                    if (nx >= 0 && nx < mask->width) {
-                        sum += mask->preview_feather_mask[y * mask->stride + nx];
-                        count++;
+                    if (nx < 0 || nx >= mask->width)
+                        continue;
+
+                    if (mask->base_mask[ny * mask->stride + nx] > 0) {
+                        /* Found a selected pixel, calculate Euclidean distance */
+                        float dist = sqrtf((float)(dx * dx + dy * dy));
+                        if (dist < min_dist) {
+                            min_dist = dist;
+                        }
                     }
                 }
-                temp[y * mask->stride + x] = (uint8_t)(sum / count);
+            }
+
+            /* Apply feathering gradient if within feather radius */
+            if (min_dist <= (float)radius) {
+                /* Create smooth falloff: fully transparent at radius, fully opaque at 0 */
+                float t = min_dist / (float)radius;
+                uint8_t alpha = (uint8_t)(255.0f * (1.0f - t * t)); /* Quadratic falloff */
+                mask->preview_feather_mask[y * mask->stride + x] = alpha;
             }
         }
-
-        /* Vertical blur pass */
-        for (int y = 0; y < mask->height; y++) {
-            for (int x = 0; x < mask->width; x++) {
-                int sum = 0;
-                int count = 0;
-                for (int dy = -radius; dy <= radius; dy++) {
-                    int ny = y + dy;
-                    if (ny >= 0 && ny < mask->height) {
-                        sum += temp[ny * mask->stride + x];
-                        count++;
-                    }
-                }
-                mask->preview_feather_mask[y * mask->stride + x] = (uint8_t)(sum / count);
-            }
-        }
-
-        g_free(temp);
     }
 
     /* Use preview feather mask for rendering */
