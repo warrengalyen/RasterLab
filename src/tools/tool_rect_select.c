@@ -1,5 +1,6 @@
 #include "tools/tool_rect_select.h"
 #include "document.h"
+#include "selection.h"
 #include "tool_manager.h"
 #include "tool_options.h"
 #include <gdk/gdk.h>
@@ -106,6 +107,23 @@ static void rect_select_tool_mouse_down(Tool* tool, struct ImageDocument* doc, M
         }
 
         /* Clicking outside - finalize and start new selection */
+        /* Create a finalized Selection object from the current edit selection */
+        if (state->selection_w > 0 && state->selection_h > 0) {
+            if (doc->selection) {
+                selection_free(doc->selection);
+            }
+            doc->selection = selection_create_rectangle(
+                state->selection_x,
+                state->selection_y,
+                state->selection_w,
+                state->selection_h,
+                state->smooth_mode,
+                state->feather_radius);
+            if (doc->selection) {
+                selection_set_animated(doc->selection, TRUE);
+            }
+        }
+
         state->is_editing = FALSE;
         if (state->animation_timer_id > 0) {
             g_source_remove(state->animation_timer_id);
@@ -479,7 +497,7 @@ static void rect_select_tool_mouse_up(Tool* tool, struct ImageDocument* doc, Mou
 
         /* Start animation timer if not already running */
         if (state->animation_timer_id == 0) {
-            state->animation_timer_id = g_timeout_add(ANT_DASH_SPEED_FAST,
+            state->animation_timer_id = g_timeout_add(ANT_DASH_SPEED_NORMAL,
                                                       on_rect_select_tool_animation_timer,
                                                       (gpointer)doc);
         }
