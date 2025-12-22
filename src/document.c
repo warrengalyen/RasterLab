@@ -257,13 +257,15 @@ static void draw_rect_select_preview(ImageDocument* doc, cairo_t* cr, gdouble zo
             /* Ensure feathering is computed by triggering surface rebuild */
             selection_mask_get_surface(preview_mask);
 
-            /* Compute and render feathered outline */
-            selection_mask_render_outline(cr, preview_mask, state->animation_phase, zoom);
+            /* Compute and render feathered outline with animation phase if enabled */
+            int animation_phase = (current_opts && current_opts->rect_select_animate) ? state->animation_phase : 0;
+            selection_mask_render_outline(cr, preview_mask, animation_phase, zoom);
 
             selection_mask_free(preview_mask);
         } else {
             /* Draw hard outline (no feathering) - faster for active dragging */
-            gdouble animation_offset = state->is_editing ? (gdouble)state->animation_phase : 0.0;
+            int animation_phase = (state->is_editing && current_opts && current_opts->rect_select_animate) ? state->animation_phase : 0;
+            gdouble animation_offset = (gdouble)animation_phase;
             selection_draw_marching_ants(cr, rect_x, rect_y, rect_w, rect_h, 0.0, animation_offset);
         }
 

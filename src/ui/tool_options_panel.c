@@ -1,8 +1,10 @@
 #include "ui/tool_options_panel.h"
 #include "document.h"
+#include "selection.h"
 #include "tool_manager.h"
 #include "tool_options.h"
 #include "tools.h"
+#include "tools/tool_rect_select.h"
 #include "ui.h"
 #include <stdio.h>
 
@@ -453,7 +455,7 @@ static void on_rect_select_feather_changed(GtkRange* range, gpointer user_data) 
  * Signal handler for rectangle select animation checkbox
  */
 static void on_rect_select_animate_toggled(GtkToggleButton* button, gpointer user_data) {
-    (void)user_data; /* Unused */
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
 
     gboolean active = gtk_toggle_button_get_active(button);
 
@@ -463,6 +465,21 @@ static void on_rect_select_animate_toggled(GtkToggleButton* button, gpointer use
     }
 
     tool_options_set_rect_select_animate(opts, active);
+
+    /* Trigger redraw to update preview - the animation timer is managed by document.c
+       which will start/stop based on the tool options animate flag */
+    if (panel && panel->panel) {
+        GtkWidget* window = gtk_widget_get_toplevel(panel->panel);
+        if (window) {
+            AppContext* ctx = (AppContext*)g_object_get_data(G_OBJECT(window), "app_context");
+            if (ctx) {
+                ImageDocument* doc = ui_get_active_document(ctx);
+                if (doc && doc->drawing_area) {
+                    gtk_widget_queue_draw(doc->drawing_area);
+                }
+            }
+        }
+    }
 }
 
 ToolOptionsPanel* create_tool_options_panel(void) {
@@ -715,7 +732,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
 
                 /* Connect signal to update tool options when changed */
                 g_signal_connect(rect_select_animate, "toggled",
-                                 G_CALLBACK(on_rect_select_animate_toggled), NULL);
+                                 G_CALLBACK(on_rect_select_animate_toggled), tool_opts_panel);
             }
 
             /* Hide rect select panel initially */
