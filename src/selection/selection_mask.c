@@ -6,6 +6,9 @@
 #define SELECTION_THRESHOLD 128 /* Alpha value threshold for edge detection */
 #define ANT_DASH_SIZE 4.0f      /* Marching ants dash length in pixels */
 
+/* Forward declaration for compute_preview_feather_mask */
+static void compute_preview_feather_mask(SelectionMask* mask);
+
 /**
  * Allocate aligned row stride for better cache performance
  */
@@ -167,7 +170,8 @@ static void draw_soft_circle(SelectionMask* mask, float cx, float cy, float radi
 
 /**
  * Fill rectangular region - creates hard 0/255 mask in base_mask
- * Feathering is applied during preview rendering, not stored in the mask
+ * For combine modes other than NEW, feathering is applied to new rectangle only before combining
+ * For NEW mode, feathering is stored for preview rendering during editing
  */
 void selection_mask_fill_rect(
     SelectionMask* mask,
@@ -196,13 +200,31 @@ void selection_mask_fill_rect(
         }
     }
 
+    /* For combine modes other than NEW, apply feathering to the temporary rectangle
+       BEFORE combining it. This ensures feathering only applies to the new geometry. */
+    if (combine != SELECTION_COMBINE_NEW && feather_radius > 0.0f) {
+        temp->feather_radius = feather_radius;
+        temp->feather_dirty = TRUE;
+        /* Compute feathering for temp mask */
+        compute_preview_feather_mask(temp);
+        /* Copy feathered result into temp's base_mask */
+        selection_mask_commit_feathering(temp);
+    }
+
     /* Apply temp mask to main mask using combine mode */
     selection_mask_apply(mask, temp, combine);
     selection_mask_free(temp);
 
-    /* Store feathering parameters for preview rendering */
-    mask->feather_radius = feather_radius;
-    mask->feather_dirty = TRUE; /* Preview needs recompute */
+    /* For NEW combine mode, store feathering parameters for preview rendering
+       This allows the user to see feathering during editing before finalizing */
+    if (combine == SELECTION_COMBINE_NEW) {
+        mask->feather_radius = feather_radius;
+        mask->feather_dirty = TRUE; /* Preview needs recompute */
+    } else {
+        /* For other combine modes, don't store feathering on the combined result */
+        mask->feather_radius = 0.0f;
+        mask->feather_dirty = FALSE;
+    }
 
     /* Mark affected region as dirty */
     selection_mask_mark_dirty(mask, x1, y1, x2 - x1, y2 - y1);
