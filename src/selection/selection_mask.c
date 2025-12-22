@@ -22,10 +22,21 @@ SelectionMask* selection_mask_new(int width, int height) {
     mask->width = width;
     mask->height = height;
     mask->stride = calculate_stride(width);
-    mask->data = g_malloc0(mask->stride * height);
+
+    /* Allocate base mask (hard 0/255 selection) */
+    mask->base_mask = g_malloc0(mask->stride * height);
+
+    /* Initially use base_mask as data */
+    mask->data = mask->base_mask;
+
     mask->temp_data = g_malloc0(mask->stride * height);
     mask->dirty = TRUE; /* Initially dirty */
     mask->surface = NULL;
+
+    /* Feathering support */
+    mask->preview_feather_mask = NULL;
+    mask->feather_radius = 0.0f;
+    mask->feather_dirty = FALSE;
 
     return mask;
 }
@@ -37,14 +48,22 @@ void selection_mask_free(SelectionMask* mask) {
     if (!mask)
         return;
 
-    if (mask->data) {
-        g_free(mask->data);
-        mask->data = NULL;
+    if (mask->base_mask) {
+        g_free(mask->base_mask);
+        mask->base_mask = NULL;
     }
     if (mask->temp_data) {
         g_free(mask->temp_data);
         mask->temp_data = NULL;
     }
+    if (mask->preview_feather_mask) {
+        g_free(mask->preview_feather_mask);
+        mask->preview_feather_mask = NULL;
+    }
+    /* Note: data always points to either base_mask or preview_feather_mask,
+       so we don't free it separately to avoid double-free */
+    mask->data = NULL;
+
     if (mask->surface) {
         cairo_surface_destroy(mask->surface);
         mask->surface = NULL;
@@ -147,7 +166,8 @@ static void draw_soft_circle(SelectionMask* mask, float cx, float cy, float radi
 }
 
 /**
- * Fill rectangular region
+ * Fill rectangular region - creates hard 0/255 mask in base_mask
+ * Feathering is applied during preview rendering, not stored in the mask
  */
 void selection_mask_fill_rect(
     SelectionMask* mask,
@@ -155,12 +175,12 @@ void selection_mask_fill_rect(
     SelectionCombineMode combine,
     SelectionSmoothingMode smoothing,
     float feather_radius) {
-    if (!mask || !mask->data)
+    if (!mask || !mask->base_mask)
         return;
     if (width <= 0 || height <= 0)
         return;
 
-    /* Create temporary mask for this rectangle */
+    /* Create temporary mask for this rectangle - hard 0/255 only */
     SelectionMask* temp = selection_mask_new(mask->width, mask->height);
 
     /* Clamp rectangle to bounds */
@@ -169,41 +189,10 @@ void selection_mask_fill_rect(
     int x2 = (x + width > mask->width) ? mask->width : (x + width);
     int y2 = (y + height > mask->height) ? mask->height : (y + height);
 
-    if (smoothing == SELECTION_SMOOTH_FEATHERED || smoothing == SELECTION_SMOOTH_ANTIALIASED) {
-        /* Use antialiased circle for soft edges */
-        float cx = x + width / 2.0f;
-        float cy = y + height / 2.0f;
-        float radius = (width < height) ? width / 2.0f : height / 2.0f;
-
-        draw_soft_circle(temp, cx, cy, radius, smoothing, feather_radius);
-
-        /* Fill the rectangle interior with feathering at edges */
-        for (int row = y1; row < y2; row++) {
-            for (int col = x1; col < x2; col++) {
-                float dist_left = col - x;
-                float dist_right = (x + width) - col;
-                float dist_top = row - y;
-                float dist_bottom = (y + height) - row;
-
-                float dist = fminf(fminf(dist_left, dist_right), fminf(dist_top, dist_bottom));
-
-                uint8_t alpha = 255;
-                if (smoothing == SELECTION_SMOOTH_FEATHERED && dist < feather_radius) {
-                    float t = 1.0f - (dist / feather_radius);
-                    alpha = (uint8_t)(255.0f * t * t); /* Quadratic falloff */
-                } else if (smoothing == SELECTION_SMOOTH_ANTIALIASED && dist < 1.0f) {
-                    alpha = (uint8_t)(255.0f * (1.0f - (1.0f - dist)));
-                }
-
-                temp->data[row * temp->stride + col] = alpha;
-            }
-        }
-    } else {
-        /* Hard edges - simple fill */
-        for (int row = y1; row < y2; row++) {
-            for (int col = x1; col < x2; col++) {
-                temp->data[row * temp->stride + col] = 255;
-            }
+    /* Always create hard-edge mask in base_mask (ignore smoothing for base) */
+    for (int row = y1; row < y2; row++) {
+        for (int col = x1; col < x2; col++) {
+            temp->base_mask[row * temp->stride + col] = 255;
         }
     }
 
@@ -211,48 +200,117 @@ void selection_mask_fill_rect(
     selection_mask_apply(mask, temp, combine);
     selection_mask_free(temp);
 
-    /* Track if feathering was applied */
-    if (smoothing == SELECTION_SMOOTH_FEATHERED && feather_radius > 0) {
-        mask->has_feathering = TRUE;
-    }
+    /* Store feathering parameters for preview rendering */
+    mask->feather_radius = feather_radius;
+    mask->feather_dirty = TRUE; /* Preview needs recompute */
 
     /* Mark affected region as dirty */
     selection_mask_mark_dirty(mask, x1, y1, x2 - x1, y2 - y1);
 }
 
 /**
- * Apply one mask to another
+ * Apply one mask to another (operates on base_mask)
  */
 void selection_mask_apply(
     SelectionMask* dest,
     SelectionMask* src,
     SelectionCombineMode combine) {
-    if (!dest || !src || !dest->data || !src->data)
+    if (!dest || !src || !dest->base_mask || !src->base_mask)
         return;
     if (dest->width != src->width || dest->height != src->height)
         return;
 
     for (int i = 0; i < dest->height * dest->stride; i++) {
-        uint8_t dst_val = dest->data[i];
-        uint8_t src_val = src->data[i];
+        uint8_t dst_val = dest->base_mask[i];
+        uint8_t src_val = src->base_mask[i];
 
         switch (combine) {
             case SELECTION_COMBINE_NEW:
-                dest->data[i] = src_val;
+                dest->base_mask[i] = src_val;
                 break;
             case SELECTION_COMBINE_ADD:
-                dest->data[i] = (dst_val > src_val) ? dst_val : src_val;
+                dest->base_mask[i] = (dst_val > src_val) ? dst_val : src_val;
                 break;
             case SELECTION_COMBINE_SUBTRACT:
-                dest->data[i] = (uint8_t)((dst_val * (255 - src_val)) / 255);
+                dest->base_mask[i] = (uint8_t)((dst_val * (255 - src_val)) / 255);
                 break;
             case SELECTION_COMBINE_INTERSECT:
-                dest->data[i] = (dst_val < src_val) ? dst_val : src_val;
+                dest->base_mask[i] = (dst_val < src_val) ? dst_val : src_val;
                 break;
         }
     }
 
     dest->dirty = TRUE;
+    dest->feather_dirty = TRUE; /* Preview needs recompute */
+}
+
+/**
+ * Compute feathering effect for preview rendering
+ * Applies Gaussian blur to base_mask to create feathering gradient
+ */
+static void compute_preview_feather_mask(SelectionMask* mask) {
+    if (!mask || !mask->base_mask || mask->feather_radius <= 0.0f) {
+        /* No feathering needed, use base_mask directly */
+        if (mask->preview_feather_mask) {
+            g_free(mask->preview_feather_mask);
+            mask->preview_feather_mask = NULL;
+        }
+        mask->data = mask->base_mask;
+        mask->feather_dirty = FALSE;
+        return;
+    }
+
+    /* Allocate preview feather mask if needed */
+    if (!mask->preview_feather_mask) {
+        mask->preview_feather_mask = g_malloc0(mask->stride * mask->height);
+    }
+
+    /* Copy base mask to preview */
+    memcpy(mask->preview_feather_mask, mask->base_mask, mask->stride * mask->height);
+
+    /* Apply simple box blur for feathering (multiple passes for Gaussian-like effect) */
+    int radius = (int)mask->feather_radius;
+    if (radius > 0) {
+        uint8_t* temp = g_malloc0(mask->stride * mask->height);
+
+        /* Horizontal blur pass */
+        for (int y = 0; y < mask->height; y++) {
+            for (int x = 0; x < mask->width; x++) {
+                int sum = 0;
+                int count = 0;
+                for (int dx = -radius; dx <= radius; dx++) {
+                    int nx = x + dx;
+                    if (nx >= 0 && nx < mask->width) {
+                        sum += mask->preview_feather_mask[y * mask->stride + nx];
+                        count++;
+                    }
+                }
+                temp[y * mask->stride + x] = (uint8_t)(sum / count);
+            }
+        }
+
+        /* Vertical blur pass */
+        for (int y = 0; y < mask->height; y++) {
+            for (int x = 0; x < mask->width; x++) {
+                int sum = 0;
+                int count = 0;
+                for (int dy = -radius; dy <= radius; dy++) {
+                    int ny = y + dy;
+                    if (ny >= 0 && ny < mask->height) {
+                        sum += temp[ny * mask->stride + x];
+                        count++;
+                    }
+                }
+                mask->preview_feather_mask[y * mask->stride + x] = (uint8_t)(sum / count);
+            }
+        }
+
+        g_free(temp);
+    }
+
+    /* Use preview feather mask for rendering */
+    mask->data = mask->preview_feather_mask;
+    mask->feather_dirty = FALSE;
 }
 
 /**
@@ -268,7 +326,15 @@ void selection_mask_mark_dirty(SelectionMask* mask, int x, int y, int width, int
  * Get or rebuild Cairo surface from mask data
  */
 cairo_surface_t* selection_mask_get_surface(SelectionMask* mask) {
-    if (!mask || !mask->data)
+    if (!mask || !mask->base_mask)
+        return NULL;
+
+    /* Compute feathering if needed */
+    if (mask->feather_dirty) {
+        compute_preview_feather_mask(mask);
+    }
+
+    if (!mask->data)
         return NULL;
 
     if (!mask->dirty && mask->surface) {
@@ -307,8 +373,34 @@ cairo_surface_t* selection_mask_get_surface(SelectionMask* mask) {
 }
 
 /**
- * Render animated marching ants outline from mask edges
+ * Apply feathering permanently to base_mask
+ * Converts preview feathering to the actual base_mask
+ * Call this when finalizing a selection
  */
+void selection_mask_commit_feathering(SelectionMask* mask) {
+    if (!mask)
+        return;
+
+    /* If we have feathering, ensure preview is up to date then bake it */
+    if (mask->feather_radius > 0.0f) {
+        /* Recompute preview if marked dirty (e.g., after combine operations) */
+        if (mask->feather_dirty) {
+            compute_preview_feather_mask(mask);
+        }
+
+        /* Bake the feathered result into base_mask */
+        if (mask->preview_feather_mask) {
+            memcpy(mask->base_mask, mask->preview_feather_mask, mask->stride * mask->height);
+        }
+
+        /* Reset feathering state - selection is now permanent */
+        mask->feather_radius = 0.0f;
+        mask->feather_dirty = FALSE;
+        /* Use base_mask directly from now on */
+        mask->data = mask->base_mask;
+        mask->dirty = TRUE;
+    }
+}
 void selection_mask_render_outline(
     cairo_t* cr,
     SelectionMask* mask,

@@ -136,6 +136,12 @@ static void rect_select_tool_mouse_down(Tool* tool, struct ImageDocument* doc, M
         }
 
         state->is_editing = FALSE;
+
+        /* Commit feathering to base_mask now that selection is finalized */
+        if (doc->selection_mask) {
+            selection_mask_commit_feathering(doc->selection_mask);
+        }
+
         if (state->animation_timer_id > 0) {
             g_source_remove(state->animation_timer_id);
             state->animation_timer_id = 0;

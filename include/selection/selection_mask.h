@@ -16,11 +16,16 @@ typedef struct SelectionMask {
     int width;                /* Mask width in pixels */
     int height;               /* Mask height in pixels */
     int stride;               /* Bytes per row (aligned) */
-    uint8_t* data;            /* 8-bit alpha mask data (owned) */
+    uint8_t* base_mask;       /* Hard mask: 0 = unselected, 255 = selected (owned) */
+    uint8_t* data;            /* Current mask data (either base_mask or feathered preview) */
     cairo_surface_t* surface; /* ARGB32 cached surface (owned) */
     gboolean dirty;           /* TRUE if surface needs rebuild from mask */
     uint8_t* temp_data;       /* Temporary buffer for operations */
-    gboolean has_feathering;  /* TRUE if feathering was applied to this mask */
+
+    /* Feathering support */
+    uint8_t* preview_feather_mask; /* Preview feather mask for rendering (owned, lower res or cached) */
+    float feather_radius;          /* Current feather radius (0 = no feathering) */
+    gboolean feather_dirty;        /* TRUE if preview_feather_mask needs recompute */
 } SelectionMask;
 
 /**
@@ -119,5 +124,13 @@ void selection_mask_render_outline(
     SelectionMask* mask,
     int dash_phase,
     gdouble zoom_factor);
+
+/**
+ * Apply feathering permanently to base_mask
+ * Converts preview feathering to the actual base_mask
+ * Call this when finalizing a selection
+ * @param mask The selection mask
+ */
+void selection_mask_commit_feathering(SelectionMask* mask);
 
 #endif /* SELECTION_MASK_H */
