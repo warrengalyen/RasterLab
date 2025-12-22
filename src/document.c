@@ -226,8 +226,14 @@ static void draw_rect_select_preview(ImageDocument* doc, cairo_t* cr, gdouble zo
             cairo_scale(cr, zoom, zoom);
         }
 
-        /* If feathering is enabled, draw feathered outline from temporary mask */
-        if (state->smooth_mode == SELECTION_SMOOTH_FEATHERED && state->feather_radius > 0.0f) {
+        /* Determine if we should show feathered outline
+           Only show feathering after mouse is released (not dragging) to improve performance */
+        gboolean show_feathered = (state->smooth_mode == SELECTION_SMOOTH_FEATHERED &&
+                                   state->feather_radius > 0.0f &&
+                                   !state->is_dragging);
+
+        if (show_feathered) {
+            /* Draw feathered outline from temporary mask (only when not actively dragging) */
             SelectionMask* preview_mask = selection_mask_new(doc->width, doc->height);
 
             /* Fill rectangle into preview mask (hard edge) */
@@ -249,7 +255,7 @@ static void draw_rect_select_preview(ImageDocument* doc, cairo_t* cr, gdouble zo
 
             selection_mask_free(preview_mask);
         } else {
-            /* Draw marching ants outline (same style as finalized selection) */
+            /* Draw hard outline (no feathering) - faster for active dragging */
             gdouble animation_offset = state->is_editing ? (gdouble)state->animation_phase : 0.0;
             selection_draw_marching_ants(cr, rect_x, rect_y, rect_w, rect_h, 0.0, animation_offset);
         }
