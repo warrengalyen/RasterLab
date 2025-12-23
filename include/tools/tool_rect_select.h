@@ -52,4 +52,19 @@ void tool_rect_select_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom
  */
 gboolean tool_rect_select_animation_timer(gpointer user_data);
 
+/**
+ * Finalize the current preview selection to the document selection mask
+ * Called when switching tools or clicking outside an editable selection
+ * @param tool The rectangular selection tool
+ * @param doc The document to finalize to
+ */
+void tool_rect_select_finalize(Tool* tool, ImageDocument* doc);
+
+/**
+ * Reset rectangular selection tool state when switching away
+ * Clears the edit preview but preserves the finalized selection in doc->selection_mask
+ * @param tool The rectangular selection tool
+ */
+void tool_rect_select_reset(Tool* tool);
+
 #endif /* TOOL_RECT_SELECT_H */

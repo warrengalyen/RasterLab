@@ -291,7 +291,6 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
                                       doc->selection_animation_phase, zoom);
     }
 
-    /* Render old geometry-based selection (deprecated) */
     /* Render selection mask overlay */
     if (doc->selection_mask && !selection_mask_is_empty(doc->selection_mask)) {
         selection_mask_render_outline(cr, doc->selection_mask,

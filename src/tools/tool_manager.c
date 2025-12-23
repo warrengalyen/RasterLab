@@ -112,6 +112,7 @@ gboolean tool_manager_register(ToolRegistry* registry, Tool* tool, ToolType type
  * Activate a tool by type
  */
 gboolean tool_manager_activate(ToolRegistry* registry, ToolType type) {
+    Tool* prev_tool;
     Tool* tool;
 
     if (!registry || type < 0 || type >= TOOL_COUNT) {
@@ -121,6 +122,15 @@ gboolean tool_manager_activate(ToolRegistry* registry, ToolType type) {
     tool = registry->tools[type];
     if (!tool) {
         return FALSE;
+    }
+
+    /* Finalize rect select if switching away from it */
+    prev_tool = registry->active_tool;
+    if (prev_tool && prev_tool->type == TOOL_RECT_SELECT && registry->current_doc) {
+        /* Finalize any preview selection in edit mode to the mask */
+        tool_rect_select_finalize(prev_tool, registry->current_doc);
+        /* Reset tool state to clear preview */
+        tool_rect_select_reset(prev_tool);
     }
 
     registry->active_tool = tool;

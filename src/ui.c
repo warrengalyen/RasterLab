@@ -582,6 +582,11 @@ ImageDocument* ui_create_document_tab(AppContext* ctx, const gchar* filename) {
     /* Add document to list */
     ctx->documents = g_list_append(ctx->documents, doc);
 
+    /* Set the current document in tool registry so tools can access it */
+    if (ctx->tool_registry) {
+        ctx->tool_registry->current_doc = doc;
+    }
+
     /* Register document for autosave */
     autosave_register_document(doc);
 
@@ -1666,6 +1671,11 @@ static void on_notebook_switch_page(GtkNotebook* notebook, GtkWidget* page,
     /* Fallback to ui_get_active_document if page matching fails */
     if (!doc) {
         doc = ui_get_active_document(ctx);
+    }
+
+    /* Set the current document in the tool registry so tools can access it */
+    if (ctx->tool_registry) {
+        ctx->tool_registry->current_doc = doc;
     }
 
     ui_update_window_title(ctx);

@@ -135,6 +135,16 @@ static void rect_select_tool_mouse_down(Tool* tool, struct ImageDocument* doc, M
                 combine,
                 state->smooth_mode,
                 state->feather_radius);
+
+            /* Verify selection was stored */
+            gboolean is_empty = selection_mask_is_empty(doc->selection_mask);
+            gint num_selected = 0;
+            if (!is_empty && doc->selection_mask->base_mask) {
+                for (int i = 0; i < doc->selection_mask->width * doc->selection_mask->height; i++) {
+                    if (doc->selection_mask->base_mask[i] > 0)
+                        num_selected++;
+                }
+            }
         }
 
         state->is_editing = FALSE;
@@ -528,6 +538,63 @@ static void rect_select_tool_mouse_up(Tool* tool, struct ImageDocument* doc, Mou
     /* Request final redraw */
     if (doc->drawing_area) {
         gtk_widget_queue_draw(doc->drawing_area);
+    }
+}
+
+/**
+ * Finalize the current preview selection to the document selection mask
+ */
+void tool_rect_select_finalize(Tool* tool, ImageDocument* doc) {
+    if (!tool || !tool->user_data || !doc) {
+        return;
+    }
+
+    RectSelectToolState* state = (RectSelectToolState*)tool->user_data;
+
+    /* If there's an active selection in edit mode, finalize it to the mask */
+    if (state->is_editing && state->selection_w > 0 && state->selection_h > 0 && doc->selection_mask) {
+        /* Fill rectangle into mask with current smoothing settings */
+        selection_mask_fill_rect(
+            doc->selection_mask,
+            state->selection_x,
+            state->selection_y,
+            state->selection_w,
+            state->selection_h,
+            state->combine_mode,
+            state->smooth_mode,
+            state->feather_radius);
+
+        /* Commit feathering to base_mask now that selection is finalized */
+        selection_mask_commit_feathering(doc->selection_mask);
+
+        /* Request redraw to show the finalized selection and hide the preview */
+        if (doc->drawing_area) {
+            gtk_widget_queue_draw(doc->drawing_area);
+        }
+    }
+}
+
+/**
+ * Reset rect select tool state (called when tool is deactivated)
+ */
+void tool_rect_select_reset(Tool* tool) {
+    if (!tool || !tool->user_data) {
+        return;
+    }
+
+    RectSelectToolState* state = (RectSelectToolState*)tool->user_data;
+
+    /* Reset edit/drag state to prevent preview from rendering */
+    state->is_dragging = FALSE;
+    state->is_editing = FALSE;
+    state->dragging_handle = -2;
+    state->hovered_handle = -2;
+    state->animation_phase = 0;
+
+    /* Clear the timer */
+    if (state->animation_timer_id != 0) {
+        g_source_remove(state->animation_timer_id);
+        state->animation_timer_id = 0;
     }
 }
 
