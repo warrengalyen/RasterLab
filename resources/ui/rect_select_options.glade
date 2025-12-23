@@ -88,7 +88,6 @@
           <object class="GtkLabel" id="rect_select_combine_label">
             <property name="visible">True</property>
             <property name="can-focus">False</property>
-            <property name="tooltip-text">How to combine new selection with existing selection</property>
             <property name="label">combine mode</property>
             <property name="xalign">0</property>
           </object>
@@ -99,11 +98,92 @@
           </packing>
         </child>
         <child>
-          <object class="GtkComboBoxText" id="rect_select_combine_combo">
+          <object class="GtkBox" id="rect_select_combine_button_box">
             <property name="visible">True</property>
             <property name="can-focus">False</property>
-            <property name="tooltip-text">How to combine new selection with existing selection</property>
-            <property name="active">0</property>
+            <property name="orientation">horizontal</property>
+            <property name="spacing">2</property>
+            <child>
+              <object class="GtkToggleButton" id="rect_select_combine_new_button">
+                <property name="visible">True</property>
+                <property name="can-focus">True</property>
+                <property name="receives-default">False</property>
+                <property name="active">True</property>
+                <property name="tooltip-text">New selection</property>
+                <child>
+                  <object class="GtkImage" id="rect_select_combine_new_image">
+                    <property name="visible">True</property>
+                    <property name="can-focus">False</property>
+                    <property name="resource">/icons/select-combine-new.png</property>
+                  </object>
+                </child>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">False</property>
+                <property name="position">0</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkToggleButton" id="rect_select_combine_add_button">
+                <property name="visible">True</property>
+                <property name="can-focus">True</property>
+                <property name="receives-default">False</property>
+                <property name="tooltip-text">Add to selection\nShortcut key: Shift</property>
+                <child>
+                  <object class="GtkImage" id="rect_select_combine_add_image">
+                    <property name="visible">True</property>
+                    <property name="can-focus">False</property>
+                    <property name="resource">/icons/select-combine-add.png</property>
+                  </object>
+                </child>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">False</property>
+                <property name="position">1</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkToggleButton" id="rect_select_combine_subtract_button">
+                <property name="visible">True</property>
+                <property name="can-focus">True</property>
+                <property name="receives-default">False</property>
+                <property name="tooltip-text">Subtract from selection\nShortcut key: Alt</property>
+                <child>
+                  <object class="GtkImage" id="rect_select_combine_subtract_image">
+                    <property name="visible">True</property>
+                    <property name="can-focus">False</property>
+                    <property name="resource">/icons/select-combine-subtract.png</property>
+                  </object>
+                </child>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">False</property>
+                <property name="position">2</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkToggleButton" id="rect_select_combine_intersect_button">
+                <property name="visible">True</property>
+                <property name="can-focus">True</property>
+                <property name="receives-default">False</property>
+                <property name="tooltip-text">Intersect with selection\nShortcut key: Shift+Alt</property>
+                <child>
+                  <object class="GtkImage" id="rect_select_combine_intersect_image">
+                    <property name="visible">True</property>
+                    <property name="can-focus">False</property>
+                    <property name="resource">/icons/select-combine-intersect.png</property>
+                  </object>
+                </child>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">False</property>
+                <property name="position">3</property>
+              </packing>
+            </child>
           </object>
           <packing>
             <property name="expand">False</property>

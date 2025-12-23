@@ -369,22 +369,154 @@ static GtkWidget* load_panel_from_glade(const gchar* resource_path, const gchar*
 }
 
 /**
- * Signal handler for rectangle select combine mode changes
+ * Signal handler for rectangle select combine mode button group changes
  */
-static void on_rect_select_combine_changed(GtkComboBox* combo_box, gpointer user_data) {
-    (void)user_data; /* Unused */
+static void on_rect_select_combine_button_toggled(GtkToggleButton* button, gpointer user_data) {
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
 
-    gint active = gtk_combo_box_get_active(combo_box);
-    if (active < 0 || active >= 4) {
+    /* Only act on button activation, not deactivation */
+    if (!gtk_toggle_button_get_active(button)) {
         return;
     }
 
+    SelectionCombineMode mode = SELECTION_COMBINE_NEW;
+
+    /* Determine which button was clicked */
+    if (button == GTK_TOGGLE_BUTTON(panel->rect_combine_new_button)) {
+        mode = SELECTION_COMBINE_NEW;
+    } else if (button == GTK_TOGGLE_BUTTON(panel->rect_combine_add_button)) {
+        mode = SELECTION_COMBINE_ADD;
+    } else if (button == GTK_TOGGLE_BUTTON(panel->rect_combine_subtract_button)) {
+        mode = SELECTION_COMBINE_SUBTRACT;
+    } else if (button == GTK_TOGGLE_BUTTON(panel->rect_combine_intersect_button)) {
+        mode = SELECTION_COMBINE_INTERSECT;
+    }
+
+    /* Block signals to avoid recursive calls while updating button states */
+    g_signal_handlers_block_by_func(panel->rect_combine_new_button,
+                                    G_CALLBACK(on_rect_select_combine_button_toggled), panel);
+    if (panel->rect_combine_add_button) {
+        g_signal_handlers_block_by_func(panel->rect_combine_add_button,
+                                        G_CALLBACK(on_rect_select_combine_button_toggled), panel);
+    }
+    if (panel->rect_combine_subtract_button) {
+        g_signal_handlers_block_by_func(panel->rect_combine_subtract_button,
+                                        G_CALLBACK(on_rect_select_combine_button_toggled), panel);
+    }
+    if (panel->rect_combine_intersect_button) {
+        g_signal_handlers_block_by_func(panel->rect_combine_intersect_button,
+                                        G_CALLBACK(on_rect_select_combine_button_toggled), panel);
+    }
+
+    /* Deactivate all other buttons and activate the clicked one */
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->rect_combine_new_button),
+                                 (mode == SELECTION_COMBINE_NEW));
+    if (panel->rect_combine_add_button) {
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->rect_combine_add_button),
+                                     (mode == SELECTION_COMBINE_ADD));
+    }
+    if (panel->rect_combine_subtract_button) {
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->rect_combine_subtract_button),
+                                     (mode == SELECTION_COMBINE_SUBTRACT));
+    }
+    if (panel->rect_combine_intersect_button) {
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->rect_combine_intersect_button),
+                                     (mode == SELECTION_COMBINE_INTERSECT));
+    }
+
+    /* Unblock signals */
+    g_signal_handlers_unblock_by_func(panel->rect_combine_new_button,
+                                      G_CALLBACK(on_rect_select_combine_button_toggled), panel);
+    if (panel->rect_combine_add_button) {
+        g_signal_handlers_unblock_by_func(panel->rect_combine_add_button,
+                                          G_CALLBACK(on_rect_select_combine_button_toggled), panel);
+    }
+    if (panel->rect_combine_subtract_button) {
+        g_signal_handlers_unblock_by_func(panel->rect_combine_subtract_button,
+                                          G_CALLBACK(on_rect_select_combine_button_toggled), panel);
+    }
+    if (panel->rect_combine_intersect_button) {
+        g_signal_handlers_unblock_by_func(panel->rect_combine_intersect_button,
+                                          G_CALLBACK(on_rect_select_combine_button_toggled), panel);
+    }
+
+    /* Update tool options with the new mode */
     ToolOptions* opts = tool_options_get_for_tool(TOOL_RECT_SELECT);
     if (!opts) {
         return;
     }
 
-    tool_options_set_rect_select_combine(opts, (SelectionCombineMode)active);
+    tool_options_set_rect_select_combine(opts, mode);
+}
+
+/**
+ * Update the combine mode button group UI to reflect the current mode
+ */
+static void update_combine_mode_buttons(ToolOptionsPanel* panel, SelectionCombineMode mode) {
+    if (!panel || !panel->rect_combine_new_button) {
+        return;
+    }
+
+    /* Disconnect signals to avoid triggering callbacks during state update */
+    g_signal_handlers_block_by_func(panel->rect_combine_new_button,
+                                    G_CALLBACK(on_rect_select_combine_button_toggled), panel);
+    if (panel->rect_combine_add_button) {
+        g_signal_handlers_block_by_func(panel->rect_combine_add_button,
+                                        G_CALLBACK(on_rect_select_combine_button_toggled), panel);
+    }
+    if (panel->rect_combine_subtract_button) {
+        g_signal_handlers_block_by_func(panel->rect_combine_subtract_button,
+                                        G_CALLBACK(on_rect_select_combine_button_toggled), panel);
+    }
+    if (panel->rect_combine_intersect_button) {
+        g_signal_handlers_block_by_func(panel->rect_combine_intersect_button,
+                                        G_CALLBACK(on_rect_select_combine_button_toggled), panel);
+    }
+
+    /* Update button states */
+    gboolean new_active = (mode == SELECTION_COMBINE_NEW);
+    gboolean add_active = (mode == SELECTION_COMBINE_ADD);
+    gboolean subtract_active = (mode == SELECTION_COMBINE_SUBTRACT);
+    gboolean intersect_active = (mode == SELECTION_COMBINE_INTERSECT);
+
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->rect_combine_new_button), new_active);
+    if (panel->rect_combine_add_button) {
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->rect_combine_add_button), add_active);
+    }
+    if (panel->rect_combine_subtract_button) {
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->rect_combine_subtract_button), subtract_active);
+    }
+    if (panel->rect_combine_intersect_button) {
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->rect_combine_intersect_button), intersect_active);
+    }
+
+    /* Force redraw of all buttons so visual state updates */
+    gtk_widget_queue_draw(panel->rect_combine_new_button);
+    if (panel->rect_combine_add_button) {
+        gtk_widget_queue_draw(panel->rect_combine_add_button);
+    }
+    if (panel->rect_combine_subtract_button) {
+        gtk_widget_queue_draw(panel->rect_combine_subtract_button);
+    }
+    if (panel->rect_combine_intersect_button) {
+        gtk_widget_queue_draw(panel->rect_combine_intersect_button);
+    }
+
+    /* Unblock signals now that state is updated */
+    g_signal_handlers_unblock_by_func(panel->rect_combine_new_button,
+                                      G_CALLBACK(on_rect_select_combine_button_toggled), panel);
+    if (panel->rect_combine_add_button) {
+        g_signal_handlers_unblock_by_func(panel->rect_combine_add_button,
+                                          G_CALLBACK(on_rect_select_combine_button_toggled), panel);
+    }
+    if (panel->rect_combine_subtract_button) {
+        g_signal_handlers_unblock_by_func(panel->rect_combine_subtract_button,
+                                          G_CALLBACK(on_rect_select_combine_button_toggled), panel);
+    }
+    if (panel->rect_combine_intersect_button) {
+        g_signal_handlers_unblock_by_func(panel->rect_combine_intersect_button,
+                                          G_CALLBACK(on_rect_select_combine_button_toggled), panel);
+    }
 }
 
 /**
@@ -506,7 +638,10 @@ ToolOptionsPanel* create_tool_options_panel(void) {
     tool_opts_panel->contiguous_radio = NULL;
     tool_opts_panel->global_radio = NULL;
     tool_opts_panel->rect_animate_checkbox = NULL;
-    tool_opts_panel->rect_combine_combo = NULL;
+    tool_opts_panel->rect_combine_new_button = NULL;
+    tool_opts_panel->rect_combine_add_button = NULL;
+    tool_opts_panel->rect_combine_subtract_button = NULL;
+    tool_opts_panel->rect_combine_intersect_button = NULL;
     tool_opts_panel->rect_smooth_combo = NULL;
     tool_opts_panel->rect_feather_scale = NULL;
     tool_opts_panel->current_tool_type = TOOL_MOVE; /* Start with no tool selected */
@@ -672,7 +807,6 @@ ToolOptionsPanel* create_tool_options_panel(void) {
     GError* rect_select_error = NULL;
     GtkWidget* rect_select_title = NULL;
     GtkWidget* rect_select_animate = NULL;
-    GtkWidget* rect_select_combine = NULL;
     GtkWidget* rect_select_smooth = NULL;
     GtkWidget* rect_select_feather = NULL;
 
@@ -684,23 +818,30 @@ ToolOptionsPanel* create_tool_options_panel(void) {
             /* Get widgets */
             rect_select_title = GTK_WIDGET(gtk_builder_get_object(rect_select_builder, "rect_select_title_label"));
             rect_select_animate = GTK_WIDGET(gtk_builder_get_object(rect_select_builder, "rect_select_animate_checkbox"));
-            rect_select_combine = GTK_WIDGET(gtk_builder_get_object(rect_select_builder, "rect_select_combine_combo"));
+            tool_opts_panel->rect_combine_new_button = GTK_WIDGET(gtk_builder_get_object(rect_select_builder, "rect_select_combine_new_button"));
+            tool_opts_panel->rect_combine_add_button = GTK_WIDGET(gtk_builder_get_object(rect_select_builder, "rect_select_combine_add_button"));
+            tool_opts_panel->rect_combine_subtract_button = GTK_WIDGET(gtk_builder_get_object(rect_select_builder, "rect_select_combine_subtract_button"));
+            tool_opts_panel->rect_combine_intersect_button = GTK_WIDGET(gtk_builder_get_object(rect_select_builder, "rect_select_combine_intersect_button"));
             rect_select_smooth = GTK_WIDGET(gtk_builder_get_object(rect_select_builder, "rect_select_smooth_combo"));
             rect_select_feather = GTK_WIDGET(gtk_builder_get_object(rect_select_builder, "rect_select_feather_scale"));
 
-            /* Populate combo boxes */
-            if (rect_select_combine) {
-                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(rect_select_combine), "New");
-                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(rect_select_combine), "Add");
-                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(rect_select_combine), "Subtract");
-                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(rect_select_combine), "Intersect");
-                gtk_combo_box_set_active(GTK_COMBO_BOX(rect_select_combine), 0);
-                g_object_set_data(G_OBJECT(tool_opts_panel->rect_select_panel), "combine_combo", rect_select_combine);
-                tool_opts_panel->rect_combine_combo = rect_select_combine;
-
-                /* Connect signal to update tool options when changed */
-                g_signal_connect(rect_select_combine, "changed",
-                                 G_CALLBACK(on_rect_select_combine_changed), NULL);
+            /* Set up combine mode toggle buttons */
+            if (tool_opts_panel->rect_combine_new_button) {
+                gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(tool_opts_panel->rect_combine_new_button), TRUE);
+                g_signal_connect(tool_opts_panel->rect_combine_new_button, "toggled",
+                                 G_CALLBACK(on_rect_select_combine_button_toggled), tool_opts_panel);
+            }
+            if (tool_opts_panel->rect_combine_add_button) {
+                g_signal_connect(tool_opts_panel->rect_combine_add_button, "toggled",
+                                 G_CALLBACK(on_rect_select_combine_button_toggled), tool_opts_panel);
+            }
+            if (tool_opts_panel->rect_combine_subtract_button) {
+                g_signal_connect(tool_opts_panel->rect_combine_subtract_button, "toggled",
+                                 G_CALLBACK(on_rect_select_combine_button_toggled), tool_opts_panel);
+            }
+            if (tool_opts_panel->rect_combine_intersect_button) {
+                g_signal_connect(tool_opts_panel->rect_combine_intersect_button, "toggled",
+                                 G_CALLBACK(on_rect_select_combine_button_toggled), tool_opts_panel);
             }
 
             if (rect_select_smooth) {
@@ -803,6 +944,13 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
         gtk_widget_set_no_show_all(panel->rect_select_panel, FALSE);
         gtk_widget_set_visible(panel->rect_select_panel, TRUE);
         gtk_widget_show_all(panel->rect_select_panel);
+
+        /* Update combine mode buttons to match current tool options */
+        ToolOptions* opts = tool_options_get_for_tool(TOOL_RECT_SELECT);
+        if (opts) {
+            update_combine_mode_buttons(panel, (SelectionCombineMode)opts->rect_select_combine);
+        }
+
         return;
     }
 
@@ -1048,6 +1196,18 @@ void tool_options_panel_set_tool_registry(ToolOptionsPanel* panel, ToolRegistry*
     if (panel) {
         panel->tool_registry = registry;
     }
+}
+
+/**
+ * Update the combine mode buttons to reflect a specific mode
+ * Called from tool when hotkeys are pressed
+ */
+void tool_options_panel_set_combine_mode(ToolOptionsPanel* panel, SelectionCombineMode mode) {
+    if (!panel) {
+        return;
+    }
+
+    update_combine_mode_buttons(panel, mode);
 }
 
 /**

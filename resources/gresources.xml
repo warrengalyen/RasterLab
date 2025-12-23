@@ -34,6 +34,10 @@
     <file preprocess="to-pixdata">icons/channel-red.png</file>
     <file preprocess="to-pixdata">icons/channel-green.png</file>
     <file preprocess="to-pixdata">icons/channel-blue.png</file>
+    <file preprocess="to-pixdata">icons/select-combine-new.png</file>
+    <file preprocess="to-pixdata">icons/select-combine-add.png</file>
+    <file preprocess="to-pixdata">icons/select-combine-subtract.png</file>
+    <file preprocess="to-pixdata">icons/select-combine-intersect.png</file>
     <file>ui/layers_panel.glade</file>
     <file>ui/brush_options.glade</file>
     <file>ui/eraser_options.glade</file>

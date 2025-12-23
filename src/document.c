@@ -12,6 +12,7 @@
 #include "tool_options.h"
 #include "tools.h"
 #include "tools/tool_rect_select.h"
+#include "ui.h"
 #include "ui/layers_panel.h"
 #include <math.h>
 #include <stdio.h>
@@ -19,7 +20,6 @@
 #include <string.h>
 
 /* Forward declarations */
-typedef struct AppContext AppContext;
 static void on_scroll_adjustment_changed(GtkAdjustment* adjustment, gpointer user_data);
 static void on_scrolled_window_adjustment_notify(GObject* object, GParamSpec* pspec, gpointer user_data);
 static gboolean on_viewport_button_press(GtkWidget* widget, GdkEventButton* event, gpointer user_data);
@@ -474,6 +474,9 @@ static gboolean on_drawing_area_enter_notify(GtkWidget* widget, GdkEventCrossing
         return FALSE;
     }
 
+    /* Grab focus for keyboard events */
+    gtk_widget_grab_focus(doc->drawing_area);
+
     /* Get tool registry from drawing area data */
     tool_registry = (ToolRegistry*)g_object_get_data(G_OBJECT(doc->drawing_area), "tool_registry");
     if (!tool_registry) {
@@ -750,6 +753,128 @@ void document_free(ImageDocument* doc) {
 }
 
 /**
+ * Key press event handler for modifiers used by rectangular select tool
+ */
+static gboolean on_drawing_area_key_press(GtkWidget* widget, GdkEventKey* event, gpointer user_data) {
+    ImageDocument* doc = (ImageDocument*)user_data;
+
+    if (!doc || !doc->drawing_area) {
+        return FALSE;
+    }
+
+    ToolRegistry* tool_registry = (ToolRegistry*)g_object_get_data(G_OBJECT(doc->drawing_area), "tool_registry");
+    if (!tool_registry) {
+        return FALSE;
+    }
+
+    Tool* active_tool = tool_manager_get_active(tool_registry);
+    if (!active_tool || active_tool->type != TOOL_RECT_SELECT) {
+        return FALSE;
+    }
+
+    /* Check if this is a modifier key press (Shift or Alt) */
+    gboolean is_shift = (event->keyval == GDK_KEY_Shift_L || event->keyval == GDK_KEY_Shift_R);
+    gboolean is_alt = (event->keyval == GDK_KEY_Alt_L || event->keyval == GDK_KEY_Alt_R);
+
+    if (!is_shift && !is_alt) {
+        return FALSE;
+    }
+
+    /* Now check the new state AFTER this key is pressed */
+    /* We need to check what modifiers will be active */
+    gboolean shift_will_be_pressed = (event->state & GDK_SHIFT_MASK) != 0 || is_shift;
+    gboolean alt_will_be_pressed = (event->state & GDK_MOD1_MASK) != 0 || is_alt;
+
+    SelectionCombineMode temp_mode = SELECTION_COMBINE_NEW;
+
+    /* Determine temporary mode based on modifier state */
+    if (shift_will_be_pressed && alt_will_be_pressed) {
+        temp_mode = SELECTION_COMBINE_INTERSECT;
+    } else if (shift_will_be_pressed) {
+        temp_mode = SELECTION_COMBINE_ADD;
+    } else if (alt_will_be_pressed) {
+        temp_mode = SELECTION_COMBINE_SUBTRACT;
+    } else {
+        temp_mode = SELECTION_COMBINE_NEW;
+    }
+
+    /* Temporarily change the tool options mode */
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_RECT_SELECT);
+    if (opts) {
+        opts->rect_select_combine = temp_mode;
+    }
+
+    /* Update UI buttons to show the temporary mode */
+    AppContext* ctx = (AppContext*)g_object_get_data(G_OBJECT(doc->drawing_area), "app_context");
+    if (ctx && ctx->tool_options_panel) {
+        tool_options_panel_set_combine_mode(ctx->tool_options_panel, temp_mode);
+    }
+
+    return FALSE; /* Let GTK handle the event normally */
+}
+
+/**
+ * Key release event handler for modifiers used by rectangular select tool
+ */
+static gboolean on_drawing_area_key_release(GtkWidget* widget, GdkEventKey* event, gpointer user_data) {
+    ImageDocument* doc = (ImageDocument*)user_data;
+
+    if (!doc || !doc->drawing_area) {
+        return FALSE;
+    }
+
+    ToolRegistry* tool_registry = (ToolRegistry*)g_object_get_data(G_OBJECT(doc->drawing_area), "tool_registry");
+    if (!tool_registry) {
+        return FALSE;
+    }
+
+    Tool* active_tool = tool_manager_get_active(tool_registry);
+    if (!active_tool || active_tool->type != TOOL_RECT_SELECT) {
+        return FALSE;
+    }
+
+    /* Check if this is a modifier key release (Shift or Alt) */
+    gboolean is_shift = (event->keyval == GDK_KEY_Shift_L || event->keyval == GDK_KEY_Shift_R);
+    gboolean is_alt = (event->keyval == GDK_KEY_Alt_L || event->keyval == GDK_KEY_Alt_R);
+
+    if (!is_shift && !is_alt) {
+        return FALSE;
+    }
+
+    /* Now check the state AFTER this key is released */
+    /* event->state still contains the OLD state (before release), so we need to subtract the released key */
+    gboolean shift_will_be_pressed = (event->state & GDK_SHIFT_MASK) != 0 && !is_shift;
+    gboolean alt_will_be_pressed = (event->state & GDK_MOD1_MASK) != 0 && !is_alt;
+
+    SelectionCombineMode temp_mode = SELECTION_COMBINE_NEW;
+
+    /* Determine temporary mode based on remaining modifier state */
+    if (shift_will_be_pressed && alt_will_be_pressed) {
+        temp_mode = SELECTION_COMBINE_INTERSECT;
+    } else if (shift_will_be_pressed) {
+        temp_mode = SELECTION_COMBINE_ADD;
+    } else if (alt_will_be_pressed) {
+        temp_mode = SELECTION_COMBINE_SUBTRACT;
+    } else {
+        temp_mode = SELECTION_COMBINE_NEW;
+    }
+
+    /* Restore the original or new combine mode */
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_RECT_SELECT);
+    if (opts) {
+        opts->rect_select_combine = temp_mode;
+    }
+
+    /* Update UI buttons to show the new mode */
+    AppContext* ctx = (AppContext*)g_object_get_data(G_OBJECT(doc->drawing_area), "app_context");
+    if (ctx && ctx->tool_options_panel) {
+        tool_options_panel_set_combine_mode(ctx->tool_options_panel, temp_mode);
+    }
+
+    return FALSE; /* Let GTK handle the event normally */
+}
+
+/**
  * Create a drawing area widget for the document
  */
 GtkWidget* document_create_drawing_area(ImageDocument* doc) {
@@ -871,6 +996,20 @@ GtkWidget* document_create_drawing_area(ImageDocument* doc) {
         g_signal_connect(scrolled_window, "notify::vadjustment",
                          G_CALLBACK(on_scrolled_window_adjustment_notify), doc);
     }
+
+    /* Enable key events for modifier key handling (especially for rect select tool hotkeys) */
+    /* Note: We need to enable focus on the drawing area to receive key events */
+    gtk_widget_set_can_focus(drawing_area, TRUE);
+    gtk_widget_set_events(drawing_area,
+                          gtk_widget_get_events(drawing_area) |
+                              GDK_KEY_PRESS_MASK |
+                              GDK_KEY_RELEASE_MASK);
+
+    /* Connect key event signals */
+    g_signal_connect(drawing_area, "key-press-event",
+                     G_CALLBACK(on_drawing_area_key_press), doc);
+    g_signal_connect(drawing_area, "key-release-event",
+                     G_CALLBACK(on_drawing_area_key_release), doc);
 
     gtk_widget_show(scrolled_window);
 
