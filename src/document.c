@@ -46,11 +46,6 @@ static gboolean on_selection_animation_timer(gpointer user_data) {
         doc->selection_animation_phase = (doc->selection_animation_phase + 1) % 4;
     }
 
-    /* Update animation for old selection (deprecated) */
-    if (doc->selection && !selection_is_empty(doc->selection)) {
-        selection_update_animation(doc->selection);
-    }
-
     /* Queue redraw to show animation */
     if (doc->drawing_area) {
         gtk_widget_queue_draw(doc->drawing_area);
@@ -297,8 +292,10 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
     }
 
     /* Render old geometry-based selection (deprecated) */
-    if (doc->selection && !selection_is_empty(doc->selection)) {
-        selection_render_overlay(doc->selection, cr, zoom);
+    /* Render selection mask overlay */
+    if (doc->selection_mask && !selection_mask_is_empty(doc->selection_mask)) {
+        selection_mask_render_outline(cr, doc->selection_mask,
+                                      doc->selection_animation_phase, zoom);
     }
 
     return FALSE;
@@ -660,9 +657,6 @@ ImageDocument* document_new(const gchar* filename, gboolean create_worker_pool) 
     doc->selection_mask = NULL;
     doc->selection_animation_phase = 0;
 
-    /* Initialize old selection (deprecated, kept for compatibility) */
-    doc->selection = NULL;
-
     /* Create tile worker pool if requested (for on-screen rendering) */
     if (create_worker_pool) {
         doc->tile_worker_pool = tile_worker_pool_create(0);
@@ -751,12 +745,6 @@ void document_free(ImageDocument* doc) {
     if (doc->selection_mask) {
         selection_mask_free(doc->selection_mask);
         doc->selection_mask = NULL;
-    }
-
-    /* Free old selection if it exists (deprecated) */
-    if (doc->selection) {
-        selection_free(doc->selection);
-        doc->selection = NULL;
     }
 
     g_free(doc);

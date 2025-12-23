@@ -31,57 +31,8 @@ typedef enum {
 } SelectionSmoothingMode;
 
 /**
- * Selection structure - represents a selection region
- * Manages both pixel-accurate region and optional alpha mask for smooth modes
- */
-typedef struct Selection {
-    cairo_region_t* region;             /* Base selection mask (pixel-accurate) */
-    cairo_surface_t* mask;              /* Optional alpha mask for AA/feathered modes */
-    gboolean animated;                  /* Marching ants enabled */
-    gint animation_phase;               /* Dash offset for animated outline */
-    SelectionSmoothingMode smooth_mode; /* Current smoothing mode */
-    gint feather_radius;                /* Feather radius in pixels (for SMOOTH_FEATHERED) */
-} Selection;
-
-/**
- * Free a selection and its resources
- * @param sel The selection to free
- */
-void selection_free(Selection* sel);
-
-/**
- * Check if a selection is empty
- * @param sel The selection to check
- * @return TRUE if selection is empty or NULL, FALSE otherwise
- */
-gboolean selection_is_empty(Selection* sel);
-
-/**
- * Update animation phase for marching ants
- * Should be called periodically (e.g., every 100ms)
- * @param sel The selection
- */
-void selection_update_animation(Selection* sel);
-
-/**
- * Enable or disable animated marching ants
- * @param sel The selection
- * @param enabled TRUE to enable, FALSE to disable
- */
-void selection_set_animated(Selection* sel, gboolean enabled);
-
-/**
- * Render selection overlay to Cairo context
- * Draws marching ants outline and/or mask visualization
- * @param sel The selection
- * @param cr Cairo context to draw on
- * @param zoom_factor Current zoom level (for line width adjustment)
- */
-void selection_render_overlay(Selection* sel, cairo_t* cr, gdouble zoom_factor);
-
-/**
  * Draw marching ants outline for a rectangle
- * Used by both selection preview and final selection rendering
+ * Used by selection preview rendering
  * @param cr Cairo context to draw on
  * @param x X coordinate of rectangle
  * @param y Y coordinate of rectangle

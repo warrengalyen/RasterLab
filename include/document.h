@@ -139,12 +139,9 @@ typedef struct ImageDocument {
     /* Viewport and zoom */
     gdouble zoom_factor; /* Current zoom level (1.0 = 100%) */
 
-    /* Selection - mask-based (new) */
+    /* Selection - mask-based */
     SelectionMask* selection_mask;  /* Pixel-based selection mask */
     gint selection_animation_phase; /* Animation phase for marching ants (0-3) */
-
-    /* Selection - deprecated (old geometry-based) */
-    Selection* selection; /* Current selection (NULL if none) */
 
     /* Undo/redo system */
     CommandStack* undo_stack; /* Stack of undoable commands */
