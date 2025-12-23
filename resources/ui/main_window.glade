@@ -1272,29 +1272,6 @@
                   </packing>
                 </child>
                 <child>
-                  <object class="GtkToggleButton" id="tool_button_eraser">
-                    <property name="width-request">32</property>
-                    <property name="height-request">32</property>
-                    <property name="visible">True</property>
-                    <property name="can-focus">False</property>
-                    <property name="receives-default">False</property>
-                    <property name="relief">none</property>
-                    <child>
-                      <object class="GtkImage" id="eraser_icon">
-                        <property name="visible">True</property>
-                        <property name="can-focus">False</property>
-                        <property name="pixel-size">24</property>
-                        <property name="resource">/icons/tool-eraser.png</property>
-                      </object>
-                    </child>
-                  </object>
-                  <packing>
-                    <property name="expand">False</property>
-                    <property name="fill">True</property>
-                    <property name="position">3</property>
-                  </packing>
-                </child>
-                <child>
                   <object class="GtkToggleButton" id="tool_button_brush">
                     <property name="width-request">32</property>
                     <property name="height-request">32</property>
@@ -1308,6 +1285,29 @@
                         <property name="can-focus">False</property>
                         <property name="pixel-size">24</property>
                         <property name="resource">/icons/tool-paintbrush.png</property>
+                      </object>
+                    </child>
+                  </object>
+                  <packing>
+                    <property name="expand">False</property>
+                    <property name="fill">True</property>
+                    <property name="position">3</property>
+                  </packing>
+                </child>
+                          <child>
+                  <object class="GtkToggleButton" id="tool_button_eraser">
+                    <property name="width-request">32</property>
+                    <property name="height-request">32</property>
+                    <property name="visible">True</property>
+                    <property name="can-focus">False</property>
+                    <property name="receives-default">False</property>
+                    <property name="relief">none</property>
+                    <child>
+                      <object class="GtkImage" id="eraser_icon">
+                        <property name="visible">True</property>
+                        <property name="can-focus">False</property>
+                        <property name="pixel-size">24</property>
+                        <property name="resource">/icons/tool-eraser.png</property>
                       </object>
                     </child>
                   </object>

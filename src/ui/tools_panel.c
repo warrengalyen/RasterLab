@@ -138,8 +138,8 @@ GtkWidget* tools_panel_initialize_from_builder(GtkBuilder* builder, ToolRegistry
         "tool_button_hand",
         "tool_button_zoom",
         "tool_button_move",
-        "tool_button_eraser",
         "tool_button_brush",
+        "tool_button_eraser",
         "tool_button_fill",
         "tool_button_rect_select",
     };
@@ -148,8 +148,8 @@ GtkWidget* tools_panel_initialize_from_builder(GtkBuilder* builder, ToolRegistry
         TOOL_HAND,
         TOOL_ZOOM,
         TOOL_MOVE,
-        TOOL_ERASER,
         TOOL_BRUSH,
+        TOOL_ERASER,
         TOOL_PAINT_BUCKET,
         TOOL_RECT_SELECT,
     };
