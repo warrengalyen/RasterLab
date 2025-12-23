@@ -44,12 +44,6 @@ typedef struct Selection {
 } Selection;
 
 /**
- * Create a new empty selection
- * @return Newly allocated Selection with empty region
- */
-Selection* selection_new(void);
-
-/**
  * Free a selection and its resources
  * @param sel The selection to free
  */
@@ -61,49 +55,6 @@ void selection_free(Selection* sel);
  * @return TRUE if selection is empty or NULL, FALSE otherwise
  */
 gboolean selection_is_empty(Selection* sel);
-
-/**
- * Clear a selection (make it empty)
- * @param sel The selection to clear
- */
-void selection_clear(Selection* sel);
-
-/**
- * Create a rectangular selection
- * @param x X coordinate in image space
- * @param y Y coordinate in image space
- * @param width Width of rectangle
- * @param height Height of rectangle
- * @param smooth_mode Smoothing mode to apply
- * @param feather_radius Feather radius (only used for SMOOTH_FEATHERED)
- * @return Newly allocated Selection with rectangular region
- */
-Selection* selection_create_rectangle(gint x, gint y, gint width, gint height,
-                                      SelectionSmoothingMode smooth_mode,
-                                      gint feather_radius);
-
-/**
- * Combine two selections
- * @param dest The destination selection (modified in place)
- * @param src The source selection to combine
- * @param mode How to combine the selections
- * @return TRUE on success, FALSE on failure
- */
-gboolean selection_combine(Selection* dest, Selection* src, SelectionCombineMode mode);
-
-/**
- * Get the alpha mask for rendering (creates if needed)
- * @param sel The selection
- * @return Cairo surface with alpha mask, or NULL if none
- */
-cairo_surface_t* selection_get_mask(Selection* sel);
-
-/**
- * Get the region (pixel-accurate representation)
- * @param sel The selection
- * @return Cairo region, or NULL if empty
- */
-cairo_region_t* selection_get_region(Selection* sel);
 
 /**
  * Update animation phase for marching ants
