@@ -154,6 +154,7 @@ set(SOURCES
     app/recent_files.c
     app/autosave.c
     app/settings.c
+    undo/undo_disk.c
     ${GRESOURCE_FILE}
 )
 
@@ -166,6 +167,9 @@ target_link_libraries(image-editor ${GTK3_LIBRARIES})
 # Link libxml2
 target_link_libraries(image-editor ${LIBXML2_LIBRARIES})
 
+# Link LZ4
+target_link_libraries(image-editor ${LZ4_LIBRARIES})
+
 # Link pthread for tile thread pool
 target_link_libraries(image-editor pthread)
 
@@ -175,4 +179,5 @@ target_link_libraries(image-editor ${CMAKE_SOURCE_DIR}/lib/libocular.a)
 # Add compile flags from pkg-config
 target_compile_options(image-editor PRIVATE ${GTK3_CFLAGS_OTHER})
 target_compile_options(image-editor PRIVATE ${LIBXML2_CFLAGS_OTHER})
+target_compile_options(image-editor PRIVATE ${LZ4_CFLAGS_OTHER})
 

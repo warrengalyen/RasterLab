@@ -32,6 +32,9 @@ typedef struct Selection Selection;
 struct SelectionMask;
 typedef struct SelectionMask SelectionMask;
 
+/* Forward declaration for undo journal - full definition in undo/undo_disk.h */
+typedef struct _UndoJournal UndoJournal;
+
 /**
  * Blend modes for layers
  */
@@ -144,8 +147,9 @@ typedef struct ImageDocument {
     gint selection_animation_phase; /* Animation phase for marching ants (0-3) */
 
     /* Undo/redo system */
-    CommandStack* undo_stack; /* Stack of undoable commands */
-    CommandStack* redo_stack; /* Stack of redoable commands */
+    CommandStack* undo_stack;  /* Stack of undoable commands (legacy, for non-pixel ops) */
+    CommandStack* redo_stack;  /* Stack of redoable commands (legacy, for non-pixel ops) */
+    UndoJournal* undo_journal; /* Disk-backed undo journal (for pixel operations) */
 } ImageDocument;
 
 /**

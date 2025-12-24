@@ -4,6 +4,7 @@
 #include "render/compositor.h"
 #include "render/dirty.h"
 #include "render/layer.h"
+#include "render/tile.h"
 #include "tool_options.h"
 #include "ui/tools_panel.h"
 #include <math.h>
@@ -23,8 +24,7 @@ typedef struct {
     gint last_x;                      /* Last mouse X position */
     gint last_y;                      /* Last mouse Y position */
     struct ImageLayer* active_layer;  /* Layer being drawn on */
-    Command* current_command;         /* Current draw command for undo */
-    cairo_surface_t* before_snapshot; /* Layer state snapshot taken at mouse_down (before any drawing) */
+    TileUndoTransaction* transaction; /* Tile-based undo transaction */
 } BrushToolState;
 
 /**
@@ -150,6 +150,55 @@ static void brush_draw_line(cairo_surface_t* surface, gdouble x1, gdouble y1,
 }
 
 /**
+ * Register all tiles that a brush stroke bounding box intersects
+ * Helper function to ensure all affected tiles are captured for undo
+ */
+static void brush_register_tiles_for_bounding_box(TileUndoTransaction* transaction,
+                                                  struct ImageDocument* doc,
+                                                  struct ImageLayer* layer,
+                                                  gint layer_x1, gint layer_y1,
+                                                  gint layer_x2, gint layer_y2,
+                                                  gfloat brush_size) {
+    if (!transaction || !doc || !layer) {
+        return;
+    }
+
+    gint tile_size = doc->tile_grid ? doc->tile_grid->tile_size : 128;
+    gdouble radius = brush_size / 2.0;
+
+    /* Calculate bounding box of stroke accounting for brush radius */
+    gint min_x = ((layer_x1 < layer_x2) ? layer_x1 : layer_x2) - (gint)radius - 1;
+    gint max_x = ((layer_x1 > layer_x2) ? layer_x1 : layer_x2) + (gint)radius + 1;
+    gint min_y = ((layer_y1 < layer_y2) ? layer_y1 : layer_y2) - (gint)radius - 1;
+    gint max_y = ((layer_y1 > layer_y2) ? layer_y1 : layer_y2) + (gint)radius + 1;
+
+    /* Clamp to layer bounds */
+    if (min_x < 0)
+        min_x = 0;
+    if (min_y < 0)
+        min_y = 0;
+    if (max_x >= (gint)layer->width)
+        max_x = layer->width - 1;
+    if (max_y >= (gint)layer->height)
+        max_y = layer->height - 1;
+
+    /* Calculate tile bounds */
+    gint start_tile_x = min_x / tile_size;
+    gint start_tile_y = min_y / tile_size;
+    gint end_tile_x = max_x / tile_size;
+    gint end_tile_y = max_y / tile_size;
+
+    /* Register all tiles in the bounding box */
+    for (gint ty = start_tile_y; ty <= end_tile_y; ty++) {
+        for (gint tx = start_tile_x; tx <= end_tile_x; tx++) {
+            gint sample_x = tx * tile_size + tile_size / 2;
+            gint sample_y = ty * tile_size + tile_size / 2;
+            tile_undo_transaction_register_tile(transaction, doc, sample_x, sample_y);
+        }
+    }
+}
+
+/**
  * Draw a single dot (for initial mouse down)
  */
 static void brush_draw_dot(cairo_surface_t* surface, gint x, gint y) {
@@ -219,14 +268,26 @@ static void brush_tool_mouse_down(Tool* tool, struct ImageDocument* doc,
     state->last_y = event->y;
     state->active_layer = active_layer;
 
-    /* CRITICAL: Create draw command BEFORE any drawing - captures the "before" state */
-    state->current_command = command_create_draw(active_layer,
-                                                 command_get_name_string(CMD_NAME_DRAW_BRUSH_STROKE));
-    state->before_snapshot = NULL; /* Not used anymore */
+    /* CRITICAL: Begin tile-based undo transaction BEFORE any drawing */
+    state->transaction = tile_undo_transaction_begin(active_layer,
+                                                     doc,
+                                                     command_get_name_string(CMD_NAME_DRAW_BRUSH_STROKE));
+    if (!state->transaction) {
+        state->is_drawing = FALSE;
+        return;
+    }
 
     /* Draw initial dot at mouse down position */
     gint layer_x = event->x - active_layer->offset_x;
     gint layer_y = event->y - active_layer->offset_y;
+
+    /* Register all tiles that the initial brush dot will affect */
+    ToolOptions* opts = tool_options_get_for_tool(tool->type);
+    gfloat brush_size = opts ? opts->size : 5.0f;
+    brush_register_tiles_for_bounding_box(state->transaction, doc, active_layer,
+                                          layer_x, layer_y,
+                                          layer_x, layer_y,
+                                          brush_size);
 
     brush_draw_dot(active_layer->surface, layer_x, layer_y);
 
@@ -237,8 +298,6 @@ static void brush_tool_mouse_down(Tool* tool, struct ImageDocument* doc,
     active_layer->cache_dirty = TRUE;
 
     /* Mark initial dot area as dirty */
-    ToolOptions* opts = tool_options_get_for_tool(tool->type);
-    gfloat brush_size = opts ? opts->size : 5.0f;
     gint margin = (gint)(brush_size / 2.0f) + 3;
 
     DirtyRect dirty_rect;
@@ -275,19 +334,36 @@ static void brush_tool_mouse_move(Tool* tool, struct ImageDocument* doc,
     active_layer = document_get_selected_layer(doc);
     if (!active_layer || !active_layer->surface) {
         // printf("Brush tool: selected layer deleted during drawing\n");
+        /* Cancel transaction if layer was deleted */
+        if (state->transaction) {
+            tile_undo_transaction_cancel(state->transaction);
+            state->transaction = NULL;
+        }
         state->is_drawing = FALSE;
         return;
     }
 
     /* Draw line from last position to current,
         adjusted for layer offset */
-    gdouble layer_x1 = (gdouble)(state->last_x - active_layer->offset_x);
-    gdouble layer_y1 = (gdouble)(state->last_y - active_layer->offset_y);
-    gdouble layer_x2 = (gdouble)(event->x - active_layer->offset_x);
-    gdouble layer_y2 = (gdouble)(event->y - active_layer->offset_y);
+    gint layer_x1 = state->last_x - active_layer->offset_x;
+    gint layer_y1 = state->last_y - active_layer->offset_y;
+    gint layer_x2 = event->x - active_layer->offset_x;
+    gint layer_y2 = event->y - active_layer->offset_y;
 
-    brush_draw_line(active_layer->surface, layer_x1, layer_y1, layer_x2,
-                    layer_y2);
+    /* Get brush size for tile registration and dirty rect calculation */
+    ToolOptions* opts = tool_options_get_for_tool(tool->type);
+    gfloat brush_size = opts ? opts->size : 5.0f;
+
+    /* Register all tiles that this stroke segment will affect */
+    if (state->transaction) {
+        brush_register_tiles_for_bounding_box(state->transaction, doc, active_layer,
+                                              layer_x1, layer_y1,
+                                              layer_x2, layer_y2,
+                                              brush_size);
+    }
+
+    brush_draw_line(active_layer->surface, (gdouble)layer_x1, (gdouble)layer_y1,
+                    (gdouble)layer_x2, (gdouble)layer_y2);
 
     /* CRITICAL: Flush Cairo surface to ensure drawing is written to pixel buffer
        Worker threads will read the raw pixels, so we must flush first */
@@ -300,8 +376,7 @@ static void brush_tool_mouse_move(Tool* tool, struct ImageDocument* doc,
 
     /* Calculate dirty rectangle BEFORE updating last_x/y
         Use the previous position and current position */
-    ToolOptions* opts = tool_options_get_for_tool(tool->type);
-    gfloat brush_size = opts ? opts->size : 5.0f;
+    /* brush_size already declared above */
     gint margin =
         (gint)(brush_size / 2.0f) + 3; /* Add margin for anti-aliasing */
 
@@ -352,14 +427,16 @@ static void brush_tool_mouse_up(Tool* tool, struct ImageDocument* doc,
         return;
     }
 
-    /* Finalize draw command - captures the "after" state */
-    if (state->current_command) {
-        command_finalize_draw(state->current_command);
+    /* Commit tile-based undo transaction (captures "after" state and creates command) */
+    Command* cmd = NULL;
+    if (state->transaction) {
+        cmd = tile_undo_transaction_commit(state->transaction);
+        state->transaction = NULL;
     }
 
-    /* Push draw command to undo stack */
-    if (state->current_command && doc->undo_stack) {
-        command_stack_push(doc->undo_stack, state->current_command);
+    /* Push command to undo stack */
+    if (cmd && doc->undo_stack) {
+        command_stack_push(doc->undo_stack, cmd);
 
         /* Clear redo stack */
         if (doc->redo_stack) {
@@ -372,13 +449,15 @@ static void brush_tool_mouse_up(Tool* tool, struct ImageDocument* doc,
             ui_update_menu_and_button_states(ctx);
             ui_update_window_title(ctx);
         }
+    } else if (cmd) {
+        /* No undo stack, free the command */
+        command_free(cmd);
     }
 
     /* Mark document as modified */
     doc->modified = TRUE;
 
     state->is_drawing = FALSE;
-    state->current_command = NULL;
     state->active_layer = NULL;
 
     // printf("Brush tool: finished drawing\n");
