@@ -945,10 +945,40 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
         gtk_widget_set_visible(panel->rect_select_panel, TRUE);
         gtk_widget_show_all(panel->rect_select_panel);
 
-        /* Update combine mode buttons to match current tool options */
+        /* Update all rect select tool options to match current settings */
         ToolOptions* opts = tool_options_get_for_tool(TOOL_RECT_SELECT);
         if (opts) {
+            /* Update combine mode buttons */
             update_combine_mode_buttons(panel, (SelectionCombineMode)opts->rect_select_combine);
+
+            /* Update smoothing mode combo */
+            if (panel->rect_smooth_combo) {
+                g_signal_handlers_block_by_func(panel->rect_smooth_combo,
+                                                G_CALLBACK(on_rect_select_smooth_changed), panel);
+                gtk_combo_box_set_active(GTK_COMBO_BOX(panel->rect_smooth_combo),
+                                         (gint)opts->rect_select_smooth);
+                g_signal_handlers_unblock_by_func(panel->rect_smooth_combo,
+                                                  G_CALLBACK(on_rect_select_smooth_changed), panel);
+            }
+
+            /* Update feather radius slider */
+            if (panel->rect_feather_scale) {
+                g_signal_handlers_block_by_func(panel->rect_feather_scale,
+                                                G_CALLBACK(on_rect_select_feather_changed), panel);
+                gtk_range_set_value(GTK_RANGE(panel->rect_feather_scale), opts->rect_select_feather);
+                g_signal_handlers_unblock_by_func(panel->rect_feather_scale,
+                                                  G_CALLBACK(on_rect_select_feather_changed), panel);
+            }
+
+            /* Update animation checkbox */
+            if (panel->rect_animate_checkbox) {
+                g_signal_handlers_block_by_func(panel->rect_animate_checkbox,
+                                                G_CALLBACK(on_rect_select_animate_toggled), panel);
+                gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->rect_animate_checkbox),
+                                             opts->rect_select_animate);
+                g_signal_handlers_unblock_by_func(panel->rect_animate_checkbox,
+                                                  G_CALLBACK(on_rect_select_animate_toggled), panel);
+            }
         }
 
         return;
