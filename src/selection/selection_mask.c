@@ -6,9 +6,6 @@
 #define SELECTION_THRESHOLD 128 /* Alpha value threshold for edge detection */
 #define ANT_DASH_SIZE 4.0f      /* Marching ants dash length in pixels */
 
-/* Forward declaration for compute_preview_feather_mask */
-static void compute_preview_feather_mask(SelectionMask* mask);
-
 /**
  * Allocate aligned row stride for better cache performance
  */
@@ -26,7 +23,7 @@ SelectionMask* selection_mask_new(int width, int height) {
     mask->height = height;
     mask->stride = calculate_stride(width);
 
-    /* Allocate base mask (hard 0/255 selection) */
+    /* Allocate base mask (hard 0/255 selection) - AUTHORITATIVE */
     mask->base_mask = g_malloc0(mask->stride * height);
 
     /* Initially use base_mask as data */
@@ -36,9 +33,11 @@ SelectionMask* selection_mask_new(int width, int height) {
     mask->dirty = TRUE; /* Initially dirty */
     mask->surface = NULL;
 
-    /* Feathering support */
-    mask->preview_feather_mask = NULL;
-    mask->feather_radius = 0.0f;
+    /* Initialize selections list */
+    mask->selections = NULL;
+
+    /* Feathering preview */
+    mask->feathered_preview = NULL;
     mask->feather_dirty = FALSE;
 
     return mask;
@@ -51,6 +50,19 @@ void selection_mask_free(SelectionMask* mask) {
     if (!mask)
         return;
 
+    /* Free all selections in the list */
+    if (mask->selections) {
+        GList* iter;
+        for (iter = mask->selections; iter != NULL; iter = iter->next) {
+            Selection* sel = (Selection*)iter->data;
+            if (sel) {
+                selection_unref(sel);
+            }
+        }
+        g_list_free(mask->selections);
+        mask->selections = NULL;
+    }
+
     if (mask->base_mask) {
         g_free(mask->base_mask);
         mask->base_mask = NULL;
@@ -59,11 +71,11 @@ void selection_mask_free(SelectionMask* mask) {
         g_free(mask->temp_data);
         mask->temp_data = NULL;
     }
-    if (mask->preview_feather_mask) {
-        g_free(mask->preview_feather_mask);
-        mask->preview_feather_mask = NULL;
+    if (mask->feathered_preview) {
+        g_free(mask->feathered_preview);
+        mask->feathered_preview = NULL;
     }
-    /* Note: data always points to either base_mask or preview_feather_mask,
+    /* Note: data always points to either base_mask or feathered_preview,
        so we don't free it separately to avoid double-free */
     mask->data = NULL;
 
@@ -169,9 +181,8 @@ static void draw_soft_circle(SelectionMask* mask, float cx, float cy, float radi
 }
 
 /**
- * Fill rectangular region - creates hard 0/255 mask in base_mask
- * For combine modes other than NEW, feathering is applied to new rectangle only before combining
- * For NEW mode, feathering is stored for preview rendering during editing
+ * Fill rectangular region - creates a new Selection object with per-selection feathering
+ * PHASE 1: Basic per-selection storage (feathering rendering comes in Phase 2)
  */
 void selection_mask_fill_rect(
     SelectionMask* mask,
@@ -184,54 +195,61 @@ void selection_mask_fill_rect(
     if (width <= 0 || height <= 0)
         return;
 
-    /* Create temporary mask for this rectangle - hard 0/255 only */
-    SelectionMask* temp = selection_mask_new(mask->width, mask->height);
-
     /* Clamp rectangle to bounds */
     int x1 = (x < 0) ? 0 : x;
     int y1 = (y < 0) ? 0 : y;
     int x2 = (x + width > mask->width) ? mask->width : (x + width);
     int y2 = (y + height > mask->height) ? mask->height : (y + height);
+    int clamped_width = x2 - x1;
+    int clamped_height = y2 - y1;
 
-    /* Always create hard-edge mask in base_mask (ignore smoothing for base) */
-    for (int row = y1; row < y2; row++) {
-        for (int col = x1; col < x2; col++) {
-            temp->base_mask[row * temp->stride + col] = 255;
+    if (clamped_width <= 0 || clamped_height <= 0)
+        return;
+
+    /* For NEW combine mode, clear all existing selections */
+    if (combine == SELECTION_COMBINE_NEW) {
+        if (mask->selections) {
+            GList* iter;
+            for (iter = mask->selections; iter != NULL; iter = iter->next) {
+                Selection* sel = (Selection*)iter->data;
+                if (sel) {
+                    selection_unref(sel);
+                }
+            }
+            g_list_free(mask->selections);
+            mask->selections = NULL;
         }
     }
 
-    /* For combine modes other than NEW, apply feathering to the temporary rectangle
-       BEFORE combining it. This ensures feathering only applies to the new geometry. */
-    if (combine != SELECTION_COMBINE_NEW && feather_radius > 0.0f) {
-        temp->feather_radius = feather_radius;
-        temp->feather_dirty = TRUE;
-        /* Compute feathering for temp mask */
-        compute_preview_feather_mask(temp);
-        /* Copy feathered result into temp's base_mask */
-        selection_mask_commit_feathering(temp);
+    /* Create new Selection object with per-selection feathering parameters */
+    Selection* sel = selection_new(x1, y1, clamped_width, clamped_height,
+                                   combine, smoothing, feather_radius);
+    if (!sel) {
+        return;
     }
 
-    /* Apply temp mask to main mask using combine mode */
-    selection_mask_apply(mask, temp, combine);
-    selection_mask_free(temp);
+    /* Allocate mask for this selection (full mask size, but only rectangle region is filled) */
+    int stride = calculate_stride(mask->width);
+    sel->mask = g_malloc0(stride * mask->height);
 
-    /* For NEW combine mode, store feathering parameters for preview rendering
-       This allows the user to see feathering during editing before finalizing */
-    if (combine == SELECTION_COMBINE_NEW) {
-        mask->feather_radius = feather_radius;
-        mask->feather_dirty = TRUE; /* Preview needs recompute */
-    } else {
-        /* For other combine modes, don't store feathering on the combined result */
-        mask->feather_radius = 0.0f;
-        mask->feather_dirty = FALSE;
+    /* Fill rectangle region in selection's mask (hard 0/255 only) */
+    for (int row = y1; row < y2; row++) {
+        for (int col = x1; col < x2; col++) {
+            sel->mask[row * stride + col] = 255;
+        }
     }
+
+    /* Add selection to list */
+    selection_mask_add_selection(mask, sel);
+    selection_unref(sel); /* Release our reference (list now owns it) */
 
     /* Mark affected region as dirty */
-    selection_mask_mark_dirty(mask, x1, y1, x2 - x1, y2 - y1);
+    selection_mask_mark_dirty(mask, x1, y1, clamped_width, clamped_height);
 }
 
 /**
- * Apply one mask to another (operates on base_mask)
+ * Apply one mask to another (operates on base_mask only)
+ * Never modifies feathering parameters - only base_mask
  */
 void selection_mask_apply(
     SelectionMask* dest,
@@ -263,131 +281,7 @@ void selection_mask_apply(
     }
 
     dest->dirty = TRUE;
-    dest->feather_dirty = TRUE; /* Preview needs recompute */
-}
-
-/**
- * Compute feathering effect for preview rendering using fast separable distance transform
- * O(n*r) performance, accurate Euclidean distances
- */
-static void compute_preview_feather_mask(SelectionMask* mask) {
-    if (!mask || !mask->base_mask || mask->feather_radius <= 0.0f) {
-        /* No feathering needed, use base_mask directly */
-        if (mask->preview_feather_mask) {
-            g_free(mask->preview_feather_mask);
-            mask->preview_feather_mask = NULL;
-        }
-        mask->data = mask->base_mask;
-        mask->feather_dirty = FALSE;
-        return;
-    }
-
-    /* Allocate preview feather mask if needed */
-    if (!mask->preview_feather_mask) {
-        mask->preview_feather_mask = g_malloc0(mask->stride * mask->height);
-    }
-
-    /* Copy base mask to preview (keep hard interior) */
-    memcpy(mask->preview_feather_mask, mask->base_mask, mask->stride * mask->height);
-
-    int radius = (int)mask->feather_radius;
-    if (radius <= 0) {
-        mask->data = mask->preview_feather_mask;
-        mask->feather_dirty = FALSE;
-        return;
-    }
-
-    /* Two-pass separable distance transform
-       Pass 1: Horizontal distance per row
-       Pass 2: Vertical distance per column, combining with horizontal */
-    float* dist = g_malloc(mask->stride * mask->height * sizeof(float));
-
-    /* Initialize: 0 for selected, large value for unselected */
-    float large_val = (float)(radius + 1);
-    for (int i = 0; i < mask->height * mask->stride; i++) {
-        dist[i] = (mask->base_mask[i] > 0) ? 0.0f : large_val;
-    }
-
-    /* Pass 1: Horizontal - find nearest selected pixel in each row */
-    for (int y = 0; y < mask->height; y++) {
-        /* Forward pass: propagate distance from left */
-        for (int x = 1; x < mask->width; x++) {
-            if (dist[y * mask->stride + x - 1] < large_val) {
-                float candidate = dist[y * mask->stride + x - 1] + 1.0f;
-                dist[y * mask->stride + x] = fminf(dist[y * mask->stride + x], candidate);
-            }
-        }
-
-        /* Backward pass: propagate distance from right */
-        for (int x = mask->width - 2; x >= 0; x--) {
-            if (dist[y * mask->stride + x + 1] < large_val) {
-                float candidate = dist[y * mask->stride + x + 1] + 1.0f;
-                dist[y * mask->stride + x] = fminf(dist[y * mask->stride + x], candidate);
-            }
-        }
-    }
-
-    /* Pass 2: Vertical - combine with vertical distance
-       For each column, check pixels within radius vertically
-       Combine horizontal distance from those pixels with vertical offset */
-    for (int x = 0; x < mask->width; x++) {
-        float* temp = g_malloc(mask->height * sizeof(float));
-        memset(temp, 0, mask->height * sizeof(float));
-
-        for (int y = 0; y < mask->height; y++) {
-            float min_dist = large_val;
-
-            /* Check all pixels within vertical radius */
-            for (int dy = -radius; dy <= radius; dy++) {
-                int ny = y + dy;
-                if (ny >= 0 && ny < mask->height) {
-                    float h_dist = dist[ny * mask->stride + x];
-                    if (h_dist < large_val) {
-                        /* Euclidean distance combining horizontal and vertical offset */
-                        float euclidean_sq = h_dist * h_dist + (float)(dy * dy);
-                        float euclidean = sqrtf(euclidean_sq);
-                        min_dist = fminf(min_dist, euclidean);
-                    }
-                }
-            }
-
-            temp[y] = min_dist;
-        }
-
-        /* Copy temp back to dist for this column */
-        for (int y = 0; y < mask->height; y++) {
-            dist[y * mask->stride + x] = temp[y];
-        }
-
-        g_free(temp);
-    }
-
-    /* Apply feathering gradient based on distance field */
-    for (int y = 0; y < mask->height; y++) {
-        for (int x = 0; x < mask->width; x++) {
-            uint8_t center = mask->base_mask[y * mask->stride + x];
-
-            /* Already selected - keep as is */
-            if (center > 0)
-                continue;
-
-            float d = dist[y * mask->stride + x];
-
-            /* Apply feathering gradient if within feather radius */
-            if (d > 0.0f && d <= (float)radius) {
-                /* Create smooth falloff: fully transparent at radius, fully opaque at 0 */
-                float t = d / (float)radius;
-                uint8_t alpha = (uint8_t)(255.0f * (1.0f - t * t)); /* Quadratic falloff */
-                mask->preview_feather_mask[y * mask->stride + x] = alpha;
-            }
-        }
-    }
-
-    g_free(dist);
-
-    /* Use preview feather mask for rendering */
-    mask->data = mask->preview_feather_mask;
-    mask->feather_dirty = FALSE;
+    dest->feather_dirty = TRUE; /* Feathered preview needs recompute due to base_mask change */
 }
 
 /**
@@ -406,9 +300,9 @@ cairo_surface_t* selection_mask_get_surface(SelectionMask* mask) {
     if (!mask || !mask->base_mask)
         return NULL;
 
-    /* Compute feathering if needed */
+    /* Regenerate combined feathered preview if needed (per-selection feathering) */
     if (mask->feather_dirty) {
-        compute_preview_feather_mask(mask);
+        selection_mask_regenerate_combined_feather_preview(mask);
     }
 
     if (!mask->data)
@@ -450,33 +344,25 @@ cairo_surface_t* selection_mask_get_surface(SelectionMask* mask) {
 }
 
 /**
- * Apply feathering permanently to base_mask
- * Converts preview feathering to the actual base_mask
- * Call this when finalizing a selection
+ * Public function to regenerate feathered preview after parameters change
+ * Used by undo/redo to rebuild preview with restored feathering parameters
+ * Now uses per-selection feathering system
  */
-void selection_mask_commit_feathering(SelectionMask* mask) {
+void selection_mask_regenerate_feather_preview(SelectionMask* mask) {
     if (!mask)
         return;
 
-    /* If we have feathering, ensure preview is up to date then bake it */
-    if (mask->feather_radius > 0.0f) {
-        /* Recompute preview if marked dirty (e.g., after combine operations) */
-        if (mask->feather_dirty) {
-            compute_preview_feather_mask(mask);
+    /* Mark all selections as needing regeneration */
+    GList* iter;
+    for (iter = mask->selections; iter != NULL; iter = iter->next) {
+        Selection* sel = (Selection*)iter->data;
+        if (sel) {
+            sel->feather_dirty = TRUE;
         }
-
-        /* Bake the feathered result into base_mask */
-        if (mask->preview_feather_mask) {
-            memcpy(mask->base_mask, mask->preview_feather_mask, mask->stride * mask->height);
-        }
-
-        /* Reset feathering state - selection is now permanent */
-        mask->feather_radius = 0.0f;
-        mask->feather_dirty = FALSE;
-        /* Use base_mask directly from now on */
-        mask->data = mask->base_mask;
-        mask->dirty = TRUE;
     }
+
+    /* Regenerate combined preview with per-selection feathering */
+    selection_mask_regenerate_combined_feather_preview(mask);
 }
 void selection_mask_render_outline(
     cairo_t* cr,
@@ -517,4 +403,397 @@ void selection_mask_render_outline(
             }
         }
     }
+}
+
+/* ============================================================
+ * Per-Selection API Implementation
+ * ============================================================ */
+
+/**
+ * Create a new Selection object
+ */
+Selection* selection_new(int x, int y, int width, int height,
+                         SelectionCombineMode combine_mode,
+                         SelectionSmoothingMode feather_mode,
+                         float feather_radius) {
+    Selection* sel = g_malloc0(sizeof(Selection));
+
+    if (!sel) {
+        return NULL;
+    }
+
+    sel->x = x;
+    sel->y = y;
+    sel->width = width;
+    sel->height = height;
+    sel->combine_mode = combine_mode;
+    sel->feather_mode = feather_mode;
+    sel->feather_radius = feather_radius;
+    sel->feather_dirty = TRUE;
+    sel->feathered_preview = NULL;
+    sel->mask = NULL; /* Will be allocated when needed */
+    sel->ref_count = 1;
+
+    return sel;
+}
+
+/**
+ * Increment reference count
+ */
+Selection* selection_ref(Selection* sel) {
+    if (sel) {
+        sel->ref_count++;
+    }
+    return sel;
+}
+
+/**
+ * Decrement reference count and free if zero
+ */
+void selection_unref(Selection* sel) {
+    if (!sel) {
+        return;
+    }
+
+    sel->ref_count--;
+    if (sel->ref_count <= 0) {
+        if (sel->mask) {
+            g_free(sel->mask);
+        }
+        if (sel->feathered_preview) {
+            g_free(sel->feathered_preview);
+        }
+        g_free(sel);
+    }
+}
+
+/**
+ * Get list of selections
+ */
+GList* selection_mask_get_selections(SelectionMask* mask) {
+    if (!mask) {
+        return NULL;
+    }
+    return mask->selections;
+}
+
+/**
+ * Add selection to mask and update base_mask
+ */
+void selection_mask_add_selection(SelectionMask* mask, Selection* sel) {
+    if (!mask || !sel) {
+        return;
+    }
+
+    /* Add to list (takes ownership) */
+    mask->selections = g_list_append(mask->selections, selection_ref(sel));
+
+    /* Rebuild base_mask from all selections (will regenerate preview if needed) */
+    selection_mask_rebuild_from_selections(mask);
+}
+
+/**
+ * Remove selection from mask and update base_mask
+ */
+void selection_mask_remove_selection(SelectionMask* mask, Selection* sel) {
+    if (!mask || !sel) {
+        return;
+    }
+
+    /* Remove from list */
+    GList* link = g_list_find(mask->selections, sel);
+    if (link) {
+        mask->selections = g_list_remove_link(mask->selections, link);
+        selection_unref(sel);
+        g_list_free(link);
+    }
+
+    /* Rebuild base_mask from remaining selections (will regenerate preview if needed) */
+    selection_mask_rebuild_from_selections(mask);
+}
+
+/**
+ * Rebuild base_mask from all selections
+ * Combines all selections according to their combine_mode
+ */
+void selection_mask_rebuild_from_selections(SelectionMask* mask) {
+    if (!mask) {
+        return;
+    }
+
+    /* Clear base_mask */
+    memset(mask->base_mask, 0, mask->stride * mask->height);
+
+    /* Combine all selections according to their combine_mode */
+    gboolean is_first = TRUE;
+    GList* iter;
+    for (iter = mask->selections; iter != NULL; iter = iter->next) {
+        Selection* sel = (Selection*)iter->data;
+        if (!sel || !sel->mask) {
+            continue;
+        }
+
+        /* Apply this selection's mask to base_mask using its combine_mode */
+        for (int i = 0; i < mask->height * mask->stride; i++) {
+            uint8_t dst_val = mask->base_mask[i];
+            uint8_t src_val = sel->mask[i];
+
+            /* First selection always starts fresh (treat as NEW even if mode says otherwise) */
+            if (is_first) {
+                mask->base_mask[i] = src_val;
+            } else {
+                switch (sel->combine_mode) {
+                    case SELECTION_COMBINE_NEW:
+                        /* Shouldn't happen after first, but handle gracefully */
+                        mask->base_mask[i] = src_val;
+                        break;
+                    case SELECTION_COMBINE_ADD:
+                        mask->base_mask[i] = (dst_val > src_val) ? dst_val : src_val;
+                        break;
+                    case SELECTION_COMBINE_SUBTRACT:
+                        mask->base_mask[i] = (uint8_t)((dst_val * (255 - src_val)) / 255);
+                        break;
+                    case SELECTION_COMBINE_INTERSECT:
+                        mask->base_mask[i] = (dst_val < src_val) ? dst_val : src_val;
+                        break;
+                }
+            }
+        }
+        is_first = FALSE;
+    }
+
+    /* Check if any selections need feathering */
+    gboolean any_feathering = FALSE;
+    for (iter = mask->selections; iter != NULL; iter = iter->next) {
+        Selection* sel = (Selection*)iter->data;
+        if (sel && sel->feather_mode == SELECTION_SMOOTH_FEATHERED && sel->feather_radius > 0.0f) {
+            any_feathering = TRUE;
+            break;
+        }
+    }
+
+    /* If feathering is needed, regenerate combined preview, otherwise use base_mask */
+    if (any_feathering) {
+        selection_mask_regenerate_combined_feather_preview(mask);
+    } else {
+        mask->data = mask->base_mask;
+    }
+
+    mask->dirty = TRUE;
+}
+
+/**
+ * Generate feathered preview for a single Selection
+ * This applies feathering to the selection's mask if feather_mode == FEATHERED and radius > 0
+ */
+static void selection_generate_feathered_preview(Selection* sel, int mask_width, int mask_height, int stride) {
+    if (!sel || !sel->mask) {
+        return;
+    }
+
+    /* Only apply feathering if BOTH conditions are true:
+       1. Mode is FEATHERED
+       2. Radius is greater than 0 */
+    gboolean should_feather = (sel->feather_mode == SELECTION_SMOOTH_FEATHERED &&
+                               sel->feather_radius > 0.0f);
+
+    if (!should_feather) {
+        /* No feathering needed - clear preview if exists */
+        if (sel->feathered_preview) {
+            g_free(sel->feathered_preview);
+            sel->feathered_preview = NULL;
+        }
+        sel->feather_dirty = FALSE;
+        return;
+    }
+
+    /* Allocate feathered preview if needed */
+    if (!sel->feathered_preview) {
+        sel->feathered_preview = g_malloc0(stride * mask_height);
+    }
+
+    /* Copy selection mask to preview (keep hard interior) */
+    memcpy(sel->feathered_preview, sel->mask, stride * mask_height);
+
+    int radius = (int)sel->feather_radius;
+    if (radius <= 0) {
+        sel->feather_dirty = FALSE;
+        return;
+    }
+
+    /* Two-pass separable distance transform (same algorithm as compute_preview_feather_mask) */
+    float* dist = g_malloc(stride * mask_height * sizeof(float));
+
+    /* Initialize: 0 for selected, large value for unselected */
+    float large_val = (float)(radius + 1);
+    for (int i = 0; i < mask_height * stride; i++) {
+        dist[i] = (sel->mask[i] > 0) ? 0.0f : large_val;
+    }
+
+    /* Pass 1: Horizontal - find nearest selected pixel in each row */
+    for (int y = 0; y < mask_height; y++) {
+        /* Forward pass: propagate distance from left */
+        for (int x = 1; x < mask_width; x++) {
+            if (dist[y * stride + x - 1] < large_val) {
+                float candidate = dist[y * stride + x - 1] + 1.0f;
+                dist[y * stride + x] = fminf(dist[y * stride + x], candidate);
+            }
+        }
+
+        /* Backward pass: propagate distance from right */
+        for (int x = mask_width - 2; x >= 0; x--) {
+            if (dist[y * stride + x + 1] < large_val) {
+                float candidate = dist[y * stride + x + 1] + 1.0f;
+                dist[y * stride + x] = fminf(dist[y * stride + x], candidate);
+            }
+        }
+    }
+
+    /* Pass 2: Vertical - combine with vertical distance */
+    for (int x = 0; x < mask_width; x++) {
+        float* temp = g_malloc(mask_height * sizeof(float));
+        memset(temp, 0, mask_height * sizeof(float));
+
+        for (int y = 0; y < mask_height; y++) {
+            float min_dist = large_val;
+
+            /* Check all pixels within vertical radius */
+            for (int dy = -radius; dy <= radius; dy++) {
+                int ny = y + dy;
+                if (ny >= 0 && ny < mask_height) {
+                    float h_dist = dist[ny * stride + x];
+                    if (h_dist < large_val) {
+                        /* Euclidean distance combining horizontal and vertical offset */
+                        float euclidean_sq = h_dist * h_dist + (float)(dy * dy);
+                        float euclidean = sqrtf(euclidean_sq);
+                        min_dist = fminf(min_dist, euclidean);
+                    }
+                }
+            }
+
+            temp[y] = min_dist;
+        }
+
+        /* Copy temp back to dist for this column */
+        for (int y = 0; y < mask_height; y++) {
+            dist[y * stride + x] = temp[y];
+        }
+
+        g_free(temp);
+    }
+
+    /* Apply feathering gradient based on distance field */
+    for (int y = 0; y < mask_height; y++) {
+        for (int x = 0; x < mask_width; x++) {
+            uint8_t center = sel->mask[y * stride + x];
+
+            /* Already selected - keep as is */
+            if (center > 0)
+                continue;
+
+            float d = dist[y * stride + x];
+
+            /* Apply feathering gradient if within feather radius */
+            if (d > 0.0f && d <= (float)radius) {
+                /* Create smooth falloff: fully transparent at radius, fully opaque at 0 */
+                float t = d / (float)radius;
+                uint8_t alpha = (uint8_t)(255.0f * (1.0f - t * t)); /* Quadratic falloff */
+                sel->feathered_preview[y * stride + x] = alpha;
+            }
+        }
+    }
+
+    g_free(dist);
+    sel->feather_dirty = FALSE;
+}
+
+/**
+ * Regenerate combined feathered preview from all selections
+ * Generates per-selection feathered previews and combines them according to combine_mode
+ */
+void selection_mask_regenerate_combined_feather_preview(SelectionMask* mask) {
+    if (!mask) {
+        return;
+    }
+
+    /* Check if any selection needs feathering */
+    gboolean any_feathering = FALSE;
+    GList* iter;
+    for (iter = mask->selections; iter != NULL; iter = iter->next) {
+        Selection* sel = (Selection*)iter->data;
+        if (sel && sel->feather_mode == SELECTION_SMOOTH_FEATHERED && sel->feather_radius > 0.0f) {
+            any_feathering = TRUE;
+            break;
+        }
+    }
+
+    /* If no feathering needed, use base_mask directly */
+    if (!any_feathering) {
+        if (mask->feathered_preview) {
+            g_free(mask->feathered_preview);
+            mask->feathered_preview = NULL;
+        }
+        mask->data = mask->base_mask;
+        mask->feather_dirty = FALSE;
+        return;
+    }
+
+    /* Allocate combined preview if needed */
+    if (!mask->feathered_preview) {
+        mask->feathered_preview = g_malloc0(mask->stride * mask->height);
+    }
+
+    /* Clear preview */
+    memset(mask->feathered_preview, 0, mask->stride * mask->height);
+
+    /* Combine all selections with their individual feathering applied */
+    gboolean is_first = TRUE;
+    for (iter = mask->selections; iter != NULL; iter = iter->next) {
+        Selection* sel = (Selection*)iter->data;
+        if (!sel || !sel->mask) {
+            continue;
+        }
+
+        /* Generate feathered preview for this selection if needed */
+        if (sel->feather_dirty) {
+            selection_generate_feathered_preview(sel, mask->width, mask->height, mask->stride);
+        }
+
+        /* Get the appropriate mask to use (feathered if available, else hard) */
+        uint8_t* src_mask = sel->feathered_preview ? sel->feathered_preview : sel->mask;
+
+        /* Combine this selection's mask with combined preview */
+        for (int i = 0; i < mask->height * mask->stride; i++) {
+            uint8_t dst_val = mask->feathered_preview[i];
+            uint8_t src_val = src_mask[i];
+
+            /* First selection always starts fresh */
+            if (is_first) {
+                mask->feathered_preview[i] = src_val;
+            } else {
+                switch (sel->combine_mode) {
+                    case SELECTION_COMBINE_NEW:
+                        /* Shouldn't happen after first, but handle gracefully */
+                        mask->feathered_preview[i] = src_val;
+                        break;
+                    case SELECTION_COMBINE_ADD:
+                        /* Union: take maximum */
+                        mask->feathered_preview[i] = (dst_val > src_val) ? dst_val : src_val;
+                        break;
+                    case SELECTION_COMBINE_SUBTRACT:
+                        /* Subtract: multiply by inverse */
+                        mask->feathered_preview[i] = (uint8_t)((dst_val * (255 - src_val)) / 255);
+                        break;
+                    case SELECTION_COMBINE_INTERSECT:
+                        /* Intersect: take minimum */
+                        mask->feathered_preview[i] = (dst_val < src_val) ? dst_val : src_val;
+                        break;
+                }
+            }
+        }
+        is_first = FALSE;
+    }
+
+    mask->data = mask->feathered_preview;
+    mask->feather_dirty = FALSE;
 }

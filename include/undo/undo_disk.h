@@ -35,7 +35,12 @@ typedef enum {
     UNDO_OP_FIT_ACTIVE_LAYER = 12,
     UNDO_OP_FIT_ALL_LAYERS = 13,
     UNDO_OP_MERGE_VISIBLE = 14,
-    UNDO_OP_FLATTEN = 15
+    UNDO_OP_FLATTEN = 15,
+    UNDO_OP_SELECTION_MODIFY = 16, /* Selection mask modification (add, subtract, intersect) */
+    UNDO_OP_SELECTION_SELECT_ALL = 17,
+    UNDO_OP_SELECTION_DESELECT_ALL = 18,
+    UNDO_OP_SELECTION_INVERT = 19,
+    UNDO_OP_SELECTION_FEATHER = 20
 } UndoOperationType;
 
 /**
@@ -213,5 +218,44 @@ gchar* undo_journal_get_default_temp_dir(void);
  * @param entry_index The entry index to free
  */
 void undo_entry_index_free(UndoEntryIndex* entry_index);
+
+/**
+ * Write a selection undo command to disk
+ * Serializes selection mask delta, compresses with LZ4, and appends to journal
+ *
+ * @param journal The undo journal
+ * @param cmd The command containing selection delta
+ * @param operation_type Selection operation type (UNDO_OP_SELECTION_*)
+ * @return TRUE on success, FALSE on error
+ */
+gboolean undo_journal_write_selection_command(UndoJournal* journal,
+                                              Command* cmd,
+                                              UndoOperationType operation_type);
+
+/**
+ * Read and apply a selection undo entry from disk (for undo operation)
+ * Decompresses entry and applies BEFORE mask state
+ *
+ * @param journal The undo journal
+ * @param entry_index The entry index to read
+ * @param doc The document
+ * @return TRUE on success, FALSE on error
+ */
+gboolean undo_journal_read_selection_undo(UndoJournal* journal,
+                                          UndoEntryIndex* entry_index,
+                                          struct ImageDocument* doc);
+
+/**
+ * Read and apply a selection undo entry from disk (for redo operation)
+ * Decompresses entry and applies AFTER mask state
+ *
+ * @param journal The undo journal
+ * @param entry_index The entry index to read
+ * @param doc The document
+ * @return TRUE on success, FALSE on error
+ */
+gboolean undo_journal_read_selection_redo(UndoJournal* journal,
+                                          UndoEntryIndex* entry_index,
+                                          struct ImageDocument* doc);
 
 #endif /* UNDO_DISK_H */

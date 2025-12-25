@@ -3,6 +3,7 @@
 
 #include <cairo.h>
 #include <glib.h>
+#include <stdint.h>
 
 /**
  * Forward declarations
@@ -21,6 +22,7 @@ typedef enum {
     COMMAND_LAYER_EDIT = 3,
     COMMAND_MOVE = 4,
     COMMAND_CANVAS_RESIZE = 5,
+    COMMAND_SELECTION = 6, /* Selection mask modification */
     COMMAND_CUSTOM = 255
 } CommandType;
 
@@ -46,6 +48,10 @@ typedef enum {
     CMD_NAME_FIT_ALL_LAYERS,
     CMD_NAME_MERGE_VISIBLE,
     CMD_NAME_FLATTEN,
+    CMD_NAME_SELECT_ALL,
+    CMD_NAME_DESELECT_ALL,
+    CMD_NAME_INVERT_SELECTION,
+    CMD_NAME_FEATHER_SELECTION,
     CMD_NAME_COUNT /* Total number of predefined command names */
 } CommandName;
 
@@ -175,6 +181,37 @@ void command_stack_clear(CommandStack* stack);
  * @param stack The command stack to free
  */
 void command_stack_free(CommandStack* stack);
+
+/**
+ * Selection undo command data structure
+ * Stores selection mask delta for undo/redo
+ */
+typedef struct {
+    gint region_x;          /* Left coordinate of affected region */
+    gint region_y;          /* Top coordinate of affected region */
+    gint region_width;      /* Width of affected region in pixels */
+    gint region_height;     /* Height of affected region in pixels */
+    uint8_t* mask_before;   /* Mask data before operation (owned) */
+    uint8_t* mask_after;    /* Mask data after operation (owned) */
+    gboolean is_compressed; /* TRUE if data is LZ4-compressed */
+    guint compressed_size_before;
+    guint compressed_size_after;
+    /* Selections list (serialized as objects, not raster data) */
+    guint8* selections_before;    /* Serialized selections list before operation (owned) */
+    guint selections_before_size; /* Size of serialized selections_before data */
+    guint8* selections_after;     /* Serialized selections list after operation (owned) */
+    guint selections_after_size;  /* Size of serialized selections_after data */
+} SelectionUndoDelta;
+
+/**
+ * Selection command data structure
+ * Stores selection mask before/after for undo/redo
+ */
+typedef struct {
+    struct SelectionMask* mask; /* Selection mask being modified */
+    SelectionUndoDelta* delta;  /* Delta containing before/after mask data (owned) */
+    struct ImageDocument* doc;  /* Document containing the selection */
+} SelectionCommandData;
 
 /**
  * Tile undo delta structure
@@ -533,5 +570,20 @@ Command* command_create_merge_visible(struct ImageDocument* doc);
  * @return Newly created Command, or NULL on failure
  */
 Command* command_create_flatten(struct ImageDocument* doc);
+
+/**
+ * Create a selection command
+ * Used by selection undo system to wrap SelectionUndoDelta changes
+ *
+ * @param mask The selection mask
+ * @param delta The undo delta (ownership transferred to command)
+ * @param doc The document
+ * @param name Command name (e.g., from command_get_name_string)
+ * @return Newly created Command, or NULL on failure
+ */
+Command* command_create_selection(struct SelectionMask* mask,
+                                  SelectionUndoDelta* delta,
+                                  struct ImageDocument* doc,
+                                  const gchar* name);
 
 #endif /* COMMAND_H */

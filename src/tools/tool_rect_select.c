@@ -1,9 +1,13 @@
 #include "tools/tool_rect_select.h"
+#include "command.h"
 #include "document.h"
 #include "selection.h"
 #include "selection/selection_mask.h"
+#include "selection/selection_undo.h"
+#include "selection/selection_undo_helpers.h"
 #include "tool_manager.h"
 #include "tool_options.h"
+#include "ui.h"
 #include <gdk/gdk.h>
 #include <gtk/gtk.h>
 #include <math.h>
@@ -105,54 +109,12 @@ static void rect_select_tool_mouse_down(Tool* tool, struct ImageDocument* doc, M
         }
 
         /* Clicking outside - finalize and start new selection */
-        /* Apply current edit selection to mask-based selection */
-        if (state->selection_w > 0 && state->selection_h > 0 && doc->selection_mask) {
-            SelectionCombineMode combine = SELECTION_COMBINE_NEW;
+        /* Finalize the current selection through the undo system */
+        tool_rect_select_finalize(tool, doc);
 
-            /* Map tool combine mode to mask combine mode if needed */
-            switch (state->combine_mode) {
-                case SELECTION_COMBINE_NEW:
-                    combine = SELECTION_COMBINE_NEW;
-                    break;
-                case SELECTION_COMBINE_ADD:
-                    combine = SELECTION_COMBINE_ADD;
-                    break;
-                case SELECTION_COMBINE_SUBTRACT:
-                    combine = SELECTION_COMBINE_SUBTRACT;
-                    break;
-                case SELECTION_COMBINE_INTERSECT:
-                    combine = SELECTION_COMBINE_INTERSECT;
-                    break;
-            }
-
-            /* Fill rectangle into mask with current smoothing settings */
-            selection_mask_fill_rect(
-                doc->selection_mask,
-                state->selection_x,
-                state->selection_y,
-                state->selection_w,
-                state->selection_h,
-                combine,
-                state->smooth_mode,
-                state->feather_radius);
-
-            /* Verify selection was stored */
-            gboolean is_empty = selection_mask_is_empty(doc->selection_mask);
-            gint num_selected = 0;
-            if (!is_empty && doc->selection_mask->base_mask) {
-                for (int i = 0; i < doc->selection_mask->width * doc->selection_mask->height; i++) {
-                    if (doc->selection_mask->base_mask[i] > 0)
-                        num_selected++;
-                }
-            }
-        }
-
+        /* Reset state for new selection */
         state->is_editing = FALSE;
-
-        /* Commit feathering to base_mask now that selection is finalized */
-        if (doc->selection_mask) {
-            selection_mask_commit_feathering(doc->selection_mask);
-        }
+        state->has_been_finalized = FALSE; /* Allow new selection to be finalized */
 
         if (state->animation_timer_id > 0) {
             g_source_remove(state->animation_timer_id);
@@ -168,6 +130,7 @@ static void rect_select_tool_mouse_down(Tool* tool, struct ImageDocument* doc, M
     state->current_x = event->x;
     state->current_y = event->y;
     state->hovered_handle = -1;
+    state->has_been_finalized = FALSE; /* Reset flag for new selection */
 
     /* Get current tool options for selection */
     ToolOptions* opts = tool_options_get_for_tool(TOOL_RECT_SELECT);
@@ -553,6 +516,65 @@ void tool_rect_select_finalize(Tool* tool, ImageDocument* doc) {
 
     /* If there's an active selection in edit mode, finalize it to the mask */
     if (state->is_editing && state->selection_w > 0 && state->selection_h > 0 && doc->selection_mask) {
+        /* Check if already finalized to prevent duplicate undo entries */
+        if (state->has_been_finalized) {
+            return;
+        }
+
+        /* Mark as finalized to prevent duplicate entries */
+        state->has_been_finalized = TRUE;
+
+        /* Begin undo transaction to capture selection change */
+        SelectionUndoTransaction* transaction = selection_undo_transaction_begin(
+            doc->selection_mask,
+            doc,
+            "Rectangle Select");
+
+        if (transaction) {
+            /* Register the affected region */
+            /* For INTERSECT/SUBTRACT modes, the affected region is larger than just the new rectangle
+               We need to register the bounding box of the current selection + new rectangle */
+            gint region_x = state->selection_x;
+            gint region_y = state->selection_y;
+            gint region_w = state->selection_w;
+            gint region_h = state->selection_h;
+
+            if (state->combine_mode == SELECTION_COMBINE_INTERSECT ||
+                state->combine_mode == SELECTION_COMBINE_SUBTRACT) {
+                /* Find bounding box of current selection to capture all changes */
+                gint min_x = region_x, max_x = region_x + region_w;
+                gint min_y = region_y, max_y = region_y + region_h;
+
+                /* Expand to include all current selected pixels */
+                for (int y = 0; y < doc->selection_mask->height; y++) {
+                    for (int x = 0; x < doc->selection_mask->width; x++) {
+                        if (doc->selection_mask->base_mask[y * doc->selection_mask->stride + x] > 0) {
+                            if (x < min_x)
+                                min_x = x;
+                            if (x + 1 > max_x)
+                                max_x = x + 1;
+                            if (y < min_y)
+                                min_y = y;
+                            if (y + 1 > max_y)
+                                max_y = y + 1;
+                        }
+                    }
+                }
+
+                region_x = min_x;
+                region_y = min_y;
+                region_w = max_x - min_x;
+                region_h = max_y - min_y;
+            }
+
+            selection_undo_transaction_register_region(
+                transaction,
+                region_x,
+                region_y,
+                region_w,
+                region_h);
+        }
+
         /* Fill rectangle into mask with current smoothing settings */
         selection_mask_fill_rect(
             doc->selection_mask,
@@ -564,8 +586,26 @@ void tool_rect_select_finalize(Tool* tool, ImageDocument* doc) {
             state->smooth_mode,
             state->feather_radius);
 
-        /* Commit feathering to base_mask now that selection is finalized */
-        selection_mask_commit_feathering(doc->selection_mask);
+        /* Note: Feathering parameters are already set per-selection in selection_mask_fill_rect */
+        /* No need to commit global feathering - per-selection system handles it */
+
+        /* Commit undo transaction */
+        if (transaction) {
+            Command* cmd = selection_undo_transaction_commit(transaction);
+            if (cmd) {
+                selection_undo_commit_operation(doc, cmd);
+
+                /* Update UI - get app context from tool */
+                AppContext* ctx = (AppContext*)tool->app_context;
+                if (ctx) {
+                    ui_update_menu_and_button_states(ctx);
+                    ui_update_window_title(ctx);
+                }
+
+                /* Mark document as modified */
+                doc->modified = TRUE;
+            }
+        }
 
         /* Request redraw to show the finalized selection and hide the preview */
         if (doc->drawing_area) {
@@ -587,6 +627,7 @@ void tool_rect_select_reset(Tool* tool) {
     /* Reset edit/drag state to prevent preview from rendering */
     state->is_dragging = FALSE;
     state->is_editing = FALSE;
+    state->has_been_finalized = FALSE; /* Reset flag when tool is deactivated */
     state->dragging_handle = -2;
     state->hovered_handle = -2;
     state->animation_phase = 0;
@@ -701,23 +742,32 @@ void tool_rect_select_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom
             /* Draw feathered outline from temporary mask (only when not actively dragging) */
             SelectionMask* preview_mask = selection_mask_new(doc->width, doc->height);
 
-            /* Fill rectangle into preview mask (hard edge) */
-            for (int row = rect_y; row < rect_y + rect_h && row < doc->height; row++) {
-                for (int col = rect_x; col < rect_x + rect_w && col < doc->width; col++) {
-                    preview_mask->base_mask[row * preview_mask->stride + col] = 255;
+            /* Create a Selection object for the preview with feathering */
+            Selection* preview_sel = selection_new(rect_x, rect_y, rect_w, rect_h,
+                                                   SELECTION_COMBINE_NEW,
+                                                   state->smooth_mode,
+                                                   (float)state->feather_radius);
+            if (preview_sel) {
+                /* Allocate and fill the selection's mask */
+                int stride = preview_mask->stride;
+                preview_sel->mask = g_malloc0(stride * doc->height);
+                for (int row = rect_y; row < rect_y + rect_h && row < doc->height; row++) {
+                    for (int col = rect_x; col < rect_x + rect_w && col < doc->width; col++) {
+                        preview_sel->mask[row * stride + col] = 255;
+                    }
                 }
+
+                /* Add to preview mask and rebuild */
+                selection_mask_add_selection(preview_mask, preview_sel);
+                selection_unref(preview_sel);
+
+                /* Ensure feathering is computed by triggering surface rebuild */
+                selection_mask_get_surface(preview_mask);
+
+                /* Compute and render feathered outline with animation phase if enabled */
+                int animation_phase = (current_opts && current_opts->rect_select_animate) ? state->animation_phase : 0;
+                selection_mask_render_outline(cr, preview_mask, animation_phase, zoom);
             }
-
-            /* Apply feathering to preview mask */
-            preview_mask->feather_radius = state->feather_radius;
-            preview_mask->feather_dirty = TRUE;
-
-            /* Ensure feathering is computed by triggering surface rebuild */
-            selection_mask_get_surface(preview_mask);
-
-            /* Compute and render feathered outline with animation phase if enabled */
-            int animation_phase = (current_opts && current_opts->rect_select_animate) ? state->animation_phase : 0;
-            selection_mask_render_outline(cr, preview_mask, animation_phase, zoom);
 
             selection_mask_free(preview_mask);
         } else {

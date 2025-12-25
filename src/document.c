@@ -285,15 +285,7 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
     /* Draw rect select tool preview during drag */
     tool_rect_select_draw_preview(doc, cr, zoom);
 
-    /* Render selection overlays after all content is drawn (unzoomed) */
-
-    /* Render mask-based selection (new) */
-    if (doc->selection_mask && !selection_mask_is_empty(doc->selection_mask)) {
-        selection_mask_render_outline(cr, doc->selection_mask,
-                                      doc->selection_animation_phase, zoom);
-    }
-
-    /* Render selection mask overlay */
+    /* Render selection overlays after all content is drawn */
     if (doc->selection_mask && !selection_mask_is_empty(doc->selection_mask)) {
         selection_mask_render_outline(cr, doc->selection_mask,
                                       doc->selection_animation_phase, zoom);

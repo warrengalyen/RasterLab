@@ -71,6 +71,8 @@ set(SOURCES
     command.c
     selection.c
     selection/selection_mask.c
+    selection/selection_undo.c
+    selection/selection_undo_helpers.c
     ui/tools_panel.c
     ui/tool_options_panel.c
     ui/layers_panel.c

@@ -7,25 +7,61 @@
 #include <stdint.h>
 
 /**
+ * Individual selection with per-selection feathering parameters
+ * Each selection maintains its own feathering state independently
+ */
+typedef struct Selection {
+    /* Selection geometry (hard-edged mask region) */
+    int x, y, width, height; /* Bounding rectangle */
+    uint8_t* mask;           /* Hard-edged mask for this selection (0/255 only, owned) */
+
+    /* Per-selection feathering parameters */
+    float feather_radius;                /* Feather radius in pixels (0.0 = no feathering) */
+    SelectionSmoothingMode feather_mode; /* Feathering algorithm */
+
+    /* Combine mode used when this selection was created */
+    SelectionCombineMode combine_mode;
+
+    /* Cached feathered preview for this selection (lazy-generated) */
+    uint8_t* feathered_preview; /* Feathered mask (owned, NULL if not generated) */
+    gboolean feather_dirty;     /* TRUE if feathered_preview needs regeneration */
+
+    /* Reference count for memory management */
+    int ref_count;
+} Selection;
+
+/**
  * Pixel mask representation of selection
- * - Authoritative data is the uint8_t array
- * - Cairo surface is cached visualization only
- * - Values: 0 = unselected, 255 = fully selected, 0-255 = partially selected
+ *
+ * NEW ARCHITECTURE:
+ * - base_mask is the COMBINED result of all selections (hard 0/255 edges only)
+ * - selections list stores individual Selection objects with per-selection feathering
+ * - feathered_preview is the combined feathered result of all selections
+ * - feathering is NEVER baked into base_mask
+ * - Each selection has independent feather_radius and feather_mode
  */
 typedef struct SelectionMask {
-    int width;                /* Mask width in pixels */
-    int height;               /* Mask height in pixels */
-    int stride;               /* Bytes per row (aligned) */
-    uint8_t* base_mask;       /* Hard mask: 0 = unselected, 255 = selected (owned) */
-    uint8_t* data;            /* Current mask data (either base_mask or feathered preview) */
+    int width;  /* Mask width in pixels */
+    int height; /* Mask height in pixels */
+    int stride; /* Bytes per row (aligned) */
+
+    /* Authoritative selection data */
+    uint8_t* base_mask; /* COMBINED: Hard-edged mask 0/255 only (never feathered, owned) */
+    uint8_t* temp_data; /* Temporary buffer for operations (owned) */
+
+    /* Individual selections with per-selection feathering */
+    GList* selections; /* List of Selection* objects (each with own feathering) */
+
+    /* Derived views */
+    uint8_t* data;              /* Current mask pointer (either base_mask or feathered_preview) */
+    uint8_t* feathered_preview; /* Cached combined feathered preview (owned, regenerated on demand) */
+
+    /* Cairo surface cache */
     cairo_surface_t* surface; /* ARGB32 cached surface (owned) */
     gboolean dirty;           /* TRUE if surface needs rebuild from mask */
-    uint8_t* temp_data;       /* Temporary buffer for operations */
 
-    /* Feathering support */
-    uint8_t* preview_feather_mask; /* Preview feather mask for rendering (owned, lower res or cached) */
-    float feather_radius;          /* Current feather radius (0 = no feathering) */
-    gboolean feather_dirty;        /* TRUE if preview_feather_mask needs recompute */
+    /* Feathering preview state */
+    gboolean feather_dirty; /* TRUE if feathered_preview needs recompute */
 } SelectionMask;
 
 /**
@@ -126,11 +162,93 @@ void selection_mask_render_outline(
     gdouble zoom_factor);
 
 /**
- * Apply feathering permanently to base_mask
- * Converts preview feathering to the actual base_mask
- * Call this when finalizing a selection
+ * Commit feathering parameters to selection
+ * Does NOT bake into base_mask (base_mask stays hard-edged)
+ * Only stores feathering parameters for non-destructive rendering
+ * Call this when finalizing a selection to lock in the feather parameters
+ * @param mask The selection mask
+ * @param feather_mode Feathering algorithm (none / antialiased / feathered)
+ * @param feather_radius Feather radius in pixels
+ */
+void selection_mask_commit_feathering(SelectionMask* mask,
+                                      SelectionSmoothingMode feather_mode,
+                                      float feather_radius);
+
+/**
+ * Regenerate feathered preview from base_mask and feather parameters
+ * Called after feathering parameters are changed to update the cached preview
  * @param mask The selection mask
  */
-void selection_mask_commit_feathering(SelectionMask* mask);
+void selection_mask_regenerate_feather_preview(SelectionMask* mask);
+
+/* ============================================================
+ * Per-Selection API (NEW - for per-selection feathering)
+ * ============================================================ */
+
+/**
+ * Create a new Selection object
+ * @param x Left coordinate of selection rectangle
+ * @param y Top coordinate of selection rectangle
+ * @param width Width of selection rectangle
+ * @param height Height of selection rectangle
+ * @param combine_mode Combine mode used when creating this selection
+ * @param feather_mode Feathering mode for this selection
+ * @param feather_radius Feather radius in pixels (0.0 = no feathering)
+ * @return New Selection object with ref_count=1, or NULL on error
+ */
+Selection* selection_new(int x, int y, int width, int height,
+                         SelectionCombineMode combine_mode,
+                         SelectionSmoothingMode feather_mode,
+                         float feather_radius);
+
+/**
+ * Increment reference count for a Selection
+ * @param sel The selection to reference
+ * @return The same Selection pointer
+ */
+Selection* selection_ref(Selection* sel);
+
+/**
+ * Decrement reference count for a Selection (frees if count reaches 0)
+ * @param sel The selection to unreference
+ */
+void selection_unref(Selection* sel);
+
+/**
+ * Get the list of all selections in a mask
+ * @param mask The selection mask
+ * @return GList of Selection* objects (do not modify, do not free)
+ */
+GList* selection_mask_get_selections(SelectionMask* mask);
+
+/**
+ * Add a selection to the mask
+ * Updates base_mask to include the new selection according to its combine_mode
+ * @param mask The selection mask
+ * @param sel The selection to add (ownership transferred, will be freed when mask is freed)
+ */
+void selection_mask_add_selection(SelectionMask* mask, Selection* sel);
+
+/**
+ * Remove a selection from the mask
+ * Updates base_mask to remove the selection
+ * @param mask The selection mask
+ * @param sel The selection to remove
+ */
+void selection_mask_remove_selection(SelectionMask* mask, Selection* sel);
+
+/**
+ * Rebuild base_mask from all selections in the list
+ * Combines all selections according to their combine_mode
+ * @param mask The selection mask
+ */
+void selection_mask_rebuild_from_selections(SelectionMask* mask);
+
+/**
+ * Regenerate combined feathered preview from all selections
+ * Applies per-selection feathering and combines results
+ * @param mask The selection mask
+ */
+void selection_mask_regenerate_combined_feather_preview(SelectionMask* mask);
 
 #endif /* SELECTION_MASK_H */

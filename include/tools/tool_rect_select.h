@@ -13,6 +13,7 @@ typedef struct ImageDocument ImageDocument;
 typedef struct {
     gboolean is_dragging;               /* Currently dragging a selection rectangle? */
     gboolean is_editing;                /* Currently editing an existing selection? */
+    gboolean has_been_finalized;        /* Has this selection been finalized to undo stack? */
     guint animation_timer_id;           /* Timer ID for marching ants animation (0 = no timer) */
     gint anchor_x;                      /* Mouse down position X in image space */
     gint anchor_y;                      /* Mouse down position Y in image space */
