@@ -3,7 +3,10 @@
 #include "render/compositor.h"
 #include "render/dirty.h"
 #include "render/layer.h"
+#include "render/render_utils.h"
 #include "render/tile.h"
+#include "selection/selection_mask.h"
+#include "selection/selection_render.h"
 #include "tool_options.h"
 #include "tools/tool_fill.h"
 #include "ui/tools_panel.h"
@@ -83,8 +86,10 @@ static gdouble calculate_blend_factor(guint8 r1, guint8 g1, guint8 b1, guint8 a1
 
 /**
  * Flood fill implementation with tolerance, contiguous/global, and antialiasing options
+ * Now supports selection masking - only fills pixels inside the active selection
  */
-static void paint_bucket_flood_fill(cairo_surface_t* surface, gint start_x, gint start_y,
+static void paint_bucket_flood_fill(cairo_surface_t* surface, struct ImageDocument* doc,
+                                    gint start_x, gint start_y, gint layer_offset_x, gint layer_offset_y,
                                     gfloat tolerance, gboolean contiguous, gboolean antialiased) {
     gint width, height, stride;
     guchar* surface_data;
@@ -109,6 +114,27 @@ static void paint_bucket_flood_fill(cairo_surface_t* surface, gint start_x, gint
     /* Validate coordinates */
     if (start_x < 0 || start_x >= width || start_y < 0 || start_y >= height) {
         return;
+    }
+
+    /* Check if selection exists and get selection mask */
+    gboolean has_selection = (doc && doc->selection_mask && !selection_mask_is_empty(doc->selection_mask));
+    SelectionMask* full_region_mask = NULL;
+    DirtyRect selection_dirty_rect;
+    DirtyRect actual_region;
+    if (has_selection) {
+        /* Calculate the region that might be affected by the fill (in document coordinates) */
+        dirty_rect_set(&selection_dirty_rect,
+                       layer_offset_x,
+                       layer_offset_y,
+                       width,
+                       height);
+
+        full_region_mask = selection_build_combined_mask(
+            doc->selection_mask, &selection_dirty_rect, FEATHER_QUALITY_NORMAL, &actual_region);
+
+        if (!full_region_mask || !full_region_mask->data) {
+            has_selection = FALSE;
+        }
     }
 
     /* Flush surface to ensure all drawing operations are complete */
@@ -183,6 +209,28 @@ static void paint_bucket_flood_fill(cairo_surface_t* surface, gint start_x, gint
                 continue;
             }
 
+            /* Check if pixel is inside selection (if selection exists) */
+            if (has_selection && full_region_mask && full_region_mask->data) {
+                /* Convert layer coordinates to document coordinates */
+                gint doc_x = x + layer_offset_x;
+                gint doc_y = y + layer_offset_y;
+
+                /* Calculate mask coordinates relative to actual_region (returned by selection_build_combined_mask) */
+                gint mask_x = doc_x - actual_region.x;
+                gint mask_y = doc_y - actual_region.y;
+
+                /* Check if pixel is within mask bounds and has non-zero mask value */
+                if (mask_x < 0 || mask_x >= full_region_mask->width ||
+                    mask_y < 0 || mask_y >= full_region_mask->height) {
+                    continue; /* Outside selection mask bounds */
+                }
+
+                uint8_t mask_alpha = full_region_mask->data[mask_y * full_region_mask->stride + mask_x];
+                if (mask_alpha == 0) {
+                    continue; /* Outside selection - skip this pixel */
+                }
+            }
+
             /* Read pixel color */
             guchar* pixel = surface_data + y * stride + x * 4;
             guint8 b = pixel[0];
@@ -232,6 +280,39 @@ static void paint_bucket_flood_fill(cairo_surface_t* surface, gint start_x, gint
                 final_a = fill_a;
             }
 
+            /* Apply selection mask blending (for feathered selections) */
+            if (has_selection && full_region_mask && full_region_mask->data) {
+                gint doc_x = x + layer_offset_x;
+                gint doc_y = y + layer_offset_y;
+                gint mask_x = doc_x - actual_region.x;
+                gint mask_y = doc_y - actual_region.y;
+
+                if (mask_x >= 0 && mask_x < full_region_mask->width &&
+                    mask_y >= 0 && mask_y < full_region_mask->height) {
+                    uint8_t mask_alpha = full_region_mask->data[mask_y * full_region_mask->stride + mask_x];
+
+                    if (mask_alpha == 255) {
+                        /* Fully inside selection: use fill color as-is */
+                        /* final_r, final_g, final_b, final_a already set correctly */
+                    } else if (mask_alpha == 0) {
+                        /* Outside selection: keep original pixel (shouldn't happen due to earlier check, but handle gracefully) */
+                        final_r = r;
+                        final_g = g;
+                        final_b = b;
+                        final_a = a;
+                    } else {
+                        /* Feather zone: blend fill color with original pixel based on mask alpha */
+                        float mask_factor = (float)mask_alpha / 255.0f;
+                        float orig_factor = 1.0f - mask_factor;
+
+                        final_r = (guint8)(final_r * mask_factor + r * orig_factor);
+                        final_g = (guint8)(final_g * mask_factor + g * orig_factor);
+                        final_b = (guint8)(final_b * mask_factor + b * orig_factor);
+                        final_a = (guint8)(final_a * mask_factor + a * orig_factor);
+                    }
+                }
+            }
+
             /* Fill pixel with premultiplied alpha */
             guint8 final_r_pre = (final_r * final_a + 127) / 255;
             guint8 final_g_pre = (final_g * final_a + 127) / 255;
@@ -266,6 +347,28 @@ static void paint_bucket_flood_fill(cairo_surface_t* surface, gint start_x, gint
         /* Global fill: fill all matching pixels in the entire image */
         for (y = 0; y < height; y++) {
             for (x = 0; x < width; x++) {
+                /* Check if pixel is inside selection (if selection exists) */
+                if (has_selection && full_region_mask && full_region_mask->data) {
+                    /* Convert layer coordinates to document coordinates */
+                    gint doc_x = x + layer_offset_x;
+                    gint doc_y = y + layer_offset_y;
+
+                    /* Calculate mask coordinates relative to actual_region */
+                    gint mask_x = doc_x - actual_region.x;
+                    gint mask_y = doc_y - actual_region.y;
+
+                    /* Check if pixel is within mask bounds and has non-zero mask value */
+                    if (mask_x < 0 || mask_x >= full_region_mask->width ||
+                        mask_y < 0 || mask_y >= full_region_mask->height) {
+                        continue; /* Outside selection mask bounds */
+                    }
+
+                    uint8_t mask_alpha = full_region_mask->data[mask_y * full_region_mask->stride + mask_x];
+                    if (mask_alpha == 0) {
+                        continue; /* Outside selection - skip this pixel */
+                    }
+                }
+
                 guchar* pixel = surface_data + y * stride + x * 4;
                 guint8 b = pixel[0];
                 guint8 g = pixel[1];
@@ -314,6 +417,21 @@ static void paint_bucket_flood_fill(cairo_surface_t* surface, gint start_x, gint
                     final_a = fill_a;
                 }
 
+                /* Apply selection mask to alpha (for feathered selections) */
+                if (has_selection && full_region_mask && full_region_mask->data) {
+                    gint doc_x = x + layer_offset_x;
+                    gint doc_y = y + layer_offset_y;
+                    gint mask_x = doc_x - selection_dirty_rect.x;
+                    gint mask_y = doc_y - selection_dirty_rect.y;
+
+                    if (mask_x >= 0 && mask_x < full_region_mask->width &&
+                        mask_y >= 0 && mask_y < full_region_mask->height) {
+                        uint8_t mask_alpha = full_region_mask->data[mask_y * full_region_mask->stride + mask_x];
+                        /* Multiply final alpha by mask alpha to respect feathered selection */
+                        final_a = (guint8)((final_a * mask_alpha) / 255);
+                    }
+                }
+
                 /* Fill pixel with premultiplied alpha */
                 guint8 final_r_pre = (final_r * final_a + 127) / 255;
                 guint8 final_g_pre = (final_g * final_a + 127) / 255;
@@ -330,6 +448,9 @@ static void paint_bucket_flood_fill(cairo_surface_t* surface, gint start_x, gint
     /* Clean up */
     g_queue_free_full(queue, g_free);
     g_free(visited);
+    if (full_region_mask) {
+        selection_mask_free(full_region_mask);
+    }
 
     /* Mark surface as modified */
     cairo_surface_mark_dirty(surface);
@@ -391,7 +512,9 @@ static void paint_bucket_tool_mouse_down(Tool* tool, struct ImageDocument* doc, 
     gboolean contiguous = opts ? opts->fill_contiguous : TRUE;
     gboolean antialiased = opts ? opts->fill_antialiased : FALSE;
 
-    paint_bucket_flood_fill(active_layer->surface, layer_x, layer_y, tolerance, contiguous, antialiased);
+    paint_bucket_flood_fill(active_layer->surface, doc, layer_x, layer_y,
+                            active_layer->offset_x, active_layer->offset_y,
+                            tolerance, contiguous, antialiased);
 
     /* Commit tile-based undo transaction (captures "after" state and creates command) */
     Command* cmd = NULL;
