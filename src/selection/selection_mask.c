@@ -7,6 +7,19 @@
 #define ANT_DASH_SIZE 4.0f      /* Marching ants dash length in pixels */
 
 /**
+ * Smoothstep interpolation function
+ * Returns smooth interpolation between 0 and 1 for t in [0, 1]
+ * smoothstep(t) = t * t * (3.0f - 2.0f * t) = 3t² - 2t³
+ */
+static inline float smoothstep(float t) {
+    if (t <= 0.0f)
+        return 0.0f;
+    if (t >= 1.0f)
+        return 1.0f;
+    return t * t * (3.0f - 2.0f * t);
+}
+
+/**
  * Allocate aligned row stride for better cache performance
  */
 static int calculate_stride(int width) {
@@ -719,21 +732,25 @@ static void selection_generate_feathered_preview(Selection* sel, int mask_width,
     /* Apply feathering gradient based on distance field */
     for (int y = 0; y < mask_height; y++) {
         for (int x = 0; x < mask_width; x++) {
-            uint8_t center = sel->mask[y * stride + x];
+            int idx = y * stride + x;
 
-            /* Already selected - keep as is */
-            if (center > 0)
+            /* Keep interior pixels solid */
+            if (sel->mask[idx] > 0)
                 continue;
 
-            float d = dist[y * stride + x];
+            float d = dist[idx];
 
-            /* Apply feathering gradient if within feather radius */
-            if (d > 0.0f && d <= (float)radius) {
-                /* Create smooth falloff: fully transparent at radius, fully opaque at 0 */
-                float t = d / (float)radius;
-                uint8_t alpha = (uint8_t)(255.0f * (1.0f - t * t)); /* Quadratic falloff */
-                sel->feathered_preview[y * stride + x] = alpha;
-            }
+            /* Outside feather radius - keep fully transparent */
+            if (d >= sel->feather_radius)
+                continue;
+
+            /* Normalize distance: 0 at edge, 1 at radius */
+            float t = d / sel->feather_radius;
+            t = fmaxf(0.0f, fminf(1.0f, t));
+
+            float alpha = 1.0f - smoothstep(t);
+
+            sel->feathered_preview[idx] = (uint8_t)(255.0f * alpha);
         }
     }
 

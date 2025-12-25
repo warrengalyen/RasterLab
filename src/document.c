@@ -295,7 +295,7 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
         if (zoom != 1.0) {
             cairo_scale(cr, zoom, zoom);
         }
-        render_utils_visualize_selection_mask(cr, doc->selection_mask);
+        // render_utils_visualize_selection_mask(cr, doc->selection_mask);
         cairo_restore(cr);
     }
 
