@@ -438,7 +438,8 @@ const gchar* command_get_name_string(CommandName name) {
         "Select All",
         "Deselect All",
         "Invert Selection",
-        "Feather Selection"};
+        "Feather Selection",
+        "Move Selected Pixels"};
 
     if (name < 0 || name >= CMD_NAME_COUNT) {
         return NULL;
@@ -994,6 +995,20 @@ void tile_undo_transaction_cancel(TileUndoTransaction* transaction) {
 }
 
 /**
+ * Move selected pixels command data structure
+ */
+typedef struct {
+    struct ImageLayer* new_layer;       /* The extracted layer with selected pixels */
+    struct ImageLayer* original_layer;  /* The original layer pixels were extracted from */
+    struct ImageDocument* doc;          /* Document reference */
+    cairo_surface_t* original_snapshot; /* Snapshot of original layer before extraction (to restore on undo) */
+    gint initial_offset_x;              /* Initial position of extracted layer */
+    gint initial_offset_y;
+    gint final_offset_x; /* Final position after moving */
+    gint final_offset_y;
+} MoveSelectedPixelsCommandData;
+
+/**
  * Move command apply callback (restore to new position)
  */
 static void move_command_apply(Command* cmd, struct ImageDocument* doc) {
@@ -1090,6 +1105,176 @@ Command* command_create_move(struct ImageLayer* layer,
                       move_command_destroy);
 
     if (!cmd) {
+        g_free(data);
+        return NULL;
+    }
+
+    cmd->user_data = data;
+
+    return cmd;
+}
+
+/**
+ * Move selected pixels command apply callback
+ * Adds the extracted layer and moves it to final position
+ */
+static void move_selected_pixels_command_apply(Command* cmd, struct ImageDocument* doc) {
+    MoveSelectedPixelsCommandData* data;
+
+    if (!cmd || !cmd->user_data || !doc) {
+        return;
+    }
+
+    data = (MoveSelectedPixelsCommandData*)cmd->user_data;
+
+    if (!data->new_layer) {
+        return;
+    }
+
+    /* Add layer to document if not already there */
+    if (!g_list_find(doc->layers, data->new_layer)) {
+        doc->layers = g_list_append(doc->layers, data->new_layer);
+        doc->selected_layer = data->new_layer;
+    }
+
+    /* Set final position */
+    data->new_layer->offset_x = data->final_offset_x;
+    data->new_layer->offset_y = data->final_offset_y;
+
+    /* Restore original layer pixels if needed (for redo after undo) */
+    if (data->original_layer && data->original_snapshot) {
+        cairo_t* cr = cairo_create(data->original_layer->surface);
+        cairo_set_source_surface(cr, data->original_snapshot, 0, 0);
+        cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+        cairo_paint(cr);
+        cairo_destroy(cr);
+        cairo_surface_mark_dirty(data->original_layer->surface);
+        layer_invalidate_cache(data->original_layer);
+    }
+
+    document_invalidate_composite(doc);
+    if (doc->drawing_area) {
+        gtk_widget_queue_draw(doc->drawing_area);
+    }
+}
+
+/**
+ * Move selected pixels command revert callback
+ * Removes the extracted layer and restores original layer pixels
+ */
+static void move_selected_pixels_command_revert(Command* cmd, struct ImageDocument* doc) {
+    MoveSelectedPixelsCommandData* data;
+
+    if (!cmd || !cmd->user_data || !doc) {
+        return;
+    }
+
+    data = (MoveSelectedPixelsCommandData*)cmd->user_data;
+
+    if (!data->new_layer || !data->original_layer) {
+        return;
+    }
+
+    /* Remove extracted layer from document */
+    if (g_list_find(doc->layers, data->new_layer)) {
+        doc->layers = g_list_remove(doc->layers, data->new_layer);
+
+        /* Update selected layer if needed */
+        if (doc->selected_layer == data->new_layer) {
+            doc->selected_layer = data->original_layer;
+        }
+    }
+
+    /* Restore original layer pixels from snapshot */
+    if (data->original_snapshot) {
+        cairo_t* cr = cairo_create(data->original_layer->surface);
+        cairo_set_source_surface(cr, data->original_snapshot, 0, 0);
+        cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+        cairo_paint(cr);
+        cairo_destroy(cr);
+        cairo_surface_mark_dirty(data->original_layer->surface);
+        layer_invalidate_cache(data->original_layer);
+    }
+
+    document_invalidate_composite(doc);
+    if (doc->drawing_area) {
+        gtk_widget_queue_draw(doc->drawing_area);
+    }
+}
+
+/**
+ * Move selected pixels command destroy callback
+ */
+static void move_selected_pixels_command_destroy(Command* cmd) {
+    MoveSelectedPixelsCommandData* data;
+
+    if (!cmd || !cmd->user_data) {
+        return;
+    }
+
+    data = (MoveSelectedPixelsCommandData*)cmd->user_data;
+
+    /* Free snapshot if exists */
+    if (data->original_snapshot) {
+        cairo_surface_destroy(data->original_snapshot);
+    }
+
+    /* Free extracted layer if not in document (undo case) */
+    if (data->new_layer) {
+        if (!data->doc || !data->doc->layers) {
+            /* Document is being freed - don't free layer */
+        } else if (!g_list_find(data->doc->layers, data->new_layer)) {
+            /* Layer not in document - free it */
+            layer_free(data->new_layer);
+        }
+    }
+
+    g_free(data);
+}
+
+/**
+ * Create a move selected pixels command
+ * This command handles extracting selected pixels to a new layer and moving that layer
+ */
+Command* command_create_move_selected_pixels(struct ImageDocument* doc,
+                                             struct ImageLayer* new_layer,
+                                             struct ImageLayer* original_layer,
+                                             gint initial_x, gint initial_y,
+                                             gint final_x, gint final_y) {
+    Command* cmd;
+    MoveSelectedPixelsCommandData* data;
+    cairo_surface_t* snapshot;
+
+    if (!doc || !new_layer || !original_layer || !original_layer->surface) {
+        return NULL;
+    }
+
+    /* Create snapshot of original layer before extraction */
+    snapshot = cairo_surface_snapshot(original_layer->surface);
+    if (!snapshot) {
+        return NULL;
+    }
+
+    /* Create command data */
+    data = (MoveSelectedPixelsCommandData*)g_malloc(sizeof(MoveSelectedPixelsCommandData));
+    data->new_layer = new_layer;
+    data->original_layer = original_layer;
+    data->doc = doc;
+    data->original_snapshot = snapshot;
+    data->initial_offset_x = initial_x;
+    data->initial_offset_y = initial_y;
+    data->final_offset_x = final_x;
+    data->final_offset_y = final_y;
+
+    /* Create command */
+    cmd = command_new(command_get_name_string(CMD_NAME_MOVE_SELECTED_PIXELS),
+                      COMMAND_LAYER_EDIT,
+                      move_selected_pixels_command_apply,
+                      move_selected_pixels_command_revert,
+                      move_selected_pixels_command_destroy);
+
+    if (!cmd) {
+        cairo_surface_destroy(snapshot);
         g_free(data);
         return NULL;
     }
