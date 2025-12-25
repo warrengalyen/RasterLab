@@ -369,31 +369,65 @@ void selection_mask_render_outline(
     SelectionMask* mask,
     int dash_phase,
     gdouble zoom_factor) {
-    if (!cr || !mask || !mask->data)
+    if (!cr || !mask)
         return;
 
     (void)zoom_factor; /* Unused parameter - kept for API compatibility */
 
-    /* Trace edges where alpha transitions and render marching ants outline
-       Use simple threshold-based edge detection (works for both feathered and non-feathered)
-       Feathering is already baked into the alpha gradient of the mask */
+    /* Ensure feathered preview is generated if feathering is active */
+    /* Check if any selection has feathering enabled */
+    gboolean any_feathering = FALSE;
+    GList* iter;
+    for (iter = mask->selections; iter != NULL; iter = iter->next) {
+        Selection* sel = (Selection*)iter->data;
+        if (sel && sel->feather_mode == SELECTION_SMOOTH_FEATHERED && sel->feather_radius > 0.0f) {
+            any_feathering = TRUE;
+            break;
+        }
+    }
+
+    /* Regenerate feathered preview if needed */
+    if (any_feathering && mask->feather_dirty) {
+        selection_mask_regenerate_combined_feather_preview(mask);
+    }
+
+    /* Use feathered preview if available and feathering is active, otherwise base_mask */
+    const uint8_t* mask_data;
+    if (any_feathering && mask->feathered_preview) {
+        mask_data = mask->feathered_preview;
+    } else {
+        mask_data = mask->base_mask;
+    }
+
+    if (!mask_data) {
+        return;
+    }
+
+    /* Edge detection: detect boundary where selection transitions to non-selected
+       For feathered selections, detect the outer edge where feathering ends (mask->0)
+       For hard selections, detect the hard edge (255->0) */
+    const uint8_t MIN_ALPHA = 1; /* Minimum alpha to consider as "inside" selection */
+
     for (int y = 0; y < mask->height; y++) {
         for (int x = 0; x < mask->width; x++) {
-            uint8_t center = selection_mask_get_alpha(mask, x, y);
+            /* Get center pixel from mask (feathered or hard-edged) */
+            uint8_t center = mask_data[y * mask->stride + x];
 
-            /* Skip fully transparent pixels */
-            if (center < SELECTION_THRESHOLD)
+            /* Skip pixels that are completely outside selection */
+            if (center == 0)
                 continue;
 
-            /* Check neighbors */
-            uint8_t left = selection_mask_get_alpha(mask, x - 1, y);
-            uint8_t right = selection_mask_get_alpha(mask, x + 1, y);
-            uint8_t top = selection_mask_get_alpha(mask, x, y - 1);
-            uint8_t bottom = selection_mask_get_alpha(mask, x, y + 1);
+            /* Check neighbors - get alpha values with bounds checking */
+            uint8_t left = (x > 0) ? mask_data[y * mask->stride + (x - 1)] : 0;
+            uint8_t right = (x < mask->width - 1) ? mask_data[y * mask->stride + (x + 1)] : 0;
+            uint8_t top = (y > 0) ? mask_data[(y - 1) * mask->stride + x] : 0;
+            uint8_t bottom = (y < mask->height - 1) ? mask_data[(y + 1) * mask->stride + x] : 0;
 
-            /* Draw at threshold boundary where selection transitions to non-selected */
-            if (left < SELECTION_THRESHOLD || right < SELECTION_THRESHOLD ||
-                top < SELECTION_THRESHOLD || bottom < SELECTION_THRESHOLD) {
+            /* Detect edge: pixel has some alpha (inside selection) but has at least one neighbor with alpha=0 (outside)
+               This detects the outer boundary for both:
+               - Hard edges: center=255, neighbor=0
+               - Feathered edges: center>0 (any value in feather), neighbor=0 (end of feather) */
+            if (left == 0 || right == 0 || top == 0 || bottom == 0) {
                 /* Render marching ants pixel - shift pattern by dash_phase for animation */
                 int pattern = ((x + y) / (int)ANT_DASH_SIZE + dash_phase) % 2;
 

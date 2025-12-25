@@ -6,6 +6,9 @@
 #include <gtk/gtk.h>
 #include <stdint.h>
 
+/* Forward declaration */
+typedef struct SelectionMask SelectionMask;
+
 /**
  * Unified rendering context for dirty rectangle optimization
  * All rendering functions should optionally accept this to clip operations
@@ -101,5 +104,14 @@ void render_utils_apply_selection_mask_to_eraser(
     gint mask_stride,
     gint original_x,
     gint original_y);
+
+/**
+ * TEMPORARY: Visualize selection mask as a semi-transparent overlay
+ * Draws the mask as a red overlay (white = fully selected, transparent = not selected)
+ * This is for debugging feathered selection masks
+ * @param cr Cairo context to draw on
+ * @param mask The selection mask to visualize
+ */
+void render_utils_visualize_selection_mask(cairo_t* cr, SelectionMask* mask);
 
 #endif /* RENDER_UTILS_H */

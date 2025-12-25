@@ -289,6 +289,14 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
     if (doc->selection_mask && !selection_mask_is_empty(doc->selection_mask)) {
         selection_mask_render_outline(cr, doc->selection_mask,
                                       doc->selection_animation_phase, zoom);
+
+        /* TEMPORARY: Visualize selection mask for debugging feathered selections */
+        cairo_save(cr);
+        if (zoom != 1.0) {
+            cairo_scale(cr, zoom, zoom);
+        }
+        render_utils_visualize_selection_mask(cr, doc->selection_mask);
+        cairo_restore(cr);
     }
 
     return FALSE;

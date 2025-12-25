@@ -1,4 +1,5 @@
 #include "render/render_utils.h"
+#include "selection/selection_mask.h"
 #include <stdint.h>
 #include <stdio.h>
 
@@ -315,10 +316,23 @@ void render_utils_apply_selection_mask(
                 pixel[1] = 0; /* G */
                 pixel[2] = 0; /* R */
                 pixel[3] = 0; /* A */
+            } else if (mask_alpha == 255) {
+                /* Fully inside selection: keep painted pixel as-is */
+                /* No change needed */
             } else {
-                /* Multiply alpha: new_alpha = pixel_alpha * (mask_alpha / 255.0) */
+                /* Feather zone: apply mask to both RGB and alpha for smooth fade */
+                /* For proper alpha compositing, we need to premultiply RGB by mask factor */
+                float mask_factor = (float)mask_alpha / 255.0f;
+
+                /* Multiply alpha by mask factor */
                 uint16_t new_alpha = ((uint16_t)pixel_alpha * (uint16_t)mask_alpha) / 255;
                 pixel[3] = (uint8_t)new_alpha;
+
+                /* Premultiply RGB by mask factor for proper alpha compositing */
+                /* This ensures smooth fade to transparency at edges */
+                pixel[0] = (uint8_t)((float)pixel[0] * mask_factor);
+                pixel[1] = (uint8_t)((float)pixel[1] * mask_factor);
+                pixel[2] = (uint8_t)((float)pixel[2] * mask_factor);
             }
         }
     }
@@ -387,24 +401,116 @@ void render_utils_apply_selection_mask_to_eraser(
                 mask_alpha = mask[mask_row_y * mask_stride + mask_col_x];
             }
 
-            /* If outside selection (mask = 0), restore original pixel from layer */
-            if (mask_alpha == 0) {
-                gint orig_x = original_x + x;
+            gint orig_x = original_x + x;
+            if (orig_x >= 0 && orig_x < original_width &&
+                orig_y >= 0 && orig_y < original_height) {
+                uint8_t* orig_pixel = original_data + orig_y * original_stride + orig_x * 4;
 
-                if (orig_x >= 0 && orig_x < original_width &&
-                    orig_y >= 0 && orig_y < original_height) {
-                    uint8_t* orig_pixel = original_data + orig_y * original_stride + orig_x * 4;
-                    /* Copy original pixel back */
+                if (mask_alpha == 0) {
+                    /* Outside selection: fully restore original pixel */
                     erased_pixel[0] = orig_pixel[0]; /* B */
                     erased_pixel[1] = orig_pixel[1]; /* G */
                     erased_pixel[2] = orig_pixel[2]; /* R */
                     erased_pixel[3] = orig_pixel[3]; /* A */
+                } else if (mask_alpha == 255) {
+                    /* Inside selection: keep fully erased result (already in erased_pixel) */
+                    /* No change needed */
+                } else {
+                    /* Feather zone: blend between erased and original with proper alpha compositing */
+                    /* mask_alpha / 255.0 = how much erasing is active (how much to use erased result) */
+                    /* (255 - mask_alpha) / 255.0 = how much to restore from original */
+                    float mask_factor = (float)mask_alpha / 255.0f;
+                    float orig_factor = 1.0f - mask_factor;
+
+                    /* For proper alpha compositing, we need to blend premultiplied alpha values */
+                    /* Convert to premultiplied alpha, blend, then convert back */
+                    float erased_a = (float)erased_pixel[3] / 255.0f;
+                    float orig_a = (float)orig_pixel[3] / 255.0f;
+
+                    /* Premultiplied RGB values */
+                    float erased_r_pre = ((float)erased_pixel[2] / 255.0f) * erased_a;
+                    float erased_g_pre = ((float)erased_pixel[1] / 255.0f) * erased_a;
+                    float erased_b_pre = ((float)erased_pixel[0] / 255.0f) * erased_a;
+
+                    float orig_r_pre = ((float)orig_pixel[2] / 255.0f) * orig_a;
+                    float orig_g_pre = ((float)orig_pixel[1] / 255.0f) * orig_a;
+                    float orig_b_pre = ((float)orig_pixel[0] / 255.0f) * orig_a;
+
+                    /* Blend premultiplied values */
+                    float result_r_pre = erased_r_pre * mask_factor + orig_r_pre * orig_factor;
+                    float result_g_pre = erased_g_pre * mask_factor + orig_g_pre * orig_factor;
+                    float result_b_pre = erased_b_pre * mask_factor + orig_b_pre * orig_factor;
+                    float result_a = erased_a * mask_factor + orig_a * orig_factor;
+
+                    /* Convert back from premultiplied alpha */
+                    if (result_a > 0.0f) {
+                        erased_pixel[2] = (uint8_t)((result_r_pre / result_a) * 255.0f + 0.5f);
+                        erased_pixel[1] = (uint8_t)((result_g_pre / result_a) * 255.0f + 0.5f);
+                        erased_pixel[0] = (uint8_t)((result_b_pre / result_a) * 255.0f + 0.5f);
+                    } else {
+                        erased_pixel[2] = 0;
+                        erased_pixel[1] = 0;
+                        erased_pixel[0] = 0;
+                    }
+                    erased_pixel[3] = (uint8_t)(result_a * 255.0f + 0.5f);
                 }
             }
-            /* If inside selection, keep the erased result (already in erased_pixel) */
         }
     }
 
     /* Mark surface as dirty so changes are visible */
     cairo_surface_mark_dirty(erased_surface);
+}
+
+/**
+ * TEMPORARY: Visualize selection mask as a semi-transparent overlay
+ * Draws the mask as a red overlay (white = fully selected, transparent = not selected)
+ * This is for debugging feathered selection masks
+ */
+void render_utils_visualize_selection_mask(cairo_t* cr, SelectionMask* mask) {
+    if (!cr || !mask || !mask->data) {
+        return;
+    }
+
+    /* Create a temporary ARGB32 surface from the mask data */
+    /* Convert 8-bit alpha mask to ARGB32: white (fully selected) = red overlay, transparent = no overlay */
+    cairo_surface_t* mask_surface = cairo_image_surface_create(
+        CAIRO_FORMAT_ARGB32, mask->width, mask->height);
+
+    if (!mask_surface) {
+        return;
+    }
+
+    uint8_t* surface_data = cairo_image_surface_get_data(mask_surface);
+    gint surface_stride = cairo_image_surface_get_stride(mask_surface);
+    const uint8_t* mask_data = mask->data;
+
+    /* Convert mask to ARGB32: use mask value as alpha, set RGB to red (255, 0, 0) */
+    for (gint y = 0; y < mask->height; y++) {
+        uint8_t* surface_row = surface_data + y * surface_stride;
+        const uint8_t* mask_row = mask_data + y * mask->stride;
+
+        for (gint x = 0; x < mask->width; x++) {
+            uint8_t mask_alpha = mask_row[x];
+            uint8_t* pixel = surface_row + x * 4;
+
+            /* BGRA format: B, G, R, A */
+            pixel[0] = 0;          /* B */
+            pixel[1] = 0;          /* G */
+            pixel[2] = 255;        /* R (red) */
+            pixel[3] = mask_alpha; /* A (use mask value as alpha) */
+        }
+    }
+
+    cairo_surface_mark_dirty(mask_surface);
+    cairo_surface_flush(mask_surface);
+
+    /* Draw the mask as a semi-transparent overlay */
+    cairo_save(cr);
+    cairo_set_source_surface(cr, mask_surface, 0, 0);
+    cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+    cairo_paint_with_alpha(cr, 0.5); /* 50% opacity overlay */
+    cairo_restore(cr);
+
+    cairo_surface_destroy(mask_surface);
 }
