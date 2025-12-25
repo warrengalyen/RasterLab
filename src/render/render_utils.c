@@ -1,4 +1,5 @@
 #include "render/render_utils.h"
+#include <stdint.h>
 #include <stdio.h>
 
 /**
@@ -232,4 +233,178 @@ void draw_checkered_background_offset(cairo_t* cr, gint offset_x, gint offset_y,
             cairo_fill(cr);
         }
     }
+}
+
+/**
+ * Apply a selection mask to a Cairo surface by multiplying alpha values
+ */
+void render_utils_apply_selection_mask(
+    cairo_surface_t* surface,
+    const uint8_t* mask,
+    gint mask_x,
+    gint mask_y,
+    gint mask_width,
+    gint mask_height,
+    gint mask_stride) {
+
+    if (!surface || !mask) {
+        return;
+    }
+
+    /* Flush surface to ensure all drawing is complete */
+    cairo_surface_flush(surface);
+
+    /* Verify surface format */
+    cairo_format_t format = cairo_image_surface_get_format(surface);
+    if (format != CAIRO_FORMAT_ARGB32) {
+        /* Only support ARGB32 for now */
+        return;
+    }
+
+    gint surface_width = cairo_image_surface_get_width(surface);
+    gint surface_height = cairo_image_surface_get_height(surface);
+    gint surface_stride = cairo_image_surface_get_stride(surface);
+    uint8_t* surface_data = cairo_image_surface_get_data(surface);
+
+    if (!surface_data) {
+        return;
+    }
+
+    /* Calculate intersection region */
+    gint start_x = (mask_x < 0) ? 0 : mask_x;
+    gint start_y = (mask_y < 0) ? 0 : mask_y;
+    gint end_x = (mask_x + mask_width > surface_width) ? surface_width : (mask_x + mask_width);
+    gint end_y = (mask_y + mask_height > surface_height) ? surface_height : (mask_y + mask_height);
+
+    if (start_x >= end_x || start_y >= end_y) {
+        return; /* No intersection */
+    }
+
+    /* Apply mask to each pixel */
+    for (gint y = start_y; y < end_y; y++) {
+        gint mask_row_y = y - mask_y;
+        if (mask_row_y < 0 || mask_row_y >= mask_height) {
+            continue;
+        }
+
+        uint8_t* surface_row = surface_data + y * surface_stride;
+        const uint8_t* mask_row = mask + mask_row_y * mask_stride;
+
+        for (gint x = start_x; x < end_x; x++) {
+            gint mask_col_x = x - mask_x;
+            if (mask_col_x < 0 || mask_col_x >= mask_width) {
+                continue;
+            }
+
+            /* Get mask alpha value (0-255) */
+            uint8_t mask_alpha = mask_row[mask_col_x];
+
+            /* Get pixel (stored as BGRA in memory for ARGB32) */
+            uint8_t* pixel = surface_row + x * 4;
+            uint8_t pixel_alpha = pixel[3];
+
+            /* Only apply mask to pixels that were actually painted (non-zero alpha) */
+            /* If pixel is transparent, it wasn't painted by this stroke, so leave it alone */
+            if (pixel_alpha == 0) {
+                continue; /* Skip transparent pixels - they weren't painted */
+            }
+
+            /* If mask is 0, completely zero out the pixel (outside selection) */
+            if (mask_alpha == 0) {
+                pixel[0] = 0; /* B */
+                pixel[1] = 0; /* G */
+                pixel[2] = 0; /* R */
+                pixel[3] = 0; /* A */
+            } else {
+                /* Multiply alpha: new_alpha = pixel_alpha * (mask_alpha / 255.0) */
+                uint16_t new_alpha = ((uint16_t)pixel_alpha * (uint16_t)mask_alpha) / 255;
+                pixel[3] = (uint8_t)new_alpha;
+            }
+        }
+    }
+
+    /* Mark surface as dirty so changes are visible */
+    cairo_surface_mark_dirty(surface);
+}
+
+/**
+ * Apply selection mask to eraser result: restore original pixels outside selection
+ */
+void render_utils_apply_selection_mask_to_eraser(
+    cairo_surface_t* erased_surface,
+    cairo_surface_t* original_surface,
+    const uint8_t* mask,
+    gint mask_x,
+    gint mask_y,
+    gint mask_width,
+    gint mask_height,
+    gint mask_stride,
+    gint original_x,
+    gint original_y) {
+
+    if (!erased_surface || !original_surface || !mask) {
+        return;
+    }
+
+    /* Flush surfaces to ensure all drawing is complete */
+    cairo_surface_flush(erased_surface);
+    cairo_surface_flush(original_surface);
+
+    /* Verify surface formats */
+    if (cairo_image_surface_get_format(erased_surface) != CAIRO_FORMAT_ARGB32 ||
+        cairo_image_surface_get_format(original_surface) != CAIRO_FORMAT_ARGB32) {
+        return;
+    }
+
+    gint erased_width = cairo_image_surface_get_width(erased_surface);
+    gint erased_height = cairo_image_surface_get_height(erased_surface);
+    gint erased_stride = cairo_image_surface_get_stride(erased_surface);
+    uint8_t* erased_data = cairo_image_surface_get_data(erased_surface);
+
+    gint original_width = cairo_image_surface_get_width(original_surface);
+    gint original_height = cairo_image_surface_get_height(original_surface);
+    gint original_stride = cairo_image_surface_get_stride(original_surface);
+    uint8_t* original_data = cairo_image_surface_get_data(original_surface);
+
+    if (!erased_data || !original_data) {
+        return;
+    }
+
+    /* For each pixel in erased surface, check if it's outside selection */
+    for (gint y = 0; y < erased_height; y++) {
+        gint mask_row_y = y - mask_y;
+        uint8_t* erased_row = erased_data + y * erased_stride;
+        gint orig_y = original_y + y;
+
+        for (gint x = 0; x < erased_width; x++) {
+            gint mask_col_x = x - mask_x;
+            uint8_t* erased_pixel = erased_row + x * 4;
+
+            /* Get mask value for this pixel */
+            uint8_t mask_alpha = 0;
+            if (mask_col_x >= 0 && mask_col_x < mask_width &&
+                mask_row_y >= 0 && mask_row_y < mask_height) {
+                mask_alpha = mask[mask_row_y * mask_stride + mask_col_x];
+            }
+
+            /* If outside selection (mask = 0), restore original pixel from layer */
+            if (mask_alpha == 0) {
+                gint orig_x = original_x + x;
+
+                if (orig_x >= 0 && orig_x < original_width &&
+                    orig_y >= 0 && orig_y < original_height) {
+                    uint8_t* orig_pixel = original_data + orig_y * original_stride + orig_x * 4;
+                    /* Copy original pixel back */
+                    erased_pixel[0] = orig_pixel[0]; /* B */
+                    erased_pixel[1] = orig_pixel[1]; /* G */
+                    erased_pixel[2] = orig_pixel[2]; /* R */
+                    erased_pixel[3] = orig_pixel[3]; /* A */
+                }
+            }
+            /* If inside selection, keep the erased result (already in erased_pixel) */
+        }
+    }
+
+    /* Mark surface as dirty so changes are visible */
+    cairo_surface_mark_dirty(erased_surface);
 }
