@@ -320,19 +320,42 @@ void render_utils_apply_selection_mask(
                 /* Fully inside selection: keep painted pixel as-is */
                 /* No change needed */
             } else {
-                /* Feather zone: apply mask to both RGB and alpha for smooth fade */
-                /* For proper alpha compositing, we need to premultiply RGB by mask factor */
-                float mask_factor = (float)mask_alpha / 255.0f;
+                /* Feather zone: apply mask to alpha with proper premultiplied alpha handling */
+                /* Cairo uses premultiplied alpha, so we need to un-premultiply, change alpha, then re-premultiply */
+                uint8_t new_alpha = (uint8_t)((pixel_alpha * mask_alpha) / 255);
 
-                /* Multiply alpha by mask factor */
-                uint16_t new_alpha = ((uint16_t)pixel_alpha * (uint16_t)mask_alpha) / 255;
-                pixel[3] = (uint8_t)new_alpha;
+                if (new_alpha == 0) {
+                    /* Completely transparent */
+                    pixel[0] = 0;
+                    pixel[1] = 0;
+                    pixel[2] = 0;
+                    pixel[3] = 0;
+                } else if (pixel_alpha > 0) {
+                    /* Un-premultiply: convert from premultiplied to straight alpha */
+                    uint16_t r = (pixel[2] * 255 + pixel_alpha / 2) / pixel_alpha;
+                    uint16_t g = (pixel[1] * 255 + pixel_alpha / 2) / pixel_alpha;
+                    uint16_t b = (pixel[0] * 255 + pixel_alpha / 2) / pixel_alpha;
 
-                /* Premultiply RGB by mask factor for proper alpha compositing */
-                /* This ensures smooth fade to transparency at edges */
-                pixel[0] = (uint8_t)((float)pixel[0] * mask_factor);
-                pixel[1] = (uint8_t)((float)pixel[1] * mask_factor);
-                pixel[2] = (uint8_t)((float)pixel[2] * mask_factor);
+                    /* Clamp to valid range */
+                    if (r > 255)
+                        r = 255;
+                    if (g > 255)
+                        g = 255;
+                    if (b > 255)
+                        b = 255;
+
+                    /* Re-premultiply with new alpha */
+                    pixel[0] = (b * new_alpha + 127) / 255; /* B */
+                    pixel[1] = (g * new_alpha + 127) / 255; /* G */
+                    pixel[2] = (r * new_alpha + 127) / 255; /* R */
+                    pixel[3] = new_alpha;                   /* A */
+                } else {
+                    /* Source was transparent */
+                    pixel[0] = 0;
+                    pixel[1] = 0;
+                    pixel[2] = 0;
+                    pixel[3] = 0;
+                }
             }
         }
     }
@@ -416,43 +439,66 @@ void render_utils_apply_selection_mask_to_eraser(
                     /* Inside selection: keep fully erased result (already in erased_pixel) */
                     /* No change needed */
                 } else {
-                    /* Feather zone: blend between erased and original with proper alpha compositing */
+                    /* Feather zone: blend between erased and original with proper premultiplied alpha handling */
                     /* mask_alpha / 255.0 = how much erasing is active (how much to use erased result) */
                     /* (255 - mask_alpha) / 255.0 = how much to restore from original */
                     float mask_factor = (float)mask_alpha / 255.0f;
                     float orig_factor = 1.0f - mask_factor;
 
-                    /* For proper alpha compositing, we need to blend premultiplied alpha values */
-                    /* Convert to premultiplied alpha, blend, then convert back */
-                    float erased_a = (float)erased_pixel[3] / 255.0f;
-                    float orig_a = (float)orig_pixel[3] / 255.0f;
+                    /* Both pixels are in premultiplied alpha format (Cairo ARGB32) */
+                    /* Un-premultiply both to get straight alpha values */
+                    uint8_t erased_a = erased_pixel[3];
+                    uint8_t orig_a = orig_pixel[3];
 
-                    /* Premultiplied RGB values */
-                    float erased_r_pre = ((float)erased_pixel[2] / 255.0f) * erased_a;
-                    float erased_g_pre = ((float)erased_pixel[1] / 255.0f) * erased_a;
-                    float erased_b_pre = ((float)erased_pixel[0] / 255.0f) * erased_a;
+                    uint16_t erased_r, erased_g, erased_b;
+                    uint16_t orig_r, orig_g, orig_b;
 
-                    float orig_r_pre = ((float)orig_pixel[2] / 255.0f) * orig_a;
-                    float orig_g_pre = ((float)orig_pixel[1] / 255.0f) * orig_a;
-                    float orig_b_pre = ((float)orig_pixel[0] / 255.0f) * orig_a;
-
-                    /* Blend premultiplied values */
-                    float result_r_pre = erased_r_pre * mask_factor + orig_r_pre * orig_factor;
-                    float result_g_pre = erased_g_pre * mask_factor + orig_g_pre * orig_factor;
-                    float result_b_pre = erased_b_pre * mask_factor + orig_b_pre * orig_factor;
-                    float result_a = erased_a * mask_factor + orig_a * orig_factor;
-
-                    /* Convert back from premultiplied alpha */
-                    if (result_a > 0.0f) {
-                        erased_pixel[2] = (uint8_t)((result_r_pre / result_a) * 255.0f + 0.5f);
-                        erased_pixel[1] = (uint8_t)((result_g_pre / result_a) * 255.0f + 0.5f);
-                        erased_pixel[0] = (uint8_t)((result_b_pre / result_a) * 255.0f + 0.5f);
+                    if (erased_a > 0) {
+                        erased_r = (erased_pixel[2] * 255 + erased_a / 2) / erased_a;
+                        erased_g = (erased_pixel[1] * 255 + erased_a / 2) / erased_a;
+                        erased_b = (erased_pixel[0] * 255 + erased_a / 2) / erased_a;
+                        if (erased_r > 255)
+                            erased_r = 255;
+                        if (erased_g > 255)
+                            erased_g = 255;
+                        if (erased_b > 255)
+                            erased_b = 255;
                     } else {
-                        erased_pixel[2] = 0;
-                        erased_pixel[1] = 0;
-                        erased_pixel[0] = 0;
+                        erased_r = erased_g = erased_b = 0;
                     }
-                    erased_pixel[3] = (uint8_t)(result_a * 255.0f + 0.5f);
+
+                    if (orig_a > 0) {
+                        orig_r = (orig_pixel[2] * 255 + orig_a / 2) / orig_a;
+                        orig_g = (orig_pixel[1] * 255 + orig_a / 2) / orig_a;
+                        orig_b = (orig_pixel[0] * 255 + orig_a / 2) / orig_a;
+                        if (orig_r > 255)
+                            orig_r = 255;
+                        if (orig_g > 255)
+                            orig_g = 255;
+                        if (orig_b > 255)
+                            orig_b = 255;
+                    } else {
+                        orig_r = orig_g = orig_b = 0;
+                    }
+
+                    /* Blend in straight alpha space */
+                    uint16_t result_r = (uint16_t)(erased_r * mask_factor + orig_r * orig_factor);
+                    uint16_t result_g = (uint16_t)(erased_g * mask_factor + orig_g * orig_factor);
+                    uint16_t result_b = (uint16_t)(erased_b * mask_factor + orig_b * orig_factor);
+                    uint8_t result_a = (uint8_t)(erased_a * mask_factor + orig_a * orig_factor);
+
+                    /* Re-premultiply with blended alpha */
+                    if (result_a > 0) {
+                        erased_pixel[0] = (result_b * result_a + 127) / 255; /* B */
+                        erased_pixel[1] = (result_g * result_a + 127) / 255; /* G */
+                        erased_pixel[2] = (result_r * result_a + 127) / 255; /* R */
+                        erased_pixel[3] = result_a;                          /* A */
+                    } else {
+                        erased_pixel[0] = 0;
+                        erased_pixel[1] = 0;
+                        erased_pixel[2] = 0;
+                        erased_pixel[3] = 0;
+                    }
                 }
             }
         }

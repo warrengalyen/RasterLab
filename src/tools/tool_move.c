@@ -178,23 +178,60 @@ static ImageLayer* extract_selection_to_layer(struct ImageDocument* doc, struct 
             }
 
             /* Copy pixel from source to destination */
+            /* Cairo ARGB32 format: BGRA in memory (little-endian) */
             guchar* src_pixel = src_data + src_y * src_stride + src_x * 4;
             guchar* dst_pixel = dst_data + y * dst_stride + x * 4;
 
+            /* Read BGRA from source */
+            guchar src_b = src_pixel[0];
+            guchar src_g = src_pixel[1];
+            guchar src_r = src_pixel[2];
+            guchar src_a = src_pixel[3];
+
             if (mask_alpha == 255) {
                 /* Fully selected: copy pixel directly */
-                dst_pixel[0] = src_pixel[0];
-                dst_pixel[1] = src_pixel[1];
-                dst_pixel[2] = src_pixel[2];
-                dst_pixel[3] = src_pixel[3];
+                dst_pixel[0] = src_b;
+                dst_pixel[1] = src_g;
+                dst_pixel[2] = src_r;
+                dst_pixel[3] = src_a;
             } else {
-                /* Partially selected: apply mask to alpha */
-                uint8_t src_alpha = src_pixel[3];
-                uint8_t new_alpha = (uint8_t)((src_alpha * mask_alpha) / 255);
-                dst_pixel[0] = src_pixel[0];
-                dst_pixel[1] = src_pixel[1];
-                dst_pixel[2] = src_pixel[2];
-                dst_pixel[3] = new_alpha;
+                /* Partially selected (feathered): apply mask to alpha
+                 * Need to handle premultiplied alpha correctly */
+                uint8_t new_alpha = (uint8_t)((src_a * mask_alpha) / 255);
+
+                if (new_alpha == 0) {
+                    /* Completely transparent */
+                    dst_pixel[0] = 0;
+                    dst_pixel[1] = 0;
+                    dst_pixel[2] = 0;
+                    dst_pixel[3] = 0;
+                } else if (src_a > 0) {
+                    /* Un-premultiply source color, then re-premultiply with new alpha */
+                    /* Un-premultiply: convert from premultiplied to straight alpha */
+                    uint16_t r = (src_r * 255 + src_a / 2) / src_a;
+                    uint16_t g = (src_g * 255 + src_a / 2) / src_a;
+                    uint16_t b = (src_b * 255 + src_a / 2) / src_a;
+
+                    /* Clamp to valid range */
+                    if (r > 255)
+                        r = 255;
+                    if (g > 255)
+                        g = 255;
+                    if (b > 255)
+                        b = 255;
+
+                    /* Re-premultiply with new alpha */
+                    dst_pixel[0] = (b * new_alpha + 127) / 255; /* B */
+                    dst_pixel[1] = (g * new_alpha + 127) / 255; /* G */
+                    dst_pixel[2] = (r * new_alpha + 127) / 255; /* R */
+                    dst_pixel[3] = new_alpha;                   /* A */
+                } else {
+                    /* Source was transparent */
+                    dst_pixel[0] = 0;
+                    dst_pixel[1] = 0;
+                    dst_pixel[2] = 0;
+                    dst_pixel[3] = 0;
+                }
             }
         }
     }
@@ -202,7 +239,8 @@ static ImageLayer* extract_selection_to_layer(struct ImageDocument* doc, struct 
     cairo_surface_mark_dirty(new_layer->surface);
     cairo_surface_mark_dirty(source_layer->surface);
 
-    /* Clear pixels from source layer where selection is active */
+    /* Clear pixels from source layer where selection is active
+     * For feathered selections, reduce alpha proportionally based on mask alpha */
     for (gint y = 0; y < source_layer->height; y++) {
         gint doc_y = source_layer->offset_y + y;
         gint mask_y = doc_y - actual_region.y;
@@ -221,12 +259,61 @@ static ImageLayer* extract_selection_to_layer(struct ImageDocument* doc, struct 
 
             uint8_t mask_alpha = region_mask->data[mask_y * region_mask->stride + mask_x];
             if (mask_alpha > 0) {
-                /* Clear pixel in source layer (set to transparent) */
+                /* Cairo ARGB32 format: BGRA in memory (little-endian) */
                 guchar* src_pixel = src_data + y * src_stride + x * 4;
-                src_pixel[0] = 0;
-                src_pixel[1] = 0;
-                src_pixel[2] = 0;
-                src_pixel[3] = 0;
+
+                /* Read BGRA from source */
+                guchar src_b = src_pixel[0];
+                guchar src_g = src_pixel[1];
+                guchar src_r = src_pixel[2];
+                guchar src_a = src_pixel[3];
+
+                if (mask_alpha == 255) {
+                    /* Fully selected: completely clear pixel */
+                    src_pixel[0] = 0;
+                    src_pixel[1] = 0;
+                    src_pixel[2] = 0;
+                    src_pixel[3] = 0;
+                } else {
+                    /* Partially selected (feathered): reduce alpha proportionally
+                     * New alpha = original_alpha * (1 - mask_alpha/255)
+                     * Need to handle premultiplied alpha correctly */
+                    uint8_t new_alpha = (uint8_t)((src_a * (255 - mask_alpha)) / 255);
+
+                    if (new_alpha < 1) {
+                        /* Alpha becomes too small: clear completely */
+                        src_pixel[0] = 0;
+                        src_pixel[1] = 0;
+                        src_pixel[2] = 0;
+                        src_pixel[3] = 0;
+                    } else if (src_a > 0) {
+                        /* Un-premultiply source color, then re-premultiply with new alpha */
+                        /* Un-premultiply: convert from premultiplied to straight alpha */
+                        uint16_t r = (src_r * 255 + src_a / 2) / src_a;
+                        uint16_t g = (src_g * 255 + src_a / 2) / src_a;
+                        uint16_t b = (src_b * 255 + src_a / 2) / src_a;
+
+                        /* Clamp to valid range */
+                        if (r > 255)
+                            r = 255;
+                        if (g > 255)
+                            g = 255;
+                        if (b > 255)
+                            b = 255;
+
+                        /* Re-premultiply with new alpha */
+                        src_pixel[0] = (b * new_alpha + 127) / 255; /* B */
+                        src_pixel[1] = (g * new_alpha + 127) / 255; /* G */
+                        src_pixel[2] = (r * new_alpha + 127) / 255; /* R */
+                        src_pixel[3] = new_alpha;                   /* A */
+                    } else {
+                        /* Source was already transparent */
+                        src_pixel[0] = 0;
+                        src_pixel[1] = 0;
+                        src_pixel[2] = 0;
+                        src_pixel[3] = 0;
+                    }
+                }
             }
         }
     }

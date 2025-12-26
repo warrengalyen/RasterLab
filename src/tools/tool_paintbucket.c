@@ -428,11 +428,13 @@ static void paint_bucket_flood_fill(cairo_surface_t* surface, struct ImageDocume
                         mask_y >= 0 && mask_y < full_region_mask->height) {
                         uint8_t mask_alpha = full_region_mask->data[mask_y * full_region_mask->stride + mask_x];
                         /* Multiply final alpha by mask alpha to respect feathered selection */
+                        /* Since we're working in straight alpha space, we can just multiply */
                         final_a = (guint8)((final_a * mask_alpha) / 255);
                     }
                 }
 
                 /* Fill pixel with premultiplied alpha */
+                /* Note: final_r, final_g, final_b are in straight alpha space, so we premultiply here */
                 guint8 final_r_pre = (final_r * final_a + 127) / 255;
                 guint8 final_g_pre = (final_g * final_a + 127) / 255;
                 guint8 final_b_pre = (final_b * final_a + 127) / 255;
