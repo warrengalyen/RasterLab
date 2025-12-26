@@ -491,8 +491,9 @@ gint ui_show_filter_dialog_with_zoom_pan(AppContext* ctx,
     /* Set layers in dialog */
     filter_dialog_set_layers(dialog, layer, temp_layer);
 
-    /* Store original layer reference and control params for preview callback */
+    /* Store original layer reference, document, and control params for preview callback */
     g_object_set_data(G_OBJECT(filter_dialog_get_window(dialog)), "original_layer", layer);
+    g_object_set_data(G_OBJECT(filter_dialog_get_window(dialog)), "filter_doc", doc);
     g_object_set_data(G_OBJECT(filter_dialog_get_window(dialog)), "control_params", controls);
 
     /* Set up live preview callback if provided */

@@ -4,6 +4,7 @@
 #include "filters.h"
 #include "render/layer.h"
 #include "ui.h"
+#include "ui/filters/filter_utils.h"
 #include "ui/widgets/filter_dialog.h"
 #include "ui/widgets/filter_preview.h"
 #include <cairo.h>
@@ -17,6 +18,8 @@ typedef struct {
     gboolean (*filter_apply_func)(ImageLayer* layer, const gfloat* values, gint num_values);
     gfloat* filter_values;
     gint num_values;
+    struct ImageDocument* doc; /* Document for selection masking */
+    struct ImageLayer* layer;  /* Original layer for selection masking */
 } FilterWrapperData;
 
 /* Forward declaration */
@@ -44,6 +47,8 @@ void ui_filter_utils_setup_viewport_filter(FilterDialog* dialog,
                                            gint num_values) {
     FilterWrapperData* wrapper_data;
     FilterPreview* preview;
+    struct ImageDocument* doc;
+    struct ImageLayer* layer;
 
     if (!dialog || !filter_func || !filter_values || num_values <= 0) {
         return;
@@ -53,6 +58,10 @@ void ui_filter_utils_setup_viewport_filter(FilterDialog* dialog,
     if (!preview) {
         return;
     }
+
+    /* Get document and layer from dialog */
+    doc = (struct ImageDocument*)g_object_get_data(G_OBJECT(filter_dialog_get_window(dialog)), "filter_doc");
+    layer = (struct ImageLayer*)g_object_get_data(G_OBJECT(filter_dialog_get_window(dialog)), "original_layer");
 
     /* Get or create wrapper data */
     wrapper_data = (FilterWrapperData*)g_object_get_data(G_OBJECT(filter_dialog_get_window(dialog)), "filter_wrapper_data");
@@ -68,6 +77,8 @@ void ui_filter_utils_setup_viewport_filter(FilterDialog* dialog,
         wrapper_data->filter_apply_func = filter_func;
         wrapper_data->filter_values = g_malloc(sizeof(gfloat) * num_values);
         wrapper_data->num_values = num_values;
+        wrapper_data->doc = doc;
+        wrapper_data->layer = layer;
         g_object_set_data_full(G_OBJECT(filter_dialog_get_window(dialog)), "filter_wrapper_data",
                                wrapper_data, (GDestroyNotify)free_filter_wrapper_data);
     }
@@ -75,6 +86,8 @@ void ui_filter_utils_setup_viewport_filter(FilterDialog* dialog,
     /* Update filter function and values */
     wrapper_data->filter_apply_func = filter_func;
     memcpy(wrapper_data->filter_values, filter_values, sizeof(gfloat) * num_values);
+    wrapper_data->doc = doc;
+    wrapper_data->layer = layer;
 
     /* Set filter function on preview to use viewport-based filtering */
     filter_preview_set_filter_function(preview, apply_filter_to_viewport_surface, wrapper_data);
@@ -87,6 +100,7 @@ static cairo_surface_t* apply_filter_to_viewport_surface(cairo_surface_t* viewpo
     FilterWrapperData* wrapper_data = (FilterWrapperData*)params;
     ImageLayer* temp_layer;
     cairo_surface_t* result;
+    cairo_surface_t* original_viewport = NULL;
 
     if (!viewport_surface || !wrapper_data || !wrapper_data->filter_apply_func) {
         return NULL;
@@ -100,10 +114,26 @@ static cairo_surface_t* apply_filter_to_viewport_surface(cairo_surface_t* viewpo
         return NULL;
     }
 
+    /* Create a copy of the original viewport for selection masking */
+    if (wrapper_data->doc && wrapper_data->layer) {
+        original_viewport = cairo_image_surface_create(
+            cairo_image_surface_get_format(viewport_surface), width, height);
+        if (original_viewport) {
+            cairo_t* cr = cairo_create(original_viewport);
+            cairo_set_source_surface(cr, viewport_surface, 0, 0);
+            cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+            cairo_paint(cr);
+            cairo_destroy(cr);
+        }
+    }
+
     /* Create a temporary layer with the viewport surface */
     temp_layer = layer_new("TempViewport", width, height, TRUE,
                            LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL, NULL);
     if (!temp_layer) {
+        if (original_viewport) {
+            cairo_surface_destroy(original_viewport);
+        }
         return NULL;
     }
 
@@ -117,7 +147,26 @@ static cairo_surface_t* apply_filter_to_viewport_surface(cairo_surface_t* viewpo
     /* Apply filter to the layer */
     if (!wrapper_data->filter_apply_func(temp_layer, wrapper_data->filter_values, wrapper_data->num_values)) {
         layer_free(temp_layer);
+        if (original_viewport) {
+            cairo_surface_destroy(original_viewport);
+        }
         return NULL;
+    }
+
+    /* Apply selection masking if there's a selection */
+    /* Note: viewport coordinates are relative to the layer, so we use layer->offset_x/offset_y to convert to document coordinates */
+    if (original_viewport && wrapper_data->doc && wrapper_data->layer) {
+        /* Create a temporary layer structure for the viewport with correct offset */
+        ImageLayer viewport_layer = *wrapper_data->layer;
+        viewport_layer.surface = temp_layer->surface;
+        viewport_layer.width = width;
+        viewport_layer.height = height;
+        /* Viewport is already at layer coordinates (0,0 relative to layer) */
+        viewport_layer.offset_x = wrapper_data->layer->offset_x;
+        viewport_layer.offset_y = wrapper_data->layer->offset_y;
+
+        filter_utils_apply_selection_mask(temp_layer->surface, original_viewport, wrapper_data->doc, &viewport_layer);
+        cairo_surface_destroy(original_viewport);
     }
 
     /* Return a reference to the filtered surface */

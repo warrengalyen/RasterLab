@@ -6,7 +6,7 @@
 #include <gtk/gtk.h>
 
 /**
- * Palettize dialog structure
+ * Palettize dialog structure (forward declaration)
  */
 typedef struct _PalettizeDialog PalettizeDialog;
 
@@ -20,6 +20,7 @@ typedef struct {
     gint max_colors;                  /* Maximum colors (if use_file is FALSE) */
     OcDitherMethod dither_method;     /* Dither method */
     gint dither_amount;               /* Dither amount (0-100) */
+    PalettizeDialog* dialog;          /* Dialog pointer for accessing document/layer */
 } PalettizeParams;
 
 /**

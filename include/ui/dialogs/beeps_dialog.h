@@ -4,6 +4,9 @@
 #include "render/layer.h"
 #include <gtk/gtk.h>
 
+/* Forward declaration */
+typedef struct _BEEPSDialog BEEPSDialog;
+
 /**
  * BEEPS parameters structure
  */
@@ -11,12 +14,8 @@ typedef struct {
     gfloat photometric_std_dev;
     gfloat spatial_decay;
     gint range_filter;
+    BEEPSDialog* dialog; /* Dialog pointer for accessing document/layer */
 } BEEPSParams;
-
-/**
- * BEEPS dialog structure
- */
-typedef struct _BEEPSDialog BEEPSDialog;
 
 /**
  * Create a new BEEPS dialog

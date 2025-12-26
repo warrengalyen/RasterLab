@@ -3,6 +3,7 @@
 #include "document.h"
 #include "filters.h"
 #include "render/layer.h"
+#include "selection/selection_mask.h"
 #include "ui.h"
 #include "ui/dialogs/color_balance_dialog.h"
 #include "ui/dialogs/curves_dialog.h"
@@ -36,6 +37,7 @@
 #include "ui/filters/filter_shadow_highlights.h"
 #include "ui/filters/filter_stretch.h"
 #include "ui/filters/filter_temperature.h"
+#include "ui/filters/filter_utils.h"
 #include "ui/filters/filter_vibrance.h"
 #include "ui/filters/filter_whitebalance.h"
 #include "ui/ui_filter.h"
@@ -1644,6 +1646,10 @@ static void on_adjust_palettize(GtkWidget* widget, gpointer data) {
     /* Set layers in dialog */
     palettize_dialog_set_layers(dialog, layer, temp_layer);
 
+    /* Store original layer reference and document for preview callback */
+    g_object_set_data(G_OBJECT(palettize_dialog_get_window(dialog)), "original_layer", layer);
+    g_object_set_data(G_OBJECT(palettize_dialog_get_window(dialog)), "filter_doc", doc);
+
     /* Set dialog as transient for main window */
     if (ctx->window) {
         gtk_window_set_transient_for(palettize_dialog_get_window(dialog), GTK_WINDOW(ctx->window));
@@ -1659,9 +1665,28 @@ static void on_adjust_palettize(GtkWidget* widget, gpointer data) {
             /* Start timing */
             gint64 start_time = g_get_monotonic_time();
 
+            /* Create a copy of the original layer surface for selection masking */
+            cairo_surface_t* original_surface_copy = NULL;
+            if (doc->selection_mask && !selection_mask_is_empty(doc->selection_mask)) {
+                original_surface_copy = cairo_surface_create_similar(layer->surface, CAIRO_CONTENT_COLOR_ALPHA, layer->width, layer->height);
+                if (original_surface_copy) {
+                    cairo_t* copy_cr = cairo_create(original_surface_copy);
+                    cairo_set_source_surface(copy_cr, layer->surface, 0, 0);
+                    cairo_set_operator(copy_cr, CAIRO_OPERATOR_SOURCE);
+                    cairo_paint(copy_cr);
+                    cairo_destroy(copy_cr);
+                }
+            }
+
             gboolean success = filter_palettize_apply(layer, &params);
 
             if (success) {
+                /* Apply selection masking if there's a selection */
+                if (original_surface_copy) {
+                    filter_utils_apply_selection_mask(layer->surface, original_surface_copy, doc, layer);
+                    cairo_surface_destroy(original_surface_copy);
+                }
+
                 /* Get processing time */
                 gint64 current_time = g_get_monotonic_time();
                 gdouble processing_time = (gdouble)(current_time - start_time) / 1000000.0;
@@ -1682,6 +1707,9 @@ static void on_adjust_palettize(GtkWidget* widget, gpointer data) {
                 ui_update_window_title(ctx);
                 ui_update_menu_and_button_states(ctx);
             } else {
+                if (original_surface_copy) {
+                    cairo_surface_destroy(original_surface_copy);
+                }
                 command_free(cmd);
             }
         }
@@ -1756,8 +1784,9 @@ static void on_adjust_retinex(GtkWidget* widget, gpointer data) {
     /* Set layers in dialog */
     retinex_dialog_set_layers(dialog, layer, temp_layer);
 
-    /* Store original layer reference for preview callback */
+    /* Store original layer reference and document for preview callback */
     g_object_set_data(G_OBJECT(retinex_dialog_get_window(dialog)), "original_layer", layer);
+    g_object_set_data(G_OBJECT(retinex_dialog_get_window(dialog)), "filter_doc", doc);
 
     /* Set dialog as transient for main window */
     if (ctx->window) {
@@ -1774,7 +1803,33 @@ static void on_adjust_retinex(GtkWidget* widget, gpointer data) {
             /* Start timing */
             gint64 start_time = g_get_monotonic_time();
 
+            /* Create a copy of the original surface for selection masking */
+            cairo_surface_t* original_surface = NULL;
+            if (layer->surface) {
+                gint width = cairo_image_surface_get_width(layer->surface);
+                gint height = cairo_image_surface_get_height(layer->surface);
+                original_surface = cairo_image_surface_create(
+                    cairo_image_surface_get_format(layer->surface), width, height);
+                if (original_surface) {
+                    cairo_t* cr = cairo_create(original_surface);
+                    cairo_set_source_surface(cr, layer->surface, 0, 0);
+                    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+                    cairo_paint(cr);
+                    cairo_destroy(cr);
+                }
+            }
+
             gboolean success = filter_retinex_apply(layer, mode, scale, num_scales, dynamic);
+
+            /* Apply selection masking if there's a selection */
+            if (success && original_surface && layer->surface) {
+                filter_utils_apply_selection_mask(layer->surface, original_surface, doc, layer);
+            }
+
+            /* Free original surface copy */
+            if (original_surface) {
+                cairo_surface_destroy(original_surface);
+            }
 
             if (success) {
                 /* Get processing time */
