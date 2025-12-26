@@ -105,4 +105,18 @@ gboolean filter_utils_rgba_to_cairo(cairo_surface_t* surface,
                                     FilterRGBABuffers* buffers,
                                     const gchar* filter_name);
 
+/**
+ * Apply selection masking to filter results
+ * Blends filtered surface with original surface based on selection mask
+ * @param filtered_surface The filtered Cairo surface (will be modified)
+ * @param original_surface The original Cairo surface before filtering
+ * @param doc The document containing the selection mask
+ * @param layer The layer being filtered (for coordinate calculation)
+ * @return TRUE if successful, FALSE otherwise
+ */
+gboolean filter_utils_apply_selection_mask(cairo_surface_t* filtered_surface,
+                                           cairo_surface_t* original_surface,
+                                           struct ImageDocument* doc,
+                                           struct ImageLayer* layer);
+
 #endif /* FILTER_UTILS_H */

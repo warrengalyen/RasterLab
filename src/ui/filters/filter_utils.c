@@ -1,5 +1,8 @@
 #include "ui/filters/filter_utils.h"
+#include "document.h"
 #include "filters.h"
+#include "render/dirty.h"
+#include "selection/selection_render.h"
 #include <glib.h>
 
 gboolean filter_utils_allocate_rgb_buffers(cairo_surface_t* surface,
@@ -148,6 +151,168 @@ gboolean filter_utils_rgba_to_cairo(cairo_surface_t* surface,
         g_warning("%s: Failed to convert RGBA to surface", filter_name);
         return FALSE;
     }
+
+    return TRUE;
+}
+
+/**
+ * Apply selection masking to filter results
+ * Blends filtered surface with original surface based on selection mask
+ */
+gboolean filter_utils_apply_selection_mask(cairo_surface_t* filtered_surface,
+                                           cairo_surface_t* original_surface,
+                                           struct ImageDocument* doc,
+                                           struct ImageLayer* layer) {
+    if (!filtered_surface || !original_surface || !doc || !layer) {
+        return FALSE;
+    }
+
+    /* Check if there's an active selection */
+    if (!doc->selection_mask || selection_mask_is_empty(doc->selection_mask)) {
+        /* No selection, filtered result is already correct */
+        return TRUE;
+    }
+
+    /* Get surface dimensions */
+    gint width = cairo_image_surface_get_width(filtered_surface);
+    gint height = cairo_image_surface_get_height(filtered_surface);
+
+    if (width <= 0 || height <= 0) {
+        return FALSE;
+    }
+
+    /* Create dirty rect for the entire layer (in document coordinates) */
+    DirtyRect layer_rect;
+    dirty_rect_set(&layer_rect, layer->offset_x, layer->offset_y, width, height);
+
+    /* Get selection mask for this layer region */
+    DirtyRect actual_region;
+    SelectionMask* region_mask = selection_build_combined_mask(
+        doc->selection_mask, &layer_rect, FEATHER_QUALITY_NORMAL, &actual_region);
+
+    if (!region_mask || !region_mask->data) {
+        /* No selection in this region, filtered result is already correct */
+        if (region_mask) {
+            selection_mask_free(region_mask);
+        }
+        return TRUE;
+    }
+
+    /* Flush surfaces to ensure all drawing is complete */
+    cairo_surface_flush(filtered_surface);
+    cairo_surface_flush(original_surface);
+
+    /* Get surface data */
+    gint filtered_stride = cairo_image_surface_get_stride(filtered_surface);
+    gint original_stride = cairo_image_surface_get_stride(original_surface);
+    guchar* filtered_data = cairo_image_surface_get_data(filtered_surface);
+    guchar* original_data = cairo_image_surface_get_data(original_surface);
+
+    if (!filtered_data || !original_data) {
+        selection_mask_free(region_mask);
+        return FALSE;
+    }
+
+    /* Calculate mask offset relative to layer */
+    gint mask_offset_x = actual_region.x - layer->offset_x;
+    gint mask_offset_y = actual_region.y - layer->offset_y;
+
+    /* Blend filtered result with original based on selection mask */
+    for (gint y = 0; y < height; y++) {
+        gint mask_y = y - mask_offset_y;
+
+        if (mask_y < 0 || mask_y >= region_mask->height) {
+            /* Outside mask region, keep original */
+            continue;
+        }
+
+        guchar* filtered_row = filtered_data + y * filtered_stride;
+        guchar* original_row = original_data + y * original_stride;
+        const uint8_t* mask_row = region_mask->data + mask_y * region_mask->stride;
+
+        for (gint x = 0; x < width; x++) {
+            gint mask_x = x - mask_offset_x;
+
+            if (mask_x < 0 || mask_x >= region_mask->width) {
+                /* Outside mask region, keep original */
+                continue;
+            }
+
+            uint8_t mask_alpha = mask_row[mask_x];
+
+            if (mask_alpha == 0) {
+                /* Outside selection: use original pixel */
+                filtered_row[x * 4 + 0] = original_row[x * 4 + 0]; /* B */
+                filtered_row[x * 4 + 1] = original_row[x * 4 + 1]; /* G */
+                filtered_row[x * 4 + 2] = original_row[x * 4 + 2]; /* R */
+                filtered_row[x * 4 + 3] = original_row[x * 4 + 3]; /* A */
+            } else if (mask_alpha < 255) {
+                /* Feather zone: blend filtered with original based on mask */
+                /* Both surfaces use premultiplied alpha, so we need to handle this correctly */
+                guchar filtered_b = filtered_row[x * 4 + 0];
+                guchar filtered_g = filtered_row[x * 4 + 1];
+                guchar filtered_r = filtered_row[x * 4 + 2];
+                guchar filtered_a = filtered_row[x * 4 + 3];
+
+                guchar original_b = original_row[x * 4 + 0];
+                guchar original_g = original_row[x * 4 + 1];
+                guchar original_r = original_row[x * 4 + 2];
+                guchar original_a = original_row[x * 4 + 3];
+
+                /* Un-premultiply both pixels */
+                uint16_t filtered_r_straight = (filtered_a > 0) ? (filtered_r * 255 + filtered_a / 2) / filtered_a : 0;
+                uint16_t filtered_g_straight = (filtered_a > 0) ? (filtered_g * 255 + filtered_a / 2) / filtered_a : 0;
+                uint16_t filtered_b_straight = (filtered_a > 0) ? (filtered_b * 255 + filtered_a / 2) / filtered_a : 0;
+
+                uint16_t original_r_straight = (original_a > 0) ? (original_r * 255 + original_a / 2) / original_a : 0;
+                uint16_t original_g_straight = (original_a > 0) ? (original_g * 255 + original_a / 2) / original_a : 0;
+                uint16_t original_b_straight = (original_a > 0) ? (original_b * 255 + original_a / 2) / original_a : 0;
+
+                /* Clamp to valid range */
+                if (filtered_r_straight > 255)
+                    filtered_r_straight = 255;
+                if (filtered_g_straight > 255)
+                    filtered_g_straight = 255;
+                if (filtered_b_straight > 255)
+                    filtered_b_straight = 255;
+                if (original_r_straight > 255)
+                    original_r_straight = 255;
+                if (original_g_straight > 255)
+                    original_g_straight = 255;
+                if (original_b_straight > 255)
+                    original_b_straight = 255;
+
+                /* Blend in straight alpha space */
+                float mask_factor = (float)mask_alpha / 255.0f;
+                float orig_factor = 1.0f - mask_factor;
+
+                uint16_t result_r = (uint16_t)(filtered_r_straight * mask_factor + original_r_straight * orig_factor);
+                uint16_t result_g = (uint16_t)(filtered_g_straight * mask_factor + original_g_straight * orig_factor);
+                uint16_t result_b = (uint16_t)(filtered_b_straight * mask_factor + original_b_straight * orig_factor);
+                uint8_t result_a = (uint8_t)(filtered_a * mask_factor + original_a * orig_factor);
+
+                /* Re-premultiply with blended alpha */
+                if (result_a > 0) {
+                    filtered_row[x * 4 + 0] = (result_b * result_a + 127) / 255; /* B */
+                    filtered_row[x * 4 + 1] = (result_g * result_a + 127) / 255; /* G */
+                    filtered_row[x * 4 + 2] = (result_r * result_a + 127) / 255; /* R */
+                    filtered_row[x * 4 + 3] = result_a;                          /* A */
+                } else {
+                    filtered_row[x * 4 + 0] = 0;
+                    filtered_row[x * 4 + 1] = 0;
+                    filtered_row[x * 4 + 2] = 0;
+                    filtered_row[x * 4 + 3] = 0;
+                }
+            }
+            /* If mask_alpha == 255, keep filtered pixel as-is (fully inside selection) */
+        }
+    }
+
+    /* Mark surface as dirty */
+    cairo_surface_mark_dirty(filtered_surface);
+
+    /* Free selection mask */
+    selection_mask_free(region_mask);
 
     return TRUE;
 }
