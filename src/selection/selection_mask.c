@@ -202,7 +202,8 @@ void selection_mask_fill_rect(
     int x, int y, int width, int height,
     SelectionCombineMode combine,
     SelectionSmoothingMode smoothing,
-    float feather_radius) {
+    float feather_radius,
+    gboolean direct_modify) {
     if (!mask || !mask->base_mask)
         return;
     if (width <= 0 || height <= 0)
@@ -219,45 +220,140 @@ void selection_mask_fill_rect(
     if (clamped_width <= 0 || clamped_height <= 0)
         return;
 
-    /* For NEW combine mode, clear all existing selections */
-    if (combine == SELECTION_COMBINE_NEW) {
-        if (mask->selections) {
-            GList* iter;
-            for (iter = mask->selections; iter != NULL; iter = iter->next) {
-                Selection* sel = (Selection*)iter->data;
-                if (sel) {
-                    selection_unref(sel);
+    if (direct_modify) {
+        /* Direct modification path: modify base_mask directly without creating Selection objects */
+        /* Combine modes are ignored - this is for global selection commands, not tool operations */
+        /* EXCEPTION: If no selections exist, create a Selection object for proper tracking */
+        gboolean should_create_selection = (mask->selections == NULL || mask->selections->data == NULL);
+
+        if (should_create_selection) {
+            /* Create a Selection object when mask is empty (for proper selection tracking) */
+            Selection* sel = selection_new(x1, y1, clamped_width, clamped_height,
+                                           SELECTION_COMBINE_NEW, /* Always NEW for global commands */
+                                           SELECTION_SMOOTH_NONE, /* No smoothing for global commands */
+                                           0.0f);
+            if (sel) {
+                /* Allocate mask for this selection */
+                int stride = calculate_stride(mask->width);
+                sel->mask = g_malloc0(stride * mask->height);
+
+                /* Fill rectangle region in selection's mask */
+                for (int row = y1; row < y2; row++) {
+                    for (int col = x1; col < x2; col++) {
+                        sel->mask[row * stride + col] = 255;
+                    }
+                }
+
+                /* Add selection to list */
+                selection_mask_add_selection(mask, sel);
+                selection_unref(sel); /* Release our reference (list now owns it) */
+
+                /* Ensure mask->data is set (selection_mask_add_selection should do this, but be explicit) */
+                if (!mask->data && mask->base_mask) {
+                    mask->data = mask->base_mask;
+                }
+
+                /* Mark affected region as dirty */
+                selection_mask_mark_dirty(mask, x1, y1, clamped_width, clamped_height);
+            }
+        } else {
+            /* Direct modify path: modify base_mask directly, but still create a Selection object */
+            /* Ignore combine modes - just fill with 255 for global commands */
+            int stride = mask->stride;
+            uint8_t* base_mask = mask->base_mask;
+
+            /* Fill rectangle region in base_mask with 255 (ignore combine mode) */
+            for (int row = y1; row < y2; row++) {
+                uint8_t* row_ptr = base_mask + row * stride;
+                for (int col = x1; col < x2; col++) {
+                    row_ptr[col] = 255;
                 }
             }
-            g_list_free(mask->selections);
-            mask->selections = NULL;
+
+            /* Clear existing selections list */
+            if (mask->selections) {
+                GList* iter;
+                for (iter = mask->selections; iter != NULL; iter = iter->next) {
+                    Selection* sel = (Selection*)iter->data;
+                    if (sel) {
+                        selection_unref(sel);
+                    }
+                }
+                g_list_free(mask->selections);
+                mask->selections = NULL;
+            }
+
+            /* Create a new Selection object to represent the full selection */
+            Selection* sel = selection_new(x1, y1, clamped_width, clamped_height,
+                                           SELECTION_COMBINE_NEW, /* Always NEW for global commands */
+                                           SELECTION_SMOOTH_NONE, /* No smoothing for global commands */
+                                           0.0f);
+            if (sel) {
+                /* Allocate mask for this selection */
+                int sel_stride = calculate_stride(mask->width);
+                sel->mask = g_malloc0(sel_stride * mask->height);
+
+                /* Fill rectangle region in selection's mask */
+                for (int row = y1; row < y2; row++) {
+                    for (int col = x1; col < x2; col++) {
+                        sel->mask[row * sel_stride + col] = 255;
+                    }
+                }
+
+                /* Add selection to list */
+                selection_mask_add_selection(mask, sel);
+                selection_unref(sel); /* Release our reference (list now owns it) */
+            }
+
+            /* Set data pointer to base_mask (no feathering when direct_modify is TRUE) */
+            mask->data = mask->base_mask;
+
+            /* Mark mask as dirty */
+            selection_mask_mark_dirty(mask, x1, y1, clamped_width, clamped_height);
+            mask->feather_dirty = TRUE;
         }
-    }
-
-    /* Create new Selection object with per-selection feathering parameters */
-    Selection* sel = selection_new(x1, y1, clamped_width, clamped_height,
-                                   combine, smoothing, feather_radius);
-    if (!sel) {
-        return;
-    }
-
-    /* Allocate mask for this selection (full mask size, but only rectangle region is filled) */
-    int stride = calculate_stride(mask->width);
-    sel->mask = g_malloc0(stride * mask->height);
-
-    /* Fill rectangle region in selection's mask (hard 0/255 only) */
-    for (int row = y1; row < y2; row++) {
-        for (int col = x1; col < x2; col++) {
-            sel->mask[row * stride + col] = 255;
+    } else {
+        /* Normal path: create Selection objects (for tool-based operations) */
+        /* For NEW combine mode, clear all existing selections */
+        if (combine == SELECTION_COMBINE_NEW) {
+            if (mask->selections) {
+                GList* iter;
+                for (iter = mask->selections; iter != NULL; iter = iter->next) {
+                    Selection* sel = (Selection*)iter->data;
+                    if (sel) {
+                        selection_unref(sel);
+                    }
+                }
+                g_list_free(mask->selections);
+                mask->selections = NULL;
+            }
         }
+
+        /* Create new Selection object with per-selection feathering parameters */
+        Selection* sel = selection_new(x1, y1, clamped_width, clamped_height,
+                                       combine, smoothing, feather_radius);
+        if (!sel) {
+            return;
+        }
+
+        /* Allocate mask for this selection (full mask size, but only rectangle region is filled) */
+        int stride = calculate_stride(mask->width);
+        sel->mask = g_malloc0(stride * mask->height);
+
+        /* Fill rectangle region in selection's mask (hard 0/255 only) */
+        for (int row = y1; row < y2; row++) {
+            for (int col = x1; col < x2; col++) {
+                sel->mask[row * stride + col] = 255;
+            }
+        }
+
+        /* Add selection to list */
+        selection_mask_add_selection(mask, sel);
+        selection_unref(sel); /* Release our reference (list now owns it) */
+
+        /* Mark affected region as dirty */
+        selection_mask_mark_dirty(mask, x1, y1, clamped_width, clamped_height);
     }
-
-    /* Add selection to list */
-    selection_mask_add_selection(mask, sel);
-    selection_unref(sel); /* Release our reference (list now owns it) */
-
-    /* Mark affected region as dirty */
-    selection_mask_mark_dirty(mask, x1, y1, clamped_width, clamped_height);
 }
 
 /**

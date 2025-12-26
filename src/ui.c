@@ -11,6 +11,8 @@
 #include "render/layer.h"
 #include "render/tile.h"
 #include "render/tile_worker.h"
+#include "selection/selection_mask.h"
+#include "selection/selection_undo.h"
 #include "tool_manager.h"
 #include "tool_options.h"
 #include "ui/dialogs/canvas_size_dialog.h"
@@ -86,6 +88,7 @@ static void setup_edit_menu(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup*
 static void setup_view_menu(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* accel_group);
 static void setup_image_menu(GtkBuilder* builder, AppContext* ctx);
 static void setup_layer_menu(GtkBuilder* builder, AppContext* ctx);
+static void setup_select_menu(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* accel_group);
 static void setup_adjust_menu(GtkBuilder* builder, AppContext* ctx);
 static void setup_effects_menu(GtkBuilder* builder, AppContext* ctx);
 
@@ -414,6 +417,7 @@ AppContext* ui_create_main_window(void) {
     setup_view_menu(builder, ctx, accel_group);
     setup_image_menu(builder, ctx);
     setup_layer_menu(builder, ctx);
+    setup_select_menu(builder, ctx, accel_group);
     setup_adjust_menu(builder, ctx);
     setup_effects_menu(builder, ctx);
 
@@ -1230,6 +1234,361 @@ static void setup_layer_menu(GtkBuilder* builder, AppContext* ctx) {
     }
     if (ctx->layer_menu_delete) {
         g_signal_connect(ctx->layer_menu_delete, "activate", G_CALLBACK(on_layer_delete), ctx);
+    }
+}
+
+/**
+ * Callback for Select All menu item
+ */
+static void on_select_all(GtkMenuItem* menu_item, gpointer user_data) {
+    AppContext* ctx = (AppContext*)user_data;
+    ImageDocument* doc = ui_get_active_document(ctx);
+
+    (void)menu_item; /* Unused parameter */
+
+    if (!doc || !doc->selection_mask) {
+        return;
+    }
+
+    /* Begin transaction, perform operation, commit */
+    SelectionUndoTransaction* transaction = selection_undo_transaction_begin(
+        doc->selection_mask, doc, command_get_name_string(CMD_NAME_SELECT_ALL));
+    if (!transaction) {
+        return;
+    }
+
+    /* Register entire mask as modified */
+    selection_undo_transaction_register_region(transaction, 0, 0,
+                                               doc->selection_mask->width,
+                                               doc->selection_mask->height);
+
+    /* Perform select all operation - fill entire mask using direct_modify flag */
+    selection_mask_fill_rect(doc->selection_mask, 0, 0,
+                             doc->selection_mask->width,
+                             doc->selection_mask->height,
+                             SELECTION_COMBINE_NEW,
+                             SELECTION_SMOOTH_NONE,
+                             0.0f,
+                             TRUE); /* TRUE = direct modify (no Selection objects, no tool commands) */
+
+    /* Ensure mask->data is set correctly after the operation */
+    if (doc->selection_mask) {
+        if (!doc->selection_mask->data && doc->selection_mask->base_mask) {
+            doc->selection_mask->data = doc->selection_mask->base_mask;
+        }
+    }
+
+    /* Commit transaction and get command */
+    Command* cmd = selection_undo_transaction_commit(transaction);
+    if (cmd && doc->undo_stack) {
+        command_stack_push(doc->undo_stack, cmd);
+        if (doc->redo_stack) {
+            command_stack_clear(doc->redo_stack);
+        }
+        command_execute(cmd, doc);
+        document_invalidate_composite(doc);
+        if (doc->drawing_area) {
+            gtk_widget_queue_draw(doc->drawing_area);
+        }
+        /* Update menu to show the new undo command */
+        ui_update_menu_and_button_states(ctx);
+    } else if (cmd) {
+        command_free(cmd);
+    }
+}
+
+/**
+ * Callback for Deselect All (Select None) menu item
+ */
+static void on_select_none(GtkMenuItem* menu_item, gpointer user_data) {
+    AppContext* ctx = (AppContext*)user_data;
+    ImageDocument* doc = ui_get_active_document(ctx);
+
+    (void)menu_item; /* Unused parameter */
+
+    if (!doc || !doc->selection_mask) {
+        return;
+    }
+
+    /* Begin transaction, perform operation, commit */
+    SelectionUndoTransaction* transaction = selection_undo_transaction_begin(
+        doc->selection_mask, doc, command_get_name_string(CMD_NAME_DESELECT_ALL));
+    if (!transaction) {
+        return;
+    }
+
+    /* Register entire mask as modified */
+    selection_undo_transaction_register_region(transaction, 0, 0,
+                                               doc->selection_mask->width,
+                                               doc->selection_mask->height);
+
+    /* Perform deselect all operation - directly clear base_mask */
+    int stride = doc->selection_mask->stride;
+    int width = doc->selection_mask->width;
+    int height = doc->selection_mask->height;
+    uint8_t* base_mask = doc->selection_mask->base_mask;
+
+    /* Clear entire base_mask */
+    for (int y = 0; y < height; y++) {
+        uint8_t* row = base_mask + y * stride;
+        for (int x = 0; x < width; x++) {
+            row[x] = 0;
+        }
+    }
+
+    /* Clear selections list since we're modifying base_mask directly */
+    if (doc->selection_mask->selections) {
+        GList* iter;
+        for (iter = doc->selection_mask->selections; iter != NULL; iter = iter->next) {
+            Selection* sel = (Selection*)iter->data;
+            if (sel) {
+                selection_unref(sel);
+            }
+        }
+        g_list_free(doc->selection_mask->selections);
+        doc->selection_mask->selections = NULL;
+    }
+
+    /* Set data pointer to base_mask (no feathering) */
+    doc->selection_mask->data = doc->selection_mask->base_mask;
+
+    /* Mark mask as dirty */
+    selection_mask_mark_dirty(doc->selection_mask, 0, 0, width, height);
+    doc->selection_mask->feather_dirty = TRUE;
+
+    /* Commit transaction and get command */
+    Command* cmd = selection_undo_transaction_commit(transaction);
+    if (cmd && doc->undo_stack) {
+        command_stack_push(doc->undo_stack, cmd);
+        if (doc->redo_stack) {
+            command_stack_clear(doc->redo_stack);
+        }
+        command_execute(cmd, doc);
+        document_invalidate_composite(doc);
+        if (doc->drawing_area) {
+            gtk_widget_queue_draw(doc->drawing_area);
+        }
+        /* Update menu to show the new undo command */
+        ui_update_menu_and_button_states(ctx);
+    } else if (cmd) {
+        command_free(cmd);
+    }
+}
+
+/**
+ * Callback for Invert Selection menu item
+ * TODO: This is not working correctly. It is not inverting the selection correctly.
+ */
+static void on_select_invert(GtkMenuItem* menu_item, gpointer user_data) {
+    AppContext* ctx = (AppContext*)user_data;
+    ImageDocument* doc = ui_get_active_document(ctx);
+
+    (void)menu_item; /* Unused parameter */
+
+    if (!doc || !doc->selection_mask || !doc->selection_mask->base_mask) {
+        return;
+    }
+
+    /* Begin transaction, perform operation, commit */
+    SelectionUndoTransaction* transaction = selection_undo_transaction_begin(
+        doc->selection_mask, doc, command_get_name_string(CMD_NAME_INVERT_SELECTION));
+    if (!transaction) {
+        return;
+    }
+
+    /* Register entire mask as modified */
+    selection_undo_transaction_register_region(transaction, 0, 0,
+                                               doc->selection_mask->width,
+                                               doc->selection_mask->height);
+
+    /* Check if there's any feathering in existing selections before clearing them */
+    gboolean has_feathering = FALSE;
+    SelectionSmoothingMode preserved_feather_mode = SELECTION_SMOOTH_NONE;
+    float preserved_feather_radius = 0.0f;
+    if (doc->selection_mask->selections) {
+        GList* iter;
+        for (iter = doc->selection_mask->selections; iter != NULL; iter = iter->next) {
+            Selection* sel = (Selection*)iter->data;
+            if (sel && sel->feather_mode == SELECTION_SMOOTH_FEATHERED && sel->feather_radius > 0.0f) {
+                has_feathering = TRUE;
+                preserved_feather_mode = sel->feather_mode;
+                preserved_feather_radius = sel->feather_radius;
+                break; /* Use first feathered selection's parameters */
+            }
+        }
+    }
+
+    /* For Select Invert, we need to invert the feathered preview if it exists */
+    /* First, ALWAYS regenerate feathered preview if feathering is active (to ensure it's up to date) */
+    if (has_feathering) {
+        selection_mask_regenerate_combined_feather_preview(doc->selection_mask);
+    }
+
+    int stride = doc->selection_mask->stride;
+    int width = doc->selection_mask->width;
+    int height = doc->selection_mask->height;
+
+    /* Determine which mask to invert: feathered_preview if available, otherwise base_mask */
+    uint8_t* source_mask;
+    gboolean inverting_feathered = FALSE;
+    if (has_feathering && doc->selection_mask->feathered_preview) {
+        source_mask = doc->selection_mask->feathered_preview;
+        inverting_feathered = TRUE;
+    } else {
+        source_mask = doc->selection_mask->base_mask;
+    }
+
+    /* Create a copy of the mask to invert (we'll invert the copy, not the original) */
+    uint8_t* inverted_mask = g_malloc0(stride * height);
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            inverted_mask[y * stride + x] = 255 - source_mask[y * stride + x];
+        }
+    }
+
+    /* Clear existing selections list */
+    if (doc->selection_mask->selections) {
+        GList* iter;
+        for (iter = doc->selection_mask->selections; iter != NULL; iter = iter->next) {
+            Selection* sel = (Selection*)iter->data;
+            if (sel) {
+                selection_unref(sel);
+            }
+        }
+        g_list_free(doc->selection_mask->selections);
+        doc->selection_mask->selections = NULL;
+    }
+
+    /* Create a Selection object to represent the inverted selection */
+    /* Preserve feathering parameters if they existed */
+    Selection* sel = selection_new(0, 0, width, height,
+                                   SELECTION_COMBINE_NEW,
+                                   preserved_feather_mode,
+                                   preserved_feather_radius);
+    if (sel) {
+        /* Allocate mask for this selection (use same stride as main mask) */
+        sel->mask = g_malloc0(stride * height);
+
+        /* Copy the inverted mask to the selection's mask */
+        /* If we inverted feathered_preview, we need to extract the hard edges for base_mask */
+        /* Otherwise, just copy the inverted base_mask */
+        if (inverting_feathered) {
+            /* Extract hard edges from inverted feathered preview for base_mask */
+            /* Use a threshold to convert feathered values back to 0/255 */
+            const uint8_t threshold = 128;
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
+                    uint8_t inverted_value = inverted_mask[y * stride + x];
+                    sel->mask[y * stride + x] = (inverted_value >= threshold) ? 255 : 0;
+                }
+            }
+            /* Also update base_mask to match */
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
+                    uint8_t inverted_value = inverted_mask[y * stride + x];
+                    doc->selection_mask->base_mask[y * stride + x] = (inverted_value >= threshold) ? 255 : 0;
+                }
+            }
+            /* Set the Selection's feathered_preview to the inverted feathered_preview */
+            /* This preserves the inverted feathering */
+            if (sel->feathered_preview) {
+                g_free(sel->feathered_preview);
+            }
+            sel->feathered_preview = inverted_mask; /* Transfer ownership */
+            inverted_mask = NULL;                   /* Don't free it */
+            sel->feather_dirty = FALSE;             /* Mark as not dirty since we set it directly */
+        } else {
+            /* Just copy the inverted base_mask */
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
+                    sel->mask[y * stride + x] = inverted_mask[y * stride + x];
+                }
+            }
+            /* Update base_mask to match */
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
+                    doc->selection_mask->base_mask[y * stride + x] = inverted_mask[y * stride + x];
+                }
+            }
+            g_free(inverted_mask);
+            inverted_mask = NULL;
+        }
+
+        /* Add selection to list */
+        selection_mask_add_selection(doc->selection_mask, sel);
+        selection_unref(sel); /* Release our reference (list now owns it) */
+    } else {
+        /* Failed to create selection, free the inverted mask */
+        if (inverted_mask) {
+            g_free(inverted_mask);
+        }
+    }
+
+    /* Regenerate combined feathered preview if feathering is active */
+    /* This will use the Selection's feathered_preview we set above */
+    if (has_feathering) {
+        selection_mask_regenerate_combined_feather_preview(doc->selection_mask);
+    } else {
+        doc->selection_mask->data = doc->selection_mask->base_mask;
+    }
+
+    /* Mark mask as dirty */
+    selection_mask_mark_dirty(doc->selection_mask, 0, 0, width, height);
+    doc->selection_mask->feather_dirty = TRUE;
+
+    /* Commit transaction and get command */
+    Command* cmd = selection_undo_transaction_commit(transaction);
+    if (cmd && doc->undo_stack) {
+        command_stack_push(doc->undo_stack, cmd);
+        if (doc->redo_stack) {
+            command_stack_clear(doc->redo_stack);
+        }
+        command_execute(cmd, doc);
+        document_invalidate_composite(doc);
+        if (doc->drawing_area) {
+            gtk_widget_queue_draw(doc->drawing_area);
+        }
+        /* Update menu to show the new undo command */
+        ui_update_menu_and_button_states(ctx);
+    } else if (cmd) {
+        command_free(cmd);
+    }
+}
+
+/**
+ * Setup Select menu from Glade builder
+ */
+static void setup_select_menu(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* accel_group) {
+    GtkWidget* select_menu = GTK_WIDGET(gtk_builder_get_object(builder, "select_menu"));
+    GtkWidget* select_menu_item = GTK_WIDGET(gtk_builder_get_object(builder, "select_menu_item"));
+
+    if (select_menu && select_menu_item) {
+        gtk_menu_item_set_submenu(GTK_MENU_ITEM(select_menu_item), select_menu);
+    }
+
+    /* Get menu items */
+    GtkWidget* select_menu_all = GTK_WIDGET(gtk_builder_get_object(builder, "select_menu_all"));
+    GtkWidget* select_menu_none = GTK_WIDGET(gtk_builder_get_object(builder, "select_menu_none"));
+    GtkWidget* select_menu_invert = GTK_WIDGET(gtk_builder_get_object(builder, "select_menu_invert"));
+
+    /* Connect Select menu signals */
+    if (select_menu_all) {
+        g_signal_connect(select_menu_all, "activate", G_CALLBACK(on_select_all), ctx);
+        /* Add accelerator (Ctrl+A) */
+        gtk_widget_add_accelerator(select_menu_all, "activate", accel_group,
+                                   GDK_KEY_a, GDK_CONTROL_MASK, GTK_ACCEL_VISIBLE);
+    }
+    if (select_menu_none) {
+        g_signal_connect(select_menu_none, "activate", G_CALLBACK(on_select_none), ctx);
+        /* Add accelerator (Ctrl+D) */
+        gtk_widget_add_accelerator(select_menu_none, "activate", accel_group,
+                                   GDK_KEY_d, GDK_CONTROL_MASK, GTK_ACCEL_VISIBLE);
+    }
+    if (select_menu_invert) {
+        g_signal_connect(select_menu_invert, "activate", G_CALLBACK(on_select_invert), ctx);
+        /* Add accelerator (Ctrl+I) if not already set in Glade */
+        gtk_widget_add_accelerator(select_menu_invert, "activate", accel_group,
+                                   GDK_KEY_i, GDK_CONTROL_MASK | GDK_SHIFT_MASK, GTK_ACCEL_VISIBLE);
     }
 }
 

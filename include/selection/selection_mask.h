@@ -101,13 +101,16 @@ gboolean selection_mask_is_empty(SelectionMask* mask);
  * @param combine How to combine with existing mask
  * @param smoothing Edge smoothing mode
  * @param feather_radius Feather radius for SMOOTH_FEATHERED (pixels)
+ * @param direct_modify If TRUE, directly modify base_mask without creating Selection objects
+ *                      (useful for programmatic operations like Select All that shouldn't trigger tool commands)
  */
 void selection_mask_fill_rect(
     SelectionMask* mask,
     int x, int y, int width, int height,
     SelectionCombineMode combine,
     SelectionSmoothingMode smoothing,
-    float feather_radius);
+    float feather_radius,
+    gboolean direct_modify);
 
 /**
  * Apply one mask to another using combine mode
