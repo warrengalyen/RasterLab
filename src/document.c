@@ -38,6 +38,12 @@ static gboolean on_selection_animation_timer(gpointer user_data) {
         return FALSE; /* Stop timer if document is gone */
     }
 
+    /* Check if drawing_area is still valid - if NULL, document is being destroyed */
+    if (!doc->drawing_area || !GTK_IS_WIDGET(doc->drawing_area)) {
+        doc->selection_animation_timer_id = 0; /* Clear timer ID */
+        return FALSE;                          /* Stop timer if widget is gone */
+    }
+
     /* Check if animation is enabled for rect select tool */
     ToolOptions* opts = tool_options_get_for_tool(TOOL_RECT_SELECT);
     gboolean animate_enabled = opts ? tool_options_get_rect_select_animate(opts) : TRUE;
@@ -49,7 +55,7 @@ static gboolean on_selection_animation_timer(gpointer user_data) {
     }
 
     /* Queue redraw to show animation */
-    if (doc->drawing_area) {
+    if (doc->drawing_area && GTK_IS_WIDGET(doc->drawing_area)) {
         gtk_widget_queue_draw(doc->drawing_area);
     }
 
@@ -66,7 +72,7 @@ static void on_scroll_adjustment_changed(GtkAdjustment* adjustment, gpointer use
 
     (void)adjustment; /* Unused */
 
-    if (doc && doc->drawing_area) {
+    if (doc && doc->drawing_area && GTK_IS_WIDGET(doc->drawing_area)) {
         /* Invalidate the entire drawing area to trigger redraw */
         gtk_widget_queue_draw(doc->drawing_area);
 
@@ -660,6 +666,7 @@ ImageDocument* document_new(const gchar* filename, gboolean create_worker_pool) 
     /* Will be allocated when document dimensions are known */
     doc->selection_mask = NULL;
     doc->selection_animation_phase = 0;
+    doc->selection_animation_timer_id = 0; /* Timer ID (0 means not active) */
 
     /* Create tile worker pool if requested (for on-screen rendering) */
     if (create_worker_pool) {
@@ -750,6 +757,12 @@ void document_free(ImageDocument* doc) {
         g_message("Shutting down legacy tile thread pool...");
         tile_thread_pool_destroy(doc->tile_thread_pool);
         doc->tile_thread_pool = NULL;
+    }
+
+    /* Remove selection animation timer if it's still running */
+    if (doc->selection_animation_timer_id > 0) {
+        g_source_remove(doc->selection_animation_timer_id);
+        doc->selection_animation_timer_id = 0;
     }
 
     /* Free selection mask if it exists */
@@ -982,7 +995,7 @@ GtkWidget* document_create_drawing_area(ImageDocument* doc) {
     doc->scrolled_window = scrolled_window;
 
     /* Start animation timer for selection marching ants (using standard speed) */
-    g_timeout_add(ANT_DASH_SPEED_SLOW, on_selection_animation_timer, doc);
+    doc->selection_animation_timer_id = g_timeout_add(ANT_DASH_SPEED_SLOW, on_selection_animation_timer, doc);
 
     /* Connect to scroll adjustment signals to trigger redraws when scrolling */
     /* Note: Adjustments might be NULL initially, so we'll connect when they're created */
@@ -1127,7 +1140,7 @@ gboolean document_load_image_from_file(ImageDocument* doc, const gchar* file_pat
     /* Create base layer from loaded image - always with alpha support
        This allows tools like the eraser to work on any image type */
     ImageLayer* base_layer = layer_new("Background", doc->width, doc->height, TRUE,
-                                       LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL);
+                                       LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL, doc);
 
     /* Convert pixbuf to Cairo surface and copy to layer */
     cairo_surface_t* temp_surface = pixbuf_to_cairo_surface(pixbuf);

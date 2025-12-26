@@ -7,7 +7,7 @@
 
 /**
  * Create a new image layer
- * @param name Layer name
+ * @param name Layer name (will be made unique if doc is provided and name exists)
  * @param width Layer width
  * @param height Layer height
  * @param has_alpha Whether layer has alpha channel
@@ -17,11 +17,12 @@
  * @param custom_color Custom color for background (only used if background is LAYER_BACKGROUND_CUSTOM)
  *                     Format: RGBA as gdouble array [r, g, b, a] where values are 0.0-1.0
  *                     Can be NULL if not using custom color
+ * @param doc Optional document to check for duplicate layer names. If provided and name exists, appends " (2)", " (3)", etc.
  * @return New layer, or NULL on error. Caller must call layer_free().
  */
 ImageLayer* layer_new(const gchar* name, guint width, guint height, gboolean has_alpha,
                       LayerBackgroundType background, LayerPosition position,
-                      const gdouble* custom_color);
+                      const gdouble* custom_color, struct ImageDocument* doc);
 
 /**
  * Free an image layer

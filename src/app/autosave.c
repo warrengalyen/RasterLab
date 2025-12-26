@@ -276,7 +276,7 @@ static ImageLayer* load_layer(FILE* file) {
 
     /* Create layer */
     ImageLayer* layer = layer_new(name, width, height, TRUE,
-                                  LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL);
+                                  LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL, NULL);
     g_free(name);
 
     if (!layer) {

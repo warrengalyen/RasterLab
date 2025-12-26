@@ -357,6 +357,17 @@ Command* command_create_move_selected_pixels(struct ImageDocument* doc,
                                              gint final_x, gint final_y);
 
 /**
+ * Create a move selected pixels command with provided snapshot
+ * @param snapshot Snapshot of original layer taken BEFORE extraction (for proper undo)
+ */
+Command* command_create_move_selected_pixels_with_snapshot(struct ImageDocument* doc,
+                                                           struct ImageLayer* new_layer,
+                                                           struct ImageLayer* original_layer,
+                                                           gint initial_x, gint initial_y,
+                                                           gint final_x, gint final_y,
+                                                           cairo_surface_t* snapshot);
+
+/**
  * Canvas resize command data structure
  * Stores canvas dimensions and layer offset adjustments
  */

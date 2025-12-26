@@ -12,12 +12,65 @@ static void layer_fill_background(ImageLayer* layer, LayerBackgroundType backgro
 /**
  * Create a new image layer
  */
+/**
+ * Generate a unique layer name by appending a count if the name already exists
+ * @param doc Document to check for existing layer names (can be NULL to skip checking)
+ * @param base_name Base name to use
+ * @return Allocated string with unique name (caller must free with g_free)
+ */
+static gchar* layer_generate_unique_name(struct ImageDocument* doc, const gchar* base_name) {
+    if (!doc || !base_name) {
+        return g_strdup(base_name ? base_name : "Layer");
+    }
+
+    /* Check if base name is unique */
+    gboolean name_exists = FALSE;
+    for (GList* iter = doc->layers; iter != NULL; iter = iter->next) {
+        ImageLayer* layer = (ImageLayer*)iter->data;
+        if (layer && layer->name && g_strcmp0(layer->name, base_name) == 0) {
+            name_exists = TRUE;
+            break;
+        }
+    }
+
+    if (!name_exists) {
+        return g_strdup(base_name);
+    }
+
+    /* Name exists, append count */
+    int count = 2;
+    gchar* unique_name = NULL;
+    do {
+        g_free(unique_name);
+        unique_name = g_strdup_printf("%s (%d)", base_name, count);
+        name_exists = FALSE;
+
+        /* Check if this name exists */
+        for (GList* iter = doc->layers; iter != NULL; iter = iter->next) {
+            ImageLayer* layer = (ImageLayer*)iter->data;
+            if (layer && layer->name && g_strcmp0(layer->name, unique_name) == 0) {
+                name_exists = TRUE;
+                break;
+            }
+        }
+
+        count++;
+    } while (name_exists);
+
+    return unique_name;
+}
+
 ImageLayer* layer_new(const gchar* name, guint width, guint height, gboolean has_alpha,
                       LayerBackgroundType background, LayerPosition position,
-                      const gdouble* custom_color) {
+                      const gdouble* custom_color, struct ImageDocument* doc) {
     ImageLayer* layer = (ImageLayer*)g_malloc(sizeof(ImageLayer));
 
-    layer->name = g_strdup(name);
+    /* Generate unique name if document is provided */
+    if (doc && name) {
+        layer->name = layer_generate_unique_name(doc, name);
+    } else {
+        layer->name = g_strdup(name);
+    }
 
     /* Create layer surface */
     cairo_format_t format = has_alpha ? CAIRO_FORMAT_ARGB32 : CAIRO_FORMAT_RGB24;
@@ -192,7 +245,7 @@ ImageLayer* document_add_layer(ImageDocument* doc, const gchar* name,
     }
 
     /* Create new layer with document dimensions */
-    layer = layer_new(name, doc->width, doc->height, TRUE, background, position, custom_color);
+    layer = layer_new(name, doc->width, doc->height, TRUE, background, position, custom_color, doc);
 
     if (!layer) {
         return NULL;
@@ -340,7 +393,7 @@ ImageLayer* document_duplicate_layer(ImageDocument* doc, ImageLayer* layer, cons
 
     /* Create new layer */
     new_layer = layer_new(name, layer->width, layer->height, TRUE,
-                          LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL);
+                          LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL, doc);
 
     if (!new_layer) {
         return NULL;

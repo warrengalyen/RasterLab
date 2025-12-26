@@ -421,7 +421,7 @@ gint ui_show_filter_dialog_with_zoom_pan(AppContext* ctx,
 
     /* Create a copy of the layer for preview */
     temp_layer = layer_new("Temp", layer->width, layer->height, TRUE,
-                           LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL);
+                           LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL, NULL);
     if (!temp_layer) {
         g_warning("Failed to create temporary layer for preview");
         filter_dialog_free(dialog);

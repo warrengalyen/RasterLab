@@ -637,9 +637,9 @@ static void test_filter_dialog(void) {
 
     /* Create test layers */
     before_layer = layer_new("Before", width, height, TRUE,
-                             LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL);
+                             LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL, NULL);
     after_layer = layer_new("After", width, height, TRUE,
-                            LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL);
+                            LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL, NULL);
 
     if (!before_layer || !after_layer) {
         g_warning("Failed to create test layers");

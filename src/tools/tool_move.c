@@ -8,10 +8,44 @@
 #include "selection/selection_render.h"
 #include "ui.h"
 #include "ui/layers_panel.h"
+#include <cairo.h>
 #include <stdio.h>
 #include <stdlib.h>
 extern void ui_update_menu_and_button_states(AppContext* ctx);
 extern void ui_update_window_title(AppContext* ctx);
+
+/**
+ * Create a snapshot of a Cairo surface
+ * Returns a new surface with a copy of the source surface
+ */
+static cairo_surface_t* create_surface_snapshot(cairo_surface_t* source) {
+    cairo_surface_t* snapshot;
+    cairo_t* cr;
+    int width, height;
+
+    if (!source) {
+        return NULL;
+    }
+
+    width = cairo_image_surface_get_width(source);
+    height = cairo_image_surface_get_height(source);
+
+    /* Create new surface with same format */
+    snapshot = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
+
+    if (!snapshot) {
+        return NULL;
+    }
+
+    /* Copy source to snapshot */
+    cr = cairo_create(snapshot);
+    cairo_set_source_surface(cr, source, 0, 0);
+    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+    cairo_paint(cr);
+    cairo_destroy(cr);
+
+    return snapshot;
+}
 
 /**
  * Extract selected pixels from a layer to a new layer
@@ -91,9 +125,11 @@ static ImageLayer* extract_selection_to_layer(struct ImageDocument* doc, struct 
     gint new_width = sel_x_max - sel_x_min + 1;
     gint new_height = sel_y_max - sel_y_min + 1;
 
-    ImageLayer* new_layer = layer_new("Floating Selection", new_width, new_height,
+    /* Use original layer name for the new layer */
+    const gchar* layer_name = source_layer->name ? source_layer->name : "Layer";
+    ImageLayer* new_layer = layer_new(layer_name, new_width, new_height,
                                       TRUE, LAYER_BACKGROUND_TRANSPARENT,
-                                      LAYER_POSITION_ABOVE_CURRENT, NULL);
+                                      LAYER_POSITION_ABOVE_CURRENT, NULL, doc);
     if (!new_layer) {
         selection_mask_free(region_mask);
         return NULL;
@@ -221,6 +257,7 @@ typedef struct {
     struct ImageLayer* active_layer;    /* Layer being moved */
     struct ImageLayer* original_layer;  /* Original layer before extraction (for clearing) */
     struct ImageLayer* extracted_layer; /* Extracted layer (for command creation) */
+    cairo_surface_t* original_snapshot; /* Snapshot of original layer BEFORE extraction (for undo) */
 } MoveToolState;
 
 /**
@@ -250,8 +287,14 @@ static void move_tool_mouse_down(Tool* tool, struct ImageDocument* doc, MouseEve
     /* Check if we have a selection - if so, extract it to a new layer */
     state->selection_extracted = FALSE;
     state->original_layer = active_layer;
+    state->original_snapshot = NULL;
 
     if (doc->selection_mask && !selection_mask_is_empty(doc->selection_mask)) {
+        /* Take snapshot of original layer BEFORE extraction (for undo) */
+        if (active_layer->surface) {
+            state->original_snapshot = create_surface_snapshot(active_layer->surface);
+        }
+
         ImageLayer* extracted_layer = extract_selection_to_layer(doc, active_layer);
         if (extracted_layer) {
             /* Add new layer to document */
@@ -265,16 +308,19 @@ static void move_tool_mouse_down(Tool* tool, struct ImageDocument* doc, MouseEve
 
             /* Update layers panel if available */
             if (tool->app_context) {
-                /* Use void* to avoid needing full AppContext definition */
-                GObject* ctx_obj = (GObject*)tool->app_context;
-                LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(
-                    ctx_obj, "layers_panel");
-                if (!layers_panel) {
-                    /* Try getting from window */
-                    GtkWindow* window = (GtkWindow*)g_object_get_data(ctx_obj, "window");
-                    if (window) {
+                /* app_context is AppContext*, not a GObject, so we need to get window from it */
+                /* We need to include ui.h to access AppContext, but to avoid circular deps,
+                 * we'll get the window from the document's drawing_area instead */
+                LayersPanel* layers_panel = NULL;
+                if (doc->drawing_area && GTK_IS_WIDGET(doc->drawing_area)) {
+                    /* Get window from drawing_area's parent hierarchy */
+                    GtkWidget* widget = doc->drawing_area;
+                    while (widget && !GTK_IS_WINDOW(widget)) {
+                        widget = gtk_widget_get_parent(widget);
+                    }
+                    if (widget && GTK_IS_WINDOW(widget)) {
                         layers_panel = (LayersPanel*)g_object_get_data(
-                            G_OBJECT(window), "layers_panel");
+                            G_OBJECT(widget), "layers_panel");
                     }
                 }
                 if (layers_panel) {
@@ -410,16 +456,35 @@ static void move_tool_mouse_up(Tool* tool, struct ImageDocument* doc, MouseEvent
          state->active_layer->offset_y != state->initial_offset_y)) {
 
         /* Create undo command for the move */
-        cmd = command_create_move(
-            state->active_layer,
-            state->initial_offset_x,
-            state->initial_offset_y,
-            state->active_layer->offset_x,
-            state->active_layer->offset_y);
+        /* Use move_selected_pixels command if selection was extracted, otherwise use regular move command */
+        if (state->selection_extracted && state->extracted_layer) {
+            cmd = command_create_move_selected_pixels_with_snapshot(
+                doc,
+                state->extracted_layer,
+                state->original_layer,
+                state->initial_offset_x,
+                state->initial_offset_y,
+                state->active_layer->offset_x,
+                state->active_layer->offset_y,
+                state->original_snapshot);
+            /* Transfer ownership of snapshot to command */
+            state->original_snapshot = NULL;
+        } else {
+            cmd = command_create_move(
+                state->active_layer,
+                state->initial_offset_x,
+                state->initial_offset_y,
+                state->active_layer->offset_x,
+                state->active_layer->offset_y);
+        }
 
         if (cmd && doc->undo_stack) {
             command_stack_push(doc->undo_stack, cmd);
             // printf("Move tool: move command pushed to undo stack\n");
+
+            /* Execute command to apply it (clears selection, etc.) */
+            /* This is needed because commands are not auto-executed when pushed */
+            command_execute(cmd, doc);
 
             /* Clear redo stack since new action performed */
             if (doc->redo_stack) {
@@ -432,11 +497,21 @@ static void move_tool_mouse_up(Tool* tool, struct ImageDocument* doc, MouseEvent
                 ui_update_menu_and_button_states(ctx);
                 ui_update_window_title(ctx);
             }
+        } else if (state->original_snapshot) {
+            /* Command creation failed, free the snapshot */
+            cairo_surface_destroy(state->original_snapshot);
+            state->original_snapshot = NULL;
         }
 
         /* Layer was moved - mark document as modified */
         doc->modified = TRUE;
         // printf("Move tool: layer moved - document marked as modified\n");
+    }
+
+    /* Clean up snapshot if not used (shouldn't happen, but be safe) */
+    if (state->original_snapshot) {
+        cairo_surface_destroy(state->original_snapshot);
+        state->original_snapshot = NULL;
     }
 
     state->is_dragging = FALSE;

@@ -2384,7 +2384,7 @@ static void on_image_duplicate(GtkWidget* widget, gpointer data) {
         ImageLayer* new_layer = layer_new(source_layer->name, source_layer->width,
                                           source_layer->height, TRUE,
                                           LAYER_BACKGROUND_TRANSPARENT,
-                                          LAYER_POSITION_ABOVE_CURRENT, NULL);
+                                          LAYER_POSITION_ABOVE_CURRENT, NULL, new_doc);
 
         if (!new_layer) {
             g_warning("Failed to create duplicate layer: %s", source_layer->name);
