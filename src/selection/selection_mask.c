@@ -726,8 +726,167 @@ void selection_mask_rebuild_from_selections(SelectionMask* mask) {
 }
 
 /**
- * Generate feathered preview for a single Selection
+ * Compute 2D Euclidean distance transform for outside pixels
+ * Returns distance to nearest edge for pixels outside the selection
+ * Uses efficient limited-radius search for true Euclidean distance
+ */
+static void compute_distance_outside(const uint8_t* mask, float* dist_outside,
+                                     int width, int height, int stride, float large_val, int max_search_radius) {
+    /* Initialize: 0 for selected (inside), large value for unselected (outside) */
+    for (int i = 0; i < height * stride; i++) {
+        dist_outside[i] = (mask[i] > 0) ? 0.0f : large_val;
+    }
+
+    /* Pass 1: Horizontal - find nearest selected pixel in each row */
+    for (int y = 0; y < height; y++) {
+        /* Forward pass: propagate distance from left */
+        for (int x = 1; x < width; x++) {
+            int idx = y * stride + x;
+            if (dist_outside[idx - 1] < large_val) {
+                float candidate = dist_outside[idx - 1] + 1.0f;
+                dist_outside[idx] = fminf(dist_outside[idx], candidate);
+            }
+        }
+
+        /* Backward pass: propagate distance from right */
+        for (int x = width - 2; x >= 0; x--) {
+            int idx = y * stride + x;
+            if (dist_outside[idx + 1] < large_val) {
+                float candidate = dist_outside[idx + 1] + 1.0f;
+                dist_outside[idx] = fminf(dist_outside[idx], candidate);
+            }
+        }
+    }
+
+    /* Pass 2: Vertical - compute true Euclidean distance using limited-radius search
+     * For each pixel, find the minimum Euclidean distance to any pixel in the column
+     * within the search radius */
+    for (int x = 0; x < width; x++) {
+        float* temp = g_malloc(height * sizeof(float));
+
+        for (int y = 0; y < height; y++) {
+            float min_dist = dist_outside[y * stride + x];
+
+            /* If this pixel is already at distance 0 (on edge), no need to search */
+            if (min_dist < 0.5f) {
+                temp[y] = min_dist;
+                continue;
+            }
+
+            /* Search vertically within limited radius for true Euclidean distance */
+            int search_radius = (int)ceilf(min_dist) + 1;
+            if (search_radius > max_search_radius) {
+                search_radius = max_search_radius;
+            }
+
+            for (int dy = -search_radius; dy <= search_radius; dy++) {
+                int ny = y + dy;
+                if (ny >= 0 && ny < height) {
+                    float h_dist = dist_outside[ny * stride + x];
+                    if (h_dist < large_val) {
+                        /* Euclidean distance: sqrt(h_dist^2 + dy^2) */
+                        float euclidean_sq = h_dist * h_dist + (float)(dy * dy);
+                        float euclidean = sqrtf(euclidean_sq);
+                        min_dist = fminf(min_dist, euclidean);
+                    }
+                }
+            }
+
+            temp[y] = min_dist;
+        }
+
+        /* Copy temp back to dist_outside for this column */
+        for (int y = 0; y < height; y++) {
+            dist_outside[y * stride + x] = temp[y];
+        }
+
+        g_free(temp);
+    }
+}
+
+/**
+ * Compute 2D Euclidean distance transform for inside pixels
+ * Returns distance to nearest edge for pixels inside the selection
+ * Uses efficient limited-radius search for true Euclidean distance
+ */
+static void compute_distance_inside(const uint8_t* mask, float* dist_inside,
+                                    int width, int height, int stride, float large_val, int max_search_radius) {
+    /* Initialize: 0 for unselected (outside), large value for selected (inside) */
+    for (int i = 0; i < height * stride; i++) {
+        dist_inside[i] = (mask[i] == 0) ? 0.0f : large_val;
+    }
+
+    /* Pass 1: Horizontal - find nearest unselected pixel in each row */
+    for (int y = 0; y < height; y++) {
+        /* Forward pass: propagate distance from left */
+        for (int x = 1; x < width; x++) {
+            int idx = y * stride + x;
+            if (dist_inside[idx - 1] < large_val) {
+                float candidate = dist_inside[idx - 1] + 1.0f;
+                dist_inside[idx] = fminf(dist_inside[idx], candidate);
+            }
+        }
+
+        /* Backward pass: propagate distance from right */
+        for (int x = width - 2; x >= 0; x--) {
+            int idx = y * stride + x;
+            if (dist_inside[idx + 1] < large_val) {
+                float candidate = dist_inside[idx + 1] + 1.0f;
+                dist_inside[idx] = fminf(dist_inside[idx], candidate);
+            }
+        }
+    }
+
+    /* Pass 2: Vertical - compute true Euclidean distance using limited-radius search
+     * For each pixel, find the minimum Euclidean distance to any pixel in the column
+     * within the search radius */
+    for (int x = 0; x < width; x++) {
+        float* temp = g_malloc(height * sizeof(float));
+
+        for (int y = 0; y < height; y++) {
+            float min_dist = dist_inside[y * stride + x];
+
+            /* If this pixel is already at distance 0 (on edge), no need to search */
+            if (min_dist < 0.5f) {
+                temp[y] = min_dist;
+                continue;
+            }
+
+            /* Search vertically within limited radius for true Euclidean distance */
+            int search_radius = (int)ceilf(min_dist) + 1;
+            if (search_radius > max_search_radius) {
+                search_radius = max_search_radius;
+            }
+
+            for (int dy = -search_radius; dy <= search_radius; dy++) {
+                int ny = y + dy;
+                if (ny >= 0 && ny < height) {
+                    float h_dist = dist_inside[ny * stride + x];
+                    if (h_dist < large_val) {
+                        /* Euclidean distance: sqrt(h_dist^2 + dy^2) */
+                        float euclidean_sq = h_dist * h_dist + (float)(dy * dy);
+                        float euclidean = sqrtf(euclidean_sq);
+                        min_dist = fminf(min_dist, euclidean);
+                    }
+                }
+            }
+
+            temp[y] = min_dist;
+        }
+
+        /* Copy temp back to dist_inside for this column */
+        for (int y = 0; y < height; y++) {
+            dist_inside[y * stride + x] = temp[y];
+        }
+
+        g_free(temp);
+    }
+}
+
+/**
+ * Generate feathered preview for a single Selection using Signed Distance Field (SDF)
  * This applies feathering to the selection's mask if feather_mode == FEATHERED and radius > 0
+ * Uses signed distance field for symmetric, Photoshop-like feathering
  */
 static void selection_generate_feathered_preview(Selection* sel, int mask_width, int mask_height, int stride) {
     if (!sel || !sel->mask) {
@@ -755,102 +914,88 @@ static void selection_generate_feathered_preview(Selection* sel, int mask_width,
         sel->feathered_preview = g_malloc0(stride * mask_height);
     }
 
-    /* Copy selection mask to preview (keep hard interior) */
-    memcpy(sel->feathered_preview, sel->mask, stride * mask_height);
-
-    int radius = (int)sel->feather_radius;
+    float feather_radius = sel->feather_radius;
+    int radius = (int)feather_radius;
     if (radius <= 0) {
         sel->feather_dirty = FALSE;
         return;
     }
 
-    /* Two-pass separable distance transform (same algorithm as compute_preview_feather_mask) */
-    float* dist = g_malloc(stride * mask_height * sizeof(float));
+    /* Start with completely transparent preview (all zeros) - we'll build feathering from scratch */
+    memset(sel->feathered_preview, 0, stride * mask_height);
 
-    /* Initialize: 0 for selected, large value for unselected */
-    float large_val = (float)(radius + 1);
+    /* Use a large value for distance transform (larger than max possible distance) */
+    float large_val = (float)(radius * 3 + 20);
+
+    /* Allocate temporary buffers for signed distance computation (full size for simplicity) */
+    float* dist_outside = g_malloc(stride * mask_height * sizeof(float));
+    float* dist_inside = g_malloc(stride * mask_height * sizeof(float));
+    float* signed_dist = g_malloc(stride * mask_height * sizeof(float));
+
+    /* Initialize buffers with large values */
     for (int i = 0; i < mask_height * stride; i++) {
-        dist[i] = (sel->mask[i] > 0) ? 0.0f : large_val;
+        dist_outside[i] = large_val;
+        dist_inside[i] = large_val;
+        signed_dist[i] = 0.0f;
     }
 
-    /* Pass 1: Horizontal - find nearest selected pixel in each row */
-    for (int y = 0; y < mask_height; y++) {
-        /* Forward pass: propagate distance from left */
-        for (int x = 1; x < mask_width; x++) {
-            if (dist[y * stride + x - 1] < large_val) {
-                float candidate = dist[y * stride + x - 1] + 1.0f;
-                dist[y * stride + x] = fminf(dist[y * stride + x], candidate);
-            }
-        }
-
-        /* Backward pass: propagate distance from right */
-        for (int x = mask_width - 2; x >= 0; x--) {
-            if (dist[y * stride + x + 1] < large_val) {
-                float candidate = dist[y * stride + x + 1] + 1.0f;
-                dist[y * stride + x] = fminf(dist[y * stride + x], candidate);
-            }
-        }
+    /* Limit search radius to feather_radius * 2 for performance (Euclidean distance needs more computation) */
+    int max_search_radius = (int)ceilf(feather_radius * 2.0f) + 5;
+    if (max_search_radius > 200) {
+        max_search_radius = 200; /* Cap at reasonable maximum */
     }
 
-    /* Pass 2: Vertical - combine with vertical distance */
-    for (int x = 0; x < mask_width; x++) {
-        float* temp = g_malloc(mask_height * sizeof(float));
-        memset(temp, 0, mask_height * sizeof(float));
+    /* Step 1: Compute distance to edge for outside pixels */
+    compute_distance_outside(sel->mask, dist_outside, mask_width, mask_height, stride, large_val, max_search_radius);
 
-        for (int y = 0; y < mask_height; y++) {
-            float min_dist = large_val;
+    /* Step 2: Compute distance to edge for inside pixels */
+    compute_distance_inside(sel->mask, dist_inside, mask_width, mask_height, stride, large_val, max_search_radius);
 
-            /* Check all pixels within vertical radius */
-            for (int dy = -radius; dy <= radius; dy++) {
-                int ny = y + dy;
-                if (ny >= 0 && ny < mask_height) {
-                    float h_dist = dist[ny * stride + x];
-                    if (h_dist < large_val) {
-                        /* Euclidean distance combining horizontal and vertical offset */
-                        float euclidean_sq = h_dist * h_dist + (float)(dy * dy);
-                        float euclidean = sqrtf(euclidean_sq);
-                        min_dist = fminf(min_dist, euclidean);
-                    }
-                }
-            }
-
-            temp[y] = min_dist;
-        }
-
-        /* Copy temp back to dist for this column */
-        for (int y = 0; y < mask_height; y++) {
-            dist[y * stride + x] = temp[y];
-        }
-
-        g_free(temp);
+    /* Step 3: Combine to create signed distance field
+     * Negative = inside selection, positive = outside, zero = edge */
+    for (int i = 0; i < mask_height * stride; i++) {
+        signed_dist[i] = dist_outside[i] - dist_inside[i];
     }
 
-    /* Apply feathering gradient based on distance field */
+    /* Step 4: Apply feathering using signed distance with symmetric smoothstep falloff
+     * Process the ENTIRE mask to ensure smooth blending - feathering extends beyond selection bounds
+     * The signed distance field already accounts for the full feather region */
     for (int y = 0; y < mask_height; y++) {
         for (int x = 0; x < mask_width; x++) {
             int idx = y * stride + x;
+            float sdf = signed_dist[idx];
 
-            /* Keep interior pixels solid */
-            if (sel->mask[idx] > 0)
-                continue;
+            float alpha;
+            if (sdf <= -feather_radius) {
+                /* Fully inside selection (beyond feather radius) - fully selected */
+                alpha = 1.0f;
+            } else if (sdf >= feather_radius) {
+                /* Fully outside selection (beyond feather radius) - completely transparent */
+                alpha = 0.0f;
+            } else {
+                /* Within feather region: use smoothstep for symmetric falloff
+                 * Map signed distance from [-feather_radius, feather_radius] to [0, 1]
+                 * t = 0 at inside edge (sdf = -feather_radius), t = 1 at outside edge (sdf = feather_radius) */
+                float t = (sdf + feather_radius) / (2.0f * feather_radius);
+                /* Clamp t to [0, 1] to ensure smoothstep works correctly */
+                t = fmaxf(0.0f, fminf(1.0f, t));
+                /* smoothstep(t) gives smooth curve from 0 to 1
+                 * We want alpha = 1.0 at inside edge (t=0) and alpha = 0.0 at outside edge (t=1)
+                 * So: alpha = 1.0 - smoothstep(t) */
+                float smooth = smoothstep(t);
+                alpha = 1.0f - smooth;
+            }
 
-            float d = dist[idx];
-
-            /* Outside feather radius - keep fully transparent */
-            if (d >= sel->feather_radius)
-                continue;
-
-            /* Normalize distance: 0 at edge, 1 at radius */
-            float t = d / sel->feather_radius;
-            t = fmaxf(0.0f, fminf(1.0f, t));
-
-            float alpha = 1.0f - smoothstep(t);
-
-            sel->feathered_preview[idx] = (uint8_t)(255.0f * alpha);
+            /* Store alpha value - will be 0.0 at outer edges (completely transparent) */
+            sel->feathered_preview[idx] = (uint8_t)(255.0f * alpha + 0.5f); /* Round to nearest */
         }
     }
 
-    g_free(dist);
+    /* Free temporary buffers */
+    g_free(dist_outside);
+    g_free(dist_inside);
+    g_free(signed_dist);
+
     sel->feather_dirty = FALSE;
 }
 
