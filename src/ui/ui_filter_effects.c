@@ -2106,12 +2106,12 @@ static void on_effects_beeps(GtkWidget* widget, gpointer data) {
         return;
     }
 
-    /* Set layers in dialog */
-    beeps_dialog_set_layers(dialog, layer, temp_layer);
-
-    /* Store original layer reference and document for preview callback */
+    /* Store original layer reference and document BEFORE set_layers so masked preview can use them */
     g_object_set_data(G_OBJECT(beeps_dialog_get_window(dialog)), "original_layer", layer);
     g_object_set_data(G_OBJECT(beeps_dialog_get_window(dialog)), "filter_doc", doc);
+
+    /* Set layers in dialog */
+    beeps_dialog_set_layers(dialog, layer, temp_layer);
 
     /* Set dialog as transient for main window */
     if (ctx->window) {

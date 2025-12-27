@@ -423,7 +423,7 @@ void filter_dialog_set_layers(FilterDialog* dialog,
         if (doc && layer) {
             before_surface = filter_utils_create_masked_preview_surface(before_layer->surface, doc, layer);
         } else {
-            before_surface = cairo_surface_reference(before_layer->surface);
+        before_surface = cairo_surface_reference(before_layer->surface);
         }
     }
 
@@ -432,7 +432,7 @@ void filter_dialog_set_layers(FilterDialog* dialog,
         if (doc && layer) {
             after_surface = filter_utils_create_masked_preview_surface(after_layer->surface, doc, layer);
         } else {
-            after_surface = cairo_surface_reference(after_layer->surface);
+        after_surface = cairo_surface_reference(after_layer->surface);
         }
     }
 
@@ -472,7 +472,7 @@ void filter_dialog_update_after_layer(FilterDialog* dialog, ImageLayer* after_la
         if (doc && layer) {
             after_surface = filter_utils_create_masked_preview_surface(after_layer->surface, doc, layer);
         } else {
-            after_surface = cairo_surface_reference(after_layer->surface);
+        after_surface = cairo_surface_reference(after_layer->surface);
         }
     }
 

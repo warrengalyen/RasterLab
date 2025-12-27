@@ -2,6 +2,8 @@
 #include "document.h"
 #include "render/compositor.h"
 #include "render/layer.h"
+#include "selection/selection_mask.h"
+#include "selection/selection_render.h"
 #include "ui/filters/filter_render_clouds.h"
 #include "ui/filters/filter_utils.h"
 #include "ui/widgets/filter_preview.h"
@@ -115,14 +117,78 @@ static cairo_surface_t* apply_clouds_filter_to_viewport_surface(cairo_surface_t*
     /* Apply selection masking if there's a selection */
     if (original_viewport && doc && layer) {
         /* Create a temporary layer structure for the viewport with correct offset */
-        /* Note: viewport is at (0,0) relative to layer for scaled preview, which is the common case */
         ImageLayer viewport_layer = *layer;
         viewport_layer.surface = temp_layer->surface;
         viewport_layer.width = width;
         viewport_layer.height = height;
-        /* Viewport coordinates are relative to layer */
-        viewport_layer.offset_x = layer->offset_x;
-        viewport_layer.offset_y = layer->offset_y;
+
+        /* Check if preview was cropped (viewport smaller than layer) */
+        /* If cropped, the viewport is at (0,0) relative to cropped surface, */
+        /* which corresponds to (sel_x_min, sel_y_min) relative to original layer */
+        gint layer_width = cairo_image_surface_get_width(layer->surface);
+        gint layer_height = cairo_image_surface_get_height(layer->surface);
+
+        if (width < layer_width || height < layer_height) {
+            /* Preview was cropped - need to find selection bounding box to get crop offset */
+            /* Build selection mask for a small region to find where selection starts */
+            DirtyRect test_rect;
+            dirty_rect_set(&test_rect, layer->offset_x, layer->offset_y, layer_width, layer_height);
+            DirtyRect actual_region;
+            SelectionMask* test_mask = selection_build_combined_mask(
+                doc->selection_mask, &test_rect, FEATHER_QUALITY_NORMAL, &actual_region);
+
+            if (test_mask && test_mask->data) {
+                /* Find selection bounding box */
+                gint sel_x_min_doc = actual_region.x + actual_region.width;
+                gint sel_y_min_doc = actual_region.y + actual_region.height;
+                gint sel_x_max_doc = actual_region.x - 1;
+                gint sel_y_max_doc = actual_region.y - 1;
+
+                for (gint y = 0; y < test_mask->height; y++) {
+                    const uint8_t* mask_row = test_mask->data + y * test_mask->stride;
+                    for (gint x = 0; x < test_mask->width; x++) {
+                        if (mask_row[x] > 0) {
+                            gint doc_x = actual_region.x + x;
+                            gint doc_y = actual_region.y + y;
+                            if (doc_x < sel_x_min_doc)
+                                sel_x_min_doc = doc_x;
+                            if (doc_y < sel_y_min_doc)
+                                sel_y_min_doc = doc_y;
+                            if (doc_x > sel_x_max_doc)
+                                sel_x_max_doc = doc_x;
+                            if (doc_y > sel_y_max_doc)
+                                sel_y_max_doc = doc_y;
+                        }
+                    }
+                }
+
+                if (sel_x_max_doc >= sel_x_min_doc && sel_y_max_doc >= sel_y_min_doc) {
+                    /* Convert to layer coordinates */
+                    gint sel_x_min = sel_x_min_doc - layer->offset_x;
+                    gint sel_y_min = sel_y_min_doc - layer->offset_y;
+
+                    /* Viewport at (0,0) in cropped surface = (sel_x_min, sel_y_min) in layer */
+                    viewport_layer.offset_x = layer->offset_x + sel_x_min;
+                    viewport_layer.offset_y = layer->offset_y + sel_y_min;
+                } else {
+                    /* Fallback to original layer offset */
+                    viewport_layer.offset_x = layer->offset_x;
+                    viewport_layer.offset_y = layer->offset_y;
+                }
+            } else {
+                /* Fallback to original layer offset */
+                viewport_layer.offset_x = layer->offset_x;
+                viewport_layer.offset_y = layer->offset_y;
+            }
+
+            if (test_mask) {
+                selection_mask_free(test_mask);
+            }
+        } else {
+            /* Preview not cropped - viewport is at (0,0) relative to layer */
+            viewport_layer.offset_x = layer->offset_x;
+            viewport_layer.offset_y = layer->offset_y;
+        }
 
         filter_utils_apply_selection_mask(temp_layer->surface, original_viewport, doc, &viewport_layer);
         cairo_surface_destroy(original_viewport);

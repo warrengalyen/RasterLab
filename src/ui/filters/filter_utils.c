@@ -382,7 +382,7 @@ cairo_surface_t* filter_utils_create_masked_preview_surface(cairo_surface_t* lay
         return masked_surface;
     }
 
-    /* Clear pixels outside the selection */
+    /* Clear pixels outside the selection and find bounding box */
     cairo_surface_flush(masked_surface);
     gint masked_stride = cairo_image_surface_get_stride(masked_surface);
     guchar* masked_data = cairo_image_surface_get_data(masked_surface);
@@ -391,6 +391,58 @@ cairo_surface_t* filter_utils_create_masked_preview_surface(cairo_surface_t* lay
     gint mask_offset_x = actual_region.x - layer->offset_x;
     gint mask_offset_y = actual_region.y - layer->offset_y;
 
+    /* First, find bounding box by scanning the region_mask directly (more efficient) */
+    /* This gives us the actual bounds of selected pixels in document coordinates */
+    /* Initialize to invalid values so we can detect if any pixels were found */
+    gint sel_x_min_doc = actual_region.x + actual_region.width;  /* Start at max */
+    gint sel_y_min_doc = actual_region.y + actual_region.height; /* Start at max */
+    gint sel_x_max_doc = actual_region.x - 1;                    /* Start at min - 1 */
+    gint sel_y_max_doc = actual_region.y - 1;                    /* Start at min - 1 */
+
+    for (gint y = 0; y < region_mask->height; y++) {
+        const uint8_t* mask_row = region_mask->data + y * region_mask->stride;
+        for (gint x = 0; x < region_mask->width; x++) {
+            uint8_t mask_alpha = mask_row[x];
+            if (mask_alpha > 0) {
+                gint doc_x = actual_region.x + x;
+                gint doc_y = actual_region.y + y;
+                if (doc_x < sel_x_min_doc)
+                    sel_x_min_doc = doc_x;
+                if (doc_y < sel_y_min_doc)
+                    sel_y_min_doc = doc_y;
+                if (doc_x > sel_x_max_doc)
+                    sel_x_max_doc = doc_x;
+                if (doc_y > sel_y_max_doc)
+                    sel_y_max_doc = doc_y;
+            }
+        }
+    }
+
+    /* Check if we found any selected pixels */
+    if (sel_x_max_doc < sel_x_min_doc || sel_y_max_doc < sel_y_min_doc) {
+        /* No selected pixels in this region */
+        selection_mask_free(region_mask);
+        cairo_surface_destroy(masked_surface);
+        return NULL;
+    }
+
+    /* Convert document coordinates to layer coordinates */
+    gint sel_x_min = sel_x_min_doc - layer->offset_x;
+    gint sel_y_min = sel_y_min_doc - layer->offset_y;
+    gint sel_x_max = sel_x_max_doc - layer->offset_x;
+    gint sel_y_max = sel_y_max_doc - layer->offset_y;
+
+    /* Clamp to layer bounds */
+    if (sel_x_min < 0)
+        sel_x_min = 0;
+    if (sel_y_min < 0)
+        sel_y_min = 0;
+    if (sel_x_max >= width)
+        sel_x_max = width - 1;
+    if (sel_y_max >= height)
+        sel_y_max = height - 1;
+
+    /* Now clear pixels outside the selection and apply feathering */
     for (gint y = 0; y < height; y++) {
         gint mask_y = y - mask_offset_y;
 
@@ -426,37 +478,41 @@ cairo_surface_t* filter_utils_create_masked_preview_surface(cairo_surface_t* lay
                     masked_row[x * 4 + 1] = 0; /* G */
                     masked_row[x * 4 + 2] = 0; /* R */
                     masked_row[x * 4 + 3] = 0; /* A */
-                } else if (mask_alpha < 255) {
-                    /* Feather zone: reduce alpha based on mask */
-                    guchar* pixel = masked_row + x * 4;
-                    uint8_t pixel_alpha = pixel[3];
-                    uint8_t new_alpha = (uint8_t)((pixel_alpha * mask_alpha) / 255);
+                } else {
+                    /* Inside selection (including feather zone) */
 
-                    if (new_alpha == 0) {
-                        pixel[0] = 0;
-                        pixel[1] = 0;
-                        pixel[2] = 0;
-                        pixel[3] = 0;
-                    } else if (pixel_alpha > 0) {
-                        /* Un-premultiply, adjust alpha, re-premultiply */
-                        uint16_t r = (pixel[2] * 255 + pixel_alpha / 2) / pixel_alpha;
-                        uint16_t g = (pixel[1] * 255 + pixel_alpha / 2) / pixel_alpha;
-                        uint16_t b = (pixel[0] * 255 + pixel_alpha / 2) / pixel_alpha;
+                    if (mask_alpha < 255) {
+                        /* Feather zone: reduce alpha based on mask */
+                        guchar* pixel = masked_row + x * 4;
+                        uint8_t pixel_alpha = pixel[3];
+                        uint8_t new_alpha = (uint8_t)((pixel_alpha * mask_alpha) / 255);
 
-                        if (r > 255)
-                            r = 255;
-                        if (g > 255)
-                            g = 255;
-                        if (b > 255)
-                            b = 255;
+                        if (new_alpha == 0) {
+                            pixel[0] = 0;
+                            pixel[1] = 0;
+                            pixel[2] = 0;
+                            pixel[3] = 0;
+                        } else if (pixel_alpha > 0) {
+                            /* Un-premultiply, adjust alpha, re-premultiply */
+                            uint16_t r = (pixel[2] * 255 + pixel_alpha / 2) / pixel_alpha;
+                            uint16_t g = (pixel[1] * 255 + pixel_alpha / 2) / pixel_alpha;
+                            uint16_t b = (pixel[0] * 255 + pixel_alpha / 2) / pixel_alpha;
 
-                        pixel[0] = (b * new_alpha + 127) / 255; /* B */
-                        pixel[1] = (g * new_alpha + 127) / 255; /* G */
-                        pixel[2] = (r * new_alpha + 127) / 255; /* R */
-                        pixel[3] = new_alpha;                   /* A */
+                            if (r > 255)
+                                r = 255;
+                            if (g > 255)
+                                g = 255;
+                            if (b > 255)
+                                b = 255;
+
+                            pixel[0] = (b * new_alpha + 127) / 255; /* B */
+                            pixel[1] = (g * new_alpha + 127) / 255; /* G */
+                            pixel[2] = (r * new_alpha + 127) / 255; /* R */
+                            pixel[3] = new_alpha;                   /* A */
+                        }
                     }
+                    /* If mask_alpha == 255, keep pixel as-is (fully inside selection) */
                 }
-                /* If mask_alpha == 255, keep pixel as-is (fully inside selection) */
             }
         }
     }
@@ -467,5 +523,46 @@ cairo_surface_t* filter_utils_create_masked_preview_surface(cairo_surface_t* lay
     /* Free selection mask */
     selection_mask_free(region_mask);
 
-    return masked_surface;
+    /* Check if we found any selected pixels */
+    if (sel_x_max < sel_x_min || sel_y_max < sel_y_min) {
+        /* No selected pixels, return empty surface */
+        cairo_surface_destroy(masked_surface);
+        return NULL;
+    }
+
+    /* Crop to bounding box */
+    gint crop_width = sel_x_max - sel_x_min + 1;
+    gint crop_height = sel_y_max - sel_y_min + 1;
+
+    /* Ensure valid crop dimensions */
+    if (crop_width <= 0 || crop_height <= 0) {
+        cairo_surface_destroy(masked_surface);
+        return NULL;
+    }
+
+    /* Only crop if selection is smaller than layer */
+    if (crop_width == width && crop_height == height && sel_x_min == 0 && sel_y_min == 0) {
+        /* Selection exactly matches layer, no need to crop */
+        return masked_surface;
+    }
+
+    /* Always crop to bounding box - this ensures preview shows only selected region */
+    cairo_surface_t* cropped_surface = cairo_image_surface_create(
+        cairo_image_surface_get_format(masked_surface), crop_width, crop_height);
+    if (!cropped_surface) {
+        cairo_surface_destroy(masked_surface);
+        return NULL;
+    }
+
+    /* Copy the cropped region */
+    cairo_t* crop_cr = cairo_create(cropped_surface);
+    cairo_set_source_surface(crop_cr, masked_surface, -sel_x_min, -sel_y_min);
+    cairo_set_operator(crop_cr, CAIRO_OPERATOR_SOURCE);
+    cairo_paint(crop_cr);
+    cairo_destroy(crop_cr);
+
+    /* Free the full-size masked surface */
+    cairo_surface_destroy(masked_surface);
+
+    return cropped_surface;
 }
