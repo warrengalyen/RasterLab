@@ -1377,7 +1377,6 @@ static void on_select_none(GtkMenuItem* menu_item, gpointer user_data) {
 
 /**
  * Callback for Invert Selection menu item
- * TODO: This is not working correctly. It is not inverting the selection correctly.
  */
 static void on_select_invert(GtkMenuItem* menu_item, gpointer user_data) {
     AppContext* ctx = (AppContext*)user_data;
@@ -1418,31 +1417,19 @@ static void on_select_invert(GtkMenuItem* menu_item, gpointer user_data) {
         }
     }
 
-    /* For Select Invert, we need to invert the feathered preview if it exists */
-    /* First, ALWAYS regenerate feathered preview if feathering is active (to ensure it's up to date) */
-    if (has_feathering) {
-        selection_mask_regenerate_combined_feather_preview(doc->selection_mask);
-    }
-
     int stride = doc->selection_mask->stride;
     int width = doc->selection_mask->width;
     int height = doc->selection_mask->height;
 
-    /* Determine which mask to invert: feathered_preview if available, otherwise base_mask */
-    uint8_t* source_mask;
-    gboolean inverting_feathered = FALSE;
-    if (has_feathering && doc->selection_mask->feathered_preview) {
-        source_mask = doc->selection_mask->feathered_preview;
-        inverting_feathered = TRUE;
-    } else {
-        source_mask = doc->selection_mask->base_mask;
-    }
+    /* For Select Invert with feathered selections, we need to invert the base_mask first,
+     * then regenerate feathering from the inverted base_mask. This ensures the feathering
+     * gradient is calculated from the correct direction (outside edge inward, not inside edge outward). */
 
-    /* Create a copy of the mask to invert (we'll invert the copy, not the original) */
-    uint8_t* inverted_mask = g_malloc0(stride * height);
+    /* Invert the base_mask */
+    uint8_t* inverted_base_mask = g_malloc0(stride * height);
     for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {
-            inverted_mask[y * stride + x] = 255 - source_mask[y * stride + x];
+            inverted_base_mask[y * stride + x] = 255 - doc->selection_mask->base_mask[y * stride + x];
         }
     }
 
@@ -1469,63 +1456,43 @@ static void on_select_invert(GtkMenuItem* menu_item, gpointer user_data) {
         /* Allocate mask for this selection (use same stride as main mask) */
         sel->mask = g_malloc0(stride * height);
 
-        /* Copy the inverted mask to the selection's mask */
-        /* If we inverted feathered_preview, we need to extract the hard edges for base_mask */
-        /* Otherwise, just copy the inverted base_mask */
-        if (inverting_feathered) {
-            /* Extract hard edges from inverted feathered preview for base_mask */
-            /* Use a threshold to convert feathered values back to 0/255 */
-            const uint8_t threshold = 128;
-            for (int y = 0; y < height; y++) {
-                for (int x = 0; x < width; x++) {
-                    uint8_t inverted_value = inverted_mask[y * stride + x];
-                    sel->mask[y * stride + x] = (inverted_value >= threshold) ? 255 : 0;
-                }
+        /* Copy the inverted base_mask to the selection's mask */
+        /* Note: base_mask will be rebuilt by selection_mask_add_selection -> selection_mask_rebuild_from_selections */
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                sel->mask[y * stride + x] = inverted_base_mask[y * stride + x];
             }
-            /* Also update base_mask to match */
-            for (int y = 0; y < height; y++) {
-                for (int x = 0; x < width; x++) {
-                    uint8_t inverted_value = inverted_mask[y * stride + x];
-                    doc->selection_mask->base_mask[y * stride + x] = (inverted_value >= threshold) ? 255 : 0;
-                }
-            }
-            /* Set the Selection's feathered_preview to the inverted feathered_preview */
-            /* This preserves the inverted feathering */
+        }
+
+        /* If feathering is active, mark the selection as dirty so feathering will be
+         * regenerated from the inverted base_mask. This ensures the feathering gradient
+         * is calculated from the correct direction (outside edge inward for the inverted selection). */
+        if (has_feathering) {
+            /* Clear any existing feathered_preview to force regeneration */
             if (sel->feathered_preview) {
                 g_free(sel->feathered_preview);
+                sel->feathered_preview = NULL;
             }
-            sel->feathered_preview = inverted_mask; /* Transfer ownership */
-            inverted_mask = NULL;                   /* Don't free it */
-            sel->feather_dirty = FALSE;             /* Mark as not dirty since we set it directly */
-        } else {
-            /* Just copy the inverted base_mask */
-            for (int y = 0; y < height; y++) {
-                for (int x = 0; x < width; x++) {
-                    sel->mask[y * stride + x] = inverted_mask[y * stride + x];
-                }
-            }
-            /* Update base_mask to match */
-            for (int y = 0; y < height; y++) {
-                for (int x = 0; x < width; x++) {
-                    doc->selection_mask->base_mask[y * stride + x] = inverted_mask[y * stride + x];
-                }
-            }
-            g_free(inverted_mask);
-            inverted_mask = NULL;
+            sel->feather_dirty = TRUE; /* Force regeneration from inverted base_mask */
         }
+
+        g_free(inverted_base_mask);
+        inverted_base_mask = NULL;
 
         /* Add selection to list */
         selection_mask_add_selection(doc->selection_mask, sel);
         selection_unref(sel); /* Release our reference (list now owns it) */
     } else {
-        /* Failed to create selection, free the inverted mask */
-        if (inverted_mask) {
-            g_free(inverted_mask);
+        /* Failed to create selection, free the inverted base mask */
+        if (inverted_base_mask) {
+            g_free(inverted_base_mask);
         }
     }
 
     /* Regenerate combined feathered preview if feathering is active */
-    /* This will use the Selection's feathered_preview we set above */
+    /* For inverted selections with feathering, this will regenerate feathering from the
+     * inverted base_mask, ensuring the gradient is calculated from the correct direction
+     * (outside edge inward for the inverted selection). */
     if (has_feathering) {
         selection_mask_regenerate_combined_feather_preview(doc->selection_mask);
     } else {
