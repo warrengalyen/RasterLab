@@ -1643,12 +1643,12 @@ static void on_adjust_palettize(GtkWidget* widget, gpointer data) {
     cairo_paint(cr);
     cairo_destroy(cr);
 
-    /* Set layers in dialog */
-    palettize_dialog_set_layers(dialog, layer, temp_layer);
-
-    /* Store original layer reference and document for preview callback */
+    /* Store original layer reference and document BEFORE set_layers so masked preview can use them */
     g_object_set_data(G_OBJECT(palettize_dialog_get_window(dialog)), "original_layer", layer);
     g_object_set_data(G_OBJECT(palettize_dialog_get_window(dialog)), "filter_doc", doc);
+
+    /* Set layers in dialog */
+    palettize_dialog_set_layers(dialog, layer, temp_layer);
 
     /* Set dialog as transient for main window */
     if (ctx->window) {
@@ -1781,12 +1781,12 @@ static void on_adjust_retinex(GtkWidget* widget, gpointer data) {
     cairo_paint(cr);
     cairo_destroy(cr);
 
-    /* Set layers in dialog */
-    retinex_dialog_set_layers(dialog, layer, temp_layer);
-
-    /* Store original layer reference and document for preview callback */
+    /* Store original layer reference and document BEFORE set_layers so masked preview can use them */
     g_object_set_data(G_OBJECT(retinex_dialog_get_window(dialog)), "original_layer", layer);
     g_object_set_data(G_OBJECT(retinex_dialog_get_window(dialog)), "filter_doc", doc);
+
+    /* Set layers in dialog */
+    retinex_dialog_set_layers(dialog, layer, temp_layer);
 
     /* Set dialog as transient for main window */
     if (ctx->window) {

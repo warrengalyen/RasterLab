@@ -1976,12 +1976,12 @@ static void on_render_clouds(GtkWidget* widget, gpointer data) {
         return;
     }
 
-    /* Set layers in dialog */
-    clouds_dialog_set_layers(dialog, layer, temp_layer);
-
-    /* Store original layer reference and document for preview callback */
+    /* Store original layer reference and document BEFORE set_layers so masked preview can use them */
     g_object_set_data(G_OBJECT(clouds_dialog_get_window(dialog)), "original_layer", layer);
     g_object_set_data(G_OBJECT(clouds_dialog_get_window(dialog)), "filter_doc", doc);
+
+    /* Set layers in dialog */
+    clouds_dialog_set_layers(dialog, layer, temp_layer);
 
     /* Dialog handles preview internally via update_preview */
 

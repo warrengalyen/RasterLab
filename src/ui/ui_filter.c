@@ -488,13 +488,13 @@ gint ui_show_filter_dialog_with_zoom_pan(AppContext* ctx,
     cairo_paint(cr);
     cairo_destroy(cr);
 
-    /* Set layers in dialog */
-    filter_dialog_set_layers(dialog, layer, temp_layer);
-
-    /* Store original layer reference, document, and control params for preview callback */
+    /* Store original layer reference, document, and control params BEFORE set_layers so masked preview can use them */
     g_object_set_data(G_OBJECT(filter_dialog_get_window(dialog)), "original_layer", layer);
     g_object_set_data(G_OBJECT(filter_dialog_get_window(dialog)), "filter_doc", doc);
     g_object_set_data(G_OBJECT(filter_dialog_get_window(dialog)), "control_params", controls);
+
+    /* Set layers in dialog */
+    filter_dialog_set_layers(dialog, layer, temp_layer);
 
     /* Set up live preview callback if provided */
     if (preview_callback) {
