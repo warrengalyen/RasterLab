@@ -481,7 +481,11 @@ void selection_mask_render_outline(
     if (!cr || !mask)
         return;
 
-    (void)zoom_factor; /* Unused parameter - kept for API compatibility */
+    /* Apply zoom transform if needed (similar to visualization code) */
+    cairo_save(cr);
+    if (zoom_factor != 1.0) {
+        cairo_scale(cr, zoom_factor, zoom_factor);
+    }
 
     /* Ensure feathered preview is generated if feathering is active */
     /* Check if any selection has feathering enabled */
@@ -509,7 +513,15 @@ void selection_mask_render_outline(
     }
 
     if (!mask_data) {
+        cairo_restore(cr);
         return;
+    }
+
+    /* Calculate dash size in image pixel space to maintain constant visual size on screen
+     * When zoom is 2x, we use half the dash size in image space so it appears the same size on screen */
+    gdouble dash_size = ANT_DASH_SIZE / zoom_factor;
+    if (dash_size < 1.0) {
+        dash_size = 1.0; /* Minimum dash size of 1 pixel */
     }
 
     /* Edge detection: detect boundary where selection transitions to non-selected
@@ -537,8 +549,9 @@ void selection_mask_render_outline(
                - Hard edges: center=255, neighbor=0
                - Feathered edges: center>0 (any value in feather), neighbor=0 (end of feather) */
             if (left == 0 || right == 0 || top == 0 || bottom == 0) {
-                /* Render marching ants pixel - shift pattern by dash_phase for animation */
-                int pattern = ((x + y) / (int)ANT_DASH_SIZE + dash_phase) % 2;
+                /* Render marching ants pixel - shift pattern by dash_phase for animation
+                 * Use scaled dash_size to maintain constant visual size on screen regardless of zoom */
+                int pattern = ((int)((x + y) / dash_size) + dash_phase) % 2;
 
                 cairo_set_source_rgb(cr, pattern ? 0.0 : 1.0, pattern ? 0.0 : 1.0, pattern ? 0.0 : 1.0);
                 cairo_rectangle(cr, (gdouble)x, (gdouble)y, 1.0, 1.0);
@@ -546,6 +559,8 @@ void selection_mask_render_outline(
             }
         }
     }
+
+    cairo_restore(cr);
 }
 
 /* ============================================================
