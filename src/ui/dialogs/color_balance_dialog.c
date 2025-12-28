@@ -1,28 +1,29 @@
 #include "ui/dialogs/color_balance_dialog.h"
-#include "ui/widgets/filter_preview.h"
-#include "render/layer.h"
 #include "render/compositor.h"
-#include <stdlib.h>
-#include <string.h>
+#include "render/layer.h"
+#include "ui/filters/filter_utils.h"
+#include "ui/widgets/filter_preview.h"
 #include <cairo.h>
 #include <glib.h>
+#include <stdlib.h>
+#include <string.h>
 
 /**
  * Color balance dialog structure
  */
 struct _ColorBalanceDialog {
-    GtkWidget *dialog;
-    FilterPreview *preview;
-    GtkWidget *red_scale;
-    GtkWidget *green_scale;
-    GtkWidget *blue_scale;
-    GtkWidget *red_spin;
-    GtkWidget *green_spin;
-    GtkWidget *blue_spin;
-    GtkWidget *shadows_radio;
-    GtkWidget *midtones_radio;
-    GtkWidget *highlights_radio;
-    GtkWidget *preserve_luminosity_checkbox;
+    GtkWidget* dialog;
+    FilterPreview* preview;
+    GtkWidget* red_scale;
+    GtkWidget* green_scale;
+    GtkWidget* blue_scale;
+    GtkWidget* red_spin;
+    GtkWidget* green_spin;
+    GtkWidget* blue_spin;
+    GtkWidget* shadows_radio;
+    GtkWidget* midtones_radio;
+    GtkWidget* highlights_radio;
+    GtkWidget* preserve_luminosity_checkbox;
     OcToneBalanceMode tone_mode;
     gboolean preserve_luminosity;
     ColorBalanceDialogPreviewCallback preview_callback;
@@ -32,9 +33,8 @@ struct _ColorBalanceDialog {
 /**
  * Red scale value changed callback
  */
-static void on_red_scale_changed(GtkRange *range, gpointer user_data)
-{
-    ColorBalanceDialog *dialog = (ColorBalanceDialog *)user_data;
+static void on_red_scale_changed(GtkRange* range, gpointer user_data) {
+    ColorBalanceDialog* dialog = (ColorBalanceDialog*)user_data;
     gint value;
 
     if (!dialog || !dialog->red_spin) {
@@ -57,9 +57,8 @@ static void on_red_scale_changed(GtkRange *range, gpointer user_data)
 /**
  * Green scale value changed callback
  */
-static void on_green_scale_changed(GtkRange *range, gpointer user_data)
-{
-    ColorBalanceDialog *dialog = (ColorBalanceDialog *)user_data;
+static void on_green_scale_changed(GtkRange* range, gpointer user_data) {
+    ColorBalanceDialog* dialog = (ColorBalanceDialog*)user_data;
     gint value;
 
     if (!dialog || !dialog->green_spin) {
@@ -82,9 +81,8 @@ static void on_green_scale_changed(GtkRange *range, gpointer user_data)
 /**
  * Blue scale value changed callback
  */
-static void on_blue_scale_changed(GtkRange *range, gpointer user_data)
-{
-    ColorBalanceDialog *dialog = (ColorBalanceDialog *)user_data;
+static void on_blue_scale_changed(GtkRange* range, gpointer user_data) {
+    ColorBalanceDialog* dialog = (ColorBalanceDialog*)user_data;
     gint value;
 
     if (!dialog || !dialog->blue_spin) {
@@ -107,9 +105,8 @@ static void on_blue_scale_changed(GtkRange *range, gpointer user_data)
 /**
  * Red spin value changed callback
  */
-static void on_red_spin_changed(GtkSpinButton *spin, gpointer user_data)
-{
-    ColorBalanceDialog *dialog = (ColorBalanceDialog *)user_data;
+static void on_red_spin_changed(GtkSpinButton* spin, gpointer user_data) {
+    ColorBalanceDialog* dialog = (ColorBalanceDialog*)user_data;
     gint value;
 
     if (!dialog || !dialog->red_scale) {
@@ -123,9 +120,8 @@ static void on_red_spin_changed(GtkSpinButton *spin, gpointer user_data)
 /**
  * Green spin value changed callback
  */
-static void on_green_spin_changed(GtkSpinButton *spin, gpointer user_data)
-{
-    ColorBalanceDialog *dialog = (ColorBalanceDialog *)user_data;
+static void on_green_spin_changed(GtkSpinButton* spin, gpointer user_data) {
+    ColorBalanceDialog* dialog = (ColorBalanceDialog*)user_data;
     gint value;
 
     if (!dialog || !dialog->green_scale) {
@@ -139,9 +135,8 @@ static void on_green_spin_changed(GtkSpinButton *spin, gpointer user_data)
 /**
  * Blue spin value changed callback
  */
-static void on_blue_spin_changed(GtkSpinButton *spin, gpointer user_data)
-{
-    ColorBalanceDialog *dialog = (ColorBalanceDialog *)user_data;
+static void on_blue_spin_changed(GtkSpinButton* spin, gpointer user_data) {
+    ColorBalanceDialog* dialog = (ColorBalanceDialog*)user_data;
     gint value;
 
     if (!dialog || !dialog->blue_scale) {
@@ -155,9 +150,8 @@ static void on_blue_spin_changed(GtkSpinButton *spin, gpointer user_data)
 /**
  * Tone balance mode changed callback
  */
-static void on_tone_mode_changed(GtkToggleButton *button, gpointer user_data)
-{
-    ColorBalanceDialog *dialog = (ColorBalanceDialog *)user_data;
+static void on_tone_mode_changed(GtkToggleButton* button, gpointer user_data) {
+    ColorBalanceDialog* dialog = (ColorBalanceDialog*)user_data;
     gpointer button_widget = GTK_WIDGET(button);
 
     if (!dialog || !gtk_toggle_button_get_active(button)) {
@@ -185,9 +179,8 @@ static void on_tone_mode_changed(GtkToggleButton *button, gpointer user_data)
 /**
  * Preserve luminosity checkbox toggled callback
  */
-static void on_preserve_luminosity_toggled(GtkToggleButton *button, gpointer user_data)
-{
-    ColorBalanceDialog *dialog = (ColorBalanceDialog *)user_data;
+static void on_preserve_luminosity_toggled(GtkToggleButton* button, gpointer user_data) {
+    ColorBalanceDialog* dialog = (ColorBalanceDialog*)user_data;
 
     if (!dialog) {
         return;
@@ -208,9 +201,8 @@ static void on_preserve_luminosity_toggled(GtkToggleButton *button, gpointer use
 /**
  * Reset button clicked callback
  */
-static void on_reset_clicked(GtkWidget *widget, gpointer user_data)
-{
-    ColorBalanceDialog *dialog = (ColorBalanceDialog *)user_data;
+static void on_reset_clicked(GtkWidget* widget, gpointer user_data) {
+    ColorBalanceDialog* dialog = (ColorBalanceDialog*)user_data;
     (void)widget;
     color_balance_dialog_reset(dialog);
 }
@@ -218,30 +210,29 @@ static void on_reset_clicked(GtkWidget *widget, gpointer user_data)
 /**
  * Create a new color balance dialog
  */
-ColorBalanceDialog* color_balance_dialog_new(const gchar *title)
-{
-    ColorBalanceDialog *dialog;
-    GtkWidget *content_area;
-    GtkWidget *main_hbox;
-    GtkWidget *right_vbox;
-    GtkWidget *control_vbox;
-    GtkWidget *label;
-    GtkWidget *scale_hbox;
-    GtkWidget *scale;
-    GtkWidget *spin;
-    GtkAdjustment *adjustment;
-    GtkWidget *tone_vbox;
-    GtkWidget *tone_label;
-    GtkWidget *preserve_hbox;
-    GtkWidget *preserve_label;
-    GtkWidget *reset_button;
-    GtkWidget *button_box;
+ColorBalanceDialog* color_balance_dialog_new(const gchar* title) {
+    ColorBalanceDialog* dialog;
+    GtkWidget* content_area;
+    GtkWidget* main_hbox;
+    GtkWidget* right_vbox;
+    GtkWidget* control_vbox;
+    GtkWidget* label;
+    GtkWidget* scale_hbox;
+    GtkWidget* scale;
+    GtkWidget* spin;
+    GtkAdjustment* adjustment;
+    GtkWidget* tone_vbox;
+    GtkWidget* tone_label;
+    GtkWidget* preserve_hbox;
+    GtkWidget* preserve_label;
+    GtkWidget* reset_button;
+    GtkWidget* button_box;
 
     if (!title) {
         return NULL;
     }
 
-    dialog = (ColorBalanceDialog *)g_malloc(sizeof(ColorBalanceDialog));
+    dialog = (ColorBalanceDialog*)g_malloc(sizeof(ColorBalanceDialog));
     if (!dialog) {
         return NULL;
     }
@@ -264,14 +255,14 @@ ColorBalanceDialog* color_balance_dialog_new(const gchar *title)
 
     /* Create dialog window */
     dialog->dialog = gtk_dialog_new_with_buttons(title,
-                                                  NULL,
-                                                  GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
-                                                  "_OK",
-                                                  GTK_RESPONSE_OK,
-                                                  "_Cancel",
-                                                  GTK_RESPONSE_CANCEL,
-                                                  NULL);
-    
+                                                 NULL,
+                                                 GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+                                                 "_OK",
+                                                 GTK_RESPONSE_OK,
+                                                 "_Cancel",
+                                                 GTK_RESPONSE_CANCEL,
+                                                 NULL);
+
     /* Don't set a fixed default size - let dialog size to content */
     gtk_window_set_resizable(GTK_WINDOW(dialog->dialog), TRUE);
 
@@ -413,36 +404,36 @@ ColorBalanceDialog* color_balance_dialog_new(const gchar *title)
     preserve_label = gtk_label_new("preserve luminosity");
     gtk_box_pack_start(GTK_BOX(preserve_hbox), preserve_label, FALSE, FALSE, 0);
 
-    /* Get button box from dialog (for OK/Cancel) */
-    #ifdef __GNUC__
-    #pragma GCC diagnostic push
-    #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-    #endif
+/* Get button box from dialog (for OK/Cancel) */
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
     button_box = gtk_dialog_get_action_area(GTK_DIALOG(dialog->dialog));
-    #ifdef __GNUC__
-    #pragma GCC diagnostic pop
-    #endif
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif
     if (button_box) {
         gtk_widget_set_margin_top(button_box, 5);
         gtk_widget_set_margin_bottom(button_box, 5);
         gtk_widget_set_margin_start(button_box, 5);
         gtk_widget_set_margin_end(button_box, 5);
-        
+
         /* Make action area expand horizontally to fill width */
         gtk_widget_set_hexpand(button_box, TRUE);
-        
+
         /* Create reset button with reset.svg icon and add it to the left side of action area */
         reset_button = gtk_button_new();
-        GtkWidget *reset_icon = gtk_image_new_from_resource("/icons/reset.svg");
+        GtkWidget* reset_icon = gtk_image_new_from_resource("/icons/reset.svg");
         if (reset_icon) {
             gtk_button_set_image(GTK_BUTTON(reset_button), reset_icon);
             gtk_button_set_always_show_image(GTK_BUTTON(reset_button), TRUE);
         }
         gtk_widget_set_halign(reset_button, GTK_ALIGN_START);
         gtk_box_pack_start(GTK_BOX(button_box), reset_button, FALSE, FALSE, 0);
-        gtk_box_reorder_child(GTK_BOX(button_box), reset_button, 0);  /* Move to start */
+        gtk_box_reorder_child(GTK_BOX(button_box), reset_button, 0); /* Move to start */
         g_signal_connect(reset_button, "clicked",
-                        G_CALLBACK(on_reset_clicked), dialog);
+                         G_CALLBACK(on_reset_clicked), dialog);
     }
 
     /* Show all widgets */
@@ -454,8 +445,7 @@ ColorBalanceDialog* color_balance_dialog_new(const gchar *title)
 /**
  * Free color balance dialog
  */
-void color_balance_dialog_free(ColorBalanceDialog *dialog)
-{
+void color_balance_dialog_free(ColorBalanceDialog* dialog) {
     if (!dialog) {
         return;
     }
@@ -470,8 +460,7 @@ void color_balance_dialog_free(ColorBalanceDialog *dialog)
 /**
  * Get the dialog window
  */
-GtkWindow* color_balance_dialog_get_window(ColorBalanceDialog *dialog)
-{
+GtkWindow* color_balance_dialog_get_window(ColorBalanceDialog* dialog) {
     if (!dialog || !dialog->dialog) {
         return NULL;
     }
@@ -482,23 +471,42 @@ GtkWindow* color_balance_dialog_get_window(ColorBalanceDialog *dialog)
 /**
  * Set the image layers for the preview widget
  */
-void color_balance_dialog_set_layers(ColorBalanceDialog *dialog,
-                                     ImageLayer *before_layer,
-                                     ImageLayer *after_layer)
-{
-    cairo_surface_t *before_surface = NULL;
-    cairo_surface_t *after_surface = NULL;
+void color_balance_dialog_set_layers(ColorBalanceDialog* dialog,
+                                     ImageLayer* before_layer,
+                                     ImageLayer* after_layer) {
+    cairo_surface_t* before_surface = NULL;
+    cairo_surface_t* after_surface = NULL;
+    struct ImageDocument* doc = NULL;
+    struct ImageLayer* layer = NULL;
 
     if (!dialog || !dialog->preview) {
         return;
     }
 
+    /* Get document and layer from dialog if available */
+    GtkWindow* window = color_balance_dialog_get_window(dialog);
+    if (window) {
+        doc = (struct ImageDocument*)g_object_get_data(G_OBJECT(window), "filter_doc");
+        layer = (struct ImageLayer*)g_object_get_data(G_OBJECT(window), "original_layer");
+    }
+
+    /* Get composite surfaces from layers if available */
     if (before_layer && before_layer->surface) {
-        before_surface = cairo_surface_reference(before_layer->surface);
+        /* If there's a selection, create masked surface showing only selected pixels */
+        if (doc && layer) {
+            before_surface = filter_utils_create_masked_preview_surface(before_layer->surface, doc, layer);
+        } else {
+            before_surface = cairo_surface_reference(before_layer->surface);
+        }
     }
 
     if (after_layer && after_layer->surface) {
-        after_surface = cairo_surface_reference(after_layer->surface);
+        /* If there's a selection, create masked surface showing only selected pixels */
+        if (doc && layer) {
+            after_surface = filter_utils_create_masked_preview_surface(after_layer->surface, doc, layer);
+        } else {
+            after_surface = cairo_surface_reference(after_layer->surface);
+        }
     }
 
     filter_preview_set_before_surface(dialog->preview, before_surface);
@@ -516,16 +524,29 @@ void color_balance_dialog_set_layers(ColorBalanceDialog *dialog,
 /**
  * Update the after layer in preview
  */
-void color_balance_dialog_update_after_layer(ColorBalanceDialog *dialog, ImageLayer *layer)
-{
-    cairo_surface_t *after_surface = NULL;
+void color_balance_dialog_update_after_layer(ColorBalanceDialog* dialog, ImageLayer* layer) {
+    cairo_surface_t* after_surface = NULL;
+    struct ImageDocument* doc = NULL;
+    struct ImageLayer* original_layer = NULL;
 
     if (!dialog || !dialog->preview) {
         return;
     }
 
+    /* Get document and layer from dialog if available */
+    GtkWindow* window = color_balance_dialog_get_window(dialog);
+    if (window) {
+        doc = (struct ImageDocument*)g_object_get_data(G_OBJECT(window), "filter_doc");
+        original_layer = (struct ImageLayer*)g_object_get_data(G_OBJECT(window), "original_layer");
+    }
+
     if (layer && layer->surface) {
-        after_surface = cairo_surface_reference(layer->surface);
+        /* If there's a selection, create masked surface showing only selected pixels */
+        if (doc && original_layer) {
+            after_surface = filter_utils_create_masked_preview_surface(layer->surface, doc, original_layer);
+        } else {
+            after_surface = cairo_surface_reference(layer->surface);
+        }
     }
 
     filter_preview_set_after_surface(dialog->preview, after_surface);
@@ -538,10 +559,9 @@ void color_balance_dialog_update_after_layer(ColorBalanceDialog *dialog, ImageLa
 /**
  * Run the dialog and get color balance values
  */
-gint color_balance_dialog_run(ColorBalanceDialog *dialog, GtkWindow *parent, 
-                               gint *red_balance, gint *green_balance, gint *blue_balance,
-                               OcToneBalanceMode *mode, gboolean *preserve_luminosity)
-{
+gint color_balance_dialog_run(ColorBalanceDialog* dialog, GtkWindow* parent,
+                              gint* red_balance, gint* green_balance, gint* blue_balance,
+                              OcToneBalanceMode* mode, gboolean* preserve_luminosity) {
     gint response;
 
     if (!dialog || !dialog->dialog) {
@@ -578,10 +598,9 @@ gint color_balance_dialog_run(ColorBalanceDialog *dialog, GtkWindow *parent,
 /**
  * Set preview callback
  */
-void color_balance_dialog_set_preview_callback(ColorBalanceDialog *dialog,
-                                                ColorBalanceDialogPreviewCallback callback,
-                                                gpointer user_data)
-{
+void color_balance_dialog_set_preview_callback(ColorBalanceDialog* dialog,
+                                               ColorBalanceDialogPreviewCallback callback,
+                                               gpointer user_data) {
     if (!dialog) {
         return;
     }
@@ -593,8 +612,7 @@ void color_balance_dialog_set_preview_callback(ColorBalanceDialog *dialog,
 /**
  * Reset all controls to default values (0 for all channels)
  */
-void color_balance_dialog_reset(ColorBalanceDialog *dialog)
-{
+void color_balance_dialog_reset(ColorBalanceDialog* dialog) {
     const gint default_balance = 0;
 
     if (!dialog) {
@@ -624,8 +642,7 @@ void color_balance_dialog_reset(ColorBalanceDialog *dialog)
 
     /* Trigger preview update if callback is set */
     if (dialog->preview_callback) {
-        gint values[3] = { default_balance, default_balance, default_balance };
+        gint values[3] = {default_balance, default_balance, default_balance};
         dialog->preview_callback(dialog, values, 3, OC_TONE_MIDTONES, TRUE, dialog->preview_user_data);
     }
 }
-

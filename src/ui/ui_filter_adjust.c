@@ -485,12 +485,13 @@ static void on_adjust_gamma(GtkWidget* widget, gpointer data) {
         return;
     }
 
+    /* Store original layer reference, document, and dialog BEFORE set_layers so masked preview can use them */
+    g_object_set_data(G_OBJECT(gamma_dialog_get_window(dialog)), "original_layer", layer);
+    g_object_set_data(G_OBJECT(gamma_dialog_get_window(dialog)), "filter_doc", doc);
+    g_object_set_data(G_OBJECT(gamma_dialog_get_window(dialog)), "gamma_dialog", dialog);
+
     /* Set layers in dialog */
     gamma_dialog_set_layers(dialog, layer, temp_layer);
-
-    /* Store original layer reference and dialog for preview callback */
-    g_object_set_data(G_OBJECT(gamma_dialog_get_window(dialog)), "original_layer", layer);
-    g_object_set_data(G_OBJECT(gamma_dialog_get_window(dialog)), "gamma_dialog", dialog);
 
     /* Set up live preview callback */
     gamma_dialog_set_preview_callback(dialog, on_gamma_preview_update, temp_layer);
@@ -604,11 +605,12 @@ static void on_adjust_curves(GtkWidget* widget, gpointer data) {
         return;
     }
 
+    /* Store original layer reference and document BEFORE set_layers so masked preview can use them */
+    g_object_set_data(G_OBJECT(curves_dialog_get_window(dialog)), "original_layer", layer);
+    g_object_set_data(G_OBJECT(curves_dialog_get_window(dialog)), "filter_doc", doc);
+
     /* Set layers in dialog */
     curves_dialog_set_layers(dialog, layer, temp_layer);
-
-    /* Store original layer reference for preview callback */
-    g_object_set_data(G_OBJECT(curves_dialog_get_window(dialog)), "original_layer", layer);
 
     /* Set up live preview callback */
     curves_dialog_set_preview_callback(dialog, on_curves_preview_update, temp_layer);
@@ -628,8 +630,36 @@ static void on_adjust_curves(GtkWidget* widget, gpointer data) {
             /* Create a draw command for undo/redo */
             Command* cmd = command_create_draw(layer, "Curves");
             if (cmd) {
+                /* Create a copy of the original surface for selection masking */
+                cairo_surface_t* original_surface = NULL;
+                if (layer->surface) {
+                    gint width = cairo_image_surface_get_width(layer->surface);
+                    gint height = cairo_image_surface_get_height(layer->surface);
+                    original_surface = cairo_image_surface_create(
+                        cairo_image_surface_get_format(layer->surface), width, height);
+                    if (original_surface) {
+                        cairo_t* cr = cairo_create(original_surface);
+                        cairo_set_source_surface(cr, layer->surface, 0, 0);
+                        cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+                        cairo_paint(cr);
+                        cairo_destroy(cr);
+                    }
+                }
+
                 /* Apply filter */
-                if (filter_curves_apply(layer, curves)) {
+                gboolean success = filter_curves_apply(layer, curves);
+
+                /* Apply selection masking if there's a selection */
+                if (success && original_surface && layer->surface) {
+                    filter_utils_apply_selection_mask(layer->surface, original_surface, doc, layer);
+                }
+
+                /* Free original surface copy */
+                if (original_surface) {
+                    cairo_surface_destroy(original_surface);
+                }
+
+                if (success) {
                     command_finalize_draw(cmd);
                     if (doc->undo_stack) {
                         command_stack_push(doc->undo_stack, cmd);
@@ -748,11 +778,12 @@ static void on_adjust_colorbalance(GtkWidget* widget, gpointer data) {
         return;
     }
 
+    /* Store original layer reference and document BEFORE set_layers so masked preview can use them */
+    g_object_set_data(G_OBJECT(color_balance_dialog_get_window(dialog)), "original_layer", layer);
+    g_object_set_data(G_OBJECT(color_balance_dialog_get_window(dialog)), "filter_doc", doc);
+
     /* Set layers in dialog */
     color_balance_dialog_set_layers(dialog, layer, temp_layer);
-
-    /* Store original layer reference for preview callback */
-    g_object_set_data(G_OBJECT(color_balance_dialog_get_window(dialog)), "original_layer", layer);
 
     /* Set up live preview callback */
     color_balance_dialog_set_preview_callback(dialog, on_colorbalance_preview_update, temp_layer);
