@@ -1104,3 +1104,533 @@ void selection_mask_regenerate_combined_feather_preview(SelectionMask* mask) {
     mask->data = mask->feathered_preview;
     mask->feather_dirty = FALSE;
 }
+
+/* ============================================================
+ * Selection Modification Operations
+ * ============================================================ */
+
+/**
+ * Morphological dilation - expands selection outward
+ */
+static void dilate_mask(uint8_t* src_mask, uint8_t* dst_mask, int width, int height, int stride, int radius) {
+    int x, y, dx, dy;
+    int dist_sq, radius_sq = radius * radius;
+
+    /* Initialize destination to zero */
+    memset(dst_mask, 0, stride * height);
+
+    /* For each pixel in source */
+    for (y = 0; y < height; y++) {
+        for (x = 0; x < width; x++) {
+            int src_idx = y * stride + x;
+            if (src_mask[src_idx] >= 128) { /* Selected pixel */
+                /* Expand this pixel to all pixels within radius */
+                for (dy = -radius; dy <= radius; dy++) {
+                    for (dx = -radius; dx <= radius; dx++) {
+                        dist_sq = dx * dx + dy * dy;
+                        if (dist_sq <= radius_sq) {
+                            int nx = x + dx;
+                            int ny = y + dy;
+                            if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+                                int dst_idx = ny * stride + nx;
+                                dst_mask[dst_idx] = 255;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Apply Gaussian blur to a mask (used for feather operation)
+ */
+static void apply_gaussian_blur(uint8_t* src_mask, uint8_t* dst_mask, int width, int height, int stride, int radius) {
+    if (!src_mask || !dst_mask || radius < 1) {
+        return;
+    }
+
+    /* Create a temporary buffer for the blurred result */
+    uint8_t* temp_result = g_malloc0(stride * height);
+    if (!temp_result) {
+        return;
+    }
+
+    /* Apply Gaussian-like blur to create feathered edges */
+    float sigma = (float)radius / 3.0f; /* Approximate Gaussian sigma */
+    int kernel_size = radius * 2 + 1;
+    float* kernel = g_malloc(sizeof(float) * kernel_size);
+    if (!kernel) {
+        g_free(temp_result);
+        return;
+    }
+
+    /* Create Gaussian kernel */
+    float sum = 0.0f;
+    for (int i = 0; i < kernel_size; i++) {
+        float x = (float)(i - radius);
+        kernel[i] = expf(-(x * x) / (2.0f * sigma * sigma));
+        sum += kernel[i];
+    }
+    /* Normalize kernel */
+    for (int i = 0; i < kernel_size; i++) {
+        kernel[i] /= sum;
+    }
+
+    /* Apply horizontal blur */
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            float value = 0.0f;
+            for (int k = 0; k < kernel_size; k++) {
+                int px = x + k - radius;
+                if (px >= 0 && px < width) {
+                    int idx = y * stride + px;
+                    value += (float)src_mask[idx] * kernel[k];
+                }
+            }
+            temp_result[y * stride + x] = (uint8_t)(value + 0.5f);
+        }
+    }
+
+    /* Apply vertical blur */
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            float value = 0.0f;
+            for (int k = 0; k < kernel_size; k++) {
+                int py = y + k - radius;
+                if (py >= 0 && py < height) {
+                    int idx = py * stride + x;
+                    value += (float)temp_result[idx] * kernel[k];
+                }
+            }
+            dst_mask[y * stride + x] = (uint8_t)(value + 0.5f);
+        }
+    }
+
+    g_free(kernel);
+    g_free(temp_result);
+}
+
+/**
+ * Morphological erosion - contracts selection inward
+ */
+static void erode_mask(uint8_t* src_mask, uint8_t* dst_mask, int width, int height, int stride, int radius) {
+    int x, y, dx, dy;
+    int dist_sq, radius_sq = radius * radius;
+    gboolean all_selected;
+
+    /* Initialize destination to zero */
+    memset(dst_mask, 0, stride * height);
+
+    /* For each pixel in source */
+    for (y = 0; y < height; y++) {
+        for (x = 0; x < width; x++) {
+            int src_idx = y * stride + x;
+            if (src_mask[src_idx] >= 128) { /* Selected pixel */
+                /* Check if all pixels within radius are selected */
+                all_selected = TRUE;
+                for (dy = -radius; dy <= radius && all_selected; dy++) {
+                    for (dx = -radius; dx <= radius && all_selected; dx++) {
+                        dist_sq = dx * dx + dy * dy;
+                        if (dist_sq <= radius_sq) {
+                            int nx = x + dx;
+                            int ny = y + dy;
+                            if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+                                int check_idx = ny * stride + nx;
+                                if (src_mask[check_idx] < 128) {
+                                    all_selected = FALSE;
+                                }
+                            } else {
+                                /* Out of bounds - consider as not selected */
+                                all_selected = FALSE;
+                            }
+                        }
+                    }
+                }
+                if (all_selected) {
+                    int dst_idx = y * stride + x;
+                    dst_mask[dst_idx] = 255;
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Grow selection by specified radius (dilate)
+ * Processes each selection individually, preserving its feathering parameters
+ */
+gboolean selection_mask_grow(SelectionMask* mask, gint radius,
+                             SelectionOperationProgressCallback progress_callback,
+                             gpointer progress_user_data) {
+    if (!mask || radius < 1 || radius > 500) {
+        return FALSE;
+    }
+
+    if (selection_mask_is_empty(mask) || !mask->selections) {
+        return FALSE; /* Can't grow empty selection */
+    }
+
+    /* Count selections */
+    gint total_selections = g_list_length(mask->selections);
+    if (total_selections == 0) {
+        return FALSE;
+    }
+
+    /* Process each selection individually */
+    GList* iter;
+    gint current = 0;
+    for (iter = mask->selections; iter != NULL; iter = iter->next) {
+        Selection* sel = (Selection*)iter->data;
+        if (!sel || !sel->mask) {
+            current++;
+            continue;
+        }
+
+        /* Update progress */
+        if (progress_callback) {
+            if (!progress_callback(current, total_selections, progress_user_data)) {
+                return FALSE; /* User cancelled */
+            }
+        }
+
+        /* Allocate temporary buffer for this selection's mask */
+        uint8_t* temp_buffer = g_malloc0(mask->stride * mask->height);
+        if (!temp_buffer) {
+            current++;
+            continue;
+        }
+
+        /* Apply dilation to this selection's mask */
+        dilate_mask(sel->mask, temp_buffer, mask->width, mask->height, mask->stride, radius);
+
+        /* Copy result back to selection's mask */
+        memcpy(sel->mask, temp_buffer, mask->stride * mask->height);
+        g_free(temp_buffer);
+
+        /* Mark selection's feathering as dirty so it regenerates */
+        if (sel->feathered_preview) {
+            g_free(sel->feathered_preview);
+            sel->feathered_preview = NULL;
+        }
+        sel->feather_dirty = TRUE;
+
+        current++;
+    }
+
+    /* Rebuild base_mask from all modified selections */
+    selection_mask_rebuild_from_selections(mask);
+
+    /* Mark as dirty */
+    selection_mask_mark_dirty(mask, 0, 0, mask->width, mask->height);
+    mask->feather_dirty = TRUE;
+
+    return TRUE;
+}
+
+/**
+ * Shrink selection by specified radius (erode)
+ * Processes each selection individually, preserving its feathering parameters
+ */
+gboolean selection_mask_shrink(SelectionMask* mask, gint radius,
+                               SelectionOperationProgressCallback progress_callback,
+                               gpointer progress_user_data) {
+    if (!mask || radius < 1 || radius > 500) {
+        return FALSE;
+    }
+
+    if (selection_mask_is_empty(mask) || !mask->selections) {
+        return FALSE; /* Can't shrink empty selection */
+    }
+
+    /* Count selections */
+    gint total_selections = g_list_length(mask->selections);
+    if (total_selections == 0) {
+        return FALSE;
+    }
+
+    /* Process each selection individually */
+    GList* iter;
+    gint current = 0;
+    for (iter = mask->selections; iter != NULL; iter = iter->next) {
+        Selection* sel = (Selection*)iter->data;
+        if (!sel || !sel->mask) {
+            current++;
+            continue;
+        }
+
+        /* Update progress */
+        if (progress_callback) {
+            if (!progress_callback(current, total_selections, progress_user_data)) {
+                return FALSE; /* User cancelled */
+            }
+        }
+
+        /* Allocate temporary buffer for this selection's mask */
+        uint8_t* temp_buffer = g_malloc0(mask->stride * mask->height);
+        if (!temp_buffer) {
+            current++;
+            continue;
+        }
+
+        /* Apply erosion to this selection's mask */
+        erode_mask(sel->mask, temp_buffer, mask->width, mask->height, mask->stride, radius);
+
+        /* Copy result back to selection's mask */
+        memcpy(sel->mask, temp_buffer, mask->stride * mask->height);
+        g_free(temp_buffer);
+
+        /* Mark selection's feathering as dirty so it regenerates */
+        if (sel->feathered_preview) {
+            g_free(sel->feathered_preview);
+            sel->feathered_preview = NULL;
+        }
+        sel->feather_dirty = TRUE;
+
+        current++;
+    }
+
+    /* Rebuild base_mask from all modified selections */
+    selection_mask_rebuild_from_selections(mask);
+
+    /* Mark as dirty */
+    selection_mask_mark_dirty(mask, 0, 0, mask->width, mask->height);
+    mask->feather_dirty = TRUE;
+
+    return TRUE;
+}
+
+/**
+ * Create border selection (dilate then subtract original)
+ * Processes each selection individually, preserving its feathering parameters
+ */
+gboolean selection_mask_border(SelectionMask* mask, gint radius,
+                               SelectionOperationProgressCallback progress_callback,
+                               gpointer progress_user_data) {
+    if (!mask || radius < 1 || radius > 500) {
+        return FALSE;
+    }
+
+    if (selection_mask_is_empty(mask) || !mask->selections) {
+        return FALSE; /* Can't create border from empty selection */
+    }
+
+    /* Count selections */
+    gint total_selections = g_list_length(mask->selections);
+    if (total_selections == 0) {
+        return FALSE;
+    }
+
+    /* Process each selection individually */
+    GList* iter;
+    gint current = 0;
+    for (iter = mask->selections; iter != NULL; iter = iter->next) {
+        Selection* sel = (Selection*)iter->data;
+        if (!sel || !sel->mask) {
+            current++;
+            continue;
+        }
+
+        /* Update progress */
+        if (progress_callback) {
+            if (!progress_callback(current, total_selections, progress_user_data)) {
+                return FALSE; /* User cancelled */
+            }
+        }
+
+        /* Allocate temporary buffers */
+        uint8_t* temp_buffer = g_malloc0(mask->stride * mask->height);
+        if (!temp_buffer) {
+            current++;
+            continue;
+        }
+
+        /* Dilate this selection's mask */
+        dilate_mask(sel->mask, temp_buffer, mask->width, mask->height, mask->stride, radius);
+
+        /* Subtract original from dilated (border = dilated - original) */
+        for (int i = 0; i < mask->height * mask->stride; i++) {
+            if (temp_buffer[i] >= 128 && sel->mask[i] < 128) {
+                sel->mask[i] = 255; /* Border pixel */
+            } else {
+                sel->mask[i] = 0; /* Not border */
+            }
+        }
+
+        g_free(temp_buffer);
+
+        /* Mark selection's feathering as dirty so it regenerates */
+        if (sel->feathered_preview) {
+            g_free(sel->feathered_preview);
+            sel->feathered_preview = NULL;
+        }
+        sel->feather_dirty = TRUE;
+
+        current++;
+    }
+
+    /* Rebuild base_mask from all modified selections */
+    selection_mask_rebuild_from_selections(mask);
+
+    /* Mark as dirty */
+    selection_mask_mark_dirty(mask, 0, 0, mask->width, mask->height);
+    mask->feather_dirty = TRUE;
+
+    return TRUE;
+}
+
+/**
+ * Feather selection edges (modify base_mask with feathering)
+ * Processes each selection individually, applying Gaussian blur to each selection's mask
+ * Preserves each selection's individual feathering parameters
+ */
+gboolean selection_mask_feather(SelectionMask* mask, gint radius,
+                                SelectionOperationProgressCallback progress_callback,
+                                gpointer progress_user_data) {
+    if (!mask || radius < 1 || radius > 500) {
+        return FALSE;
+    }
+
+    if (selection_mask_is_empty(mask) || !mask->selections) {
+        return FALSE; /* Can't feather empty selection */
+    }
+
+    /* Count selections */
+    gint total_selections = g_list_length(mask->selections);
+    if (total_selections == 0) {
+        return FALSE;
+    }
+
+    /* Process each selection individually */
+    GList* iter;
+    gint current = 0;
+    for (iter = mask->selections; iter != NULL; iter = iter->next) {
+        Selection* sel = (Selection*)iter->data;
+        if (!sel || !sel->mask) {
+            current++;
+            continue;
+        }
+
+        /* Update progress */
+        if (progress_callback) {
+            if (!progress_callback(current, total_selections, progress_user_data)) {
+                return FALSE; /* User cancelled */
+            }
+        }
+
+        /* Allocate temporary buffer for this selection's mask */
+        uint8_t* temp_buffer = g_malloc0(mask->stride * mask->height);
+        if (!temp_buffer) {
+            current++;
+            continue;
+        }
+
+        /* Apply Gaussian blur to this selection's mask */
+        apply_gaussian_blur(sel->mask, temp_buffer, mask->width, mask->height, mask->stride, radius);
+
+        /* Copy result back to selection's mask */
+        memcpy(sel->mask, temp_buffer, mask->stride * mask->height);
+        g_free(temp_buffer);
+
+        /* Mark selection's feathering as dirty so it regenerates */
+        if (sel->feathered_preview) {
+            g_free(sel->feathered_preview);
+            sel->feathered_preview = NULL;
+        }
+        sel->feather_dirty = TRUE;
+
+        current++;
+    }
+
+    /* Rebuild base_mask from all modified selections */
+    selection_mask_rebuild_from_selections(mask);
+
+    /* Mark as dirty */
+    selection_mask_mark_dirty(mask, 0, 0, mask->width, mask->height);
+    mask->feather_dirty = TRUE;
+
+    return TRUE;
+}
+
+/**
+ * Sharpen selection edges (contract then expand to make edges harder)
+ * Processes each selection individually, preserving its feathering parameters
+ */
+gboolean selection_mask_sharpen(SelectionMask* mask, gint radius,
+                                SelectionOperationProgressCallback progress_callback,
+                                gpointer progress_user_data) {
+    if (!mask || radius < 1 || radius > 500) {
+        return FALSE;
+    }
+
+    if (selection_mask_is_empty(mask) || !mask->selections) {
+        return FALSE; /* Can't sharpen empty selection */
+    }
+
+    /* Count selections */
+    gint total_selections = g_list_length(mask->selections);
+    if (total_selections == 0) {
+        return FALSE;
+    }
+
+    /* Process each selection individually */
+    GList* iter;
+    gint current = 0;
+    for (iter = mask->selections; iter != NULL; iter = iter->next) {
+        Selection* sel = (Selection*)iter->data;
+        if (!sel || !sel->mask) {
+            current++;
+            continue;
+        }
+
+        /* Update progress */
+        if (progress_callback) {
+            if (!progress_callback(current, total_selections, progress_user_data)) {
+                return FALSE; /* User cancelled */
+            }
+        }
+
+        /* Allocate temporary buffers */
+        uint8_t* temp_buffer1 = g_malloc0(mask->stride * mask->height);
+        uint8_t* temp_buffer2 = g_malloc0(mask->stride * mask->height);
+        if (!temp_buffer1 || !temp_buffer2) {
+            if (temp_buffer1)
+                g_free(temp_buffer1);
+            if (temp_buffer2)
+                g_free(temp_buffer2);
+            current++;
+            continue;
+        }
+
+        /* Shrink then grow to sharpen edges */
+        /* First shrink */
+        erode_mask(sel->mask, temp_buffer1, mask->width, mask->height, mask->stride, radius);
+
+        /* Then grow back */
+        dilate_mask(temp_buffer1, temp_buffer2, mask->width, mask->height, mask->stride, radius);
+
+        /* Copy result back to selection's mask */
+        memcpy(sel->mask, temp_buffer2, mask->stride * mask->height);
+        g_free(temp_buffer1);
+        g_free(temp_buffer2);
+
+        /* Mark selection's feathering as dirty so it regenerates */
+        if (sel->feathered_preview) {
+            g_free(sel->feathered_preview);
+            sel->feathered_preview = NULL;
+        }
+        sel->feather_dirty = TRUE;
+
+        current++;
+    }
+
+    /* Rebuild base_mask from all modified selections */
+    selection_mask_rebuild_from_selections(mask);
+
+    /* Mark as dirty */
+    selection_mask_mark_dirty(mask, 0, 0, mask->width, mask->height);
+    mask->feather_dirty = TRUE;
+
+    return TRUE;
+}

@@ -58,6 +58,7 @@ set(SOURCES
     ui/dialogs/palettize_dialog.c
     ui/dialogs/recovery_dialog.c
     ui/dialogs/retinex_dialog.c
+    ui/dialogs/selection_radius_dialog.c
     tools.c
     tools/tool_manager.c
     tools/tool_hand.c

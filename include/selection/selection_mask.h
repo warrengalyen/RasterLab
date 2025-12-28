@@ -254,4 +254,88 @@ void selection_mask_rebuild_from_selections(SelectionMask* mask);
  */
 void selection_mask_regenerate_combined_feather_preview(SelectionMask* mask);
 
+/* ============================================================
+ * Selection Modification Operations
+ * ============================================================ */
+
+/**
+ * Progress callback for selection operations
+ * Called periodically during long operations to update progress
+ * @param current Current selection index (0-based)
+ * @param total Total number of selections
+ * @param user_data User data passed to the operation
+ * @return TRUE to continue, FALSE to cancel
+ */
+typedef gboolean (*SelectionOperationProgressCallback)(gint current, gint total, gpointer user_data);
+
+/**
+ * Grow selection by specified radius (dilate)
+ * Expands each selection outward by the given number of pixels
+ * Preserves each selection's individual feathering parameters
+ * @param mask The selection mask to modify
+ * @param radius Radius in pixels (1-500)
+ * @param progress_callback Optional callback for progress updates (can be NULL)
+ * @param progress_user_data User data for progress callback
+ * @return TRUE if successful, FALSE otherwise
+ */
+gboolean selection_mask_grow(SelectionMask* mask, gint radius,
+                             SelectionOperationProgressCallback progress_callback,
+                             gpointer progress_user_data);
+
+/**
+ * Shrink selection by specified radius (erode)
+ * Contracts each selection inward by the given number of pixels
+ * Preserves each selection's individual feathering parameters
+ * @param mask The selection mask to modify
+ * @param radius Radius in pixels (1-500)
+ * @param progress_callback Optional callback for progress updates (can be NULL)
+ * @param progress_user_data User data for progress callback
+ * @return TRUE if successful, FALSE otherwise
+ */
+gboolean selection_mask_shrink(SelectionMask* mask, gint radius,
+                               SelectionOperationProgressCallback progress_callback,
+                               gpointer progress_user_data);
+
+/**
+ * Create border selection (dilate then subtract original)
+ * Creates a selection that is only the border/edge of each original selection
+ * Preserves each selection's individual feathering parameters
+ * @param mask The selection mask to modify
+ * @param radius Border width in pixels (1-500)
+ * @param progress_callback Optional callback for progress updates (can be NULL)
+ * @param progress_user_data User data for progress callback
+ * @return TRUE if successful, FALSE otherwise
+ */
+gboolean selection_mask_border(SelectionMask* mask, gint radius,
+                               SelectionOperationProgressCallback progress_callback,
+                               gpointer progress_user_data);
+
+/**
+ * Feather selection edges (modify base_mask with feathering)
+ * Applies feathering directly to each selection's mask
+ * Preserves each selection's individual feathering parameters
+ * @param mask The selection mask to modify
+ * @param radius Feather radius in pixels (1-500)
+ * @param progress_callback Optional callback for progress updates (can be NULL)
+ * @param progress_user_data User data for progress callback
+ * @return TRUE if successful, FALSE otherwise
+ */
+gboolean selection_mask_feather(SelectionMask* mask, gint radius,
+                                SelectionOperationProgressCallback progress_callback,
+                                gpointer progress_user_data);
+
+/**
+ * Sharpen selection edges (contract then expand to make edges harder)
+ * Makes each selection's edges more defined by shrinking then growing
+ * Preserves each selection's individual feathering parameters
+ * @param mask The selection mask to modify
+ * @param radius Sharpen radius in pixels (1-500)
+ * @param progress_callback Optional callback for progress updates (can be NULL)
+ * @param progress_user_data User data for progress callback
+ * @return TRUE if successful, FALSE otherwise
+ */
+gboolean selection_mask_sharpen(SelectionMask* mask, gint radius,
+                                SelectionOperationProgressCallback progress_callback,
+                                gpointer progress_user_data);
+
 #endif /* SELECTION_MASK_H */
