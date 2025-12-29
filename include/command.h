@@ -451,6 +451,14 @@ typedef struct {
 Command* command_create_layer_add(struct ImageDocument* doc, struct ImageLayer* layer);
 
 /**
+ * Create a paste command (adds layer with "Paste" name in undo/redo)
+ * @param doc The document
+ * @param layer The layer being pasted
+ * @return Newly created Command, or NULL on failure
+ */
+Command* command_create_paste(struct ImageDocument* doc, struct ImageLayer* layer);
+
+/**
  * Create a layer delete command
  * @param doc The document
  * @param layer The layer being deleted

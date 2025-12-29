@@ -2108,6 +2108,36 @@ Command* command_create_layer_add(struct ImageDocument* doc, struct ImageLayer* 
 }
 
 /**
+ * Create a paste command (similar to layer add but with "Paste" name)
+ */
+Command* command_create_paste(struct ImageDocument* doc, struct ImageLayer* layer) {
+    Command* cmd;
+    LayerAddCommandData* data;
+
+    if (!doc || !layer) {
+        return NULL;
+    }
+
+    data = (LayerAddCommandData*)g_malloc(sizeof(LayerAddCommandData));
+    data->doc = doc;
+    data->layer = layer;
+
+    cmd = command_new("Paste",
+                      COMMAND_LAYER_EDIT,
+                      layer_add_command_apply,
+                      layer_add_command_revert,
+                      layer_add_command_destroy);
+
+    if (!cmd) {
+        g_free(data);
+        return NULL;
+    }
+
+    cmd->user_data = data;
+    return cmd;
+}
+
+/**
  * Create a layer delete command
  */
 Command* command_create_layer_delete(struct ImageDocument* doc, struct ImageLayer* layer) {
