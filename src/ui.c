@@ -75,6 +75,8 @@ static void on_edit_redo(GtkWidget* widget, gpointer data);
 static void on_edit_copy(GtkWidget* widget, gpointer data);
 static void on_edit_cut(GtkWidget* widget, gpointer data);
 static void on_edit_paste(GtkWidget* widget, gpointer data);
+static void on_edit_copy_merged(GtkWidget* widget, gpointer data);
+static void on_edit_cut_merged(GtkWidget* widget, gpointer data);
 static void on_view_zoom_in(GtkWidget* widget, gpointer data);
 static void on_view_zoom_out(GtkWidget* widget, gpointer data);
 static void on_view_zoom_reset(GtkWidget* widget, gpointer data);
@@ -1127,6 +1129,8 @@ static void setup_edit_menu(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup*
     GtkWidget* edit_menu_copy = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu_copy"));
     GtkWidget* edit_menu_cut = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu_cut"));
     GtkWidget* edit_menu_paste = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu_paste"));
+    GtkWidget* edit_menu_copy_merged = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu_copy_merged"));
+    GtkWidget* edit_menu_cut_merged = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu_cut_merged"));
 
     if (edit_menu_copy) {
         g_signal_connect(edit_menu_copy, "activate", G_CALLBACK(on_edit_copy), ctx);
@@ -1136,6 +1140,12 @@ static void setup_edit_menu(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup*
     }
     if (edit_menu_paste) {
         g_signal_connect(edit_menu_paste, "activate", G_CALLBACK(on_edit_paste), ctx);
+    }
+    if (edit_menu_copy_merged) {
+        g_signal_connect(edit_menu_copy_merged, "activate", G_CALLBACK(on_edit_copy_merged), ctx);
+    }
+    if (edit_menu_cut_merged) {
+        g_signal_connect(edit_menu_cut_merged, "activate", G_CALLBACK(on_edit_cut_merged), ctx);
     }
 }
 
@@ -2432,6 +2442,244 @@ static cairo_surface_t* extract_pixels_for_copy(ImageDocument* doc, ImageLayer* 
 }
 
 /**
+ * Helper function to create a merged surface from all visible layers
+ * Returns a cairo surface with all visible layers composited, or NULL on error
+ */
+static cairo_surface_t* create_merged_surface(ImageDocument* doc) {
+    if (!doc || doc->width == 0 || doc->height == 0) {
+        return NULL;
+    }
+
+    /* Create surface for merged result */
+    cairo_surface_t* merged = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, doc->width, doc->height);
+    if (!merged) {
+        return NULL;
+    }
+
+    /* Composite all visible layers */
+    cairo_t* cr = cairo_create(merged);
+    if (!cr) {
+        cairo_surface_destroy(merged);
+        return NULL;
+    }
+
+    /* Clear to transparent */
+    cairo_set_operator(cr, CAIRO_OPERATOR_CLEAR);
+    cairo_paint(cr);
+    cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+
+    /* Composite each visible layer */
+    gboolean is_first_layer = TRUE;
+    for (GList* iter = doc->layers; iter; iter = iter->next) {
+        ImageLayer* layer = (ImageLayer*)iter->data;
+
+        if (!layer || !layer->surface) {
+            continue;
+        }
+
+        /* Skip invisible layers */
+        if (!layer->visible || layer->opacity <= 0.0) {
+            continue;
+        }
+
+        /* Ensure layer cache is up to date */
+        if (!layer_ensure_cache(layer)) {
+            continue;
+        }
+
+        /* Draw layer with offset */
+        cairo_save(cr);
+        cairo_translate(cr, layer->offset_x, layer->offset_y);
+        cairo_set_source_surface(cr, layer->cache_surface, 0, 0);
+
+        /* Set operator based on layer's blend mode */
+        cairo_operator_t op;
+        if (is_first_layer) {
+            op = CAIRO_OPERATOR_OVER;
+            is_first_layer = FALSE;
+        } else {
+            op = blend_mode_to_cairo_operator(layer->blend_mode);
+        }
+        cairo_set_operator(cr, op);
+        cairo_paint(cr);
+        cairo_restore(cr);
+    }
+
+    cairo_destroy(cr);
+    cairo_surface_flush(merged);
+
+    return merged;
+}
+
+/**
+ * Helper function to extract pixels from merged layers for copying
+ * Returns a cairo surface with the pixels to copy (selection or entire merged image)
+ */
+static cairo_surface_t* extract_merged_pixels_for_copy(ImageDocument* doc) {
+    if (!doc) {
+        return NULL;
+    }
+
+    /* Create merged surface from all visible layers */
+    cairo_surface_t* merged = create_merged_surface(doc);
+    if (!merged) {
+        return NULL;
+    }
+
+    gint width = doc->width;
+    gint height = doc->height;
+
+    /* Check if there's a selection */
+    gboolean has_selection = (doc->selection_mask && !selection_mask_is_empty(doc->selection_mask));
+
+    if (!has_selection) {
+        /* No selection: return merged surface as-is */
+        return merged;
+    }
+
+    /* Has selection: extract selected pixels from merged surface */
+    DirtyRect doc_rect;
+    dirty_rect_set(&doc_rect, 0, 0, width, height);
+
+    DirtyRect actual_region;
+    SelectionMask* region_mask = selection_build_combined_mask(
+        doc->selection_mask, &doc_rect, FEATHER_QUALITY_NORMAL, &actual_region);
+
+    if (!region_mask || !region_mask->data || dirty_rect_is_empty(&actual_region)) {
+        cairo_surface_destroy(merged);
+        if (region_mask) {
+            selection_mask_free(region_mask);
+        }
+        return NULL;
+    }
+
+    /* Find bounding box of selected pixels */
+    gint sel_x_min = actual_region.x + actual_region.width;
+    gint sel_y_min = actual_region.y + actual_region.height;
+    gint sel_x_max = actual_region.x;
+    gint sel_y_max = actual_region.y;
+
+    /* Scan mask to find actual bounds */
+    for (gint y = 0; y < region_mask->height; y++) {
+        for (gint x = 0; x < region_mask->width; x++) {
+            uint8_t mask_alpha = region_mask->data[y * region_mask->stride + x];
+            if (mask_alpha > 0) {
+                gint doc_x = actual_region.x + x;
+                gint doc_y = actual_region.y + y;
+                if (doc_x < sel_x_min)
+                    sel_x_min = doc_x;
+                if (doc_y < sel_y_min)
+                    sel_y_min = doc_y;
+                if (doc_x > sel_x_max)
+                    sel_x_max = doc_x;
+                if (doc_y > sel_y_max)
+                    sel_y_max = doc_y;
+            }
+        }
+    }
+
+    if (sel_x_max < sel_x_min || sel_y_max < sel_y_min) {
+        cairo_surface_destroy(merged);
+        selection_mask_free(region_mask);
+        return NULL; /* No selected pixels */
+    }
+
+    /* Create surface with bounding box dimensions */
+    gint new_width = sel_x_max - sel_x_min + 1;
+    gint new_height = sel_y_max - sel_y_min + 1;
+
+    cairo_surface_t* copy = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, new_width, new_height);
+    if (!copy) {
+        cairo_surface_destroy(merged);
+        selection_mask_free(region_mask);
+        return NULL;
+    }
+
+    /* Copy pixels from merged surface to copy, masked by selection */
+    cairo_surface_flush(merged);
+    cairo_surface_flush(copy);
+
+    guchar* src_data = cairo_image_surface_get_data(merged);
+    gint src_stride = cairo_image_surface_get_stride(merged);
+    guchar* dst_data = cairo_image_surface_get_data(copy);
+    gint dst_stride = cairo_image_surface_get_stride(copy);
+
+    for (gint y = 0; y < new_height; y++) {
+        gint doc_y = sel_y_min + y;
+        gint mask_y = doc_y - actual_region.y;
+
+        if (doc_y < 0 || doc_y >= height) {
+            continue;
+        }
+        if (mask_y < 0 || mask_y >= region_mask->height) {
+            continue;
+        }
+
+        for (gint x = 0; x < new_width; x++) {
+            gint doc_x = sel_x_min + x;
+            gint mask_x = doc_x - actual_region.x;
+
+            if (doc_x < 0 || doc_x >= width) {
+                continue;
+            }
+            if (mask_x < 0 || mask_x >= region_mask->width) {
+                continue;
+            }
+
+            uint8_t mask_alpha = region_mask->data[mask_y * region_mask->stride + mask_x];
+            if (mask_alpha == 0) {
+                continue; /* Not selected */
+            }
+
+            /* Copy pixel from merged to destination */
+            guchar* src_pixel = src_data + doc_y * src_stride + doc_x * 4;
+            guchar* dst_pixel = dst_data + y * dst_stride + x * 4;
+
+            if (mask_alpha == 255) {
+                /* Fully selected: copy pixel directly */
+                dst_pixel[0] = src_pixel[0];
+                dst_pixel[1] = src_pixel[1];
+                dst_pixel[2] = src_pixel[2];
+                dst_pixel[3] = src_pixel[3];
+            } else {
+                /* Partially selected (feathered): apply mask to alpha */
+                uint8_t src_a = src_pixel[3];
+                uint8_t new_alpha = (uint8_t)((src_a * mask_alpha) / 255);
+
+                if (new_alpha == 0) {
+                    dst_pixel[0] = dst_pixel[1] = dst_pixel[2] = dst_pixel[3] = 0;
+                } else if (src_a > 0) {
+                    /* Un-premultiply, then re-premultiply with new alpha */
+                    uint16_t r = (src_pixel[2] * 255 + src_a / 2) / src_a;
+                    uint16_t g = (src_pixel[1] * 255 + src_a / 2) / src_a;
+                    uint16_t b = (src_pixel[0] * 255 + src_a / 2) / src_a;
+
+                    if (r > 255)
+                        r = 255;
+                    if (g > 255)
+                        g = 255;
+                    if (b > 255)
+                        b = 255;
+
+                    dst_pixel[0] = (b * new_alpha + 127) / 255;
+                    dst_pixel[1] = (g * new_alpha + 127) / 255;
+                    dst_pixel[2] = (r * new_alpha + 127) / 255;
+                    dst_pixel[3] = new_alpha;
+                } else {
+                    dst_pixel[0] = dst_pixel[1] = dst_pixel[2] = dst_pixel[3] = 0;
+                }
+            }
+        }
+    }
+
+    cairo_surface_mark_dirty(copy);
+    cairo_surface_destroy(merged);
+    selection_mask_free(region_mask);
+
+    return copy;
+}
+
+/**
  * Edit > Copy callback
  */
 static void on_edit_copy(GtkWidget* widget, gpointer data) {
@@ -2777,6 +3025,232 @@ static void on_edit_paste(GtkWidget* widget, gpointer data) {
     }
 
     /* Update UI */
+    document_invalidate_composite(doc);
+
+    LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window), "layers_panel");
+    if (layers_panel) {
+        layers_panel_update(layers_panel, doc);
+    }
+
+    ui_update_menu_and_button_states(ctx);
+    ui_update_window_title(ctx);
+
+    if (doc->drawing_area) {
+        gtk_widget_queue_draw(doc->drawing_area);
+    }
+}
+
+/**
+ * Edit > Copy Merged callback
+ */
+static void on_edit_copy_merged(GtkWidget* widget, gpointer data) {
+    (void)widget; /* Unused */
+
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc;
+    cairo_surface_t* copy_surface;
+    GdkPixbuf* pixbuf;
+    GtkClipboard* clipboard;
+
+    if (!ctx) {
+        return;
+    }
+
+    doc = ui_get_active_document(ctx);
+    if (!doc) {
+        return;
+    }
+
+    /* Extract pixels from merged layers */
+    copy_surface = extract_merged_pixels_for_copy(doc);
+    if (!copy_surface) {
+        return;
+    }
+
+    /* Convert to pixbuf */
+    pixbuf = cairo_surface_to_pixbuf(copy_surface, TRUE);
+    cairo_surface_destroy(copy_surface);
+
+    if (!pixbuf) {
+        return;
+    }
+
+    /* Copy to clipboard */
+    clipboard = gtk_clipboard_get(GDK_SELECTION_CLIPBOARD);
+    if (clipboard) {
+        gtk_clipboard_set_image(clipboard, pixbuf);
+    }
+
+    g_object_unref(pixbuf);
+}
+
+/**
+ * Edit > Cut Merged callback
+ */
+static void on_edit_cut_merged(GtkWidget* widget, gpointer data) {
+    (void)widget; /* Unused */
+
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc;
+    cairo_surface_t* copy_surface;
+    GdkPixbuf* pixbuf;
+    GtkClipboard* clipboard;
+
+    if (!ctx) {
+        return;
+    }
+
+    doc = ui_get_active_document(ctx);
+    if (!doc) {
+        return;
+    }
+
+    /* First, copy merged layers to clipboard */
+    copy_surface = extract_merged_pixels_for_copy(doc);
+    if (!copy_surface) {
+        return;
+    }
+
+    pixbuf = cairo_surface_to_pixbuf(copy_surface, TRUE);
+    cairo_surface_destroy(copy_surface);
+
+    if (!pixbuf) {
+        return;
+    }
+
+    clipboard = gtk_clipboard_get(GDK_SELECTION_CLIPBOARD);
+    if (clipboard) {
+        gtk_clipboard_set_image(clipboard, pixbuf);
+    }
+    g_object_unref(pixbuf);
+
+    /* Now create undo commands and clear pixels from all visible layers */
+    gboolean has_selection = (doc->selection_mask && !selection_mask_is_empty(doc->selection_mask));
+    GList* commands = NULL; /* List to collect commands before pushing */
+
+    /* Iterate through all visible layers and cut from each */
+    for (GList* iter = doc->layers; iter; iter = iter->next) {
+        ImageLayer* current_layer = (ImageLayer*)iter->data;
+
+        if (!current_layer || !current_layer->surface) {
+            continue;
+        }
+
+        /* Skip invisible layers */
+        if (!current_layer->visible || current_layer->opacity <= 0.0) {
+            continue;
+        }
+
+        /* Create a draw command to track the cut merged operation for this layer */
+        Command* layer_cmd = command_create_draw(current_layer, "Cut Merged");
+        if (!layer_cmd) {
+            continue;
+        }
+
+        /* Clear pixels from this layer */
+        if (has_selection) {
+            /* Clear selected pixels */
+            DirtyRect layer_rect;
+            dirty_rect_set(&layer_rect, current_layer->offset_x, current_layer->offset_y,
+                           current_layer->width, current_layer->height);
+
+            DirtyRect actual_region;
+            SelectionMask* region_mask = selection_build_combined_mask(
+                doc->selection_mask, &layer_rect, FEATHER_QUALITY_NORMAL, &actual_region);
+
+            if (region_mask && region_mask->data) {
+                cairo_surface_flush(current_layer->surface);
+                guchar* layer_data = cairo_image_surface_get_data(current_layer->surface);
+                gint layer_stride = cairo_image_surface_get_stride(current_layer->surface);
+
+                for (gint y = 0; y < (gint)current_layer->height; y++) {
+                    gint doc_y = current_layer->offset_y + y;
+                    gint mask_y = doc_y - actual_region.y;
+
+                    if (mask_y < 0 || mask_y >= region_mask->height) {
+                        continue;
+                    }
+
+                    for (gint x = 0; x < (gint)current_layer->width; x++) {
+                        gint doc_x = current_layer->offset_x + x;
+                        gint mask_x = doc_x - actual_region.x;
+
+                        if (mask_x < 0 || mask_x >= region_mask->width) {
+                            continue;
+                        }
+
+                        uint8_t mask_alpha = region_mask->data[mask_y * region_mask->stride + mask_x];
+                        if (mask_alpha > 0) {
+                            guchar* pixel = layer_data + y * layer_stride + x * 4;
+
+                            if (mask_alpha == 255) {
+                                /* Fully selected: clear completely */
+                                pixel[0] = pixel[1] = pixel[2] = pixel[3] = 0;
+                            } else {
+                                /* Partially selected: reduce alpha */
+                                uint8_t src_a = pixel[3];
+                                uint8_t new_alpha = (uint8_t)((src_a * (255 - mask_alpha)) / 255);
+
+                                if (new_alpha < 1) {
+                                    pixel[0] = pixel[1] = pixel[2] = pixel[3] = 0;
+                                } else if (src_a > 0) {
+                                    /* Un-premultiply, then re-premultiply */
+                                    uint16_t r = (pixel[2] * 255 + src_a / 2) / src_a;
+                                    uint16_t g = (pixel[1] * 255 + src_a / 2) / src_a;
+                                    uint16_t b = (pixel[0] * 255 + src_a / 2) / src_a;
+
+                                    if (r > 255)
+                                        r = 255;
+                                    if (g > 255)
+                                        g = 255;
+                                    if (b > 255)
+                                        b = 255;
+
+                                    pixel[0] = (b * new_alpha + 127) / 255;
+                                    pixel[1] = (g * new_alpha + 127) / 255;
+                                    pixel[2] = (r * new_alpha + 127) / 255;
+                                    pixel[3] = new_alpha;
+                                } else {
+                                    pixel[0] = pixel[1] = pixel[2] = pixel[3] = 0;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                cairo_surface_mark_dirty(current_layer->surface);
+                selection_mask_free(region_mask);
+            }
+        } else {
+            /* No selection: clear entire layer */
+            cairo_t* cr = cairo_create(current_layer->surface);
+            cairo_set_operator(cr, CAIRO_OPERATOR_CLEAR);
+            cairo_paint(cr);
+            cairo_destroy(cr);
+            cairo_surface_mark_dirty(current_layer->surface);
+        }
+
+        /* Finalize command and add to list */
+        if (command_finalize_draw(layer_cmd)) {
+            command_execute(layer_cmd, doc);
+            commands = g_list_prepend(commands, layer_cmd);
+        } else {
+            command_free(layer_cmd);
+        }
+
+        /* Invalidate layer cache */
+        layer_invalidate_cache(current_layer);
+    }
+
+    /* Push all commands to undo stack (in reverse order so top layer is undone first) */
+    for (GList* l = commands; l; l = l->next) {
+        Command* cmd_to_push = (Command*)l->data;
+        command_stack_push(doc->undo_stack, cmd_to_push);
+    }
+    g_list_free(commands);                /* Free list, but not commands (they're on the stack now) */
+    command_stack_clear(doc->redo_stack); /* Clear redo stack */
+
+    /* Invalidate document composite */
     document_invalidate_composite(doc);
 
     LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window), "layers_panel");
