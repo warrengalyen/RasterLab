@@ -584,7 +584,8 @@ void tool_rect_select_finalize(Tool* tool, ImageDocument* doc) {
             state->selection_h,
             state->combine_mode,
             state->smooth_mode,
-            state->feather_radius);
+            state->feather_radius,
+            FALSE); /* FALSE = create Selection objects (for tool operations) */
 
         /* Note: Feathering parameters are already set per-selection in selection_mask_fill_rect */
         /* No need to commit global feathering - per-selection system handles it */

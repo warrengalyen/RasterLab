@@ -1,7 +1,11 @@
 #include "ui/dialogs/clouds_dialog.h"
+#include "document.h"
 #include "render/compositor.h"
 #include "render/layer.h"
+#include "selection/selection_mask.h"
+#include "selection/selection_render.h"
 #include "ui/filters/filter_render_clouds.h"
+#include "ui/filters/filter_utils.h"
 #include "ui/widgets/filter_preview.h"
 #include <cairo.h>
 #include <glib.h>
@@ -31,15 +35,36 @@ struct _CloudsDialog {
 };
 
 /**
+ * Wrapper structure for CloudParams with dialog pointer
+ */
+typedef struct {
+    CloudParams params;
+    CloudsDialog* dialog; /* Dialog pointer for accessing document/layer */
+} CloudParamsWrapper;
+
+/**
  * Helper function to wrap CloudParams filter for viewport system
  */
 static cairo_surface_t* apply_clouds_filter_to_viewport_surface(cairo_surface_t* viewport_surface, gpointer params) {
-    CloudParams* cloud_params = (CloudParams*)params;
+    CloudParamsWrapper* wrapper = (CloudParamsWrapper*)params;
+    CloudParams* cloud_params = wrapper ? &wrapper->params : NULL;
     ImageLayer* temp_layer;
     cairo_surface_t* result;
+    cairo_surface_t* original_viewport = NULL;
+    struct ImageDocument* doc = NULL;
+    struct ImageLayer* layer = NULL;
 
     if (!viewport_surface || !cloud_params) {
         return NULL;
+    }
+
+    /* Get document and layer from dialog if available */
+    if (wrapper && wrapper->dialog) {
+        GtkWindow* window = clouds_dialog_get_window(wrapper->dialog);
+        if (window) {
+            doc = (struct ImageDocument*)g_object_get_data(G_OBJECT(window), "filter_doc");
+            layer = (struct ImageLayer*)g_object_get_data(G_OBJECT(window), "original_layer");
+        }
     }
 
     /* Get viewport dimensions */
@@ -50,10 +75,26 @@ static cairo_surface_t* apply_clouds_filter_to_viewport_surface(cairo_surface_t*
         return NULL;
     }
 
+    /* Create a copy of the original viewport for selection masking */
+    if (doc && layer) {
+        original_viewport = cairo_image_surface_create(
+            cairo_image_surface_get_format(viewport_surface), width, height);
+        if (original_viewport) {
+            cairo_t* cr = cairo_create(original_viewport);
+            cairo_set_source_surface(cr, viewport_surface, 0, 0);
+            cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+            cairo_paint(cr);
+            cairo_destroy(cr);
+        }
+    }
+
     /* Create a temporary layer with the viewport surface */
     temp_layer = layer_new("TempViewport", width, height, TRUE,
-                           LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL);
+                           LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL, NULL);
     if (!temp_layer) {
+        if (original_viewport) {
+            cairo_surface_destroy(original_viewport);
+        }
         return NULL;
     }
 
@@ -67,7 +108,90 @@ static cairo_surface_t* apply_clouds_filter_to_viewport_surface(cairo_surface_t*
     /* Apply filter to the layer */
     if (!filter_render_clouds_apply(temp_layer, cloud_params)) {
         layer_free(temp_layer);
+        if (original_viewport) {
+            cairo_surface_destroy(original_viewport);
+        }
         return NULL;
+    }
+
+    /* Apply selection masking if there's a selection */
+    if (original_viewport && doc && layer) {
+        /* Create a temporary layer structure for the viewport with correct offset */
+        ImageLayer viewport_layer = *layer;
+        viewport_layer.surface = temp_layer->surface;
+        viewport_layer.width = width;
+        viewport_layer.height = height;
+
+        /* Check if preview was cropped (viewport smaller than layer) */
+        /* If cropped, the viewport is at (0,0) relative to cropped surface, */
+        /* which corresponds to (sel_x_min, sel_y_min) relative to original layer */
+        gint layer_width = cairo_image_surface_get_width(layer->surface);
+        gint layer_height = cairo_image_surface_get_height(layer->surface);
+
+        if (width < layer_width || height < layer_height) {
+            /* Preview was cropped - need to find selection bounding box to get crop offset */
+            /* Build selection mask for a small region to find where selection starts */
+            DirtyRect test_rect;
+            dirty_rect_set(&test_rect, layer->offset_x, layer->offset_y, layer_width, layer_height);
+            DirtyRect actual_region;
+            SelectionMask* test_mask = selection_build_combined_mask(
+                doc->selection_mask, &test_rect, FEATHER_QUALITY_NORMAL, &actual_region);
+
+            if (test_mask && test_mask->data) {
+                /* Find selection bounding box */
+                gint sel_x_min_doc = actual_region.x + actual_region.width;
+                gint sel_y_min_doc = actual_region.y + actual_region.height;
+                gint sel_x_max_doc = actual_region.x - 1;
+                gint sel_y_max_doc = actual_region.y - 1;
+
+                for (gint y = 0; y < test_mask->height; y++) {
+                    const uint8_t* mask_row = test_mask->data + y * test_mask->stride;
+                    for (gint x = 0; x < test_mask->width; x++) {
+                        if (mask_row[x] > 0) {
+                            gint doc_x = actual_region.x + x;
+                            gint doc_y = actual_region.y + y;
+                            if (doc_x < sel_x_min_doc)
+                                sel_x_min_doc = doc_x;
+                            if (doc_y < sel_y_min_doc)
+                                sel_y_min_doc = doc_y;
+                            if (doc_x > sel_x_max_doc)
+                                sel_x_max_doc = doc_x;
+                            if (doc_y > sel_y_max_doc)
+                                sel_y_max_doc = doc_y;
+                        }
+                    }
+                }
+
+                if (sel_x_max_doc >= sel_x_min_doc && sel_y_max_doc >= sel_y_min_doc) {
+                    /* Convert to layer coordinates */
+                    gint sel_x_min = sel_x_min_doc - layer->offset_x;
+                    gint sel_y_min = sel_y_min_doc - layer->offset_y;
+
+                    /* Viewport at (0,0) in cropped surface = (sel_x_min, sel_y_min) in layer */
+                    viewport_layer.offset_x = layer->offset_x + sel_x_min;
+                    viewport_layer.offset_y = layer->offset_y + sel_y_min;
+                } else {
+                    /* Fallback to original layer offset */
+                    viewport_layer.offset_x = layer->offset_x;
+                    viewport_layer.offset_y = layer->offset_y;
+                }
+            } else {
+                /* Fallback to original layer offset */
+                viewport_layer.offset_x = layer->offset_x;
+                viewport_layer.offset_y = layer->offset_y;
+            }
+
+            if (test_mask) {
+                selection_mask_free(test_mask);
+            }
+        } else {
+            /* Preview not cropped - viewport is at (0,0) relative to layer */
+            viewport_layer.offset_x = layer->offset_x;
+            viewport_layer.offset_y = layer->offset_y;
+        }
+
+        filter_utils_apply_selection_mask(temp_layer->surface, original_viewport, doc, &viewport_layer);
+        cairo_surface_destroy(original_viewport);
     }
 
     /* Return a reference to the filtered surface */
@@ -81,7 +205,7 @@ static cairo_surface_t* apply_clouds_filter_to_viewport_surface(cairo_surface_t*
  * Update preview callback
  */
 static void update_preview(CloudsDialog* dialog) {
-    CloudParams* stored_params;
+    CloudParamsWrapper* stored_wrapper;
 
     if (!dialog || !dialog->preview) {
         return;
@@ -111,20 +235,21 @@ static void update_preview(CloudsDialog* dialog) {
     dialog->params.highlightColorG = (guchar)(highlight_color.green * 255.0);
     dialog->params.highlightColorB = (guchar)(highlight_color.blue * 255.0);
 
-    /* Get or create stored params */
-    stored_params = (CloudParams*)g_object_get_data(G_OBJECT(dialog->dialog), "clouds_params");
+    /* Get or create stored wrapper */
+    stored_wrapper = (CloudParamsWrapper*)g_object_get_data(G_OBJECT(dialog->dialog), "clouds_params");
 
-    if (!stored_params) {
-        stored_params = g_malloc(sizeof(CloudParams));
+    if (!stored_wrapper) {
+        stored_wrapper = g_malloc(sizeof(CloudParamsWrapper));
         g_object_set_data_full(G_OBJECT(dialog->dialog), "clouds_params",
-                               stored_params, g_free);
+                               stored_wrapper, g_free);
     }
 
-    /* Copy params */
-    *stored_params = dialog->params;
+    /* Copy params and dialog pointer */
+    stored_wrapper->params = dialog->params;
+    stored_wrapper->dialog = dialog;
 
     /* Set filter function on preview to use viewport-based filtering */
-    filter_preview_set_filter_function(dialog->preview, apply_clouds_filter_to_viewport_surface, stored_params);
+    filter_preview_set_filter_function(dialog->preview, apply_clouds_filter_to_viewport_surface, stored_wrapper);
     filter_preview_refresh(dialog->preview);
 
     /* Call user callback if provided */
@@ -622,18 +747,37 @@ GtkWindow* clouds_dialog_get_window(CloudsDialog* dialog) {
 void clouds_dialog_set_layers(CloudsDialog* dialog, ImageLayer* original, ImageLayer* temp) {
     cairo_surface_t* before_surface = NULL;
     cairo_surface_t* after_surface = NULL;
+    struct ImageDocument* doc = NULL;
+    struct ImageLayer* layer = NULL;
 
     if (!dialog || !dialog->preview) {
         return;
     }
 
+    /* Get document and layer from dialog if available */
+    GtkWindow* window = clouds_dialog_get_window(dialog);
+    if (window) {
+        doc = (struct ImageDocument*)g_object_get_data(G_OBJECT(window), "filter_doc");
+        layer = (struct ImageLayer*)g_object_get_data(G_OBJECT(window), "original_layer");
+    }
+
     /* Get composite surfaces from layers if available */
     if (original && original->surface) {
-        before_surface = cairo_surface_reference(original->surface);
+        /* If there's a selection, create masked surface showing only selected pixels */
+        if (doc && layer) {
+            before_surface = filter_utils_create_masked_preview_surface(original->surface, doc, layer);
+        } else {
+            before_surface = cairo_surface_reference(original->surface);
+        }
     }
 
     if (temp && temp->surface) {
-        after_surface = cairo_surface_reference(temp->surface);
+        /* If there's a selection, create masked surface showing only selected pixels */
+        if (doc && layer) {
+            after_surface = filter_utils_create_masked_preview_surface(temp->surface, doc, layer);
+        } else {
+            after_surface = cairo_surface_reference(temp->surface);
+        }
     }
 
     filter_preview_set_before_surface(dialog->preview, before_surface);
@@ -700,11 +844,36 @@ gint clouds_dialog_run(CloudsDialog* dialog, GtkWindow* parent, CloudParams* par
  * Update the after layer in preview
  */
 void clouds_dialog_update_after_layer(CloudsDialog* dialog, ImageLayer* layer) {
+    cairo_surface_t* after_surface = NULL;
+    struct ImageDocument* doc = NULL;
+    struct ImageLayer* original_layer = NULL;
+
     if (!dialog || !dialog->preview) {
         return;
     }
-    filter_preview_set_after_surface(dialog->preview, layer ? layer->surface : NULL);
+
+    /* Get document and original layer from dialog if available */
+    GtkWindow* window = clouds_dialog_get_window(dialog);
+    if (window) {
+        doc = (struct ImageDocument*)g_object_get_data(G_OBJECT(window), "filter_doc");
+        original_layer = (struct ImageLayer*)g_object_get_data(G_OBJECT(window), "original_layer");
+    }
+
+    if (layer && layer->surface) {
+        /* If there's a selection, create masked surface showing only selected pixels */
+        if (doc && original_layer) {
+            after_surface = filter_utils_create_masked_preview_surface(layer->surface, doc, original_layer);
+        } else {
+            after_surface = cairo_surface_reference(layer->surface);
+        }
+    }
+
+    filter_preview_set_after_surface(dialog->preview, after_surface);
     filter_preview_refresh(dialog->preview);
+
+    if (after_surface) {
+        cairo_surface_destroy(after_surface);
+    }
 }
 
 /**

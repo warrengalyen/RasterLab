@@ -1139,6 +1139,14 @@
               </object>
             </child>
             <child>
+              <object class="GtkMenuItem" id="select_menu_item">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">_Select</property>
+                <property name="use-underline">True</property>
+              </object>
+            </child>
+            <child>
               <object class="GtkMenuItem" id="view_menu_item">
                 <property name="visible">True</property>
                 <property name="can-focus">False</property>
@@ -1294,7 +1302,7 @@
                     <property name="position">3</property>
                   </packing>
                 </child>
-                          <child>
+                <child>
                   <object class="GtkToggleButton" id="tool_button_eraser">
                     <property name="width-request">32</property>
                     <property name="height-request">32</property>
@@ -1575,6 +1583,85 @@
             <property name="position">3</property>
           </packing>
         </child>
+      </object>
+    </child>
+  </object>
+  <object class="GtkMenu" id="select_menu">
+    <property name="visible">True</property>
+    <property name="can-focus">False</property>
+    <child>
+      <object class="GtkMenuItem" id="select_menu_all">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">All</property>
+        <property name="use-underline">True</property>
+        <accelerator key="a" signal="activate" modifiers="GDK_CONTROL_MASK"/>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="select_menu_none">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">None</property>
+        <property name="use-underline">True</property>
+        <accelerator key="d" signal="activate" modifiers="GDK_CONTROL_MASK"/>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="select_menu_invert">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Invert</property>
+        <property name="use-underline">True</property>
+        <accelerator key="i" signal="activate" modifiers="GDK_SHIFT_MASK | GDK_CONTROL_MASK"/>
+      </object>
+    </child>
+    <child>
+      <object class="GtkSeparatorMenuItem" id="select_menu_separator">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="select_menu_grow">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Grow</property>
+        <property name="use-underline">True</property>
+        <accelerator key="bracketright" signal="activate" modifiers="GDK_CONTROL_MASK | GDK_MOD1_MASK"/>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="select_menu_shrink">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Shrink</property>
+        <property name="use-underline">True</property>
+        <accelerator key="bracketleft" signal="activate" modifiers="GDK_CONTROL_MASK | GDK_MOD1_MASK"/>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="select_menu_border">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Border</property>
+        <property name="use-underline">True</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="select_menu_feather">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Feather</property>
+        <property name="use-underline">True</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="select_menu_sharpen">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Sharpen</property>
+        <property name="use-underline">True</property>
       </object>
     </child>
   </object>

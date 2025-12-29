@@ -3,6 +3,7 @@
 #include "filters.h"
 #include "render/layer.h"
 #include "ui.h"
+#include "ui/filters/filter_utils.h"
 #include <glib.h>
 #include <gtk/gtk.h>
 
@@ -183,8 +184,34 @@ gboolean ui_apply_layer_filter(AppContext* ctx,
     /* Start timing */
     start_time = start_processing_timer();
 
+    /* Create a copy of the original surface for selection masking */
+    cairo_surface_t* original_surface = NULL;
+    if (layer->surface) {
+        gint width = cairo_image_surface_get_width(layer->surface);
+        gint height = cairo_image_surface_get_height(layer->surface);
+        original_surface = cairo_image_surface_create(
+            cairo_image_surface_get_format(layer->surface), width, height);
+        if (original_surface) {
+            cairo_t* cr = cairo_create(original_surface);
+            cairo_set_source_surface(cr, layer->surface, 0, 0);
+            cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+            cairo_paint(cr);
+            cairo_destroy(cr);
+        }
+    }
+
     /* Apply filter (this is blocking, but progress bar will pulse via timeout) */
     gboolean success = filter_func(layer);
+
+    /* Apply selection masking if there's a selection */
+    if (success && original_surface && layer->surface) {
+        filter_utils_apply_selection_mask(layer->surface, original_surface, doc, layer);
+    }
+
+    /* Free original surface copy */
+    if (original_surface) {
+        cairo_surface_destroy(original_surface);
+    }
 
     /* Process any pending events after filter completes */
     if (progress) {
@@ -291,8 +318,34 @@ gboolean ui_apply_layer_filter_with_value(AppContext* ctx,
     /* Start timing */
     start_time = start_processing_timer();
 
+    /* Create a copy of the original surface for selection masking */
+    cairo_surface_t* original_surface = NULL;
+    if (layer->surface) {
+        gint width = cairo_image_surface_get_width(layer->surface);
+        gint height = cairo_image_surface_get_height(layer->surface);
+        original_surface = cairo_image_surface_create(
+            cairo_image_surface_get_format(layer->surface), width, height);
+        if (original_surface) {
+            cairo_t* cr = cairo_create(original_surface);
+            cairo_set_source_surface(cr, layer->surface, 0, 0);
+            cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+            cairo_paint(cr);
+            cairo_destroy(cr);
+        }
+    }
+
     /* Apply filter (this is blocking, but progress bar will pulse via timeout) */
     gboolean success = filter_func(layer, values, num_values);
+
+    /* Apply selection masking if there's a selection */
+    if (success && original_surface && layer->surface) {
+        filter_utils_apply_selection_mask(layer->surface, original_surface, doc, layer);
+    }
+
+    /* Free original surface copy */
+    if (original_surface) {
+        cairo_surface_destroy(original_surface);
+    }
 
     /* Process any pending events after filter completes */
     if (progress) {
@@ -421,7 +474,7 @@ gint ui_show_filter_dialog_with_zoom_pan(AppContext* ctx,
 
     /* Create a copy of the layer for preview */
     temp_layer = layer_new("Temp", layer->width, layer->height, TRUE,
-                           LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL);
+                           LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL, NULL);
     if (!temp_layer) {
         g_warning("Failed to create temporary layer for preview");
         filter_dialog_free(dialog);
@@ -435,12 +488,13 @@ gint ui_show_filter_dialog_with_zoom_pan(AppContext* ctx,
     cairo_paint(cr);
     cairo_destroy(cr);
 
+    /* Store original layer reference, document, and control params BEFORE set_layers so masked preview can use them */
+    g_object_set_data(G_OBJECT(filter_dialog_get_window(dialog)), "original_layer", layer);
+    g_object_set_data(G_OBJECT(filter_dialog_get_window(dialog)), "filter_doc", doc);
+    g_object_set_data(G_OBJECT(filter_dialog_get_window(dialog)), "control_params", controls);
+
     /* Set layers in dialog */
     filter_dialog_set_layers(dialog, layer, temp_layer);
-
-    /* Store original layer reference and control params for preview callback */
-    g_object_set_data(G_OBJECT(filter_dialog_get_window(dialog)), "original_layer", layer);
-    g_object_set_data(G_OBJECT(filter_dialog_get_window(dialog)), "control_params", controls);
 
     /* Set up live preview callback if provided */
     if (preview_callback) {

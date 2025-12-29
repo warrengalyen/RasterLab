@@ -1,27 +1,28 @@
 #include "ui/dialogs/gamma_dialog.h"
-#include "ui/widgets/filter_preview.h"
-#include "render/layer.h"
 #include "render/compositor.h"
-#include <stdlib.h>
-#include <string.h>
-#include <math.h>
+#include "render/layer.h"
+#include "ui/filters/filter_utils.h"
+#include "ui/widgets/filter_preview.h"
 #include <cairo.h>
 #include <glib.h>
+#include <math.h>
+#include <stdlib.h>
+#include <string.h>
 
 /**
  * Gamma dialog structure
  */
 struct _GammaDialog {
-    GtkWidget *dialog;
-    FilterPreview *preview;
-    GtkWidget *gamma_curve_area;  /* Drawing area for gamma curve */
-    GtkWidget *red_scale;
-    GtkWidget *green_scale;
-    GtkWidget *blue_scale;
-    GtkWidget *red_spin;
-    GtkWidget *green_spin;
-    GtkWidget *blue_spin;
-    GtkWidget *sync_checkbox;
+    GtkWidget* dialog;
+    FilterPreview* preview;
+    GtkWidget* gamma_curve_area; /* Drawing area for gamma curve */
+    GtkWidget* red_scale;
+    GtkWidget* green_scale;
+    GtkWidget* blue_scale;
+    GtkWidget* red_spin;
+    GtkWidget* green_spin;
+    GtkWidget* blue_spin;
+    GtkWidget* sync_checkbox;
     gfloat red_gamma;
     gfloat green_gamma;
     gfloat blue_gamma;
@@ -33,9 +34,8 @@ struct _GammaDialog {
 /**
  * Draw gamma curve preview
  */
-static gboolean on_gamma_curve_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
-{
-    GammaDialog *dialog = (GammaDialog *)user_data;
+static gboolean on_gamma_curve_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
+    GammaDialog* dialog = (GammaDialog*)user_data;
     gint width, height;
     gint i;
     gdouble x, y;
@@ -89,7 +89,7 @@ static gboolean on_gamma_curve_draw(GtkWidget *widget, cairo_t *cr, gpointer use
         cairo_set_source_rgb(cr, 0.0, 0.0, 1.0);
         cairo_set_line_width(cr, 2.0);
         cairo_move_to(cr, 0.5, height - 0.5);
-        
+
         for (i = 0; i <= 100; i++) {
             x = (gdouble)i / 100.0;
             /* Gamma curve: output = input^(1/gamma) */
@@ -147,9 +147,8 @@ static gboolean on_gamma_curve_draw(GtkWidget *widget, cairo_t *cr, gpointer use
 /**
  * Red scale value changed callback
  */
-static void on_red_scale_changed(GtkRange *range, gpointer user_data)
-{
-    GammaDialog *dialog = (GammaDialog *)user_data;
+static void on_red_scale_changed(GtkRange* range, gpointer user_data) {
+    GammaDialog* dialog = (GammaDialog*)user_data;
     gdouble value;
 
     if (!dialog) {
@@ -188,9 +187,8 @@ static void on_red_scale_changed(GtkRange *range, gpointer user_data)
 /**
  * Green scale value changed callback
  */
-static void on_green_scale_changed(GtkRange *range, gpointer user_data)
-{
-    GammaDialog *dialog = (GammaDialog *)user_data;
+static void on_green_scale_changed(GtkRange* range, gpointer user_data) {
+    GammaDialog* dialog = (GammaDialog*)user_data;
     gdouble value;
 
     if (!dialog) {
@@ -230,9 +228,8 @@ static void on_green_scale_changed(GtkRange *range, gpointer user_data)
 /**
  * Blue scale value changed callback
  */
-static void on_blue_scale_changed(GtkRange *range, gpointer user_data)
-{
-    GammaDialog *dialog = (GammaDialog *)user_data;
+static void on_blue_scale_changed(GtkRange* range, gpointer user_data) {
+    GammaDialog* dialog = (GammaDialog*)user_data;
     gdouble value;
 
     if (!dialog) {
@@ -272,9 +269,8 @@ static void on_blue_scale_changed(GtkRange *range, gpointer user_data)
 /**
  * Sync checkbox toggled callback
  */
-static void on_sync_toggled(GtkToggleButton *button, gpointer user_data)
-{
-    GammaDialog *dialog = (GammaDialog *)user_data;
+static void on_sync_toggled(GtkToggleButton* button, gpointer user_data) {
+    GammaDialog* dialog = (GammaDialog*)user_data;
 
     if (!dialog) {
         return;
@@ -296,9 +292,8 @@ static void on_sync_toggled(GtkToggleButton *button, gpointer user_data)
 /**
  * Reset button clicked callback
  */
-static void on_reset_clicked(GtkWidget *widget, gpointer user_data)
-{
-    GammaDialog *dialog = (GammaDialog *)user_data;
+static void on_reset_clicked(GtkWidget* widget, gpointer user_data) {
+    GammaDialog* dialog = (GammaDialog*)user_data;
     (void)widget;
     gamma_dialog_reset(dialog);
 }
@@ -306,29 +301,28 @@ static void on_reset_clicked(GtkWidget *widget, gpointer user_data)
 /**
  * Create a new gamma correction dialog
  */
-GammaDialog* gamma_dialog_new(const gchar *title)
-{
-    GammaDialog *dialog;
-    GtkWidget *content_area;
-    GtkWidget *main_hbox;
-    GtkWidget *right_vbox;
-    GtkWidget *curve_label;
-    GtkWidget *control_vbox;
-    GtkWidget *label;
-    GtkWidget *scale_hbox;
-    GtkWidget *scale;
-    GtkWidget *spin;
-    GtkAdjustment *adjustment;
-    GtkWidget *sync_hbox;
-    GtkWidget *sync_label;
-    GtkWidget *reset_button;
-    GtkWidget *button_box;
+GammaDialog* gamma_dialog_new(const gchar* title) {
+    GammaDialog* dialog;
+    GtkWidget* content_area;
+    GtkWidget* main_hbox;
+    GtkWidget* right_vbox;
+    GtkWidget* curve_label;
+    GtkWidget* control_vbox;
+    GtkWidget* label;
+    GtkWidget* scale_hbox;
+    GtkWidget* scale;
+    GtkWidget* spin;
+    GtkAdjustment* adjustment;
+    GtkWidget* sync_hbox;
+    GtkWidget* sync_label;
+    GtkWidget* reset_button;
+    GtkWidget* button_box;
 
     if (!title) {
         return NULL;
     }
 
-    dialog = (GammaDialog *)g_malloc(sizeof(GammaDialog));
+    dialog = (GammaDialog*)g_malloc(sizeof(GammaDialog));
     if (!dialog) {
         return NULL;
     }
@@ -350,14 +344,14 @@ GammaDialog* gamma_dialog_new(const gchar *title)
 
     /* Create dialog window */
     dialog->dialog = gtk_dialog_new_with_buttons(title,
-                                                  NULL,
-                                                  GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
-                                                  "_OK",
-                                                  GTK_RESPONSE_OK,
-                                                  "_Cancel",
-                                                  GTK_RESPONSE_CANCEL,
-                                                  NULL);
-    
+                                                 NULL,
+                                                 GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+                                                 "_OK",
+                                                 GTK_RESPONSE_OK,
+                                                 "_Cancel",
+                                                 GTK_RESPONSE_CANCEL,
+                                                 NULL);
+
     /* Don't set a fixed default size - let dialog size to content */
     gtk_window_set_resizable(GTK_WINDOW(dialog->dialog), TRUE);
 
@@ -484,38 +478,38 @@ GammaDialog* gamma_dialog_new(const gchar *title)
     sync_label = gtk_label_new("keep all colors in sync");
     gtk_box_pack_start(GTK_BOX(sync_hbox), sync_label, FALSE, FALSE, 0);
 
-    /* Get button box from dialog (for OK/Cancel) */
-    /* Note: OK/Cancel buttons are already added by gtk_dialog_new_with_buttons */
-    /* gtk_dialog_get_action_area is deprecated but still works in GTK3 */
-    #ifdef __GNUC__
-    #pragma GCC diagnostic push
-    #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-    #endif
+/* Get button box from dialog (for OK/Cancel) */
+/* Note: OK/Cancel buttons are already added by gtk_dialog_new_with_buttons */
+/* gtk_dialog_get_action_area is deprecated but still works in GTK3 */
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
     button_box = gtk_dialog_get_action_area(GTK_DIALOG(dialog->dialog));
-    #ifdef __GNUC__
-    #pragma GCC diagnostic pop
-    #endif
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif
     if (button_box) {
         gtk_widget_set_margin_top(button_box, 5);
         gtk_widget_set_margin_bottom(button_box, 5);
         gtk_widget_set_margin_start(button_box, 5);
         gtk_widget_set_margin_end(button_box, 5);
-        
+
         /* Make action area expand horizontally to fill width */
         gtk_widget_set_hexpand(button_box, TRUE);
-        
+
         /* Create reset button with reset.svg icon and add it to the left side of action area */
         reset_button = gtk_button_new();
-        GtkWidget *reset_icon = gtk_image_new_from_resource("/icons/reset.svg");
+        GtkWidget* reset_icon = gtk_image_new_from_resource("/icons/reset.svg");
         if (reset_icon) {
             gtk_button_set_image(GTK_BUTTON(reset_button), reset_icon);
             gtk_button_set_always_show_image(GTK_BUTTON(reset_button), TRUE);
         }
         gtk_widget_set_halign(reset_button, GTK_ALIGN_START);
         gtk_box_pack_start(GTK_BOX(button_box), reset_button, FALSE, FALSE, 0);
-        gtk_box_reorder_child(GTK_BOX(button_box), reset_button, 0);  /* Move to start */
+        gtk_box_reorder_child(GTK_BOX(button_box), reset_button, 0); /* Move to start */
         g_signal_connect(reset_button, "clicked",
-                        G_CALLBACK(on_reset_clicked), dialog);
+                         G_CALLBACK(on_reset_clicked), dialog);
     }
 
     /* Show all widgets */
@@ -527,8 +521,7 @@ GammaDialog* gamma_dialog_new(const gchar *title)
 /**
  * Free gamma dialog
  */
-void gamma_dialog_free(GammaDialog *dialog)
-{
+void gamma_dialog_free(GammaDialog* dialog) {
     if (!dialog) {
         return;
     }
@@ -543,8 +536,7 @@ void gamma_dialog_free(GammaDialog *dialog)
 /**
  * Get the dialog window
  */
-GtkWindow* gamma_dialog_get_window(GammaDialog *dialog)
-{
+GtkWindow* gamma_dialog_get_window(GammaDialog* dialog) {
     if (!dialog || !dialog->dialog) {
         return NULL;
     }
@@ -555,22 +547,40 @@ GtkWindow* gamma_dialog_get_window(GammaDialog *dialog)
 /**
  * Set the layers for preview
  */
-void gamma_dialog_set_layers(GammaDialog *dialog, ImageLayer *original, ImageLayer *temp)
-{
-    cairo_surface_t *before_surface = NULL;
-    cairo_surface_t *after_surface = NULL;
+void gamma_dialog_set_layers(GammaDialog* dialog, ImageLayer* original, ImageLayer* temp) {
+    cairo_surface_t* before_surface = NULL;
+    cairo_surface_t* after_surface = NULL;
+    struct ImageDocument* doc = NULL;
+    struct ImageLayer* layer = NULL;
 
     if (!dialog || !dialog->preview) {
         return;
     }
 
+    /* Get document and layer from dialog if available */
+    GtkWindow* window = gamma_dialog_get_window(dialog);
+    if (window) {
+        doc = (struct ImageDocument*)g_object_get_data(G_OBJECT(window), "filter_doc");
+        layer = (struct ImageLayer*)g_object_get_data(G_OBJECT(window), "original_layer");
+    }
+
     /* Get composite surfaces from layers if available */
     if (original && original->surface) {
-        before_surface = cairo_surface_reference(original->surface);
+        /* If there's a selection, create masked surface showing only selected pixels */
+        if (doc && layer) {
+            before_surface = filter_utils_create_masked_preview_surface(original->surface, doc, layer);
+        } else {
+            before_surface = cairo_surface_reference(original->surface);
+        }
     }
 
     if (temp && temp->surface) {
-        after_surface = cairo_surface_reference(temp->surface);
+        /* If there's a selection, create masked surface showing only selected pixels */
+        if (doc && layer) {
+            after_surface = filter_utils_create_masked_preview_surface(temp->surface, doc, layer);
+        } else {
+            after_surface = cairo_surface_reference(temp->surface);
+        }
     }
 
     filter_preview_set_before_surface(dialog->preview, before_surface);
@@ -588,8 +598,7 @@ void gamma_dialog_set_layers(GammaDialog *dialog, ImageLayer *original, ImageLay
 /**
  * Run the dialog and get gamma values
  */
-gint gamma_dialog_run(GammaDialog *dialog, GtkWindow *parent, gfloat *gamma_values)
-{
+gint gamma_dialog_run(GammaDialog* dialog, GtkWindow* parent, gfloat* gamma_values) {
     gint response;
 
     if (!dialog || !gamma_values) {
@@ -614,16 +623,29 @@ gint gamma_dialog_run(GammaDialog *dialog, GtkWindow *parent, gfloat *gamma_valu
 /**
  * Update the after layer in preview
  */
-void gamma_dialog_update_after_layer(GammaDialog *dialog, ImageLayer *layer)
-{
-    cairo_surface_t *after_surface = NULL;
+void gamma_dialog_update_after_layer(GammaDialog* dialog, ImageLayer* layer) {
+    cairo_surface_t* after_surface = NULL;
+    struct ImageDocument* doc = NULL;
+    struct ImageLayer* original_layer = NULL;
 
     if (!dialog || !dialog->preview) {
         return;
     }
 
+    /* Get document and layer from dialog if available */
+    GtkWindow* window = gamma_dialog_get_window(dialog);
+    if (window) {
+        doc = (struct ImageDocument*)g_object_get_data(G_OBJECT(window), "filter_doc");
+        original_layer = (struct ImageLayer*)g_object_get_data(G_OBJECT(window), "original_layer");
+    }
+
     if (layer && layer->surface) {
-        after_surface = cairo_surface_reference(layer->surface);
+        /* If there's a selection, create masked surface showing only selected pixels */
+        if (doc && original_layer) {
+            after_surface = filter_utils_create_masked_preview_surface(layer->surface, doc, original_layer);
+        } else {
+            after_surface = cairo_surface_reference(layer->surface);
+        }
     }
 
     filter_preview_set_after_surface(dialog->preview, after_surface);
@@ -636,10 +658,9 @@ void gamma_dialog_update_after_layer(GammaDialog *dialog, ImageLayer *layer)
 /**
  * Set preview callback
  */
-void gamma_dialog_set_preview_callback(GammaDialog *dialog,
+void gamma_dialog_set_preview_callback(GammaDialog* dialog,
                                        GammaDialogPreviewCallback callback,
-                                       gpointer user_data)
-{
+                                       gpointer user_data) {
     if (!dialog) {
         return;
     }
@@ -651,8 +672,7 @@ void gamma_dialog_set_preview_callback(GammaDialog *dialog,
 /**
  * Reset all controls to default values (1.0 for all channels)
  */
-void gamma_dialog_reset(GammaDialog *dialog)
-{
+void gamma_dialog_reset(GammaDialog* dialog) {
     const gdouble default_gamma = 1.0;
 
     if (!dialog) {
@@ -677,8 +697,7 @@ void gamma_dialog_reset(GammaDialog *dialog)
 
     /* Trigger preview update if callback is set */
     if (dialog->preview_callback) {
-        gdouble gamma_values[3] = { default_gamma, default_gamma, default_gamma };
+        gdouble gamma_values[3] = {default_gamma, default_gamma, default_gamma};
         dialog->preview_callback(dialog, gamma_values, 3, dialog->preview_user_data);
     }
 }
-

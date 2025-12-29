@@ -1,7 +1,9 @@
 #include "ui/dialogs/retinex_dialog.h"
+#include "document.h"
 #include "render/compositor.h"
 #include "render/layer.h"
 #include "ui/filters/filter_retinex.h"
+#include "ui/filters/filter_utils.h"
 #include "ui/widgets/filter_preview.h"
 #include <cairo.h>
 #include <glib.h>
@@ -37,6 +39,7 @@ typedef struct {
     gint scale;
     gfloat num_scales;
     gfloat dynamic;
+    RetinexDialog* dialog; /* Dialog pointer for accessing document/layer */
 } RetinexParams;
 
 /**
@@ -46,9 +49,21 @@ static cairo_surface_t* apply_retinex_filter_to_viewport_surface(cairo_surface_t
     RetinexParams* retinex_params = (RetinexParams*)params;
     ImageLayer* temp_layer;
     cairo_surface_t* result;
+    cairo_surface_t* original_viewport = NULL;
+    struct ImageDocument* doc = NULL;
+    struct ImageLayer* layer = NULL;
 
     if (!viewport_surface || !retinex_params) {
         return NULL;
+    }
+
+    /* Get document and layer from dialog if available */
+    if (retinex_params->dialog) {
+        GtkWindow* window = retinex_dialog_get_window(retinex_params->dialog);
+        if (window) {
+            doc = (struct ImageDocument*)g_object_get_data(G_OBJECT(window), "filter_doc");
+            layer = (struct ImageLayer*)g_object_get_data(G_OBJECT(window), "original_layer");
+        }
     }
 
     /* Get viewport dimensions */
@@ -59,10 +74,26 @@ static cairo_surface_t* apply_retinex_filter_to_viewport_surface(cairo_surface_t
         return NULL;
     }
 
+    /* Create a copy of the original viewport for selection masking */
+    if (doc && layer) {
+        original_viewport = cairo_image_surface_create(
+            cairo_image_surface_get_format(viewport_surface), width, height);
+        if (original_viewport) {
+            cairo_t* cr = cairo_create(original_viewport);
+            cairo_set_source_surface(cr, viewport_surface, 0, 0);
+            cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+            cairo_paint(cr);
+            cairo_destroy(cr);
+        }
+    }
+
     /* Create a temporary layer with the viewport surface */
     temp_layer = layer_new("TempViewport", width, height, TRUE,
-                           LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL);
+                           LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL, NULL);
     if (!temp_layer) {
+        if (original_viewport) {
+            cairo_surface_destroy(original_viewport);
+        }
         return NULL;
     }
 
@@ -77,7 +108,26 @@ static cairo_surface_t* apply_retinex_filter_to_viewport_surface(cairo_surface_t
     if (!filter_retinex_apply(temp_layer, retinex_params->mode, retinex_params->scale,
                               retinex_params->num_scales, retinex_params->dynamic)) {
         layer_free(temp_layer);
+        if (original_viewport) {
+            cairo_surface_destroy(original_viewport);
+        }
         return NULL;
+    }
+
+    /* Apply selection masking if there's a selection */
+    if (original_viewport && doc && layer) {
+        /* Create a temporary layer structure for the viewport with correct offset */
+        /* Note: viewport is at (0,0) relative to layer for scaled preview, which is the common case */
+        ImageLayer viewport_layer = *layer;
+        viewport_layer.surface = temp_layer->surface;
+        viewport_layer.width = width;
+        viewport_layer.height = height;
+        /* Viewport coordinates are relative to layer */
+        viewport_layer.offset_x = layer->offset_x;
+        viewport_layer.offset_y = layer->offset_y;
+
+        filter_utils_apply_selection_mask(temp_layer->surface, original_viewport, doc, &viewport_layer);
+        cairo_surface_destroy(original_viewport);
     }
 
     /* Return a reference to the filtered surface */
@@ -126,6 +176,7 @@ static void update_preview(RetinexDialog* dialog) {
     stored_params->scale = dialog->scale;
     stored_params->num_scales = dialog->num_scales;
     stored_params->dynamic = dialog->dynamic;
+    stored_params->dialog = dialog;
 
     /* Set filter function on preview to use viewport-based filtering */
     filter_preview_set_filter_function(dialog->preview, apply_retinex_filter_to_viewport_surface, stored_params);
@@ -496,18 +547,37 @@ GtkWindow* retinex_dialog_get_window(RetinexDialog* dialog) {
 void retinex_dialog_set_layers(RetinexDialog* dialog, ImageLayer* original, ImageLayer* temp) {
     cairo_surface_t* before_surface = NULL;
     cairo_surface_t* after_surface = NULL;
+    struct ImageDocument* doc = NULL;
+    struct ImageLayer* layer = NULL;
 
     if (!dialog || !dialog->preview) {
         return;
     }
 
+    /* Get document and layer from dialog if available */
+    GtkWindow* window = retinex_dialog_get_window(dialog);
+    if (window) {
+        doc = (struct ImageDocument*)g_object_get_data(G_OBJECT(window), "filter_doc");
+        layer = (struct ImageLayer*)g_object_get_data(G_OBJECT(window), "original_layer");
+    }
+
     /* Get composite surfaces from layers if available */
     if (original && original->surface) {
-        before_surface = cairo_surface_reference(original->surface);
+        /* If there's a selection, create masked surface showing only selected pixels */
+        if (doc && layer) {
+            before_surface = filter_utils_create_masked_preview_surface(original->surface, doc, layer);
+        } else {
+            before_surface = cairo_surface_reference(original->surface);
+        }
     }
 
     if (temp && temp->surface) {
-        after_surface = cairo_surface_reference(temp->surface);
+        /* If there's a selection, create masked surface showing only selected pixels */
+        if (doc && layer) {
+            after_surface = filter_utils_create_masked_preview_surface(temp->surface, doc, layer);
+        } else {
+            after_surface = cairo_surface_reference(temp->surface);
+        }
     }
 
     filter_preview_set_before_surface(dialog->preview, before_surface);
@@ -566,11 +636,36 @@ gint retinex_dialog_run(RetinexDialog* dialog, GtkWindow* parent,
  * Update the after layer in preview
  */
 void retinex_dialog_update_after_layer(RetinexDialog* dialog, ImageLayer* layer) {
+    cairo_surface_t* after_surface = NULL;
+    struct ImageDocument* doc = NULL;
+    struct ImageLayer* original_layer = NULL;
+
     if (!dialog || !dialog->preview) {
         return;
     }
-    filter_preview_set_after_surface(dialog->preview, layer ? layer->surface : NULL);
+
+    /* Get document and original layer from dialog if available */
+    GtkWindow* window = retinex_dialog_get_window(dialog);
+    if (window) {
+        doc = (struct ImageDocument*)g_object_get_data(G_OBJECT(window), "filter_doc");
+        original_layer = (struct ImageLayer*)g_object_get_data(G_OBJECT(window), "original_layer");
+    }
+
+    if (layer && layer->surface) {
+        /* If there's a selection, create masked surface showing only selected pixels */
+        if (doc && original_layer) {
+            after_surface = filter_utils_create_masked_preview_surface(layer->surface, doc, original_layer);
+        } else {
+            after_surface = cairo_surface_reference(layer->surface);
+        }
+    }
+
+    filter_preview_set_after_surface(dialog->preview, after_surface);
     filter_preview_refresh(dialog->preview);
+
+    if (after_surface) {
+        cairo_surface_destroy(after_surface);
+    }
 }
 
 /**

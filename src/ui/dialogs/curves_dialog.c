@@ -3,6 +3,7 @@
 #include "render/compositor.h"
 #include "render/layer.h"
 #include "ui/filters/filter_curves.h"
+#include "ui/filters/filter_utils.h"
 #include "ui/widgets/curves_widget.h"
 #include "ui/widgets/filter_preview.h"
 #include <cairo.h>
@@ -641,14 +642,28 @@ void curves_dialog_set_layers(CurvesDialog* dialog, ImageLayer* original, ImageL
     cairo_surface_t* before_surface = NULL;
     cairo_surface_t* after_surface = NULL;
     double hist_r[256], hist_g[256], hist_b[256];
+    struct ImageDocument* doc = NULL;
+    struct ImageLayer* layer = NULL;
 
     if (!dialog || !dialog->preview) {
         return;
     }
 
+    /* Get document and layer from dialog if available */
+    GtkWindow* window = curves_dialog_get_window(dialog);
+    if (window) {
+        doc = (struct ImageDocument*)g_object_get_data(G_OBJECT(window), "filter_doc");
+        layer = (struct ImageLayer*)g_object_get_data(G_OBJECT(window), "original_layer");
+    }
+
     /* Get composite surfaces from layers if available */
     if (original && original->surface) {
-        before_surface = cairo_surface_reference(original->surface);
+        /* If there's a selection, create masked surface showing only selected pixels */
+        if (doc && layer) {
+            before_surface = filter_utils_create_masked_preview_surface(original->surface, doc, layer);
+        } else {
+            before_surface = cairo_surface_reference(original->surface);
+        }
 
         /* Compute histogram from original layer */
         compute_layer_histogram(original, hist_r, hist_g, hist_b);
@@ -664,7 +679,12 @@ void curves_dialog_set_layers(CurvesDialog* dialog, ImageLayer* original, ImageL
     }
 
     if (temp && temp->surface) {
-        after_surface = cairo_surface_reference(temp->surface);
+        /* If there's a selection, create masked surface showing only selected pixels */
+        if (doc && layer) {
+            after_surface = filter_utils_create_masked_preview_surface(temp->surface, doc, layer);
+        } else {
+            after_surface = cairo_surface_reference(temp->surface);
+        }
     }
 
     filter_preview_set_before_surface(dialog->preview, before_surface);
@@ -703,13 +723,27 @@ gint curves_dialog_run(CurvesDialog* dialog, GtkWindow* parent) {
  */
 void curves_dialog_update_after_layer(CurvesDialog* dialog, ImageLayer* layer) {
     cairo_surface_t* after_surface = NULL;
+    struct ImageDocument* doc = NULL;
+    struct ImageLayer* original_layer = NULL;
 
     if (!dialog || !dialog->preview) {
         return;
     }
 
+    /* Get document and layer from dialog if available */
+    GtkWindow* window = curves_dialog_get_window(dialog);
+    if (window) {
+        doc = (struct ImageDocument*)g_object_get_data(G_OBJECT(window), "filter_doc");
+        original_layer = (struct ImageLayer*)g_object_get_data(G_OBJECT(window), "original_layer");
+    }
+
     if (layer && layer->surface) {
-        after_surface = cairo_surface_reference(layer->surface);
+        /* If there's a selection, create masked surface showing only selected pixels */
+        if (doc && original_layer) {
+            after_surface = filter_utils_create_masked_preview_surface(layer->surface, doc, original_layer);
+        } else {
+            after_surface = cairo_surface_reference(layer->surface);
+        }
     }
 
     filter_preview_set_after_surface(dialog->preview, after_surface);

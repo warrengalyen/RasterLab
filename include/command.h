@@ -52,6 +52,7 @@ typedef enum {
     CMD_NAME_DESELECT_ALL,
     CMD_NAME_INVERT_SELECTION,
     CMD_NAME_FEATHER_SELECTION,
+    CMD_NAME_MOVE_SELECTED_PIXELS,
     CMD_NAME_COUNT /* Total number of predefined command names */
 } CommandName;
 
@@ -336,6 +337,35 @@ typedef struct {
 Command* command_create_move(struct ImageLayer* layer,
                              gint old_x, gint old_y,
                              gint new_x, gint new_y);
+
+/**
+ * Create a move selected pixels command
+ * Extracts selected pixels to a new layer and moves that layer
+ * @param doc The document
+ * @param new_layer The extracted layer with selected pixels
+ * @param original_layer The original layer pixels were extracted from
+ * @param initial_x Initial X position of extracted layer
+ * @param initial_y Initial Y position of extracted layer
+ * @param final_x Final X position after moving
+ * @param final_y Final Y position after moving
+ * @return Newly created Command, or NULL on failure
+ */
+Command* command_create_move_selected_pixels(struct ImageDocument* doc,
+                                             struct ImageLayer* new_layer,
+                                             struct ImageLayer* original_layer,
+                                             gint initial_x, gint initial_y,
+                                             gint final_x, gint final_y);
+
+/**
+ * Create a move selected pixels command with provided snapshot
+ * @param snapshot Snapshot of original layer taken BEFORE extraction (for proper undo)
+ */
+Command* command_create_move_selected_pixels_with_snapshot(struct ImageDocument* doc,
+                                                           struct ImageLayer* new_layer,
+                                                           struct ImageLayer* original_layer,
+                                                           gint initial_x, gint initial_y,
+                                                           gint final_x, gint final_y,
+                                                           cairo_surface_t* snapshot);
 
 /**
  * Canvas resize command data structure

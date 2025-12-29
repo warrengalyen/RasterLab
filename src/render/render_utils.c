@@ -1,4 +1,6 @@
 #include "render/render_utils.h"
+#include "selection/selection_mask.h"
+#include <stdint.h>
 #include <stdio.h>
 
 /**
@@ -232,4 +234,329 @@ void draw_checkered_background_offset(cairo_t* cr, gint offset_x, gint offset_y,
             cairo_fill(cr);
         }
     }
+}
+
+/**
+ * Apply a selection mask to a Cairo surface by multiplying alpha values
+ */
+void render_utils_apply_selection_mask(
+    cairo_surface_t* surface,
+    const uint8_t* mask,
+    gint mask_x,
+    gint mask_y,
+    gint mask_width,
+    gint mask_height,
+    gint mask_stride) {
+
+    if (!surface || !mask) {
+        return;
+    }
+
+    /* Flush surface to ensure all drawing is complete */
+    cairo_surface_flush(surface);
+
+    /* Verify surface format */
+    cairo_format_t format = cairo_image_surface_get_format(surface);
+    if (format != CAIRO_FORMAT_ARGB32) {
+        /* Only support ARGB32 for now */
+        return;
+    }
+
+    gint surface_width = cairo_image_surface_get_width(surface);
+    gint surface_height = cairo_image_surface_get_height(surface);
+    gint surface_stride = cairo_image_surface_get_stride(surface);
+    uint8_t* surface_data = cairo_image_surface_get_data(surface);
+
+    if (!surface_data) {
+        return;
+    }
+
+    /* Calculate intersection region */
+    gint start_x = (mask_x < 0) ? 0 : mask_x;
+    gint start_y = (mask_y < 0) ? 0 : mask_y;
+    gint end_x = (mask_x + mask_width > surface_width) ? surface_width : (mask_x + mask_width);
+    gint end_y = (mask_y + mask_height > surface_height) ? surface_height : (mask_y + mask_height);
+
+    if (start_x >= end_x || start_y >= end_y) {
+        return; /* No intersection */
+    }
+
+    /* Apply mask to each pixel */
+    for (gint y = start_y; y < end_y; y++) {
+        gint mask_row_y = y - mask_y;
+        if (mask_row_y < 0 || mask_row_y >= mask_height) {
+            continue;
+        }
+
+        uint8_t* surface_row = surface_data + y * surface_stride;
+        const uint8_t* mask_row = mask + mask_row_y * mask_stride;
+
+        for (gint x = start_x; x < end_x; x++) {
+            gint mask_col_x = x - mask_x;
+            if (mask_col_x < 0 || mask_col_x >= mask_width) {
+                continue;
+            }
+
+            /* Get mask alpha value (0-255) */
+            uint8_t mask_alpha = mask_row[mask_col_x];
+
+            /* Get pixel (stored as BGRA in memory for ARGB32) */
+            uint8_t* pixel = surface_row + x * 4;
+            uint8_t pixel_alpha = pixel[3];
+
+            /* Only apply mask to pixels that were actually painted (non-zero alpha) */
+            /* If pixel is transparent, it wasn't painted by this stroke, so leave it alone */
+            if (pixel_alpha == 0) {
+                continue; /* Skip transparent pixels - they weren't painted */
+            }
+
+            /* If mask is 0, completely zero out the pixel (outside selection) */
+            if (mask_alpha == 0) {
+                pixel[0] = 0; /* B */
+                pixel[1] = 0; /* G */
+                pixel[2] = 0; /* R */
+                pixel[3] = 0; /* A */
+            } else if (mask_alpha == 255) {
+                /* Fully inside selection: keep painted pixel as-is */
+                /* No change needed */
+            } else {
+                /* Feather zone: apply mask to alpha with proper premultiplied alpha handling */
+                /* Cairo uses premultiplied alpha, so we need to un-premultiply, change alpha, then re-premultiply */
+                uint8_t new_alpha = (uint8_t)((pixel_alpha * mask_alpha) / 255);
+
+                if (new_alpha == 0) {
+                    /* Completely transparent */
+                    pixel[0] = 0;
+                    pixel[1] = 0;
+                    pixel[2] = 0;
+                    pixel[3] = 0;
+                } else if (pixel_alpha > 0) {
+                    /* Un-premultiply: convert from premultiplied to straight alpha */
+                    uint16_t r = (pixel[2] * 255 + pixel_alpha / 2) / pixel_alpha;
+                    uint16_t g = (pixel[1] * 255 + pixel_alpha / 2) / pixel_alpha;
+                    uint16_t b = (pixel[0] * 255 + pixel_alpha / 2) / pixel_alpha;
+
+                    /* Clamp to valid range */
+                    if (r > 255)
+                        r = 255;
+                    if (g > 255)
+                        g = 255;
+                    if (b > 255)
+                        b = 255;
+
+                    /* Re-premultiply with new alpha */
+                    pixel[0] = (b * new_alpha + 127) / 255; /* B */
+                    pixel[1] = (g * new_alpha + 127) / 255; /* G */
+                    pixel[2] = (r * new_alpha + 127) / 255; /* R */
+                    pixel[3] = new_alpha;                   /* A */
+                } else {
+                    /* Source was transparent */
+                    pixel[0] = 0;
+                    pixel[1] = 0;
+                    pixel[2] = 0;
+                    pixel[3] = 0;
+                }
+            }
+        }
+    }
+
+    /* Mark surface as dirty so changes are visible */
+    cairo_surface_mark_dirty(surface);
+}
+
+/**
+ * Apply selection mask to eraser result: restore original pixels outside selection
+ */
+void render_utils_apply_selection_mask_to_eraser(
+    cairo_surface_t* erased_surface,
+    cairo_surface_t* original_surface,
+    const uint8_t* mask,
+    gint mask_x,
+    gint mask_y,
+    gint mask_width,
+    gint mask_height,
+    gint mask_stride,
+    gint original_x,
+    gint original_y) {
+
+    if (!erased_surface || !original_surface || !mask) {
+        return;
+    }
+
+    /* Flush surfaces to ensure all drawing is complete */
+    cairo_surface_flush(erased_surface);
+    cairo_surface_flush(original_surface);
+
+    /* Verify surface formats */
+    if (cairo_image_surface_get_format(erased_surface) != CAIRO_FORMAT_ARGB32 ||
+        cairo_image_surface_get_format(original_surface) != CAIRO_FORMAT_ARGB32) {
+        return;
+    }
+
+    gint erased_width = cairo_image_surface_get_width(erased_surface);
+    gint erased_height = cairo_image_surface_get_height(erased_surface);
+    gint erased_stride = cairo_image_surface_get_stride(erased_surface);
+    uint8_t* erased_data = cairo_image_surface_get_data(erased_surface);
+
+    gint original_width = cairo_image_surface_get_width(original_surface);
+    gint original_height = cairo_image_surface_get_height(original_surface);
+    gint original_stride = cairo_image_surface_get_stride(original_surface);
+    uint8_t* original_data = cairo_image_surface_get_data(original_surface);
+
+    if (!erased_data || !original_data) {
+        return;
+    }
+
+    /* For each pixel in erased surface, check if it's outside selection */
+    for (gint y = 0; y < erased_height; y++) {
+        gint mask_row_y = y - mask_y;
+        uint8_t* erased_row = erased_data + y * erased_stride;
+        gint orig_y = original_y + y;
+
+        for (gint x = 0; x < erased_width; x++) {
+            gint mask_col_x = x - mask_x;
+            uint8_t* erased_pixel = erased_row + x * 4;
+
+            /* Get mask value for this pixel */
+            uint8_t mask_alpha = 0;
+            if (mask_col_x >= 0 && mask_col_x < mask_width &&
+                mask_row_y >= 0 && mask_row_y < mask_height) {
+                mask_alpha = mask[mask_row_y * mask_stride + mask_col_x];
+            }
+
+            gint orig_x = original_x + x;
+            if (orig_x >= 0 && orig_x < original_width &&
+                orig_y >= 0 && orig_y < original_height) {
+                uint8_t* orig_pixel = original_data + orig_y * original_stride + orig_x * 4;
+
+                if (mask_alpha == 0) {
+                    /* Outside selection: fully restore original pixel */
+                    erased_pixel[0] = orig_pixel[0]; /* B */
+                    erased_pixel[1] = orig_pixel[1]; /* G */
+                    erased_pixel[2] = orig_pixel[2]; /* R */
+                    erased_pixel[3] = orig_pixel[3]; /* A */
+                } else if (mask_alpha == 255) {
+                    /* Inside selection: keep fully erased result (already in erased_pixel) */
+                    /* No change needed */
+                } else {
+                    /* Feather zone: blend between erased and original with proper premultiplied alpha handling */
+                    /* mask_alpha / 255.0 = how much erasing is active (how much to use erased result) */
+                    /* (255 - mask_alpha) / 255.0 = how much to restore from original */
+                    float mask_factor = (float)mask_alpha / 255.0f;
+                    float orig_factor = 1.0f - mask_factor;
+
+                    /* Both pixels are in premultiplied alpha format (Cairo ARGB32) */
+                    /* Un-premultiply both to get straight alpha values */
+                    uint8_t erased_a = erased_pixel[3];
+                    uint8_t orig_a = orig_pixel[3];
+
+                    uint16_t erased_r, erased_g, erased_b;
+                    uint16_t orig_r, orig_g, orig_b;
+
+                    if (erased_a > 0) {
+                        erased_r = (erased_pixel[2] * 255 + erased_a / 2) / erased_a;
+                        erased_g = (erased_pixel[1] * 255 + erased_a / 2) / erased_a;
+                        erased_b = (erased_pixel[0] * 255 + erased_a / 2) / erased_a;
+                        if (erased_r > 255)
+                            erased_r = 255;
+                        if (erased_g > 255)
+                            erased_g = 255;
+                        if (erased_b > 255)
+                            erased_b = 255;
+                    } else {
+                        erased_r = erased_g = erased_b = 0;
+                    }
+
+                    if (orig_a > 0) {
+                        orig_r = (orig_pixel[2] * 255 + orig_a / 2) / orig_a;
+                        orig_g = (orig_pixel[1] * 255 + orig_a / 2) / orig_a;
+                        orig_b = (orig_pixel[0] * 255 + orig_a / 2) / orig_a;
+                        if (orig_r > 255)
+                            orig_r = 255;
+                        if (orig_g > 255)
+                            orig_g = 255;
+                        if (orig_b > 255)
+                            orig_b = 255;
+                    } else {
+                        orig_r = orig_g = orig_b = 0;
+                    }
+
+                    /* Blend in straight alpha space */
+                    uint16_t result_r = (uint16_t)(erased_r * mask_factor + orig_r * orig_factor);
+                    uint16_t result_g = (uint16_t)(erased_g * mask_factor + orig_g * orig_factor);
+                    uint16_t result_b = (uint16_t)(erased_b * mask_factor + orig_b * orig_factor);
+                    uint8_t result_a = (uint8_t)(erased_a * mask_factor + orig_a * orig_factor);
+
+                    /* Re-premultiply with blended alpha */
+                    if (result_a > 0) {
+                        erased_pixel[0] = (result_b * result_a + 127) / 255; /* B */
+                        erased_pixel[1] = (result_g * result_a + 127) / 255; /* G */
+                        erased_pixel[2] = (result_r * result_a + 127) / 255; /* R */
+                        erased_pixel[3] = result_a;                          /* A */
+                    } else {
+                        erased_pixel[0] = 0;
+                        erased_pixel[1] = 0;
+                        erased_pixel[2] = 0;
+                        erased_pixel[3] = 0;
+                    }
+                }
+            }
+        }
+    }
+
+    /* Mark surface as dirty so changes are visible */
+    cairo_surface_mark_dirty(erased_surface);
+}
+
+/**
+ * TEMPORARY: Visualize selection mask as a semi-transparent overlay
+ * Draws the mask as a red overlay (white = fully selected, transparent = not selected)
+ * This is for debugging feathered selection masks
+ */
+void render_utils_visualize_selection_mask(cairo_t* cr, SelectionMask* mask) {
+    if (!cr || !mask || !mask->data) {
+        return;
+    }
+
+    /* Create a temporary ARGB32 surface from the mask data */
+    /* Convert 8-bit alpha mask to ARGB32: white (fully selected) = red overlay, transparent = no overlay */
+    cairo_surface_t* mask_surface = cairo_image_surface_create(
+        CAIRO_FORMAT_ARGB32, mask->width, mask->height);
+
+    if (!mask_surface) {
+        return;
+    }
+
+    uint8_t* surface_data = cairo_image_surface_get_data(mask_surface);
+    gint surface_stride = cairo_image_surface_get_stride(mask_surface);
+    const uint8_t* mask_data = mask->data;
+
+    /* Convert mask to ARGB32: use mask value as alpha, set RGB to red (255, 0, 0) */
+    for (gint y = 0; y < mask->height; y++) {
+        uint8_t* surface_row = surface_data + y * surface_stride;
+        const uint8_t* mask_row = mask_data + y * mask->stride;
+
+        for (gint x = 0; x < mask->width; x++) {
+            uint8_t mask_alpha = mask_row[x];
+            uint8_t* pixel = surface_row + x * 4;
+
+            /* BGRA format: B, G, R, A */
+            pixel[0] = 0;          /* B */
+            pixel[1] = 0;          /* G */
+            pixel[2] = 255;        /* R (red) */
+            pixel[3] = mask_alpha; /* A (use mask value as alpha) */
+        }
+    }
+
+    cairo_surface_mark_dirty(mask_surface);
+    cairo_surface_flush(mask_surface);
+
+    /* Draw the mask as a semi-transparent overlay */
+    cairo_save(cr);
+    cairo_set_source_surface(cr, mask_surface, 0, 0);
+    cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+    cairo_paint_with_alpha(cr, 0.5); /* 50% opacity overlay */
+    cairo_restore(cr);
+
+    cairo_surface_destroy(mask_surface);
 }

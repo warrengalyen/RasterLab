@@ -4,7 +4,9 @@
 #include "render/compositor.h"
 #include "render/dirty.h"
 #include "render/layer.h"
+#include "render/render_utils.h"
 #include "render/tile.h"
+#include "selection/selection_render.h"
 #include "tool_options.h"
 #include <math.h>
 #include <stdio.h>
@@ -83,9 +85,13 @@ static void eraser_stamp_at(cairo_t* cr, gdouble x, gdouble y, gfloat size,
  * Erase pixels from the layer surface (make transparent)
  * Uses tool options for size, opacity, and hardness
  * Interpoltes stamps along the line for smooth strokes
+ * Applies selection mask if present in document
+ * @param layer_offset_x Layer's X offset in document coordinates
+ * @param layer_offset_y Layer's Y offset in document coordinates
  */
-static void eraser_erase_line(cairo_surface_t* surface, gdouble x1, gdouble y1,
-                              gdouble x2, gdouble y2) {
+static void eraser_erase_line(cairo_surface_t* surface, struct ImageDocument* doc,
+                              gdouble x1, gdouble y1, gdouble x2, gdouble y2,
+                              gint layer_offset_x, gint layer_offset_y) {
     cairo_t* cr;
     ToolOptions* opts;
     gfloat eraser_size;
@@ -106,7 +112,51 @@ static void eraser_erase_line(cairo_surface_t* surface, gdouble x1, gdouble y1,
     flow = opts ? opts->flow : 1.0f;
     spacing = opts ? opts->spacing : 0.25f; /* Default 25% spacing */
 
-    cr = cairo_create(surface);
+    /* Calculate bounding box for stroke */
+    gint min_x_layer = (gint)((x1 < x2) ? x1 : x2) - (gint)(eraser_size / 2.0f) - 2;
+    gint min_y_layer = (gint)((y1 < y2) ? y1 : y2) - (gint)(eraser_size / 2.0f) - 2;
+    gint max_x_layer = (gint)((x1 > x2) ? x1 : x2) + (gint)(eraser_size / 2.0f) + 2;
+    gint max_y_layer = (gint)((y1 > y2) ? y1 : y2) + (gint)(eraser_size / 2.0f) + 2;
+
+    /* Clamp to surface bounds */
+    gint surface_width = cairo_image_surface_get_width(surface);
+    gint surface_height = cairo_image_surface_get_height(surface);
+    if (min_x_layer < 0)
+        min_x_layer = 0;
+    if (min_y_layer < 0)
+        min_y_layer = 0;
+    if (max_x_layer > surface_width)
+        max_x_layer = surface_width;
+    if (max_y_layer > surface_height)
+        max_y_layer = surface_height;
+
+    gint stroke_width = max_x_layer - min_x_layer;
+    gint stroke_height = max_y_layer - min_y_layer;
+
+    /* Check if we need to apply selection mask */
+    gboolean has_selection = (doc && doc->selection_mask && !selection_mask_is_empty(doc->selection_mask));
+    cairo_surface_t* temp_surface = NULL;
+
+    if (has_selection && stroke_width > 0 && stroke_height > 0) {
+        /* Draw to temporary surface first, then apply mask and composite */
+        temp_surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, stroke_width, stroke_height);
+        if (temp_surface) {
+            cr = cairo_create(temp_surface);
+            /* Copy existing layer content to temp surface (eraser needs destination pixels) */
+            cairo_set_source_surface(cr, surface, -min_x_layer, -min_y_layer);
+            cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+            cairo_paint(cr);
+            /* Now translate for erasing operations */
+            cairo_translate(cr, -min_x_layer, -min_y_layer);
+        } else {
+            /* Fallback to drawing directly if temp surface creation fails */
+            temp_surface = NULL;
+            cr = cairo_create(surface);
+        }
+    } else {
+        /* No selection, draw directly to surface */
+        cr = cairo_create(surface);
+    }
 
     /* Calculate distance for interpolation */
     gdouble dx = x2 - x1;
@@ -131,6 +181,65 @@ static void eraser_erase_line(cairo_surface_t* surface, gdouble x1, gdouble y1,
     }
 
     cairo_destroy(cr);
+
+    /* Apply selection mask if present */
+    if (has_selection && temp_surface && stroke_width > 0 && stroke_height > 0) {
+        /* Convert to document coordinates for selection mask */
+        gint min_x_doc = min_x_layer + layer_offset_x;
+        gint min_y_doc = min_y_layer + layer_offset_y;
+        gint max_x_doc = max_x_layer + layer_offset_x;
+        gint max_y_doc = max_y_layer + layer_offset_y;
+
+        DirtyRect dirty_rect;
+        dirty_rect_set(&dirty_rect, min_x_doc, min_y_doc,
+                       max_x_doc - min_x_doc, max_y_doc - min_y_doc);
+
+        /* Get selection mask for this region (in document coordinates) */
+        DirtyRect actual_region;
+        SelectionMask* region_mask = selection_build_combined_mask(
+            doc->selection_mask, &dirty_rect, FEATHER_QUALITY_NORMAL, &actual_region);
+
+        if (region_mask && region_mask->data) {
+            /* Convert actual region to temp surface coordinates */
+            gint mask_x_temp = (actual_region.x - min_x_doc);
+            gint mask_y_temp = (actual_region.y - min_y_doc);
+
+            /* For eraser: restore original pixels outside selection */
+            render_utils_apply_selection_mask_to_eraser(
+                temp_surface,
+                surface,
+                region_mask->data,
+                mask_x_temp, mask_y_temp,
+                region_mask->width, region_mask->height,
+                region_mask->stride,
+                min_x_layer, min_y_layer);
+
+            selection_mask_free(region_mask);
+        }
+
+        /* Composite masked result onto layer surface using SOURCE to replace region */
+        cairo_surface_flush(temp_surface);
+        cairo_t* composite_cr = cairo_create(surface);
+        cairo_rectangle(composite_cr, min_x_layer, min_y_layer, stroke_width, stroke_height);
+        cairo_clip(composite_cr);
+        cairo_set_source_surface(composite_cr, temp_surface, min_x_layer, min_y_layer);
+        cairo_set_operator(composite_cr, CAIRO_OPERATOR_SOURCE);
+        cairo_paint(composite_cr);
+        cairo_destroy(composite_cr);
+
+        cairo_surface_destroy(temp_surface);
+    } else if (!has_selection && temp_surface) {
+        /* No selection but temp surface was created - composite it */
+        cairo_surface_flush(temp_surface);
+        cairo_t* composite_cr = cairo_create(surface);
+        cairo_rectangle(composite_cr, min_x_layer, min_y_layer, stroke_width, stroke_height);
+        cairo_clip(composite_cr);
+        cairo_set_source_surface(composite_cr, temp_surface, min_x_layer, min_y_layer);
+        cairo_set_operator(composite_cr, CAIRO_OPERATOR_SOURCE);
+        cairo_paint(composite_cr);
+        cairo_destroy(composite_cr);
+        cairo_surface_destroy(temp_surface);
+    }
 
     /* Mark surface as modified */
     cairo_surface_mark_dirty(surface);
@@ -187,8 +296,12 @@ static void eraser_register_tiles_for_bounding_box(TileUndoTransaction* transact
 
 /**
  * Erase a single dot (for initial mouse down)
+ * Applies selection mask if present in document
+ * @param layer_offset_x Layer's X offset in document coordinates
+ * @param layer_offset_y Layer's Y offset in document coordinates
  */
-static void eraser_erase_dot(cairo_surface_t* surface, gint x, gint y) {
+static void eraser_erase_dot(cairo_surface_t* surface, struct ImageDocument* doc,
+                             gint x, gint y, gint layer_offset_x, gint layer_offset_y) {
     ToolOptions* opts;
     gfloat eraser_size;
     gfloat eraser_opacity;
@@ -207,10 +320,115 @@ static void eraser_erase_dot(cairo_surface_t* surface, gint x, gint y) {
     hardness = opts ? opts->hardness : 1.0f;
     flow = opts ? opts->flow : 1.0f;
 
-    cr = cairo_create(surface);
+    /* Calculate bounding box of dot */
+    gint margin = (gint)(eraser_size / 2.0f) + 2;
+    gint min_x_layer = x - margin;
+    gint min_y_layer = y - margin;
+    gint max_x_layer = x + margin;
+    gint max_y_layer = y + margin;
+
+    /* Clamp to surface bounds */
+    gint surface_width = cairo_image_surface_get_width(surface);
+    gint surface_height = cairo_image_surface_get_height(surface);
+    if (min_x_layer < 0)
+        min_x_layer = 0;
+    if (min_y_layer < 0)
+        min_y_layer = 0;
+    if (max_x_layer > surface_width)
+        max_x_layer = surface_width;
+    if (max_y_layer > surface_height)
+        max_y_layer = surface_height;
+
+    gint stroke_width = max_x_layer - min_x_layer;
+    gint stroke_height = max_y_layer - min_y_layer;
+
+    /* Check if we need to apply selection mask */
+    gboolean has_selection = (doc && doc->selection_mask && !selection_mask_is_empty(doc->selection_mask));
+    cairo_surface_t* temp_surface = NULL;
+
+    if (has_selection && stroke_width > 0 && stroke_height > 0) {
+        /* Draw to temporary surface first, then apply mask and composite */
+        temp_surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, stroke_width, stroke_height);
+        if (temp_surface) {
+            cr = cairo_create(temp_surface);
+            /* Copy existing layer content to temp surface (eraser needs destination pixels) */
+            cairo_set_source_surface(cr, surface, -min_x_layer, -min_y_layer);
+            cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+            cairo_paint(cr);
+            /* Now translate for erasing operations */
+            cairo_translate(cr, -min_x_layer, -min_y_layer);
+        } else {
+            /* Fallback to drawing directly if temp surface creation fails */
+            temp_surface = NULL;
+            cr = cairo_create(surface);
+        }
+    } else {
+        /* No selection, draw directly to surface */
+        cr = cairo_create(surface);
+    }
+
     eraser_stamp_at(cr, (gdouble)x + 0.5, (gdouble)y + 0.5, eraser_size, eraser_opacity, hardness, flow);
 
     cairo_destroy(cr);
+
+    /* Apply selection mask if present */
+    if (has_selection && temp_surface && stroke_width > 0 && stroke_height > 0) {
+        /* Convert to document coordinates for selection mask */
+        gint min_x_doc = min_x_layer + layer_offset_x;
+        gint min_y_doc = min_y_layer + layer_offset_y;
+        gint max_x_doc = max_x_layer + layer_offset_x;
+        gint max_y_doc = max_y_layer + layer_offset_y;
+
+        DirtyRect dirty_rect;
+        dirty_rect_set(&dirty_rect, min_x_doc, min_y_doc, max_x_doc - min_x_doc, max_y_doc - min_y_doc);
+
+        /* Get selection mask for this region (in document coordinates) */
+        DirtyRect actual_region;
+        SelectionMask* region_mask = selection_build_combined_mask(
+            doc->selection_mask, &dirty_rect, FEATHER_QUALITY_NORMAL, &actual_region);
+
+        if (region_mask && region_mask->data) {
+            /* Convert actual region to temp surface coordinates */
+            gint mask_x_temp = (actual_region.x - min_x_doc);
+            gint mask_y_temp = (actual_region.y - min_y_doc);
+
+            /* For eraser: restore original pixels outside selection */
+            render_utils_apply_selection_mask_to_eraser(
+                temp_surface,
+                surface,
+                region_mask->data,
+                mask_x_temp, mask_y_temp,
+                region_mask->width, region_mask->height,
+                region_mask->stride,
+                min_x_layer, min_y_layer);
+
+            selection_mask_free(region_mask);
+        }
+
+        /* Composite masked result onto layer surface using SOURCE to replace region */
+        cairo_surface_flush(temp_surface);
+        cairo_t* composite_cr = cairo_create(surface);
+        cairo_rectangle(composite_cr, min_x_layer, min_y_layer, stroke_width, stroke_height);
+        cairo_clip(composite_cr);
+        cairo_set_source_surface(composite_cr, temp_surface, min_x_layer, min_y_layer);
+        cairo_set_operator(composite_cr, CAIRO_OPERATOR_SOURCE);
+        cairo_paint(composite_cr);
+        cairo_destroy(composite_cr);
+
+        cairo_surface_destroy(temp_surface);
+    } else if (!has_selection && temp_surface) {
+        /* No selection but temp surface was created - composite it */
+        cairo_surface_flush(temp_surface);
+        cairo_t* composite_cr = cairo_create(surface);
+        cairo_rectangle(composite_cr, min_x_layer, min_y_layer, stroke_width, stroke_height);
+        cairo_clip(composite_cr);
+        cairo_set_source_surface(composite_cr, temp_surface, min_x_layer, min_y_layer);
+        cairo_set_operator(composite_cr, CAIRO_OPERATOR_SOURCE);
+        cairo_paint(composite_cr);
+        cairo_destroy(composite_cr);
+        cairo_surface_destroy(temp_surface);
+    }
+
     cairo_surface_mark_dirty(surface);
 }
 
@@ -265,7 +483,8 @@ static void eraser_tool_mouse_down(Tool* tool, struct ImageDocument* doc, MouseE
                                            layer_x, layer_y,
                                            eraser_size);
 
-    eraser_erase_dot(active_layer->surface, layer_x, layer_y);
+    eraser_erase_dot(active_layer->surface, doc, layer_x, layer_y,
+                     active_layer->offset_x, active_layer->offset_y);
 
     /* CRITICAL: Flush Cairo surface to ensure drawing is written to pixel buffer
        Worker threads will read the raw pixels, so we must flush first */
@@ -336,8 +555,9 @@ static void eraser_tool_mouse_move(Tool* tool, struct ImageDocument* doc,
                                                eraser_size);
     }
 
-    eraser_erase_line(active_layer->surface, (gdouble)layer_x1, (gdouble)layer_y1,
-                      (gdouble)layer_x2, (gdouble)layer_y2);
+    eraser_erase_line(active_layer->surface, doc, (gdouble)layer_x1, (gdouble)layer_y1,
+                      (gdouble)layer_x2, (gdouble)layer_y2,
+                      active_layer->offset_x, active_layer->offset_y);
 
     /* CRITICAL: Flush Cairo surface to ensure drawing is written to pixel buffer
        Worker threads will read the raw pixels, so we must flush first */
