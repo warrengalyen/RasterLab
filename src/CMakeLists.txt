@@ -40,6 +40,7 @@ set(SOURCES
     ui/ui_edit_menu.c
     ui/ui_view_menu.c
     ui/ui_image_menu.c
+    ui/ui_layer_menu.c
     ui/ui_filter.c
     ui/ui_filter_adjust.c
     ui/ui_filter_effects.c
