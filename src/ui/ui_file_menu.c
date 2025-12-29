@@ -3,6 +3,7 @@
 #include "app/settings.h"
 #include "command.h"
 #include "document.h"
+#include "plugins/format_registry.h"
 #include "ui.h"
 #include "ui/layers_panel.h"
 #include <glib.h>
@@ -310,6 +311,9 @@ void on_file_open(GtkWidget* widget, gpointer data) {
     }
     GtkWidget* dialog;
     GtkFileFilter* filter;
+    GList* handlers;
+    GHashTable* seen_formats;
+    gchar* all_patterns;
 
     /* Create file chooser dialog */
     dialog = gtk_file_chooser_dialog_new(
@@ -320,24 +324,71 @@ void on_file_open(GtkWidget* widget, gpointer data) {
         "_Open", GTK_RESPONSE_ACCEPT,
         NULL);
 
-    /* Add file filters */
-    filter = gtk_file_filter_new();
-    gtk_file_filter_set_name(filter, "All Supported Images");
-    gtk_file_filter_add_pattern(filter, "*.png");
-    gtk_file_filter_add_pattern(filter, "*.jpg");
-    gtk_file_filter_add_pattern(filter, "*.jpeg");
-    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
+    /* Get all registered format handlers from plugin system */
+    handlers = format_registry_get_all_handlers();
+    seen_formats = g_hash_table_new(g_str_hash, g_str_equal);
 
-    filter = gtk_file_filter_new();
-    gtk_file_filter_set_name(filter, "PNG - Portable Network Graphic");
-    gtk_file_filter_add_pattern(filter, "*.png");
-    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
+    /* Create "All Supported Images" filter with all patterns */
+    all_patterns = format_registry_get_file_filter_patterns();
+    if (all_patterns && strlen(all_patterns) > 0) {
+        filter = gtk_file_filter_new();
+        gtk_file_filter_set_name(filter, "All Supported Images");
+        /* Parse patterns (semicolon-separated) and add each */
+        gchar** patterns = g_strsplit(all_patterns, ";", -1);
+        for (gint i = 0; patterns[i]; i++) {
+            g_strstrip(patterns[i]);
+            if (strlen(patterns[i]) > 0) {
+                gtk_file_filter_add_pattern(filter, patterns[i]);
+            }
+        }
+        g_strfreev(patterns);
+        gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
+        g_free(all_patterns);
+    }
 
-    filter = gtk_file_filter_new();
-    gtk_file_filter_set_name(filter, "JPG/JPEG - Joint Photographic Experts Group");
-    gtk_file_filter_add_pattern(filter, "*.jpg");
-    gtk_file_filter_add_pattern(filter, "*.jpeg");
-    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
+    /* Create individual filters for each format */
+    if (handlers) {
+        for (GList* iter = handlers; iter; iter = iter->next) {
+            FormatHandler* handler = (FormatHandler*)iter->data;
+            if (!handler || !handler->format_info.name || !handler->format_info.extensions) {
+                continue;
+            }
+
+            /* Skip if we've already added a filter for this format name */
+            if (g_hash_table_contains(seen_formats, handler->format_info.name)) {
+                continue;
+            }
+            g_hash_table_insert(seen_formats, (gpointer)handler->format_info.name, GINT_TO_POINTER(1));
+
+            /* Create filter for this format */
+            filter = gtk_file_filter_new();
+            gtk_file_filter_set_name(filter, handler->format_info.name);
+
+            /* Parse extensions (comma-separated) and add patterns */
+            gchar** exts = g_strsplit(handler->format_info.extensions, ",", -1);
+            for (gint i = 0; exts[i]; i++) {
+                g_strstrip(exts[i]);
+                if (strlen(exts[i]) > 0) {
+                    gchar* pattern = g_strdup_printf("*.%s", exts[i]);
+                    gtk_file_filter_add_pattern(filter, pattern);
+                    g_free(pattern);
+                }
+            }
+            g_strfreev(exts);
+
+            gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
+        }
+    }
+
+    g_hash_table_destroy(seen_formats);
+
+    /* Add fallback "All Files" filter if no formats registered */
+    if (!handlers || g_list_length(handlers) == 0) {
+        filter = gtk_file_filter_new();
+        gtk_file_filter_set_name(filter, "All Files");
+        gtk_file_filter_add_pattern(filter, "*");
+        gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
+    }
 
     /* Connect response signal */
     g_signal_connect(dialog, "response", G_CALLBACK(on_file_open_response), ctx);
@@ -391,6 +442,8 @@ void on_file_save_as(GtkWidget* widget, gpointer data) {
     ImageDocument* doc = ui_get_active_document(ctx);
     GtkWidget* dialog;
     GtkFileFilter* filter;
+    GList* handlers;
+    GHashTable* seen_formats;
 
     if (!doc) {
         g_warning("No document open");
@@ -408,17 +461,53 @@ void on_file_save_as(GtkWidget* widget, gpointer data) {
 
     gtk_file_chooser_set_do_overwrite_confirmation(GTK_FILE_CHOOSER(dialog), TRUE);
 
-    /* Add file filters */
-    filter = gtk_file_filter_new();
-    gtk_file_filter_set_name(filter, "PNG - Portable Network Graphic");
-    gtk_file_filter_add_pattern(filter, "*.png");
-    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
+    /* Get all registered format handlers from plugin system */
+    handlers = format_registry_get_all_handlers();
+    seen_formats = g_hash_table_new(g_str_hash, g_str_equal);
 
-    filter = gtk_file_filter_new();
-    gtk_file_filter_set_name(filter, "JPG/JPEG - Joint Photographic Experts Group");
-    gtk_file_filter_add_pattern(filter, "*.jpg");
-    gtk_file_filter_add_pattern(filter, "*.jpeg");
-    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
+    /* Create filters for each format */
+    if (handlers) {
+        for (GList* iter = handlers; iter; iter = iter->next) {
+            FormatHandler* handler = (FormatHandler*)iter->data;
+            if (!handler || !handler->format_info.name || !handler->format_info.extensions) {
+                continue;
+            }
+
+            /* Skip if we've already added a filter for this format name */
+            if (g_hash_table_contains(seen_formats, handler->format_info.name)) {
+                continue;
+            }
+            g_hash_table_insert(seen_formats, (gpointer)handler->format_info.name, GINT_TO_POINTER(1));
+
+            /* Create filter for this format */
+            filter = gtk_file_filter_new();
+            gtk_file_filter_set_name(filter, handler->format_info.name);
+
+            /* Parse extensions (comma-separated) and add patterns */
+            gchar** exts = g_strsplit(handler->format_info.extensions, ",", -1);
+            for (gint i = 0; exts[i]; i++) {
+                g_strstrip(exts[i]);
+                if (strlen(exts[i]) > 0) {
+                    gchar* pattern = g_strdup_printf("*.%s", exts[i]);
+                    gtk_file_filter_add_pattern(filter, pattern);
+                    g_free(pattern);
+                }
+            }
+            g_strfreev(exts);
+
+            gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
+        }
+    }
+
+    g_hash_table_destroy(seen_formats);
+
+    /* Add fallback "All Files" filter if no formats registered */
+    if (!handlers || g_list_length(handlers) == 0) {
+        filter = gtk_file_filter_new();
+        gtk_file_filter_set_name(filter, "All Files");
+        gtk_file_filter_add_pattern(filter, "*");
+        gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
+    }
 
     /* Set current filename if document has a path */
     if (doc->file_path) {
