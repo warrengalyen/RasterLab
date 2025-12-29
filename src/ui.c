@@ -78,6 +78,7 @@ static void on_edit_paste(GtkWidget* widget, gpointer data);
 static void on_edit_paste_new_image(GtkWidget* widget, gpointer data);
 static void on_edit_copy_merged(GtkWidget* widget, gpointer data);
 static void on_edit_cut_merged(GtkWidget* widget, gpointer data);
+static void on_edit_clear(GtkWidget* widget, gpointer data);
 static void on_view_zoom_in(GtkWidget* widget, gpointer data);
 static void on_view_zoom_out(GtkWidget* widget, gpointer data);
 static void on_view_zoom_reset(GtkWidget* widget, gpointer data);
@@ -1153,6 +1154,12 @@ static void setup_edit_menu(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup*
     }
     if (edit_menu_cut_merged) {
         g_signal_connect(edit_menu_cut_merged, "activate", G_CALLBACK(on_edit_cut_merged), ctx);
+    }
+
+    /* Connect Clear menu item */
+    GtkWidget* edit_menu_clear = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu_clear"));
+    if (edit_menu_clear) {
+        g_signal_connect(edit_menu_clear, "activate", G_CALLBACK(on_edit_clear), ctx);
     }
 }
 
@@ -2786,6 +2793,147 @@ static void on_edit_cut(GtkWidget* widget, gpointer data) {
     /* Now create undo command and clear pixels */
     /* Create a draw command to track the cut operation */
     cmd = command_create_draw(layer, "Cut");
+    if (!cmd) {
+        return;
+    }
+
+    /* Clear pixels from layer */
+    gboolean has_selection = (doc->selection_mask && !selection_mask_is_empty(doc->selection_mask));
+
+    if (has_selection) {
+        /* Clear selected pixels */
+        DirtyRect layer_rect;
+        dirty_rect_set(&layer_rect, layer->offset_x, layer->offset_y, layer->width, layer->height);
+
+        DirtyRect actual_region;
+        SelectionMask* region_mask = selection_build_combined_mask(
+            doc->selection_mask, &layer_rect, FEATHER_QUALITY_NORMAL, &actual_region);
+
+        if (region_mask && region_mask->data) {
+            cairo_surface_flush(layer->surface);
+            guchar* layer_data = cairo_image_surface_get_data(layer->surface);
+            gint layer_stride = cairo_image_surface_get_stride(layer->surface);
+
+            for (gint y = 0; y < (gint)layer->height; y++) {
+                gint doc_y = layer->offset_y + y;
+                gint mask_y = doc_y - actual_region.y;
+
+                if (mask_y < 0 || mask_y >= region_mask->height) {
+                    continue;
+                }
+
+                for (gint x = 0; x < (gint)layer->width; x++) {
+                    gint doc_x = layer->offset_x + x;
+                    gint mask_x = doc_x - actual_region.x;
+
+                    if (mask_x < 0 || mask_x >= region_mask->width) {
+                        continue;
+                    }
+
+                    uint8_t mask_alpha = region_mask->data[mask_y * region_mask->stride + mask_x];
+                    if (mask_alpha > 0) {
+                        guchar* pixel = layer_data + y * layer_stride + x * 4;
+
+                        if (mask_alpha == 255) {
+                            /* Fully selected: clear completely */
+                            pixel[0] = pixel[1] = pixel[2] = pixel[3] = 0;
+                        } else {
+                            /* Partially selected: reduce alpha */
+                            uint8_t src_a = pixel[3];
+                            uint8_t new_alpha = (uint8_t)((src_a * (255 - mask_alpha)) / 255);
+
+                            if (new_alpha < 1) {
+                                pixel[0] = pixel[1] = pixel[2] = pixel[3] = 0;
+                            } else if (src_a > 0) {
+                                /* Un-premultiply, then re-premultiply */
+                                uint16_t r = (pixel[2] * 255 + src_a / 2) / src_a;
+                                uint16_t g = (pixel[1] * 255 + src_a / 2) / src_a;
+                                uint16_t b = (pixel[0] * 255 + src_a / 2) / src_a;
+
+                                if (r > 255)
+                                    r = 255;
+                                if (g > 255)
+                                    g = 255;
+                                if (b > 255)
+                                    b = 255;
+
+                                pixel[0] = (b * new_alpha + 127) / 255;
+                                pixel[1] = (g * new_alpha + 127) / 255;
+                                pixel[2] = (r * new_alpha + 127) / 255;
+                                pixel[3] = new_alpha;
+                            } else {
+                                pixel[0] = pixel[1] = pixel[2] = pixel[3] = 0;
+                            }
+                        }
+                    }
+                }
+            }
+
+            cairo_surface_mark_dirty(layer->surface);
+            selection_mask_free(region_mask);
+        }
+    } else {
+        /* No selection: clear entire layer */
+        cairo_t* cr = cairo_create(layer->surface);
+        cairo_set_operator(cr, CAIRO_OPERATOR_CLEAR);
+        cairo_paint(cr);
+        cairo_destroy(cr);
+        cairo_surface_mark_dirty(layer->surface);
+    }
+
+    /* Finalize command and push to undo stack */
+    if (command_finalize_draw(cmd)) {
+        command_execute(cmd, doc);
+        command_stack_push(doc->undo_stack, cmd);
+        command_stack_clear(doc->redo_stack); /* Clear redo stack */
+    } else {
+        command_free(cmd);
+    }
+
+    /* Invalidate document and update UI */
+    layer_invalidate_cache(layer);
+    document_invalidate_composite(doc);
+
+    LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window), "layers_panel");
+    if (layers_panel) {
+        layers_panel_update(layers_panel, doc);
+    }
+
+    ui_update_menu_and_button_states(ctx);
+    ui_update_window_title(ctx, NULL);
+
+    if (doc->drawing_area) {
+        gtk_widget_queue_draw(doc->drawing_area);
+    }
+}
+
+/**
+ * Edit > Clear callback
+ */
+static void on_edit_clear(GtkWidget* widget, gpointer data) {
+    (void)widget; /* Unused */
+
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc;
+    ImageLayer* layer;
+    Command* cmd;
+
+    if (!ctx) {
+        return;
+    }
+
+    doc = ui_get_active_document(ctx);
+    if (!doc) {
+        return;
+    }
+
+    layer = document_get_selected_layer(doc);
+    if (!layer || !layer->surface) {
+        return;
+    }
+
+    /* Create a draw command to track the clear operation */
+    cmd = command_create_draw(layer, "Clear");
     if (!cmd) {
         return;
     }
