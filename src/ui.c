@@ -75,6 +75,7 @@ static void on_edit_redo(GtkWidget* widget, gpointer data);
 static void on_edit_copy(GtkWidget* widget, gpointer data);
 static void on_edit_cut(GtkWidget* widget, gpointer data);
 static void on_edit_paste(GtkWidget* widget, gpointer data);
+static void on_edit_paste_new_image(GtkWidget* widget, gpointer data);
 static void on_edit_copy_merged(GtkWidget* widget, gpointer data);
 static void on_edit_cut_merged(GtkWidget* widget, gpointer data);
 static void on_view_zoom_in(GtkWidget* widget, gpointer data);
@@ -1129,6 +1130,7 @@ static void setup_edit_menu(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup*
     GtkWidget* edit_menu_copy = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu_copy"));
     GtkWidget* edit_menu_cut = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu_cut"));
     GtkWidget* edit_menu_paste = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu_paste"));
+    GtkWidget* edit_menu_paste_new_image = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu_paste_new_image"));
     GtkWidget* edit_menu_copy_merged = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu_copy_merged"));
     GtkWidget* edit_menu_cut_merged = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu_cut_merged"));
 
@@ -1140,6 +1142,9 @@ static void setup_edit_menu(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup*
     }
     if (edit_menu_paste) {
         g_signal_connect(edit_menu_paste, "activate", G_CALLBACK(on_edit_paste), ctx);
+    }
+    if (edit_menu_paste_new_image) {
+        g_signal_connect(edit_menu_paste_new_image, "activate", G_CALLBACK(on_edit_paste_new_image), ctx);
     }
     if (edit_menu_copy_merged) {
         g_signal_connect(edit_menu_copy_merged, "activate", G_CALLBACK(on_edit_copy_merged), ctx);
@@ -3038,6 +3043,190 @@ static void on_edit_paste(GtkWidget* widget, gpointer data) {
     if (doc->drawing_area) {
         gtk_widget_queue_draw(doc->drawing_area);
     }
+}
+
+/**
+ * Edit > Paste to New Image callback
+ */
+static void on_edit_paste_new_image(GtkWidget* widget, gpointer data) {
+    (void)widget; /* Unused */
+
+    AppContext* ctx = (AppContext*)data;
+    GtkClipboard* clipboard;
+    GdkPixbuf* pixbuf;
+    cairo_surface_t* surface;
+    ImageDocument* new_doc;
+    ImageLayer* new_layer;
+    LayersPanel* layers_panel;
+
+    if (!ctx) {
+        return;
+    }
+
+    /* Get image from clipboard */
+    clipboard = gtk_clipboard_get(GDK_SELECTION_CLIPBOARD);
+    if (!clipboard) {
+        return;
+    }
+
+    pixbuf = gtk_clipboard_wait_for_image(clipboard);
+    if (!pixbuf) {
+        /* No valid image in clipboard - notify user */
+        GtkWidget* dialog = gtk_message_dialog_new(
+            GTK_WINDOW(ctx->window),
+            GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+            GTK_MESSAGE_INFO,
+            GTK_BUTTONS_OK,
+            "No valid image found in clipboard.");
+        gtk_dialog_run(GTK_DIALOG(dialog));
+        gtk_widget_destroy(dialog);
+        return;
+    }
+
+    /* Get image dimensions */
+    gint width = gdk_pixbuf_get_width(pixbuf);
+    gint height = gdk_pixbuf_get_height(pixbuf);
+
+    if (width <= 0 || height <= 0) {
+        g_object_unref(pixbuf);
+        return;
+    }
+
+    /* Create new document tab */
+    new_doc = ui_create_document_tab(ctx, "Clipboard Image");
+    if (!new_doc) {
+        g_object_unref(pixbuf);
+        return;
+    }
+
+    /* Set document dimensions */
+    new_doc->width = (guint)width;
+    new_doc->height = (guint)height;
+    new_doc->channels = gdk_pixbuf_get_n_channels(pixbuf);
+    new_doc->bit_depth = 8; /* GdkPixbuf always uses 8 bits per channel */
+    new_doc->has_alpha = gdk_pixbuf_get_has_alpha(pixbuf);
+
+    /* Create tile grid */
+    if (new_doc->tile_grid) {
+        tile_grid_free(new_doc->tile_grid);
+    }
+    new_doc->tile_grid = tile_grid_create(new_doc->width, new_doc->height, 128);
+    if (!new_doc->tile_grid) {
+        g_warning("Failed to create tile grid");
+        g_object_unref(pixbuf);
+        return;
+    }
+
+    /* Create selection mask */
+    if (new_doc->selection_mask) {
+        selection_mask_free(new_doc->selection_mask);
+    }
+    new_doc->selection_mask = selection_mask_new(new_doc->width, new_doc->height);
+    if (!new_doc->selection_mask) {
+        g_warning("Failed to create selection mask");
+        g_object_unref(pixbuf);
+        return;
+    }
+
+    /* Convert pixbuf to cairo surface */
+    surface = pixbuf_to_cairo_surface(pixbuf);
+    g_object_unref(pixbuf);
+
+    if (!surface) {
+        return;
+    }
+
+    /* Ensure surface is properly formatted and flushed */
+    cairo_surface_flush(surface);
+
+    /* Create new layer from clipboard image */
+    new_layer = layer_new("Clipboard Image", width, height, TRUE,
+                          LAYER_BACKGROUND_TRANSPARENT,
+                          LAYER_POSITION_ABOVE_CURRENT, NULL, new_doc);
+    if (!new_layer) {
+        cairo_surface_destroy(surface);
+        return;
+    }
+
+    /* Copy surface to layer with proper alpha handling */
+    /* Use direct pixel copy like Paste does, premultiplying alpha */
+    cairo_surface_flush(surface);
+    cairo_surface_flush(new_layer->surface);
+
+    guchar* src_data = cairo_image_surface_get_data(surface);
+    gint src_stride = cairo_image_surface_get_stride(surface);
+    guchar* dst_data = cairo_image_surface_get_data(new_layer->surface);
+    gint dst_stride = cairo_image_surface_get_stride(new_layer->surface);
+
+    /* Copy pixel data and premultiply alpha (pixbuf has straight alpha, Cairo needs premultiplied) */
+    /* Cairo ARGB32 format: BGRA in memory (little-endian) */
+    for (gint y = 0; y < height; y++) {
+        guchar* src_row = src_data + y * src_stride;
+        guchar* dst_row = dst_data + y * dst_stride;
+
+        for (gint x = 0; x < width; x++) {
+            guchar* src_pixel = src_row + x * 4;
+            guchar* dst_pixel = dst_row + x * 4;
+
+            /* Read BGRA from source (straight alpha from pixbuf conversion) */
+            guchar src_b = src_pixel[0];
+            guchar src_g = src_pixel[1];
+            guchar src_r = src_pixel[2];
+            guchar src_a = src_pixel[3];
+
+            if (src_a == 0) {
+                /* Fully transparent */
+                dst_pixel[0] = 0;
+                dst_pixel[1] = 0;
+                dst_pixel[2] = 0;
+                dst_pixel[3] = 0;
+            } else if (src_a == 255) {
+                /* Fully opaque - no premultiplication needed */
+                dst_pixel[0] = src_b;
+                dst_pixel[1] = src_g;
+                dst_pixel[2] = src_r;
+                dst_pixel[3] = src_a;
+            } else {
+                /* Partially transparent - premultiply alpha */
+                dst_pixel[0] = (src_b * src_a + 127) / 255; /* B */
+                dst_pixel[1] = (src_g * src_a + 127) / 255; /* G */
+                dst_pixel[2] = (src_r * src_a + 127) / 255; /* R */
+                dst_pixel[3] = src_a;                       /* A */
+            }
+        }
+    }
+
+    cairo_surface_mark_dirty(new_layer->surface);
+    cairo_surface_destroy(surface);
+
+    /* Add layer to document */
+    new_doc->layers = g_list_append(new_doc->layers, new_layer);
+    document_set_selected_layer(new_doc, new_layer);
+
+    /* Update drawing area size to match document dimensions */
+    if (new_doc->drawing_area) {
+        gint display_width = (gint)(new_doc->width * new_doc->zoom_factor);
+        gint display_height = (gint)(new_doc->height * new_doc->zoom_factor);
+        gtk_widget_set_size_request(new_doc->drawing_area, display_width, display_height);
+        gtk_widget_queue_draw(new_doc->drawing_area);
+    }
+
+    /* Mark composite as needing re-render */
+    document_invalidate_composite(new_doc);
+
+    /* Update layers panel */
+    layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window), "layers_panel");
+    if (layers_panel) {
+        layers_panel_update(layers_panel, new_doc);
+    }
+
+    /* Mark document as modified */
+    new_doc->modified = TRUE;
+
+    /* Update UI state */
+    ui_update_menu_and_button_states(ctx);
+    ui_update_window_title(ctx);
+    ui_update_status_bar(ctx, NULL);
 }
 
 /**
