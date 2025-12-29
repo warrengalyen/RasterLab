@@ -17,9 +17,8 @@ void on_image_canvas_size(GtkWidget* widget, gpointer data) {
     (void)widget; /* Unused */
 
     AppContext* ctx = (AppContext*)data;
-    ImageDocument* doc = ui_get_active_document(ctx);
-    LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window),
-                                                                "layers_panel");
+    ImageDocument* doc;
+    LayersPanel* layers_panel;
     CanvasSizeDialog* dialog;
     CanvasSizeDialogResult* result;
     Command* cmd;
@@ -30,11 +29,26 @@ void on_image_canvas_size(GtkWidget* widget, gpointer data) {
     gint delta_width, delta_height;
     CanvasAnchorPosition anchor;
     gint response;
+    GtkWindow* parent_window = NULL;
 
+    if (!ctx) {
+        g_warning("Invalid application context");
+        return;
+    }
+
+    if (!ctx->window || !GTK_IS_WIDGET(ctx->window)) {
+        g_warning("Invalid main window");
+        return;
+    }
+
+    doc = ui_get_active_document(ctx);
     if (!doc) {
         g_warning("No document open");
         return;
     }
+
+    layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window),
+                                                   "layers_panel");
 
     /* Create and show dialog */
     dialog = canvas_size_dialog_new(doc);
@@ -43,7 +57,20 @@ void on_image_canvas_size(GtkWidget* widget, gpointer data) {
         return;
     }
 
-    response = canvas_size_dialog_run(dialog, GTK_WINDOW(ctx->window), &result);
+    /* Validate dialog was created properly */
+    GtkWindow* dialog_window = canvas_size_dialog_get_window(dialog);
+    if (!dialog_window || !GTK_IS_WINDOW(dialog_window)) {
+        g_warning("Dialog window is invalid");
+        canvas_size_dialog_free(dialog);
+        return;
+    }
+
+    /* Get parent window if valid */
+    if (GTK_IS_WINDOW(ctx->window)) {
+        parent_window = GTK_WINDOW(ctx->window);
+    }
+
+    response = canvas_size_dialog_run(dialog, parent_window, &result);
 
     if (response == GTK_RESPONSE_OK && result) {
         old_width = doc->width;

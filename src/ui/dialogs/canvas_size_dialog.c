@@ -539,9 +539,10 @@ static void update_preserve_ratio_icon(CanvasSizeDialog* dialog) {
         image = GTK_IMAGE(child);
         gtk_image_set_from_pixbuf(image, pixbuf);
     } else {
-        /* Remove existing child and add image */
-        if (child) {
-            gtk_container_remove(GTK_CONTAINER(dialog->preserve_ratio_toggle), child);
+        /* Remove existing child and add image - use destroy instead of unparent to avoid parent access */
+        if (child && GTK_IS_WIDGET(child)) {
+            /* Destroy the widget - this is safer than unparent which might access parent */
+            gtk_widget_destroy(child);
         }
         image = GTK_IMAGE(gtk_image_new_from_pixbuf(pixbuf));
         gtk_widget_show(GTK_WIDGET(image));
@@ -589,13 +590,8 @@ static void set_reset_button_icon(GtkButton* button) {
     g_object_unref(pixbuf);
 
     if (scaled) {
-        /* Remove any existing label/image */
-        GtkWidget* child = gtk_bin_get_child(GTK_BIN(button));
-        if (child) {
-            gtk_container_remove(GTK_CONTAINER(button), child);
-        }
-
-        /* Create image from scaled pixbuf */
+        /* gtk_button_set_image automatically replaces any existing image/label,
+         * so we don't need to manually remove the child - this avoids parent access issues */
         GtkWidget* image = gtk_image_new_from_pixbuf(scaled);
         gtk_button_set_image(button, image);
         g_object_unref(scaled);
@@ -707,27 +703,37 @@ CanvasSizeDialog* canvas_size_dialog_new(ImageDocument* doc) {
     dialog->anchor_widget = anchor_position_widget_new();
     if (dialog->anchor_widget) {
         GtkWidget* anchor_widget = anchor_position_widget_get_widget(dialog->anchor_widget);
-        if (anchor_widget) {
-            /* Remove placeholder if it exists */
-            GList* children = gtk_container_get_children(GTK_CONTAINER(dialog->anchor_container));
-            if (children) {
-                GList* iter = children;
-                while (iter) {
-                    GtkWidget* child = GTK_WIDGET(iter->data);
-                    gtk_container_remove(GTK_CONTAINER(dialog->anchor_container), child);
-                    iter = iter->next;
+        if (anchor_widget && GTK_IS_WIDGET(anchor_widget)) {
+            /* Remove placeholder if it exists - skip if container might have issues */
+            if (GTK_IS_CONTAINER(dialog->anchor_container)) {
+                /* Check if container has children - only remove if safe */
+                GList* children = gtk_container_get_children(GTK_CONTAINER(dialog->anchor_container));
+                if (children) {
+                    gint child_count = g_list_length(children);
+                    if (child_count > 0) {
+                        /* Try to remove children - iterate backwards */
+                        for (GList* iter = g_list_last(children); iter; iter = iter->prev) {
+                            GtkWidget* child = GTK_WIDGET(iter->data);
+                            if (child && GTK_IS_WIDGET(child)) {
+                                /* Just hide the child instead of removing to avoid parent access */
+                                gtk_widget_hide(child);
+                            }
+                        }
+                    }
+                    g_list_free(children);
                 }
-                g_list_free(children);
             }
-            /* Ensure container is visible */
-            gtk_widget_set_visible(dialog->anchor_container, TRUE);
-            /* Add and show the anchor widget using gtk_box_pack_start since it's a GtkBox */
-            gtk_box_pack_start(GTK_BOX(dialog->anchor_container), anchor_widget, FALSE, FALSE, 0);
-            /* Ensure the anchor widget is visible and show all its children */
-            gtk_widget_set_visible(anchor_widget, TRUE);
-            gtk_widget_show_all(anchor_widget);
-            /* Ensure container shows all children */
-            gtk_widget_show_all(dialog->anchor_container);
+            /* Ensure container is visible and valid */
+            if (GTK_IS_WIDGET(dialog->anchor_container) && GTK_IS_BOX(dialog->anchor_container)) {
+                gtk_widget_set_visible(dialog->anchor_container, TRUE);
+                /* Add and show the anchor widget using gtk_box_pack_start since it's a GtkBox */
+                gtk_box_pack_start(GTK_BOX(dialog->anchor_container), anchor_widget, FALSE, FALSE, 0);
+                /* Ensure the anchor widget is visible and show all its children */
+                gtk_widget_set_visible(anchor_widget, TRUE);
+                gtk_widget_show_all(anchor_widget);
+                /* Ensure container shows all children */
+                gtk_widget_show_all(dialog->anchor_container);
+            }
         } else {
             g_warning("Failed to get anchor widget from anchor_position_widget");
         }
@@ -850,11 +856,14 @@ CanvasSizeDialog* canvas_size_dialog_new(ImageDocument* doc) {
     update_aspect_ratio_label(dialog);
     update_preserve_ratio_icon(dialog);
 
-    /* Ensure dialog shows all widgets including the dynamically added anchor widget */
-    gtk_widget_show_all(dialog->dialog);
+    /* Don't show dialog yet - it will be shown by gtk_dialog_run
+     * This avoids parent access issues during setup */
 
     /* Clean up builder */
     g_object_unref(builder);
+
+    /* Ensure dialog is not shown yet - it will be shown by gtk_dialog_run */
+    gtk_widget_hide(dialog->dialog);
 
     return dialog;
 }
@@ -898,11 +907,31 @@ gint canvas_size_dialog_run(CanvasSizeDialog* dialog, GtkWindow* parent, CanvasS
         return GTK_RESPONSE_CANCEL;
     }
 
+    if (!dialog->dialog || !GTK_IS_WIDGET(dialog->dialog)) {
+        g_warning("Invalid dialog widget");
+        return GTK_RESPONSE_CANCEL;
+    }
+
     *result = NULL;
 
-    if (parent) {
-        gtk_window_set_transient_for(GTK_WINDOW(dialog->dialog), parent);
+    /* Set parent window for proper centering and modal behavior
+     * Must be done before showing the dialog, but after dialog is fully constructed */
+    if (parent && GTK_IS_WINDOW(parent) && GTK_IS_WINDOW(dialog->dialog)) {
+        /* Ensure dialog widget is a valid window before setting transient */
+        GtkWindow* dialog_window = GTK_WINDOW(dialog->dialog);
+        if (dialog_window && GTK_IS_WINDOW(dialog_window)) {
+            /* Set transient parent - this enables proper centering */
+            gtk_window_set_transient_for(dialog_window, parent);
+            /* Set window position to center on parent */
+            gtk_window_set_position(dialog_window, GTK_WIN_POS_CENTER_ON_PARENT);
+        }
+    } else if (GTK_IS_WINDOW(dialog->dialog)) {
+        /* Fallback to center on screen if no valid parent */
+        gtk_window_set_position(GTK_WINDOW(dialog->dialog), GTK_WIN_POS_CENTER);
     }
+
+    /* Show the dialog - must happen after setting transient parent for proper centering */
+    gtk_widget_show_all(dialog->dialog);
 
     response = gtk_dialog_run(GTK_DIALOG(dialog->dialog));
 
