@@ -28,6 +28,7 @@
 #include "ui/ui_filter.h"
 #include "ui/ui_filter_adjust.h"
 #include "ui/ui_filter_effects.h"
+#include "ui/ui_view_menu.h"
 #include "undo/undo_disk.h"
 #include <glib.h>
 #include <stdio.h>
@@ -71,10 +72,6 @@ static void on_image_flip_vertical(GtkWidget* widget, gpointer data);
 static void on_image_transpose(GtkWidget* widget, gpointer data);
 static void on_image_merge_visible(GtkWidget* widget, gpointer data);
 static void on_image_flatten(GtkWidget* widget, gpointer data);
-static void on_view_zoom_in(GtkWidget* widget, gpointer data);
-static void on_view_zoom_out(GtkWidget* widget, gpointer data);
-static void on_view_zoom_reset(GtkWidget* widget, gpointer data);
-static void on_view_zoom_fit(GtkWidget* widget, gpointer data);
 static gboolean on_window_delete(GtkWidget* widget, GdkEvent* event, gpointer data);
 static void on_layer_new(GtkWidget* widget, gpointer data);
 static void on_layer_delete(GtkWidget* widget, gpointer data);
@@ -415,7 +412,7 @@ AppContext* ui_create_main_window(void) {
     /* Setup each menu separately */
     setup_file_menu(builder, ctx, accel_group);
     ui_edit_menu_setup(builder, ctx, accel_group);
-    setup_view_menu(builder, ctx, accel_group);
+    ui_view_menu_setup(builder, ctx, accel_group);
     setup_image_menu(builder, ctx);
     setup_layer_menu(builder, ctx);
     setup_select_menu(builder, ctx, accel_group);
@@ -1082,39 +1079,6 @@ static void setup_file_menu(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup*
     }
     if (file_menu_exit) {
         g_signal_connect(file_menu_exit, "activate", G_CALLBACK(on_file_exit), ctx);
-    }
-}
-
-/**
- * Setup View menu from Glade builder
- */
-static void setup_view_menu(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* accel_group) {
-    (void)accel_group; /* Not used for View menu yet */
-
-    GtkWidget* view_menu = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu"));
-    GtkWidget* view_menu_item = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_item"));
-
-    if (view_menu && view_menu_item) {
-        gtk_menu_item_set_submenu(GTK_MENU_ITEM(view_menu_item), view_menu);
-    }
-
-    /* Connect View menu signals */
-    GtkWidget* view_menu_zoom_in = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_in"));
-    GtkWidget* view_menu_zoom_out = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_out"));
-    GtkWidget* view_menu_zoom_reset = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_reset"));
-    GtkWidget* view_menu_zoom_fit = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_fit"));
-
-    if (view_menu_zoom_in) {
-        g_signal_connect(view_menu_zoom_in, "activate", G_CALLBACK(on_view_zoom_in), ctx);
-    }
-    if (view_menu_zoom_out) {
-        g_signal_connect(view_menu_zoom_out, "activate", G_CALLBACK(on_view_zoom_out), ctx);
-    }
-    if (view_menu_zoom_reset) {
-        g_signal_connect(view_menu_zoom_reset, "activate", G_CALLBACK(on_view_zoom_reset), ctx);
-    }
-    if (view_menu_zoom_fit) {
-        g_signal_connect(view_menu_zoom_fit, "activate", G_CALLBACK(on_view_zoom_fit), ctx);
     }
 }
 
@@ -2541,66 +2505,6 @@ static cairo_surface_t* extract_merged_pixels_for_copy(ImageDocument* doc) {
     selection_mask_free(region_mask);
 
     return copy;
-}
-
-/**
- * View > Zoom In callback
- */
-static void on_view_zoom_in(GtkWidget* widget, gpointer data) {
-    (void)widget; /* Unused */
-
-    AppContext* ctx = (AppContext*)data;
-    ImageDocument* doc = ui_get_active_document(ctx);
-
-    if (doc) {
-        document_zoom_in(doc);
-        ui_update_status_bar(ctx, NULL);
-    }
-}
-
-/**
- * View > Zoom Out callback
- */
-static void on_view_zoom_out(GtkWidget* widget, gpointer data) {
-    (void)widget; /* Unused */
-
-    AppContext* ctx = (AppContext*)data;
-    ImageDocument* doc = ui_get_active_document(ctx);
-
-    if (doc) {
-        document_zoom_out(doc);
-        ui_update_status_bar(ctx, NULL);
-    }
-}
-
-/**
- * View > Reset Zoom callback
- */
-static void on_view_zoom_reset(GtkWidget* widget, gpointer data) {
-    (void)widget; /* Unused */
-
-    AppContext* ctx = (AppContext*)data;
-    ImageDocument* doc = ui_get_active_document(ctx);
-
-    if (doc) {
-        document_zoom_reset(doc);
-        ui_update_status_bar(ctx, NULL);
-    }
-}
-
-/**
- * View > Zoom Fit callback
- */
-static void on_view_zoom_fit(GtkWidget* widget, gpointer data) {
-    (void)widget; /* Unused */
-
-    AppContext* ctx = (AppContext*)data;
-    ImageDocument* doc = ui_get_active_document(ctx);
-
-    if (doc) {
-        document_zoom_fit(doc);
-        ui_update_status_bar(ctx, NULL);
-    }
 }
 
 /**
