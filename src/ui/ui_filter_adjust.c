@@ -672,7 +672,7 @@ static void on_adjust_curves(GtkWidget* widget, gpointer data) {
                     layer_invalidate_cache(layer);
                     doc->modified = TRUE;
                     document_invalidate_composite(doc);
-                    ui_update_window_title(ctx);
+                    ui_update_window_title(ctx, NULL);
                     ui_update_menu_and_button_states(ctx);
                 } else {
                     command_free(cmd);
@@ -1735,7 +1735,7 @@ static void on_adjust_palettize(GtkWidget* widget, gpointer data) {
                 doc->modified = TRUE;
                 document_invalidate_composite(doc);
                 ui_update_status_bar_time(ctx, processing_time);
-                ui_update_window_title(ctx);
+                ui_update_window_title(ctx, NULL);
                 ui_update_menu_and_button_states(ctx);
             } else {
                 if (original_surface_copy) {
@@ -1880,7 +1880,7 @@ static void on_adjust_retinex(GtkWidget* widget, gpointer data) {
                 doc->modified = TRUE;
                 document_invalidate_composite(doc);
                 ui_update_status_bar_time(ctx, processing_time);
-                ui_update_window_title(ctx);
+                ui_update_window_title(ctx, NULL);
                 ui_update_menu_and_button_states(ctx);
             } else {
                 command_free(cmd);

@@ -221,7 +221,7 @@ static void on_recovery_dialog_response(GtkDialog* dialog, gint response_id, gpo
                         autosave_register_document(doc);
 
                         /* Update UI */
-                        ui_update_window_title(ctx);
+                        ui_update_window_title(ctx, NULL);
                         ui_update_status_bar(ctx, doc);
 
                         /* Update layers panel */

@@ -63,8 +63,9 @@ ImageDocument* ui_get_active_document(AppContext* ctx);
 /**
  * Update the window title based on active document
  * @param ctx The application context
+ * @param doc Optional document to use for title. If NULL, fetches active document.
  */
-void ui_update_window_title(AppContext* ctx);
+void ui_update_window_title(AppContext* ctx, ImageDocument* doc);
 
 /**
  * Free the application context

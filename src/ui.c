@@ -558,6 +558,10 @@ ImageDocument* ui_create_document_tab(AppContext* ctx, const gchar* filename) {
     gtk_widget_show_all(tab_hbox);
     gtk_widget_show_all(page_content);
 
+    /* Add document to list BEFORE adding page to notebook
+     * This ensures that when switch-page signal fires, the document is already in the list */
+    ctx->documents = g_list_append(ctx->documents, doc);
+
     /* Add page to notebook */
     page_num = gtk_notebook_append_page(GTK_NOTEBOOK(ctx->notebook),
                                         page_content, tab_hbox);
@@ -603,9 +607,6 @@ ImageDocument* ui_create_document_tab(AppContext* ctx, const gchar* filename) {
         gtk_widget_queue_draw(doc->viewport);
     }
 
-    /* Add document to list */
-    ctx->documents = g_list_append(ctx->documents, doc);
-
     /* Set the current document in tool registry so tools can access it */
     if (ctx->tool_registry) {
         ctx->tool_registry->current_doc = doc;
@@ -614,8 +615,8 @@ ImageDocument* ui_create_document_tab(AppContext* ctx, const gchar* filename) {
     /* Register document for autosave */
     autosave_register_document(doc);
 
-    /* Update window title */
-    ui_update_window_title(ctx);
+    /* Update window title (pass doc to ensure correct title) */
+    ui_update_window_title(ctx, doc);
 
     return doc;
 }
@@ -675,7 +676,7 @@ static void ui_close_document_tab_internal(AppContext* ctx, ImageDocument* doc) 
         doc = NULL; /* Ensure doc pointer is NULL after freeing */
 
         /* Update window title (handles empty notebook) */
-        ui_update_window_title(ctx);
+        ui_update_window_title(ctx, NULL);
 
         /* Update status bar and menu/button states */
         ui_update_status_bar(ctx, NULL);
@@ -800,7 +801,7 @@ ImageDocument* ui_get_active_document(AppContext* ctx) {
 /**
  * Update the window title based on active document
  */
-void ui_update_window_title(AppContext* ctx) {
+void ui_update_window_title(AppContext* ctx, ImageDocument* doc) {
     ImageDocument* active_doc;
     gchar* title;
 
@@ -808,7 +809,8 @@ void ui_update_window_title(AppContext* ctx) {
         return;
     }
 
-    active_doc = ui_get_active_document(ctx);
+    /* Use provided document, or query for active document if not provided */
+    active_doc = doc ? doc : ui_get_active_document(ctx);
 
     if (active_doc) {
         const gchar* filename = document_get_filename(active_doc);
@@ -1784,7 +1786,7 @@ static void execute_select_radius_operation(AppContext* ctx,
                 document_invalidate_composite(doc);
 
                 /* Update window title and menu states */
-                ui_update_window_title(ctx);
+                ui_update_window_title(ctx, NULL);
                 ui_update_menu_and_button_states(ctx);
             } else {
                 /* Operation failed, cancel transaction */
@@ -2031,7 +2033,7 @@ static void on_file_save_as_response(GtkDialog* dialog, gint response_id, gpoint
                     recent_files_save(); /* This syncs to settings if connected */
 
                     /* Update window title to reflect new filename */
-                    ui_update_window_title(ctx);
+                    ui_update_window_title(ctx, NULL);
                     ui_update_status_bar(ctx, NULL);
                     ui_update_recent_files_menu(ctx);
                     // printf("Document saved: %s\n", file_path);
@@ -2217,7 +2219,7 @@ static void on_edit_undo(GtkWidget* widget, gpointer data) {
 
     /* Update menu state and window title */
     ui_update_menu_and_button_states(ctx);
-    ui_update_window_title(ctx);
+    ui_update_window_title(ctx, NULL);
 }
 
 /**
@@ -2253,7 +2255,7 @@ static void on_edit_redo(GtkWidget* widget, gpointer data) {
 
     /* Update menu state and window title */
     ui_update_menu_and_button_states(ctx);
-    ui_update_window_title(ctx);
+    ui_update_window_title(ctx, NULL);
 }
 
 /**
@@ -2891,7 +2893,7 @@ static void on_edit_cut(GtkWidget* widget, gpointer data) {
     }
 
     ui_update_menu_and_button_states(ctx);
-    ui_update_window_title(ctx);
+    ui_update_window_title(ctx, NULL);
 
     if (doc->drawing_area) {
         gtk_widget_queue_draw(doc->drawing_area);
@@ -3038,7 +3040,7 @@ static void on_edit_paste(GtkWidget* widget, gpointer data) {
     }
 
     ui_update_menu_and_button_states(ctx);
-    ui_update_window_title(ctx);
+    ui_update_window_title(ctx, NULL);
 
     if (doc->drawing_area) {
         gtk_widget_queue_draw(doc->drawing_area);
@@ -3225,7 +3227,7 @@ static void on_edit_paste_new_image(GtkWidget* widget, gpointer data) {
 
     /* Update UI state */
     ui_update_menu_and_button_states(ctx);
-    ui_update_window_title(ctx);
+    ui_update_window_title(ctx, NULL);
     ui_update_status_bar(ctx, NULL);
 }
 
@@ -3448,7 +3450,7 @@ static void on_edit_cut_merged(GtkWidget* widget, gpointer data) {
     }
 
     ui_update_menu_and_button_states(ctx);
-    ui_update_window_title(ctx);
+    ui_update_window_title(ctx, NULL);
 
     if (doc->drawing_area) {
         gtk_widget_queue_draw(doc->drawing_area);
@@ -3549,7 +3551,7 @@ static void on_notebook_switch_page(GtkNotebook* notebook, GtkWidget* page,
         ctx->tool_registry->current_doc = doc;
     }
 
-    ui_update_window_title(ctx);
+    ui_update_window_title(ctx, doc);
     ui_update_status_bar(ctx, doc);
 
     /* Update layers panel with current document's layers */
@@ -3650,7 +3652,7 @@ static void on_layer_new(GtkWidget* widget, gpointer data) {
 
             /* Update UI state */
             ui_update_menu_and_button_states(ctx);
-            ui_update_window_title(ctx);
+            ui_update_window_title(ctx, NULL);
             doc->modified = TRUE;
         }
 
@@ -3794,7 +3796,7 @@ static void on_image_canvas_size(GtkWidget* widget, gpointer data) {
 
             /* Update UI state */
             ui_update_menu_and_button_states(ctx);
-            ui_update_window_title(ctx);
+            ui_update_window_title(ctx, NULL);
             ui_update_status_bar(ctx, NULL);
             doc->modified = TRUE;
         } else {
@@ -3933,7 +3935,7 @@ static void on_image_duplicate(GtkWidget* widget, gpointer data) {
 
     /* Update UI state */
     ui_update_menu_and_button_states(ctx);
-    ui_update_window_title(ctx);
+    ui_update_window_title(ctx, NULL);
     ui_update_status_bar(ctx, NULL);
 
     /* Mark new document as modified */
@@ -4034,7 +4036,7 @@ static void on_image_fit_active_layer(GtkWidget* widget, gpointer data) {
 
         /* Update UI state */
         ui_update_menu_and_button_states(ctx);
-        ui_update_window_title(ctx);
+        ui_update_window_title(ctx, NULL);
         ui_update_status_bar(ctx, NULL);
         doc->modified = TRUE;
     } else {
@@ -4177,7 +4179,7 @@ static void on_image_fit_all_layers(GtkWidget* widget, gpointer data) {
 
         /* Update UI state */
         ui_update_menu_and_button_states(ctx);
-        ui_update_window_title(ctx);
+        ui_update_window_title(ctx, NULL);
         ui_update_status_bar(ctx, NULL);
         doc->modified = TRUE;
     } else {
@@ -4501,7 +4503,7 @@ static void on_image_transpose(GtkWidget* widget, gpointer data) {
 
     /* Update UI state */
     ui_update_menu_and_button_states(ctx);
-    ui_update_window_title(ctx);
+    ui_update_window_title(ctx, NULL);
     ui_update_status_bar(ctx, NULL);
     doc->modified = TRUE;
 }
@@ -4674,7 +4676,7 @@ static void on_layer_delete(GtkWidget* widget, gpointer data) {
 
     /* Update UI state */
     ui_update_menu_and_button_states(ctx);
-    ui_update_window_title(ctx);
+    ui_update_window_title(ctx, NULL);
     doc->modified = TRUE;
 }
 
@@ -4733,7 +4735,7 @@ static void on_layer_duplicate(GtkWidget* widget, gpointer data) {
 
         /* Update UI state */
         ui_update_menu_and_button_states(ctx);
-        ui_update_window_title(ctx);
+        ui_update_window_title(ctx, NULL);
         doc->modified = TRUE;
     }
 }
@@ -4794,7 +4796,7 @@ static void on_layer_move_up(GtkWidget* widget, gpointer data) {
 
     /* Update UI state */
     ui_update_menu_and_button_states(ctx);
-    ui_update_window_title(ctx);
+    ui_update_window_title(ctx, NULL);
     doc->modified = TRUE;
 }
 
@@ -4854,7 +4856,7 @@ static void on_layer_move_down(GtkWidget* widget, gpointer data) {
 
     /* Update UI state */
     ui_update_menu_and_button_states(ctx);
-    ui_update_window_title(ctx);
+    ui_update_window_title(ctx, NULL);
     doc->modified = TRUE;
 }
 

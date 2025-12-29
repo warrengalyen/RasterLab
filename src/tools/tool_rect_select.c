@@ -600,7 +600,7 @@ void tool_rect_select_finalize(Tool* tool, ImageDocument* doc) {
                 AppContext* ctx = (AppContext*)tool->app_context;
                 if (ctx) {
                     ui_update_menu_and_button_states(ctx);
-                    ui_update_window_title(ctx);
+                    ui_update_window_title(ctx, NULL);
                 }
 
                 /* Mark document as modified */

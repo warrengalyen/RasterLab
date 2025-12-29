@@ -265,7 +265,7 @@ gboolean ui_apply_layer_filter(AppContext* ctx,
     ui_update_status_bar_time(ctx, processing_time);
 
     /* Update window title and menu states */
-    ui_update_window_title(ctx);
+    ui_update_window_title(ctx, NULL);
     ui_update_menu_and_button_states(ctx);
 
     return TRUE;
@@ -399,7 +399,7 @@ gboolean ui_apply_layer_filter_with_value(AppContext* ctx,
     ui_update_status_bar_time(ctx, processing_time);
 
     /* Update window title and menu states */
-    ui_update_window_title(ctx);
+    ui_update_window_title(ctx, NULL);
     ui_update_menu_and_button_states(ctx);
 
     return TRUE;

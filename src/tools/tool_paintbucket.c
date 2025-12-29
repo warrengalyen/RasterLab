@@ -17,8 +17,9 @@
 
 /* Forward declarations */
 typedef struct AppContext AppContext;
+typedef struct ImageDocument ImageDocument;
 extern void ui_update_menu_and_button_states(AppContext* ctx);
-extern void ui_update_window_title(AppContext* ctx);
+extern void ui_update_window_title(AppContext* ctx, ImageDocument* doc);
 
 /**
  * Fill Tool state
@@ -538,7 +539,7 @@ static void paint_bucket_tool_mouse_down(Tool* tool, struct ImageDocument* doc, 
         AppContext* ctx = (AppContext*)tool->app_context;
         if (ctx) {
             ui_update_menu_and_button_states(ctx);
-            ui_update_window_title(ctx);
+            ui_update_window_title(ctx, NULL);
         }
     } else if (cmd) {
         /* No undo stack, free the command */

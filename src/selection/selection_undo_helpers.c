@@ -86,7 +86,7 @@ gboolean selection_undo_complete_transaction(
     if (ctx) {
         AppContext* app_ctx = (AppContext*)ctx;
         ui_update_menu_and_button_states(app_ctx);
-        ui_update_window_title(app_ctx);
+        ui_update_window_title(app_ctx, NULL);
     }
 
     return TRUE;

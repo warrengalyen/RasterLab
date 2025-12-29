@@ -2046,7 +2046,7 @@ static void on_render_clouds(GtkWidget* widget, gpointer data) {
                 doc->modified = TRUE;
                 document_invalidate_composite(doc);
                 ui_update_status_bar_time(ctx, processing_time);
-                ui_update_window_title(ctx);
+                ui_update_window_title(ctx, NULL);
                 ui_update_menu_and_button_states(ctx);
             } else {
                 command_free(cmd);
@@ -2149,7 +2149,7 @@ static void on_effects_beeps(GtkWidget* widget, gpointer data) {
                 doc->modified = TRUE;
                 document_invalidate_composite(doc);
                 ui_update_status_bar_time(ctx, processing_time);
-                ui_update_window_title(ctx);
+                ui_update_window_title(ctx, NULL);
                 ui_update_menu_and_button_states(ctx);
             } else {
                 command_free(cmd);

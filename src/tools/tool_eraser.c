@@ -14,8 +14,9 @@
 
 /* Forward declarations */
 typedef struct AppContext AppContext;
+typedef struct ImageDocument ImageDocument;
 extern void ui_update_menu_and_button_states(AppContext* ctx);
-extern void ui_update_window_title(AppContext* ctx);
+extern void ui_update_window_title(AppContext* ctx, ImageDocument* doc);
 
 /**
  * Eraser Tool state
@@ -638,7 +639,7 @@ static void eraser_tool_mouse_up(Tool* tool, struct ImageDocument* doc, MouseEve
         ctx = (AppContext*)tool->app_context;
         if (ctx) {
             ui_update_menu_and_button_states(ctx);
-            ui_update_window_title(ctx);
+            ui_update_window_title(ctx, NULL);
         }
     } else if (cmd) {
         /* No undo stack, free the command */
