@@ -37,6 +37,12 @@ add_custom_command(
 set(SOURCES
     main.c
     ui.c
+    io/image_io.c
+    plugins/plugin_loader.c
+    plugins/format_registry.c
+    plugins/plugin_host_api.c
+    plugins/builtin_plugins.c
+    plugins/plugin_png.c
     ui/ui_edit_menu.c
     ui/ui_file_menu.c
     ui/ui_view_menu.c
