@@ -923,7 +923,7 @@
       </object>
     </child>
     <child>
-      <object class="GtkCheckMenuItem" id="image_menu_resize">
+      <object class="GtkMenuItem" id="image_menu_resize">
         <property name="visible">True</property>
         <property name="can-focus">False</property>
         <property name="label" translatable="yes">Resize...</property>
@@ -1672,15 +1672,15 @@
       <object class="GtkMenuItem" id="view_menu_zoom_in">
         <property name="visible">True</property>
         <property name="can-focus">False</property>
-        <property name="label" translatable="yes">Zoom _In</property>
+        <property name="label" translatable="yes">Zoom In</property>
         <accelerator key="plus" signal="activate" modifiers="GDK_CONTROL_MASK"/>
       </object>
     </child>
     <child>
-      <object class="GtkCheckMenuItem" id="view_menu_zoom_out">
+      <object class="GtkMenuItem" id="view_menu_zoom_out">
         <property name="visible">True</property>
         <property name="can-focus">False</property>
-        <property name="label" translatable="yes">Zoom _Out</property>
+        <property name="label" translatable="yes">Zoom Out</property>
         <property name="use-underline">True</property>
         <accelerator key="minus" signal="activate" modifiers="GDK_CONTROL_MASK"/>
       </object>
@@ -1697,7 +1697,7 @@
       <object class="GtkMenuItem" id="view_menu_zoom_fit">
         <property name="visible">True</property>
         <property name="can-focus">False</property>
-        <property name="label" translatable="yes">_Fit on Screen</property>
+        <property name="label" translatable="yes">Fit on Screen</property>
         <accelerator key="1" signal="activate" modifiers="GDK_CONTROL_MASK"/>
       </object>
     </child>
