@@ -3,10 +3,12 @@
 #include "app/settings.h"
 #include "command.h"
 #include "document.h"
+#include "io/image_io.h"
 #include "plugins/format_registry.h"
 #include "ui.h"
 #include "ui/layers_panel.h"
 #include <glib.h>
+#include <glib/gstdio.h>
 #include <stdio.h>
 
 /**
@@ -16,6 +18,10 @@ void on_recent_file_activate(GtkMenuItem* menu_item, gpointer user_data) {
     (void)menu_item; /* Unused */
     AppContext* ctx = (AppContext*)user_data;
     gchar* file_path = (gchar*)g_object_get_data(G_OBJECT(menu_item), "recent_file_path");
+    FormatHandler* handler;
+    uint8_t header[64];
+    size_t header_size = 0;
+    FILE* file;
 
     if (!file_path) {
         return;
@@ -43,14 +49,53 @@ void on_recent_file_activate(GtkMenuItem* menu_item, gpointer user_data) {
         return;
     }
 
+    /* Check if a plugin can handle this file format */
+    file = g_fopen(file_path, "rb");
+    if (file) {
+        header_size = fread(header, 1, sizeof(header), file);
+        fclose(file);
+    }
+
+    handler = format_registry_find_loader(file_path, header, header_size);
+    if (!handler) {
+        /* No plugin can handle this file format */
+        GtkWidget* dialog = gtk_message_dialog_new(
+            GTK_WINDOW(ctx->window),
+            GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+            GTK_MESSAGE_ERROR,
+            GTK_BUTTONS_OK,
+            "Unsupported file format: %s\n\nNo plugin is available to load this file type.\n\nThe file has been removed from the recent files list.",
+            file_path);
+
+        gtk_dialog_run(GTK_DIALOG(dialog));
+        gtk_widget_destroy(dialog);
+
+        /* Remove from recent files */
+        recent_files_remove(file_path);
+        recent_files_save(); /* This syncs to settings if connected */
+        ui_update_recent_files_menu(ctx);
+
+        return;
+    }
+
     /* Open the file */
     gchar* basename = g_path_get_basename(file_path);
     ImageDocument* doc = ui_create_document_tab(ctx, basename);
 
     if (doc) {
-        /* Load the image into the document */
+        /* Load the image into the document using plugin system */
         if (!document_load_image_from_file(doc, file_path)) {
-            g_warning("Failed to load image: %s", file_path);
+            /* Show error dialog */
+            GtkWidget* dialog = gtk_message_dialog_new(
+                GTK_WINDOW(ctx->window),
+                GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+                GTK_MESSAGE_ERROR,
+                GTK_BUTTONS_OK,
+                "Failed to load image: %s\n\nThe file may be corrupted or in an unsupported format.",
+                file_path);
+
+            gtk_dialog_run(GTK_DIALOG(dialog));
+            gtk_widget_destroy(dialog);
         } else {
             /* Update recent files (move to top) */
             recent_files_add(file_path);
@@ -162,17 +207,45 @@ void ui_update_recent_files_menu(AppContext* ctx) {
     /* Add menu items for each recent file */
     for (const GList* iter = recent_files; iter; iter = iter->next) {
         RecentFile* rf = (RecentFile*)iter->data;
+        FormatHandler* handler;
+        gchar* basename;
+        uint8_t header[64];
+        size_t header_size = 0;
+        FILE* file;
+        gboolean file_exists;
+
         if (!rf || !rf->path) {
             continue;
         }
 
+        /* Check if file exists */
+        file_exists = g_file_test(rf->path, G_FILE_TEST_EXISTS);
+
+        /* Try to detect format if file exists */
+        handler = NULL;
+        if (file_exists) {
+            file = g_fopen(rf->path, "rb");
+            if (file) {
+                header_size = fread(header, 1, sizeof(header), file);
+                fclose(file);
+            }
+
+            /* Find plugin handler for this file */
+            handler = format_registry_find_loader(rf->path, header, header_size);
+        }
+
         /* Get filename for display */
-        gchar* basename = g_path_get_basename(rf->path);
+        basename = g_path_get_basename(rf->path);
         GtkWidget* menu_item = gtk_menu_item_new_with_label(basename);
         g_free(basename);
 
         /* Set tooltip to full path */
         gtk_widget_set_tooltip_text(menu_item, rf->path);
+
+        /* Disable menu item if file doesn't exist or no plugin can handle it */
+        if (!file_exists || !handler) {
+            gtk_widget_set_sensitive(menu_item, FALSE);
+        }
 
         /* Store file path in menu item data */
         g_object_set_data(G_OBJECT(menu_item), "recent_file_path", g_strdup(rf->path));
