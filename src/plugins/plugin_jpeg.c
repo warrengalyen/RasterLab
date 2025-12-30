@@ -6,6 +6,7 @@
 #include "render/render_utils.h"
 #include <glib.h>
 #include <glib/gstdio.h>
+#include <math.h>
 #include <setjmp.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -16,20 +17,54 @@
 #include <jpeglib.h>
 
 /**
+ * JPEG compression method
+ */
+typedef enum {
+    JPEG_COMPRESSION_BASELINE = 0,   /* Standard baseline JPEG */
+    JPEG_COMPRESSION_OPTIMIZED = 1,  /* Optimized baseline (Huffman optimization) */
+    JPEG_COMPRESSION_PROGRESSIVE = 2 /* Progressive JPEG */
+} JPEGCompressionMethod;
+
+/**
+ * JPEG chroma subsampling
+ */
+typedef enum {
+    JPEG_SUBSAMPLING_NONE = 0,   /* 4:4:4 - No subsampling (highest quality) */
+    JPEG_SUBSAMPLING_LOW = 1,    /* 4:2:0 - Default (good quality/size balance) */
+    JPEG_SUBSAMPLING_MEDIUM = 2, /* 4:2:2 - Medium subsampling */
+    JPEG_SUBSAMPLING_HIGH = 3    /* 4:1:1 - High subsampling (smallest file) */
+} JPEGChromaSubsampling;
+
+/**
+ * JPEG color depth
+ */
+typedef enum {
+    JPEG_COLOR_AUTO = 0,     /* Auto-detect (use grayscale if image is grayscale) */
+    JPEG_COLOR_RGB = 1,      /* 24-bit color (RGB) */
+    JPEG_COLOR_GRAYSCALE = 2 /* 8-bit grayscale */
+} JPEGColorDepth;
+
+/**
  * JPEG-specific save options
  */
 typedef struct {
     /* Quality setting (0-100, where 0 = lowest quality, 100 = highest quality) */
     int32_t quality;
 
-    /* Progressive JPEG encoding (true = progressive, false = baseline) */
-    bool progressive;
+    /* Compression method */
+    JPEGCompressionMethod compression_method;
 
-    /* Optimize Huffman tables (slower encoding, smaller file) */
-    bool optimize_huffman;
+    /* Chroma subsampling */
+    JPEGChromaSubsampling chroma_subsampling;
+
+    /* Color depth */
+    JPEGColorDepth color_depth;
+
+    /* Embed thumbnail image (true = embed, false = don't embed) */
+    bool embed_thumbnail;
 
     /* Reserved for future use */
-    uint32_t reserved[4];
+    uint32_t reserved[2];
 } JPEGSaveOptions;
 
 /* JPEG file signature */
@@ -225,8 +260,10 @@ static void init_jpeg_save_options(void* plugin_data) {
     JPEGSaveOptions* opts = (JPEGSaveOptions*)plugin_data;
     if (opts) {
         opts->quality = 85; /* Default quality */
-        opts->progressive = false;
-        opts->optimize_huffman = false;
+        opts->compression_method = JPEG_COMPRESSION_BASELINE;
+        opts->chroma_subsampling = JPEG_SUBSAMPLING_LOW; /* Default: 4:2:0 */
+        opts->color_depth = JPEG_COLOR_AUTO;
+        opts->embed_thumbnail = false;
         memset(opts->reserved, 0, sizeof(opts->reserved));
     }
 }
@@ -246,8 +283,11 @@ static PluginError save_jpeg(ImageDocument* doc, const char* filename, const Sav
     int surface_stride;
     gint quality;
     JPEGSaveOptions* jpeg_opts = NULL;
-    bool progressive = false;
-    bool optimize_huffman = false;
+    JPEGCompressionMethod compression_method = JPEG_COMPRESSION_BASELINE;
+    JPEGChromaSubsampling chroma_subsampling = JPEG_SUBSAMPLING_LOW;
+    JPEGColorDepth color_depth = JPEG_COLOR_AUTO;
+    bool embed_thumbnail = false;
+    bool is_grayscale = false;
 
     if (!doc || !filename) {
         return PLUGIN_ERROR_INVALID_PARAMETERS;
@@ -259,8 +299,10 @@ static PluginError save_jpeg(ImageDocument* doc, const char* filename, const Sav
         quality = (jpeg_opts->quality >= 0 && jpeg_opts->quality <= 100)
                       ? jpeg_opts->quality
                       : 85;
-        progressive = jpeg_opts->progressive;
-        optimize_huffman = jpeg_opts->optimize_huffman;
+        compression_method = jpeg_opts->compression_method;
+        chroma_subsampling = jpeg_opts->chroma_subsampling;
+        color_depth = jpeg_opts->color_depth;
+        embed_thumbnail = jpeg_opts->embed_thumbnail;
     } else if (opts && opts->quality >= 0) {
         /* Fallback to base SaveOptions quality if plugin_data not provided */
         quality = (opts->quality > 100) ? 100 : opts->quality;
@@ -309,45 +351,225 @@ static PluginError save_jpeg(ImageDocument* doc, const char* filename, const Sav
     surface_data = cairo_image_surface_get_data(flattened);
     surface_stride = cairo_image_surface_get_stride(flattened);
 
+    /* Determine if image is grayscale (for auto color depth) */
+    if (color_depth == JPEG_COLOR_AUTO) {
+        /* Check if image is grayscale by sampling pixels */
+        is_grayscale = TRUE;
+        for (guint y = 0; y < doc->height && is_grayscale; y += 10) {
+            for (guint x = 0; x < doc->width && is_grayscale; x += 10) {
+                guchar* pixel = surface_data + y * surface_stride + x * 4;
+                guchar b = pixel[0];
+                guchar g = pixel[1];
+                guchar r = pixel[2];
+                /* If R, G, B are not approximately equal, it's not grayscale */
+                if (abs((int)r - (int)g) > 2 || abs((int)g - (int)b) > 2) {
+                    is_grayscale = FALSE;
+                }
+            }
+        }
+    } else if (color_depth == JPEG_COLOR_GRAYSCALE) {
+        is_grayscale = TRUE;
+    }
+
     /* Set compression parameters */
     cinfo.image_width = doc->width;
     cinfo.image_height = doc->height;
-    cinfo.input_components = 3; /* RGB */
-    cinfo.in_color_space = JCS_RGB;
+
+    if (is_grayscale) {
+        cinfo.input_components = 1;
+        cinfo.in_color_space = JCS_GRAYSCALE;
+    } else {
+        cinfo.input_components = 3;
+        cinfo.in_color_space = JCS_RGB;
+    }
+
     jpeg_set_defaults(&cinfo);
     jpeg_set_quality(&cinfo, quality, TRUE);
 
-    /* Set progressive encoding if requested */
-    if (progressive) {
+    /* Set compression method */
+    if (compression_method == JPEG_COMPRESSION_PROGRESSIVE) {
         jpeg_simple_progression(&cinfo);
+    } else if (compression_method == JPEG_COMPRESSION_OPTIMIZED) {
+        cinfo.optimize_coding = TRUE;
+    } else {
+        cinfo.optimize_coding = FALSE;
     }
 
-    /* Set optimization if requested */
-    cinfo.optimize_coding = optimize_huffman ? TRUE : FALSE;
+    /* Set chroma subsampling (only for color images) */
+    if (!is_grayscale) {
+        /* Set subsampling factors based on chroma_subsampling setting */
+        switch (chroma_subsampling) {
+            case JPEG_SUBSAMPLING_NONE: /* 4:4:4 - No subsampling */
+                cinfo.comp_info[0].h_samp_factor = 1;
+                cinfo.comp_info[0].v_samp_factor = 1;
+                cinfo.comp_info[1].h_samp_factor = 1;
+                cinfo.comp_info[1].v_samp_factor = 1;
+                cinfo.comp_info[2].h_samp_factor = 1;
+                cinfo.comp_info[2].v_samp_factor = 1;
+                break;
+            case JPEG_SUBSAMPLING_LOW: /* 4:2:0 - Default */
+                /* Default is already 4:2:0, but set explicitly */
+                cinfo.comp_info[0].h_samp_factor = 2;
+                cinfo.comp_info[0].v_samp_factor = 2;
+                cinfo.comp_info[1].h_samp_factor = 1;
+                cinfo.comp_info[1].v_samp_factor = 1;
+                cinfo.comp_info[2].h_samp_factor = 1;
+                cinfo.comp_info[2].v_samp_factor = 1;
+                break;
+            case JPEG_SUBSAMPLING_MEDIUM: /* 4:2:2 */
+                cinfo.comp_info[0].h_samp_factor = 2;
+                cinfo.comp_info[0].v_samp_factor = 1;
+                cinfo.comp_info[1].h_samp_factor = 1;
+                cinfo.comp_info[1].v_samp_factor = 1;
+                cinfo.comp_info[2].h_samp_factor = 1;
+                cinfo.comp_info[2].v_samp_factor = 1;
+                break;
+            case JPEG_SUBSAMPLING_HIGH: /* 4:1:1 */
+                cinfo.comp_info[0].h_samp_factor = 4;
+                cinfo.comp_info[0].v_samp_factor = 1;
+                cinfo.comp_info[1].h_samp_factor = 1;
+                cinfo.comp_info[1].v_samp_factor = 1;
+                cinfo.comp_info[2].h_samp_factor = 1;
+                cinfo.comp_info[2].v_samp_factor = 1;
+                break;
+        }
+    }
+
+    /* Disable automatic JFIF header if we're embedding a thumbnail */
+    /* We'll write our own APP0 marker with thumbnail */
+    if (embed_thumbnail && !is_grayscale) {
+        cinfo.write_JFIF_header = FALSE;
+    }
 
     /* Start compression */
     jpeg_start_compress(&cinfo, TRUE);
 
-    /* Write scanlines */
-    row_stride = cinfo.image_width * 3;
-    buffer = (*cinfo.mem->alloc_sarray)((j_common_ptr)&cinfo, JPOOL_IMAGE, row_stride, 1);
+    /* Write JFIF APP0 marker with thumbnail if requested */
+    if (embed_thumbnail && !is_grayscale) {
+        /* Create thumbnail (typically 1/8th size, max 255x255) */
+        guint thumb_width = (doc->width + 7) / 8;
+        guint thumb_height = (doc->height + 7) / 8;
 
-    for (guint y = 0; y < doc->height; y++) {
-        guchar* src_row = surface_data + y * surface_stride;
-        guchar* dst_row = buffer[0];
+        /* Clamp to maximum JFIF thumbnail size */
+        if (thumb_width > 255)
+            thumb_width = 255;
+        if (thumb_height > 255)
+            thumb_height = 255;
 
-        /* Convert ARGB32 (BGRA in memory) to RGB */
-        for (guint x = 0; x < doc->width; x++) {
-            guchar b = src_row[x * 4 + 0];
-            guchar g = src_row[x * 4 + 1];
-            guchar r = src_row[x * 4 + 2];
+        if (thumb_width > 0 && thumb_height > 0) {
+            /* Allocate thumbnail buffer (RGB, 3 bytes per pixel) */
+            guchar* thumb_data = g_malloc(thumb_width * thumb_height * 3);
+            if (thumb_data) {
+                /* Downsample image to thumbnail size */
+                for (guint ty = 0; ty < thumb_height; ty++) {
+                    guint sy = (ty * doc->height) / thumb_height;
+                    guchar* src_row = surface_data + sy * surface_stride;
+                    guchar* dst_row = thumb_data + ty * thumb_width * 3;
 
-            dst_row[x * 3 + 0] = r;
-            dst_row[x * 3 + 1] = g;
-            dst_row[x * 3 + 2] = b;
+                    for (guint tx = 0; tx < thumb_width; tx++) {
+                        guint sx = (tx * doc->width) / thumb_width;
+                        guchar b = src_row[sx * 4 + 0];
+                        guchar g = src_row[sx * 4 + 1];
+                        guchar r = src_row[sx * 4 + 2];
+
+                        /* Store as RGB (not BGRA) */
+                        dst_row[tx * 3 + 0] = r;
+                        dst_row[tx * 3 + 1] = g;
+                        dst_row[tx * 3 + 2] = b;
+                    }
+                }
+
+                /* Build JFIF APP0 marker data */
+                /* Structure: "JFIF\0"(5) + version(2) + units(1) +
+                 *            xdensity(2) + ydensity(2) + xthumbnail(1) + ythumbnail(1) + data */
+                /* Note: jpeg_write_marker adds the marker code and length field automatically */
+                guint16 data_length = 5 + 2 + 1 + 2 + 2 + 1 + 1 + (thumb_width * thumb_height * 3);
+                guchar* marker_data = g_malloc(data_length);
+
+                if (marker_data) {
+                    guchar* p = marker_data;
+
+                    /* Identifier: "JFIF\0" */
+                    memcpy(p, "JFIF\0", 5);
+                    p += 5;
+
+                    /* Version: 1.1 (major=1, minor=1) */
+                    *p++ = 1;
+                    *p++ = 1;
+
+                    /* Units: 0 = no units */
+                    *p++ = 0;
+
+                    /* X density: 1 (no units) */
+                    *p++ = 0;
+                    *p++ = 1;
+
+                    /* Y density: 1 (no units) */
+                    *p++ = 0;
+                    *p++ = 1;
+
+                    /* X thumbnail */
+                    *p++ = (guchar)thumb_width;
+
+                    /* Y thumbnail */
+                    *p++ = (guchar)thumb_height;
+
+                    /* Thumbnail data (RGB) */
+                    memcpy(p, thumb_data, thumb_width * thumb_height * 3);
+
+                    /* Write APP0 marker (libjpeg adds marker code and length automatically) */
+                    jpeg_write_marker(&cinfo, JPEG_APP0, marker_data, data_length);
+
+                    g_free(marker_data);
+                }
+
+                g_free(thumb_data);
+            }
         }
+    }
 
-        jpeg_write_scanlines(&cinfo, buffer, 1);
+    /* Write scanlines */
+    if (is_grayscale) {
+        row_stride = cinfo.image_width * 1;
+        buffer = (*cinfo.mem->alloc_sarray)((j_common_ptr)&cinfo, JPOOL_IMAGE, row_stride, 1);
+
+        for (guint y = 0; y < doc->height; y++) {
+            guchar* src_row = surface_data + y * surface_stride;
+            guchar* dst_row = buffer[0];
+
+            /* Convert ARGB32 (BGRA in memory) to grayscale using luminance formula */
+            for (guint x = 0; x < doc->width; x++) {
+                guchar b = src_row[x * 4 + 0];
+                guchar g = src_row[x * 4 + 1];
+                guchar r = src_row[x * 4 + 2];
+                /* ITU-R BT.601 luminance formula: Y = 0.299*R + 0.587*G + 0.114*B */
+                guchar gray = (guchar)(0.299 * r + 0.587 * g + 0.114 * b + 0.5);
+                dst_row[x] = gray;
+            }
+
+            jpeg_write_scanlines(&cinfo, buffer, 1);
+        }
+    } else {
+        row_stride = cinfo.image_width * 3;
+        buffer = (*cinfo.mem->alloc_sarray)((j_common_ptr)&cinfo, JPOOL_IMAGE, row_stride, 1);
+
+        for (guint y = 0; y < doc->height; y++) {
+            guchar* src_row = surface_data + y * surface_stride;
+            guchar* dst_row = buffer[0];
+
+            /* Convert ARGB32 (BGRA in memory) to RGB */
+            for (guint x = 0; x < doc->width; x++) {
+                guchar b = src_row[x * 4 + 0];
+                guchar g = src_row[x * 4 + 1];
+                guchar r = src_row[x * 4 + 2];
+
+                dst_row[x * 3 + 0] = r;
+                dst_row[x * 3 + 1] = g;
+                dst_row[x * 3 + 2] = b;
+            }
+
+            jpeg_write_scanlines(&cinfo, buffer, 1);
+        }
     }
 
     /* Finish compression */
