@@ -6,6 +6,7 @@
 #include "render/render_utils.h"
 #include <glib.h>
 #include <glib/gstdio.h>
+#include <limits.h>
 #include <setjmp.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,8 +28,11 @@ typedef struct {
     /* Strategy (PNG_Z_DEFAULT_STRATEGY, PNG_Z_FILTERED, PNG_Z_HUFFMAN_ONLY, etc.) */
     int32_t compression_strategy;
 
+    /* Automatic mode: test multiple strategies and select best compression */
+    bool automatic_mode;
+
     /* Reserved for future use */
-    uint32_t reserved[4];
+    uint32_t reserved[3];
 } PNGSaveOptions;
 
 /* PNG file signature */
@@ -329,6 +333,131 @@ static PluginError load_png(ImageDocument* doc, const char* filename) {
 }
 
 /**
+ * Structure for memory buffer writing
+ */
+struct png_memory_buffer {
+    GByteArray* buffer;
+};
+
+/**
+ * Write callback for memory buffer
+ */
+static void png_write_memory_callback(png_structp png_ptr, png_bytep data, png_size_t length) {
+    struct png_memory_buffer* mem_buf = (struct png_memory_buffer*)png_get_io_ptr(png_ptr);
+    if (mem_buf && mem_buf->buffer) {
+        g_byte_array_append(mem_buf->buffer, data, length);
+    }
+}
+
+/**
+ * Flush callback for memory buffer (no-op)
+ */
+static void png_flush_memory_callback(png_structp png_ptr) {
+    (void)png_ptr; /* No-op for memory buffers */
+}
+
+/**
+ * Save PNG image to memory buffer with specified compression settings
+ * Returns allocated GByteArray with PNG data, or NULL on error
+ */
+static GByteArray* save_png_to_memory(ImageDocument* doc,
+                                      guchar* surface_data,
+                                      int surface_stride,
+                                      png_bytep* row_pointers,
+                                      png_bytep image_data,
+                                      int compression_level,
+                                      int filter_type,
+                                      int compression_strategy) {
+    png_structp png_ptr;
+    png_infop info_ptr;
+    struct png_error_info error_info = {0};
+    struct png_memory_buffer mem_buf;
+    GByteArray* result = NULL;
+    png_uint_32 rowbytes;
+
+    /* Initialize libpng structures */
+    png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, &error_info, png_error_handler, png_warning_handler);
+    if (!png_ptr) {
+        return NULL;
+    }
+
+    info_ptr = png_create_info_struct(png_ptr);
+    if (!info_ptr) {
+        png_destroy_write_struct(&png_ptr, NULL);
+        return NULL;
+    }
+
+    /* Set up error handling */
+    if (setjmp(error_info.jmpbuf)) {
+        png_destroy_write_struct(&png_ptr, &info_ptr);
+        if (result) {
+            g_byte_array_free(result, TRUE);
+        }
+        return NULL;
+    }
+
+    /* Initialize memory buffer */
+    mem_buf.buffer = g_byte_array_new();
+    if (!mem_buf.buffer) {
+        png_destroy_write_struct(&png_ptr, &info_ptr);
+        return NULL;
+    }
+
+    /* Set up custom write function */
+    png_set_write_fn(png_ptr, &mem_buf, png_write_memory_callback, png_flush_memory_callback);
+
+    /* Set compression options */
+    png_set_compression_level(png_ptr, compression_level);
+    png_set_compression_strategy(png_ptr, compression_strategy);
+    png_set_filter(png_ptr, PNG_FILTER_TYPE_BASE, filter_type);
+
+    /* Set PNG header */
+    png_set_IHDR(png_ptr, info_ptr, doc->width, doc->height, 8,
+                 PNG_COLOR_TYPE_RGBA, PNG_INTERLACE_NONE,
+                 PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
+
+    /* Write info */
+    png_write_info(png_ptr, info_ptr);
+
+    /* Calculate rowbytes */
+    rowbytes = png_get_rowbytes(png_ptr, info_ptr);
+
+    /* Convert from Cairo's ARGB32 (BGRA in memory) to RGBA */
+    for (guint y = 0; y < doc->height; y++) {
+        guchar* src_row = surface_data + y * surface_stride;
+        png_bytep dst_row = image_data + y * rowbytes;
+        row_pointers[y] = dst_row;
+
+        for (guint x = 0; x < doc->width; x++) {
+            guchar b = src_row[x * 4 + 0];
+            guchar g = src_row[x * 4 + 1];
+            guchar r = src_row[x * 4 + 2];
+            guchar a = src_row[x * 4 + 3];
+
+            /* PNG RGBA format */
+            dst_row[x * 4 + 0] = r;
+            dst_row[x * 4 + 1] = g;
+            dst_row[x * 4 + 2] = b;
+            dst_row[x * 4 + 3] = a;
+        }
+    }
+
+    /* Write image data */
+    png_write_image(png_ptr, row_pointers);
+
+    /* Finish writing */
+    png_write_end(png_ptr, NULL);
+
+    /* Get the result */
+    result = mem_buf.buffer;
+
+    /* Cleanup */
+    png_destroy_write_struct(&png_ptr, &info_ptr);
+
+    return result;
+}
+
+/**
  * Save PNG image using libpng
  */
 static PluginError save_png(ImageDocument* doc, const char* filename, const SaveOptions* opts) {
@@ -347,6 +476,7 @@ static PluginError save_png(ImageDocument* doc, const char* filename, const Save
     int compression_strategy = PNG_Z_DEFAULT_STRATEGY;
 
     /* Get PNG-specific options if provided */
+    bool automatic_mode = false;
     if (opts && opts->plugin_data) {
         png_opts = (PNGSaveOptions*)opts->plugin_data;
         compression_level = (png_opts->compression_level >= 0 && png_opts->compression_level <= 9)
@@ -354,6 +484,7 @@ static PluginError save_png(ImageDocument* doc, const char* filename, const Save
                                 : 6;
         filter_type = png_opts->filter_type;
         compression_strategy = png_opts->compression_strategy;
+        automatic_mode = png_opts->automatic_mode;
     } else if (opts && opts->compression_level >= 0 && opts->compression_level <= 9) {
         /* Fallback to base SaveOptions compression_level if plugin_data not provided */
         compression_level = opts->compression_level;
@@ -379,9 +510,132 @@ static PluginError save_png(ImageDocument* doc, const char* filename, const Save
         return PLUGIN_ERROR_FILE_WRITE_ERROR;
     }
 
+    /* Pre-allocate image data buffers (needed for both automatic mode and regular save) */
+    png_uint_32 rowbytes = (png_uint_32)(doc->width * 4); /* RGBA = 4 bytes per pixel */
+    row_pointers = g_malloc(sizeof(png_bytep) * doc->height);
+    if (!row_pointers) {
+        cairo_surface_destroy(composite);
+        return PLUGIN_ERROR_OUT_OF_MEMORY;
+    }
+
+    image_data = g_malloc(rowbytes * doc->height);
+    if (!image_data) {
+        g_free(row_pointers);
+        cairo_surface_destroy(composite);
+        return PLUGIN_ERROR_OUT_OF_MEMORY;
+    }
+
+    /* Convert from Cairo's ARGB32 (BGRA in memory) to RGBA */
+    for (guint y = 0; y < doc->height; y++) {
+        guchar* src_row = surface_data + y * surface_stride;
+        png_bytep dst_row = image_data + y * rowbytes;
+        row_pointers[y] = dst_row;
+
+        for (guint x = 0; x < doc->width; x++) {
+            guchar b = src_row[x * 4 + 0];
+            guchar g = src_row[x * 4 + 1];
+            guchar r = src_row[x * 4 + 2];
+            guchar a = src_row[x * 4 + 3];
+
+            /* PNG RGBA format */
+            dst_row[x * 4 + 0] = r;
+            dst_row[x * 4 + 1] = g;
+            dst_row[x * 4 + 2] = b;
+            dst_row[x * 4 + 3] = a;
+        }
+    }
+
+    /* If automatic mode, test multiple strategies and pick the best */
+    if (automatic_mode) {
+        GByteArray* best_result = NULL;
+        size_t best_size = SIZE_MAX;
+        int best_filter = PNG_FILTER_NONE;
+        int best_strategy = PNG_Z_DEFAULT_STRATEGY;
+
+        /* Test combinations of filter types and compression strategies */
+        int filter_types[] = {
+            PNG_FILTER_NONE,
+            PNG_FILTER_SUB,
+            PNG_FILTER_UP,
+            PNG_FILTER_AVG,
+            PNG_FILTER_PAETH};
+        int strategies[] = {
+            PNG_Z_DEFAULT_STRATEGY,
+            PNG_Z_FILTERED,
+            PNG_Z_HUFFMAN_ONLY};
+
+        /* Use maximum compression level for automatic mode */
+        int test_compression_level = 9;
+
+        for (guint f = 0; f < G_N_ELEMENTS(filter_types); f++) {
+            for (guint s = 0; s < G_N_ELEMENTS(strategies); s++) {
+                GByteArray* test_result = save_png_to_memory(doc, surface_data, surface_stride,
+                                                             row_pointers, image_data,
+                                                             test_compression_level,
+                                                             filter_types[f],
+                                                             strategies[s]);
+                if (test_result && test_result->len < best_size) {
+                    /* Found a better compression */
+                    if (best_result) {
+                        g_byte_array_free(best_result, TRUE);
+                    }
+                    best_result = test_result;
+                    best_size = test_result->len;
+                    best_filter = filter_types[f];
+                    best_strategy = strategies[s];
+                } else if (test_result) {
+                    g_byte_array_free(test_result, TRUE);
+                }
+            }
+        }
+
+        if (!best_result) {
+            /* All tests failed, fall back to default */
+            g_free(row_pointers);
+            g_free(image_data);
+            cairo_surface_destroy(composite);
+            return PLUGIN_ERROR_FILE_WRITE_ERROR;
+        }
+
+        /* Use the best settings found */
+        filter_type = best_filter;
+        compression_strategy = best_strategy;
+        compression_level = test_compression_level;
+
+        /* Write best result to file */
+        outfile = g_fopen(filename, "wb");
+        if (!outfile) {
+            g_byte_array_free(best_result, TRUE);
+            g_free(row_pointers);
+            g_free(image_data);
+            cairo_surface_destroy(composite);
+            return PLUGIN_ERROR_FILE_WRITE_ERROR;
+        }
+
+        if (fwrite(best_result->data, 1, best_result->len, outfile) != best_result->len) {
+            g_byte_array_free(best_result, TRUE);
+            g_free(row_pointers);
+            g_free(image_data);
+            fclose(outfile);
+            cairo_surface_destroy(composite);
+            return PLUGIN_ERROR_FILE_WRITE_ERROR;
+        }
+
+        g_byte_array_free(best_result, TRUE);
+        fclose(outfile);
+        g_free(row_pointers);
+        g_free(image_data);
+        cairo_surface_destroy(composite);
+
+        return PLUGIN_ERROR_NONE;
+    }
+
+    /* Regular mode: use specified settings */
     /* Open output file */
     outfile = g_fopen(filename, "wb");
     if (!outfile) {
+        g_free(row_pointers);
+        g_free(image_data);
         cairo_surface_destroy(composite);
         return PLUGIN_ERROR_FILE_WRITE_ERROR;
     }
@@ -432,44 +686,13 @@ static PluginError save_png(ImageDocument* doc, const char* filename, const Save
     /* Write info */
     png_write_info(png_ptr, info_ptr);
 
-    /* Allocate row pointers */
-    row_pointers = g_malloc(sizeof(png_bytep) * doc->height);
-    if (!row_pointers) {
-        png_destroy_write_struct(&png_ptr, &info_ptr);
-        fclose(outfile);
-        cairo_surface_destroy(composite);
-        return PLUGIN_ERROR_OUT_OF_MEMORY;
-    }
-
-    /* Allocate image data buffer */
+    /* Calculate rowbytes (image_data already allocated and converted earlier) */
     png_uint_32 rowbytes = png_get_rowbytes(png_ptr, info_ptr);
-    image_data = g_malloc(rowbytes * doc->height);
-    if (!image_data) {
-        g_free(row_pointers);
-        png_destroy_write_struct(&png_ptr, &info_ptr);
-        fclose(outfile);
-        cairo_surface_destroy(composite);
-        return PLUGIN_ERROR_OUT_OF_MEMORY;
-    }
 
-    /* Convert from Cairo's ARGB32 (BGRA in memory) to RGBA */
+    /* For RGBA format, rowbytes should always be width * 4, so we can reuse pre-allocated data */
+    /* Just ensure row_pointers point to the correct locations */
     for (guint y = 0; y < doc->height; y++) {
-        guchar* src_row = surface_data + y * surface_stride;
-        png_bytep dst_row = image_data + y * rowbytes;
-        row_pointers[y] = dst_row;
-
-        for (guint x = 0; x < doc->width; x++) {
-            guchar b = src_row[x * 4 + 0];
-            guchar g = src_row[x * 4 + 1];
-            guchar r = src_row[x * 4 + 2];
-            guchar a = src_row[x * 4 + 3];
-
-            /* PNG RGBA format */
-            dst_row[x * 4 + 0] = r;
-            dst_row[x * 4 + 1] = g;
-            dst_row[x * 4 + 2] = b;
-            dst_row[x * 4 + 3] = a;
-        }
+        row_pointers[y] = image_data + y * rowbytes;
     }
 
     /* Write image data */
@@ -541,6 +764,7 @@ static void init_png_save_options(void* plugin_data) {
         opts->compression_level = 6; /* Default compression */
         opts->filter_type = PNG_FILTER_NONE;
         opts->compression_strategy = PNG_Z_DEFAULT_STRATEGY;
+        opts->automatic_mode = true; /* Default to automatic mode */
         memset(opts->reserved, 0, sizeof(opts->reserved));
     }
 }
