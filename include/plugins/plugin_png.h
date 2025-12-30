@@ -12,11 +12,6 @@ extern "C" {
  */
 bool plugin_init_png(const ImageFormatHostAPI* host, ImageFormatPlugin* out_plugin);
 
-/**
- * Initialize JPEG plugin
- */
-bool plugin_init_jpeg(const ImageFormatHostAPI* host, ImageFormatPlugin* out_plugin);
-
 #ifdef __cplusplus
 }
 #endif

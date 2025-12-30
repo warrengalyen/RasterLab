@@ -94,6 +94,7 @@ PluginHandle* plugin_loader_load(const char* plugin_path) {
     if (!handle->handle) {
         DWORD error = GetLastError();
         g_warning("Failed to load plugin %s: error %lu", plugin_path, (unsigned long)error);
+        g_message("Plugin load failed: %s (error code: %lu)", plugin_path, (unsigned long)error);
         g_free(handle->plugin_path);
         g_free(handle);
         return NULL;
@@ -106,6 +107,7 @@ PluginHandle* plugin_loader_load(const char* plugin_path) {
     if (!handle->handle) {
         const char* error = dlerror();
         g_warning("Failed to load plugin %s: %s", plugin_path, error ? error : "Unknown error");
+        g_message("Plugin load failed: %s (%s)", plugin_path, error ? error : "Unknown error");
         g_free(handle->plugin_path);
         g_free(handle);
         return NULL;
@@ -117,6 +119,7 @@ PluginHandle* plugin_loader_load(const char* plugin_path) {
     const char* dlsym_error = dlerror();
     if (dlsym_error) {
         g_warning("Failed to find plugin_init in %s: %s", plugin_path, dlsym_error);
+        g_message("Plugin load failed: %s (symbol lookup error: %s)", plugin_path, dlsym_error);
         dlclose(handle->handle);
         g_free(handle->plugin_path);
         g_free(handle);
@@ -126,6 +129,7 @@ PluginHandle* plugin_loader_load(const char* plugin_path) {
 
     if (!init_func) {
         g_warning("plugin_init symbol not found in %s", plugin_path);
+        g_message("Plugin load failed: %s (plugin_init symbol not found)", plugin_path);
 #ifdef _WIN32
         FreeLibrary(handle->handle);
 #else
@@ -142,6 +146,7 @@ PluginHandle* plugin_loader_load(const char* plugin_path) {
     /* Add to loaded plugins list */
     loaded_plugins = g_list_append(loaded_plugins, handle);
 
+    g_message("Successfully loaded plugin: %s", plugin_path);
     return handle;
 }
 
@@ -180,6 +185,7 @@ static gboolean plugin_handle_init(PluginHandle* handle, const ImageFormatHostAP
     /* Call plugin_init */
     if (!init_func(host_api, &handle->plugin)) {
         g_warning("Plugin initialization failed for %s", handle->plugin_path);
+        g_message("Plugin initialization failed: %s (plugin_init returned false)", handle->plugin_path);
         return FALSE;
     }
 
@@ -189,10 +195,12 @@ static gboolean plugin_handle_init(PluginHandle* handle, const ImageFormatHostAP
         !handle->plugin.callbacks.can_save ||
         !handle->plugin.callbacks.save) {
         g_warning("Plugin %s missing required callbacks", handle->plugin_path);
+        g_message("Plugin initialization failed: %s (missing required callbacks)", handle->plugin_path);
         return FALSE;
     }
 
     handle->initialized = TRUE;
+    g_message("Successfully initialized plugin: %s", handle->plugin_path);
     return TRUE;
 }
 
@@ -291,18 +299,26 @@ GList* plugin_loader_scan_directory(const char* directory_path) {
     }
 
     /* Scan for plugin files */
+    g_message("Scanning directory for plugins: %s", directory_path);
     while ((filename = g_dir_read_name(dir))) {
         if (is_plugin_file(filename)) {
             gchar* full_path = g_build_filename(directory_path, filename, NULL);
+            g_message("Found potential plugin file: %s", filename);
             PluginHandle* handle = plugin_loader_load(full_path);
 
             if (handle) {
                 plugin_handles = g_list_append(plugin_handles, handle);
+                g_message("Successfully loaded plugin from file: %s", filename);
+            } else {
+                g_message("Failed to load plugin from file: %s", filename);
             }
 
             g_free(full_path);
         }
     }
+
+    g_message("Finished scanning directory %s: loaded %d plugin(s)",
+              directory_path, g_list_length(plugin_handles));
 
     g_dir_close(dir);
 

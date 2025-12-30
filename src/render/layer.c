@@ -64,6 +64,9 @@ ImageLayer* layer_new(const gchar* name, guint width, guint height, gboolean has
                       LayerBackgroundType background, LayerPosition position,
                       const gdouble* custom_color, struct ImageDocument* doc) {
     ImageLayer* layer = (ImageLayer*)g_malloc(sizeof(ImageLayer));
+    if (!layer) {
+        return NULL;
+    }
 
     /* Generate unique name if document is provided */
     if (doc && name) {
@@ -72,9 +75,22 @@ ImageLayer* layer_new(const gchar* name, guint width, guint height, gboolean has
         layer->name = g_strdup(name);
     }
 
+    if (!layer->name) {
+        g_free(layer);
+        return NULL;
+    }
+
     /* Create layer surface */
     cairo_format_t format = has_alpha ? CAIRO_FORMAT_ARGB32 : CAIRO_FORMAT_RGB24;
     layer->surface = cairo_image_surface_create(format, width, height);
+
+    /* Check if surface creation succeeded */
+    if (cairo_surface_status(layer->surface) != CAIRO_STATUS_SUCCESS) {
+        cairo_surface_destroy(layer->surface);
+        g_free(layer->name);
+        g_free(layer);
+        return NULL;
+    }
 
     /* Use defaults if not specified */
     if (background < LAYER_BACKGROUND_TRANSPARENT || background > LAYER_BACKGROUND_CUSTOM) {
