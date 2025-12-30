@@ -6,6 +6,7 @@
 #include "io/image_io.h"
 #include "plugins/format_registry.h"
 #include "ui.h"
+#include "ui/dialogs/save_options_dialog.h"
 #include "ui/layers_panel.h"
 #include <glib.h>
 #include <glib/gstdio.h>
@@ -479,30 +480,71 @@ void on_file_save_as_response(GtkDialog* dialog, gint response_id, gpointer user
     if (response_id == GTK_RESPONSE_ACCEPT) {
         gchar* file_path = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));
 
+        /* Close file chooser dialog first */
+        gtk_widget_destroy(GTK_WIDGET(dialog));
+
         if (file_path) {
             ImageDocument* doc = ui_get_active_document(ctx);
 
             if (doc) {
-                /* Save the document */
-                if (document_save_as(doc, file_path)) {
-                    /* Add to recent files */
-                    recent_files_add(file_path);
-                    recent_files_save(); /* This syncs to settings if connected */
+                SaveOptions opts;
+                FormatHandler* handler;
+                void* plugin_data = NULL;
+                size_t plugin_options_size = 0;
+                gboolean dialog_result;
 
-                    /* Update window title to reflect new filename */
-                    ui_update_window_title(ctx, NULL);
-                    ui_update_status_bar(ctx, NULL);
-                    ui_update_recent_files_menu(ctx);
-                } else {
-                    g_warning("Failed to save document");
+                /* Initialize save options */
+                memset(&opts, 0, sizeof(SaveOptions));
+                opts.quality = -1;
+                opts.compression_level = -1;
+                opts.preserve_alpha = doc->has_alpha ? true : false;
+                opts.flatten_layers = FALSE;
+
+                /* Find handler to determine if we need plugin-specific options */
+                handler = format_registry_find_saver(file_path);
+                if (handler && handler->plugin && handler->plugin->callbacks.get_save_options_size) {
+                    plugin_options_size = handler->plugin->callbacks.get_save_options_size();
+                    if (plugin_options_size > 0) {
+                        plugin_data = g_malloc0(plugin_options_size);
+                        if (plugin_data && handler->plugin->callbacks.init_save_options) {
+                            handler->plugin->callbacks.init_save_options(plugin_data);
+                        }
+                        opts.plugin_data = plugin_data;
+                    }
+                }
+
+                /* Show save options dialog if needed (after file chooser is closed) */
+                dialog_result = save_options_dialog_show(GTK_WINDOW(ctx->window), file_path, &opts);
+
+                if (dialog_result) {
+                    /* User clicked OK, proceed with save */
+                    if (document_save_as(doc, file_path, &opts)) {
+                        /* Add to recent files */
+                        recent_files_add(file_path);
+                        recent_files_save(); /* This syncs to settings if connected */
+
+                        /* Update window title to reflect new filename */
+                        ui_update_window_title(ctx, NULL);
+                        ui_update_status_bar(ctx, NULL);
+                        ui_update_recent_files_menu(ctx);
+                    } else {
+                        g_warning("Failed to save document");
+                    }
+                }
+                /* If dialog_result is FALSE, user cancelled, so don't save */
+
+                /* Clean up plugin data */
+                if (plugin_data) {
+                    g_free(plugin_data);
                 }
             }
 
             g_free(file_path);
         }
+    } else {
+        /* User cancelled file chooser, just close it */
+        gtk_widget_destroy(GTK_WIDGET(dialog));
     }
-
-    gtk_widget_destroy(GTK_WIDGET(dialog));
 }
 
 /**

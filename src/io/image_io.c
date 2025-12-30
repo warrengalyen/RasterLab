@@ -113,26 +113,50 @@ gboolean image_io_save(ImageDocument* doc, const char* filename, const SaveOptio
         actual_opts->compression_level = opts->compression_level;
         actual_opts->preserve_alpha = opts->preserve_alpha;
         actual_opts->flatten_layers = opts->flatten_layers;
-        /* Note: plugin_data from opts is not copied - we'll allocate new one below */
+
+        /* Use existing plugin_data if provided, otherwise allocate new one */
+        if (opts->plugin_data) {
+            /* Use existing plugin_data (e.g., from save options dialog) */
+            actual_opts->plugin_data = opts->plugin_data;
+            /* Don't free this - it's owned by the caller */
+            plugin_data = NULL; /* Mark as not allocated here */
+        } else {
+            /* Allocate and initialize plugin-specific options if plugin supports them */
+            if (handler && handler->plugin && handler->plugin->callbacks.get_save_options_size) {
+                plugin_options_size = handler->plugin->callbacks.get_save_options_size();
+                if (plugin_options_size > 0) {
+                    plugin_data = g_malloc0(plugin_options_size);
+                    if (plugin_data) {
+                        /* Initialize with plugin's default values */
+                        if (handler->plugin->callbacks.init_save_options) {
+                            handler->plugin->callbacks.init_save_options(plugin_data);
+                        }
+                        actual_opts->plugin_data = plugin_data;
+                    }
+                }
+            } else {
+                actual_opts->plugin_data = NULL;
+            }
+        }
     } else {
         actual_opts->quality = -1;
         actual_opts->compression_level = -1;
         actual_opts->preserve_alpha = doc->has_alpha ? true : false;
         actual_opts->flatten_layers = FALSE;
-    }
-    actual_opts->plugin_data = NULL;
+        actual_opts->plugin_data = NULL;
 
-    /* Allocate and initialize plugin-specific options if plugin supports them */
-    if (handler && handler->plugin && handler->plugin->callbacks.get_save_options_size) {
-        plugin_options_size = handler->plugin->callbacks.get_save_options_size();
-        if (plugin_options_size > 0) {
-            plugin_data = g_malloc0(plugin_options_size);
-            if (plugin_data) {
-                /* Initialize with plugin's default values */
-                if (handler->plugin->callbacks.init_save_options) {
-                    handler->plugin->callbacks.init_save_options(plugin_data);
+        /* Allocate and initialize plugin-specific options if plugin supports them */
+        if (handler && handler->plugin && handler->plugin->callbacks.get_save_options_size) {
+            plugin_options_size = handler->plugin->callbacks.get_save_options_size();
+            if (plugin_options_size > 0) {
+                plugin_data = g_malloc0(plugin_options_size);
+                if (plugin_data) {
+                    /* Initialize with plugin's default values */
+                    if (handler->plugin->callbacks.init_save_options) {
+                        handler->plugin->callbacks.init_save_options(plugin_data);
+                    }
+                    actual_opts->plugin_data = plugin_data;
                 }
-                actual_opts->plugin_data = plugin_data;
             }
         }
     }

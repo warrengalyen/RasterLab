@@ -1463,23 +1463,34 @@ gboolean document_save_as_jpeg(ImageDocument* doc, const gchar* filename, gint q
 
 /**
  * Save document with auto-detection by file extension using plugin system
+ * @param doc Document to save
+ * @param filename Filename to save to
+ * @param opts Save options (can be NULL to use defaults)
  */
-gboolean document_save_as(ImageDocument* doc, const gchar* filename) {
-    SaveOptions opts;
+gboolean document_save_as(ImageDocument* doc, const gchar* filename, const SaveOptions* opts) {
+    SaveOptions default_opts;
 
     if (!doc || !filename) {
         return FALSE;
     }
 
+    /* Use provided options or defaults */
+    if (opts) {
+        /* Use plugin system to save with provided options */
+        /* Note: plugin_data should already be allocated and initialized by caller */
+        return image_io_save(doc, filename, opts);
+    }
+
     /* Set default save options */
-    memset(&opts, 0, sizeof(SaveOptions));
-    opts.quality = -1;           /* Use default */
-    opts.compression_level = -1; /* Use default */
-    opts.preserve_alpha = doc->has_alpha ? true : false;
-    opts.flatten_layers = FALSE; /* Keep layers for now */
+    memset(&default_opts, 0, sizeof(SaveOptions));
+    default_opts.quality = -1;           /* Use default */
+    default_opts.compression_level = -1; /* Use default */
+    default_opts.preserve_alpha = doc->has_alpha ? true : false;
+    default_opts.flatten_layers = FALSE; /* Keep layers for now */
+    default_opts.plugin_data = NULL;
 
     /* Use plugin system to save */
-    return image_io_save(doc, filename, &opts);
+    return image_io_save(doc, filename, &default_opts);
 }
 
 /**

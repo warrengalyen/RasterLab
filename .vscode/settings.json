@@ -29,5 +29,8 @@
     "C_Cpp.clang_format_fallbackStyle": "{ BasedOnStyle: LLVM, IndentWidth: 4, UseTab: Never }",
     "C_Cpp.clang_format_path": "",
     "clang-format.executable": "",
-    "clang-format.style": "file"
+    "clang-format.style": "file",
+    "[xml]": {
+        "editor.formatOnSave": false
+    }
 }

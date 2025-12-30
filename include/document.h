@@ -1,6 +1,7 @@
 #ifndef DOCUMENT_H
 #define DOCUMENT_H
 
+#include "image_format_plugin.h"
 #include "render/dirty.h"
 #include <cairo.h>
 #include <gdk-pixbuf/gdk-pixbuf.h>
@@ -412,9 +413,10 @@ gboolean document_save_as_jpeg(ImageDocument* doc, const gchar* filename, gint q
  * Save document with auto-detection by file extension
  * @param doc The document
  * @param filename Path to save file
+ * @param opts Save options (can be NULL to use defaults)
  * @return TRUE on success, FALSE on failure
  */
-gboolean document_save_as(ImageDocument* doc, const gchar* filename);
+gboolean document_save_as(ImageDocument* doc, const gchar* filename, const SaveOptions* opts);
 
 /**
  * Mark document as saved (clear dirty flag)
