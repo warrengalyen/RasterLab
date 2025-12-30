@@ -14,6 +14,29 @@
 
 #ifdef HAVE_LIBPNG
 #include <png.h>
+#ifdef HAVE_ZLIB
+#include <zlib.h>
+#endif
+
+/**
+ * PNG color format options
+ */
+typedef enum {
+    PNG_COLOR_FORMAT_AUTO = 0,
+    PNG_COLOR_FORMAT_COLOR = 1,
+    PNG_COLOR_FORMAT_GRAYSCALE = 2
+} PNGColorFormat;
+
+/**
+ * PNG transparency format options
+ */
+typedef enum {
+    PNG_TRANSPARENCY_AUTO = 0,
+    PNG_TRANSPARENCY_FULL = 1,
+    PNG_TRANSPARENCY_BINARY_CUTOFF = 2,
+    PNG_TRANSPARENCY_BINARY_COLOR = 3,
+    PNG_TRANSPARENCY_NONE = 4
+} PNGTransparencyFormat;
 
 /**
  * PNG-specific save options
@@ -31,8 +54,30 @@ typedef struct {
     /* Automatic mode: test multiple strategies and select best compression */
     bool automatic_mode;
 
+    /* Embed background color (bKGD chunk) */
+    bool embed_background_color;
+
+    /* Background color RGB values (0-255) when embed_background_color is true */
+    uint8_t background_color_r;
+    uint8_t background_color_g;
+    uint8_t background_color_b;
+
+    /* Color format: auto, color, or grayscale */
+    PNGColorFormat color_format;
+
+    /* Transparency format: auto, full, binary (by cutoff), binary (by color), or none */
+    PNGTransparencyFormat transparency_format;
+
+    /* Alpha cutoff value (0-255) for PNG_TRANSPARENCY_BINARY_CUTOFF */
+    uint8_t transparency_cutoff;
+
+    /* Color key RGB values (0-255) for PNG_TRANSPARENCY_BINARY_COLOR */
+    uint8_t transparency_color_r;
+    uint8_t transparency_color_g;
+    uint8_t transparency_color_b;
+
     /* Reserved for future use */
-    uint32_t reserved[3];
+    uint32_t reserved[1];
 } PNGSaveOptions;
 
 /* PNG file signature */
@@ -333,6 +378,204 @@ static PluginError load_png(ImageDocument* doc, const char* filename) {
 }
 
 /**
+ * Helper function to check if an image is grayscale by sampling pixels
+ */
+static bool is_image_grayscale(guchar* surface_data, int surface_stride, guint width, guint height) {
+    /* Sample pixels to determine if image is grayscale */
+    for (guint y = 0; y < height; y += 10) {
+        for (guint x = 0; x < width; x += 10) {
+            guchar* pixel = surface_data + y * surface_stride + x * 4;
+            guchar b = pixel[0];
+            guchar g = pixel[1];
+            guchar r = pixel[2];
+            /* If R, G, B are not approximately equal, it's not grayscale */
+            if (abs((int)r - (int)g) > 2 || abs((int)g - (int)b) > 2) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+/**
+ * Helper function to check if an image has transparency (non-opaque alpha values)
+ */
+static bool has_transparency(guchar* surface_data, int surface_stride, guint width, guint height) {
+    for (guint y = 0; y < height; y += 10) {
+        for (guint x = 0; x < width; x += 10) {
+            guchar* pixel = surface_data + y * surface_stride + x * 4;
+            guchar a = pixel[3];
+            if (a < 255) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/**
+ * Structure to hold converted image data and metadata
+ */
+struct converted_image_data {
+    png_bytep* row_pointers;
+    png_bytep image_data;
+    png_uint_32 rowbytes;
+    int png_color_type;
+    bool needs_trns;
+    png_color_16 trns_color; /* For binary transparency by color */
+};
+
+/**
+ * Convert image data based on PNG save options
+ * Returns 0 on success, non-zero on error
+ */
+static int convert_image_data_for_png(guchar* surface_data,
+                                      int surface_stride,
+                                      guint width,
+                                      guint height,
+                                      PNGSaveOptions* png_opts,
+                                      struct converted_image_data* out) {
+    PNGColorFormat color_format;
+    PNGTransparencyFormat transparency_format;
+    bool is_gray = false;
+    bool has_alpha = false;
+    bool needs_transparency = false;
+    png_uint_32 rowbytes;
+    png_bytep* row_pointers = NULL;
+    png_bytep image_data = NULL;
+
+    /* Determine color format */
+    if (png_opts && png_opts->color_format == PNG_COLOR_FORMAT_AUTO) {
+        is_gray = is_image_grayscale(surface_data, surface_stride, width, height);
+        color_format = is_gray ? PNG_COLOR_FORMAT_GRAYSCALE : PNG_COLOR_FORMAT_COLOR;
+    } else if (png_opts && png_opts->color_format == PNG_COLOR_FORMAT_GRAYSCALE) {
+        is_gray = true;
+        color_format = PNG_COLOR_FORMAT_GRAYSCALE;
+    } else {
+        is_gray = false;
+        color_format = PNG_COLOR_FORMAT_COLOR;
+    }
+
+    /* Determine transparency format */
+    if (png_opts && png_opts->transparency_format == PNG_TRANSPARENCY_AUTO) {
+        has_alpha = has_transparency(surface_data, surface_stride, width, height);
+        transparency_format = has_alpha ? PNG_TRANSPARENCY_FULL : PNG_TRANSPARENCY_NONE;
+    } else if (png_opts) {
+        transparency_format = png_opts->transparency_format;
+    } else {
+        transparency_format = PNG_TRANSPARENCY_NONE;
+    }
+
+    /* Determine if we need transparency */
+    needs_transparency = (transparency_format == PNG_TRANSPARENCY_FULL ||
+                          transparency_format == PNG_TRANSPARENCY_BINARY_CUTOFF ||
+                          transparency_format == PNG_TRANSPARENCY_BINARY_COLOR);
+
+    /* Allocate row pointers */
+    row_pointers = g_malloc(sizeof(png_bytep) * height);
+    if (!row_pointers) {
+        return -1;
+    }
+
+    /* Determine rowbytes and allocate image data */
+    /* Binary by cutoff uses full alpha channel (RGBA/GrayA), binary by color uses tRNS (RGB/Gray) */
+    bool use_alpha_channel = (transparency_format == PNG_TRANSPARENCY_FULL ||
+                              transparency_format == PNG_TRANSPARENCY_BINARY_CUTOFF);
+    if (is_gray) {
+        rowbytes = width * (use_alpha_channel ? 2 : 1);
+    } else {
+        rowbytes = width * (use_alpha_channel ? 4 : 3);
+    }
+
+    image_data = g_malloc(rowbytes * height);
+    if (!image_data) {
+        g_free(row_pointers);
+        return -1;
+    }
+
+    /* Convert image data */
+    for (guint y = 0; y < height; y++) {
+        guchar* src_row = surface_data + y * surface_stride;
+        png_bytep dst_row = image_data + y * rowbytes;
+        row_pointers[y] = dst_row;
+
+        for (guint x = 0; x < width; x++) {
+            guchar b = src_row[x * 4 + 0];
+            guchar g = src_row[x * 4 + 1];
+            guchar r = src_row[x * 4 + 2];
+            guchar a = src_row[x * 4 + 3];
+
+            /* Handle transparency format */
+            if (transparency_format == PNG_TRANSPARENCY_BINARY_CUTOFF) {
+                a = (a >= (png_opts ? png_opts->transparency_cutoff : 128)) ? 255 : 0;
+            } else if (transparency_format == PNG_TRANSPARENCY_BINARY_COLOR) {
+                if (png_opts && r == png_opts->transparency_color_r &&
+                    g == png_opts->transparency_color_g &&
+                    b == png_opts->transparency_color_b) {
+                    a = 0;
+                } else {
+                    a = 255;
+                }
+            } else if (transparency_format == PNG_TRANSPARENCY_NONE) {
+                a = 255;
+            }
+
+            if (is_gray) {
+                /* Convert to grayscale using ITU-R BT.601 luminance formula */
+                guchar gray = (guchar)(0.299 * r + 0.587 * g + 0.114 * b + 0.5);
+                if (use_alpha_channel) {
+                    /* Grayscale with alpha (2 bytes per pixel) */
+                    dst_row[x * 2 + 0] = gray;
+                    dst_row[x * 2 + 1] = a;
+                } else {
+                    /* Grayscale (1 byte per pixel) */
+                    dst_row[x] = gray;
+                }
+            } else {
+                /* Color format */
+                if (use_alpha_channel) {
+                    /* RGB with alpha (4 bytes per pixel: RGBA) */
+                    dst_row[x * 4 + 0] = r;
+                    dst_row[x * 4 + 1] = g;
+                    dst_row[x * 4 + 2] = b;
+                    dst_row[x * 4 + 3] = a;
+                } else {
+                    /* RGB (3 bytes per pixel) */
+                    dst_row[x * 3 + 0] = r;
+                    dst_row[x * 3 + 1] = g;
+                    dst_row[x * 3 + 2] = b;
+                }
+            }
+        }
+    }
+
+    /* Determine PNG color type */
+    /* Binary by cutoff uses full alpha channel, binary by color uses tRNS chunk */
+    if (is_gray) {
+        out->png_color_type = use_alpha_channel ? PNG_COLOR_TYPE_GRAY_ALPHA : PNG_COLOR_TYPE_GRAY;
+    } else {
+        out->png_color_type = use_alpha_channel ? PNG_COLOR_TYPE_RGB_ALPHA : PNG_COLOR_TYPE_RGB;
+    }
+
+    /* Set tRNS flag only for binary transparency by color (uses tRNS chunk, not alpha channel) */
+    out->needs_trns = (transparency_format == PNG_TRANSPARENCY_BINARY_COLOR);
+
+    if (out->needs_trns && transparency_format == PNG_TRANSPARENCY_BINARY_COLOR && png_opts) {
+        /* Store color key for tRNS chunk */
+        out->trns_color.red = (png_uint_16)(png_opts->transparency_color_r << 8);
+        out->trns_color.green = (png_uint_16)(png_opts->transparency_color_g << 8);
+        out->trns_color.blue = (png_uint_16)(png_opts->transparency_color_b << 8);
+        out->trns_color.gray = 0;
+    }
+
+    out->row_pointers = row_pointers;
+    out->image_data = image_data;
+    out->rowbytes = rowbytes;
+
+    return 0;
+}
+
+/**
  * Structure for memory buffer writing
  */
 struct png_memory_buffer {
@@ -510,38 +753,57 @@ static PluginError save_png(ImageDocument* doc, const char* filename, const Save
         return PLUGIN_ERROR_FILE_WRITE_ERROR;
     }
 
-    /* Pre-allocate image data buffers (needed for both automatic mode and regular save) */
-    png_uint_32 rowbytes = (png_uint_32)(doc->width * 4); /* RGBA = 4 bytes per pixel */
-    row_pointers = g_malloc(sizeof(png_bytep) * doc->height);
-    if (!row_pointers) {
-        cairo_surface_destroy(composite);
-        return PLUGIN_ERROR_OUT_OF_MEMORY;
+    struct converted_image_data converted = {0};
+    int png_color_type = PNG_COLOR_TYPE_RGB_ALPHA; /* Default to RGBA */
+    bool use_converted_data = false;
+
+    /* For manual mode, use advanced conversion if options are provided */
+    if (!automatic_mode && png_opts) {
+        /* Convert image data based on options */
+        if (convert_image_data_for_png(surface_data, surface_stride, doc->width, doc->height,
+                                       png_opts, &converted) == 0) {
+            row_pointers = converted.row_pointers;
+            image_data = converted.image_data;
+            png_color_type = converted.png_color_type;
+            use_converted_data = true;
+        }
     }
 
-    image_data = g_malloc(rowbytes * doc->height);
-    if (!image_data) {
-        g_free(row_pointers);
-        cairo_surface_destroy(composite);
-        return PLUGIN_ERROR_OUT_OF_MEMORY;
-    }
+    /* For automatic mode or if conversion failed, use default RGBA format */
+    if (!use_converted_data) {
+        /* Pre-allocate image data buffers (needed for automatic mode or fallback) */
+        png_uint_32 rowbytes = (png_uint_32)(doc->width * 4); /* RGBA = 4 bytes per pixel */
+        row_pointers = g_malloc(sizeof(png_bytep) * doc->height);
+        if (!row_pointers) {
+            cairo_surface_destroy(composite);
+            return PLUGIN_ERROR_OUT_OF_MEMORY;
+        }
 
-    /* Convert from Cairo's ARGB32 (BGRA in memory) to RGBA */
-    for (guint y = 0; y < doc->height; y++) {
-        guchar* src_row = surface_data + y * surface_stride;
-        png_bytep dst_row = image_data + y * rowbytes;
-        row_pointers[y] = dst_row;
+        image_data = g_malloc(rowbytes * doc->height);
+        if (!image_data) {
+            g_free(row_pointers);
+            cairo_surface_destroy(composite);
+            return PLUGIN_ERROR_OUT_OF_MEMORY;
+        }
 
-        for (guint x = 0; x < doc->width; x++) {
-            guchar b = src_row[x * 4 + 0];
-            guchar g = src_row[x * 4 + 1];
-            guchar r = src_row[x * 4 + 2];
-            guchar a = src_row[x * 4 + 3];
+        /* Convert from Cairo's ARGB32 (BGRA in memory) to RGBA */
+        for (guint y = 0; y < doc->height; y++) {
+            guchar* src_row = surface_data + y * surface_stride;
+            png_bytep dst_row = image_data + y * rowbytes;
+            row_pointers[y] = dst_row;
 
-            /* PNG RGBA format */
-            dst_row[x * 4 + 0] = r;
-            dst_row[x * 4 + 1] = g;
-            dst_row[x * 4 + 2] = b;
-            dst_row[x * 4 + 3] = a;
+            for (guint x = 0; x < doc->width; x++) {
+                guchar b = src_row[x * 4 + 0];
+                guchar g = src_row[x * 4 + 1];
+                guchar r = src_row[x * 4 + 2];
+                guchar a = src_row[x * 4 + 3];
+
+                /* PNG RGBA format */
+                dst_row[x * 4 + 0] = r;
+                dst_row[x * 4 + 1] = g;
+                dst_row[x * 4 + 2] = b;
+                dst_row[x * 4 + 3] = a;
+            }
         }
     }
 
@@ -561,8 +823,14 @@ static PluginError save_png(ImageDocument* doc, const char* filename, const Save
             PNG_FILTER_PAETH};
         int strategies[] = {
             PNG_Z_DEFAULT_STRATEGY,
-            PNG_Z_FILTERED,
-            PNG_Z_HUFFMAN_ONLY};
+#ifdef HAVE_ZLIB
+            Z_FILTERED,
+            Z_HUFFMAN_ONLY
+#else
+            PNG_Z_DEFAULT_STRATEGY,
+            PNG_Z_DEFAULT_STRATEGY
+#endif
+        };
 
         /* Use maximum compression level for automatic mode */
         int test_compression_level = 9;
@@ -659,11 +927,22 @@ static PluginError save_png(ImageDocument* doc, const char* filename, const Save
     /* Set up error handling */
     if (setjmp(error_info.jmpbuf)) {
         png_destroy_write_struct(&png_ptr, &info_ptr);
-        if (row_pointers) {
-            g_free(row_pointers);
-        }
-        if (image_data) {
-            g_free(image_data);
+        if (use_converted_data) {
+            /* Free converted data */
+            if (converted.row_pointers) {
+                g_free(converted.row_pointers);
+            }
+            if (converted.image_data) {
+                g_free(converted.image_data);
+            }
+        } else {
+            /* Free regular data */
+            if (row_pointers) {
+                g_free(row_pointers);
+            }
+            if (image_data) {
+                g_free(image_data);
+            }
         }
         fclose(outfile);
         cairo_surface_destroy(composite);
@@ -678,21 +957,52 @@ static PluginError save_png(ImageDocument* doc, const char* filename, const Save
     png_set_compression_strategy(png_ptr, compression_strategy);
     png_set_filter(png_ptr, PNG_FILTER_TYPE_BASE, filter_type);
 
-    /* Set PNG header */
+    /* Set PNG header with the determined color type */
     png_set_IHDR(png_ptr, info_ptr, doc->width, doc->height, 8,
-                 PNG_COLOR_TYPE_RGBA, PNG_INTERLACE_NONE,
+                 png_color_type, PNG_INTERLACE_NONE,
                  PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
+
+    /* Add bKGD chunk if requested */
+    if (use_converted_data && png_opts && png_opts->embed_background_color) {
+        png_color_16 background;
+        if (png_color_type == PNG_COLOR_TYPE_GRAY || png_color_type == PNG_COLOR_TYPE_GRAY_ALPHA) {
+            /* For grayscale, use the grayscale value of the background color */
+            guchar gray = (guchar)(0.299 * png_opts->background_color_r +
+                                   0.587 * png_opts->background_color_g +
+                                   0.114 * png_opts->background_color_b + 0.5);
+            background.gray = (png_uint_16)(gray << 8);
+            background.red = background.green = background.blue = 0;
+        } else {
+            /* For color formats, use RGB values */
+            background.red = (png_uint_16)(png_opts->background_color_r << 8);
+            background.green = (png_uint_16)(png_opts->background_color_g << 8);
+            background.blue = (png_uint_16)(png_opts->background_color_b << 8);
+            background.gray = 0;
+        }
+        background.index = 0;
+        png_set_bKGD(png_ptr, info_ptr, &background);
+    }
+
+    /* Add tRNS chunk if needed (for binary transparency by color) */
+    if (use_converted_data && converted.needs_trns) {
+        png_set_tRNS(png_ptr, info_ptr, NULL, 0, &converted.trns_color);
+    }
 
     /* Write info */
     png_write_info(png_ptr, info_ptr);
 
-    /* Calculate rowbytes (image_data already allocated and converted earlier) */
-    png_uint_32 rowbytes = png_get_rowbytes(png_ptr, info_ptr);
-
-    /* For RGBA format, rowbytes should always be width * 4, so we can reuse pre-allocated data */
-    /* Just ensure row_pointers point to the correct locations */
-    for (guint y = 0; y < doc->height; y++) {
-        row_pointers[y] = image_data + y * rowbytes;
+    /* Use rowbytes from converted data if available, otherwise calculate */
+    png_uint_32 rowbytes;
+    if (use_converted_data) {
+        rowbytes = converted.rowbytes;
+        /* Row pointers are already set in converted data */
+    } else {
+        rowbytes = png_get_rowbytes(png_ptr, info_ptr);
+        /* For RGBA format, rowbytes should always be width * 4, so we can reuse pre-allocated data */
+        /* Just ensure row_pointers point to the correct locations */
+        for (guint y = 0; y < doc->height; y++) {
+            row_pointers[y] = image_data + y * rowbytes;
+        }
     }
 
     /* Write image data */
@@ -702,8 +1012,19 @@ static PluginError save_png(ImageDocument* doc, const char* filename, const Save
     png_write_end(png_ptr, NULL);
 
     /* Cleanup */
-    g_free(row_pointers);
-    g_free(image_data);
+    if (use_converted_data) {
+        /* Free converted data */
+        if (converted.row_pointers) {
+            g_free(converted.row_pointers);
+        }
+        if (converted.image_data) {
+            g_free(converted.image_data);
+        }
+    } else {
+        /* Free regular data */
+        g_free(row_pointers);
+        g_free(image_data);
+    }
     png_destroy_write_struct(&png_ptr, &info_ptr);
     fclose(outfile);
     cairo_surface_destroy(composite);
@@ -765,6 +1086,16 @@ static void init_png_save_options(void* plugin_data) {
         opts->filter_type = PNG_FILTER_NONE;
         opts->compression_strategy = PNG_Z_DEFAULT_STRATEGY;
         opts->automatic_mode = true; /* Default to automatic mode */
+        opts->embed_background_color = false;
+        opts->background_color_r = 255;
+        opts->background_color_g = 255;
+        opts->background_color_b = 255;
+        opts->color_format = PNG_COLOR_FORMAT_AUTO;
+        opts->transparency_format = PNG_TRANSPARENCY_AUTO;
+        opts->transparency_cutoff = 128; /* Default cutoff for binary transparency */
+        opts->transparency_color_r = 0;
+        opts->transparency_color_g = 0;
+        opts->transparency_color_b = 0;
         memset(opts->reserved, 0, sizeof(opts->reserved));
     }
 }
