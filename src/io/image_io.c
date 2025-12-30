@@ -82,21 +82,14 @@ gboolean image_io_load(ImageDocument* doc, const char* filename) {
 gboolean image_io_save(ImageDocument* doc, const char* filename, const SaveOptions* opts) {
     FormatHandler* handler;
     SaveOptions default_opts;
+    SaveOptions* actual_opts = NULL;
     PluginError error;
+    size_t plugin_options_size = 0;
+    void* plugin_data = NULL;
 
     if (!doc || !filename) {
         g_warning("Invalid parameters for image_io_save");
         return FALSE;
-    }
-
-    /* Use default options if not provided */
-    if (!opts) {
-        memset(&default_opts, 0, sizeof(SaveOptions));
-        default_opts.quality = -1;
-        default_opts.compression_level = -1;
-        default_opts.preserve_alpha = doc->has_alpha ? true : false;
-        default_opts.flatten_layers = FALSE;
-        opts = &default_opts;
     }
 
     /* Find appropriate plugin */
@@ -106,8 +99,62 @@ gboolean image_io_save(ImageDocument* doc, const char* filename, const SaveOptio
         return FALSE;
     }
 
+    /* Allocate options structure */
+    actual_opts = g_malloc(sizeof(SaveOptions));
+    if (!actual_opts) {
+        g_warning("Failed to allocate memory for save options");
+        return FALSE;
+    }
+
+    /* Initialize with provided options or defaults */
+    if (opts) {
+        /* Copy base options */
+        actual_opts->quality = opts->quality;
+        actual_opts->compression_level = opts->compression_level;
+        actual_opts->preserve_alpha = opts->preserve_alpha;
+        actual_opts->flatten_layers = opts->flatten_layers;
+        /* Note: plugin_data from opts is not copied - we'll allocate new one below */
+    } else {
+        actual_opts->quality = -1;
+        actual_opts->compression_level = -1;
+        actual_opts->preserve_alpha = doc->has_alpha ? true : false;
+        actual_opts->flatten_layers = FALSE;
+    }
+    actual_opts->plugin_data = NULL;
+
+    /* Allocate and initialize plugin-specific options if plugin supports them */
+    if (handler && handler->plugin && handler->plugin->callbacks.get_save_options_size) {
+        plugin_options_size = handler->plugin->callbacks.get_save_options_size();
+        if (plugin_options_size > 0) {
+            plugin_data = g_malloc0(plugin_options_size);
+            if (plugin_data) {
+                /* Initialize with plugin's default values */
+                if (handler->plugin->callbacks.init_save_options) {
+                    handler->plugin->callbacks.init_save_options(plugin_data);
+                }
+                actual_opts->plugin_data = plugin_data;
+            }
+        }
+    }
+
     /* Call plugin's save function */
-    error = handler->plugin->callbacks.save(doc, filename, opts);
+    if (!handler || !handler->plugin || !handler->plugin->callbacks.save) {
+        g_warning("Invalid plugin handler for saving file: %s", filename);
+        if (plugin_data) {
+            g_free(plugin_data);
+        }
+        g_free(actual_opts);
+        return FALSE;
+    }
+    error = handler->plugin->callbacks.save(doc, filename, actual_opts);
+
+    /* Clean up plugin-specific options */
+    if (plugin_data) {
+        g_free(plugin_data);
+    }
+
+    /* Clean up options structure */
+    g_free(actual_opts);
 
     if (error != PLUGIN_ERROR_NONE) {
         g_warning("Plugin failed to save file %s: error %d", filename, error);

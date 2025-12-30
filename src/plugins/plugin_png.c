@@ -14,6 +14,23 @@
 #ifdef HAVE_LIBPNG
 #include <png.h>
 
+/**
+ * PNG-specific save options
+ */
+typedef struct {
+    /* Compression level (0-9, where 0 = no compression, 9 = maximum compression) */
+    int32_t compression_level;
+
+    /* Filter type (PNG_FILTER_NONE, PNG_FILTER_SUB, PNG_FILTER_UP, PNG_FILTER_AVG, PNG_FILTER_PAETH) */
+    int32_t filter_type;
+
+    /* Strategy (PNG_Z_DEFAULT_STRATEGY, PNG_Z_FILTERED, PNG_Z_HUFFMAN_ONLY, etc.) */
+    int32_t compression_strategy;
+
+    /* Reserved for future use */
+    uint32_t reserved[4];
+} PNGSaveOptions;
+
 /* PNG file signature */
 static const uint8_t PNG_SIGNATURE[8] = {0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A};
 
@@ -324,8 +341,23 @@ static PluginError save_png(ImageDocument* doc, const char* filename, const Save
     int surface_stride;
     png_bytep* row_pointers = NULL;
     png_bytep image_data = NULL;
+    PNGSaveOptions* png_opts = NULL;
+    int compression_level = 6; /* Default PNG compression */
+    int filter_type = PNG_FILTER_NONE;
+    int compression_strategy = PNG_Z_DEFAULT_STRATEGY;
 
-    (void)opts; /* Options not used for PNG yet */
+    /* Get PNG-specific options if provided */
+    if (opts && opts->plugin_data) {
+        png_opts = (PNGSaveOptions*)opts->plugin_data;
+        compression_level = (png_opts->compression_level >= 0 && png_opts->compression_level <= 9)
+                                ? png_opts->compression_level
+                                : 6;
+        filter_type = png_opts->filter_type;
+        compression_strategy = png_opts->compression_strategy;
+    } else if (opts && opts->compression_level >= 0 && opts->compression_level <= 9) {
+        /* Fallback to base SaveOptions compression_level if plugin_data not provided */
+        compression_level = opts->compression_level;
+    }
 
     if (!doc || !filename) {
         return PLUGIN_ERROR_INVALID_PARAMETERS;
@@ -386,6 +418,11 @@ static PluginError save_png(ImageDocument* doc, const char* filename, const Save
 
     /* Initialize I/O */
     png_init_io(png_ptr, outfile);
+
+    /* Set compression options */
+    png_set_compression_level(png_ptr, compression_level);
+    png_set_compression_strategy(png_ptr, compression_strategy);
+    png_set_filter(png_ptr, PNG_FILTER_TYPE_BASE, filter_type);
 
     /* Set PNG header */
     png_set_IHDR(png_ptr, info_ptr, doc->width, doc->height, 8,
@@ -487,6 +524,42 @@ static bool can_save_png(const char* filename) {
     return g_ascii_strcasecmp(ext + 1, "png") == 0;
 }
 
+#ifdef HAVE_LIBPNG
+/**
+ * Get size of PNG-specific save options structure
+ */
+static size_t get_png_save_options_size(void) {
+    return sizeof(PNGSaveOptions);
+}
+
+/**
+ * Initialize PNG-specific save options with defaults
+ */
+static void init_png_save_options(void* plugin_data) {
+    PNGSaveOptions* opts = (PNGSaveOptions*)plugin_data;
+    if (opts) {
+        opts->compression_level = 6; /* Default compression */
+        opts->filter_type = PNG_FILTER_NONE;
+        opts->compression_strategy = PNG_Z_DEFAULT_STRATEGY;
+        memset(opts->reserved, 0, sizeof(opts->reserved));
+    }
+}
+#else
+/**
+ * Get size of PNG-specific save options structure (stub when libpng not available)
+ */
+static size_t get_png_save_options_size(void) {
+    return 0;
+}
+
+/**
+ * Initialize PNG-specific save options with defaults (stub when libpng not available)
+ */
+static void init_png_save_options(void* plugin_data) {
+    (void)plugin_data;
+}
+#endif
+
 /**
  * PNG plugin initialization
  */
@@ -511,6 +584,8 @@ bool plugin_init_png(const ImageFormatHostAPI* host, ImageFormatPlugin* out_plug
     out_plugin->callbacks.load = load_png;
     out_plugin->callbacks.can_save = can_save_png;
     out_plugin->callbacks.save = save_png;
+    out_plugin->callbacks.get_save_options_size = get_png_save_options_size;
+    out_plugin->callbacks.init_save_options = init_png_save_options;
 
     return true;
 #else

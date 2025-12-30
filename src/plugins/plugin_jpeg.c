@@ -15,6 +15,23 @@
 #include <jerror.h>
 #include <jpeglib.h>
 
+/**
+ * JPEG-specific save options
+ */
+typedef struct {
+    /* Quality setting (0-100, where 0 = lowest quality, 100 = highest quality) */
+    int32_t quality;
+
+    /* Progressive JPEG encoding (true = progressive, false = baseline) */
+    bool progressive;
+
+    /* Optimize Huffman tables (slower encoding, smaller file) */
+    bool optimize_huffman;
+
+    /* Reserved for future use */
+    uint32_t reserved[4];
+} JPEGSaveOptions;
+
 /* JPEG file signature */
 static const uint8_t JPEG_SIGNATURE_SOI[2] = {0xFF, 0xD8};
 
@@ -195,6 +212,26 @@ static bool can_save_jpeg(const char* filename) {
 
 #ifdef HAVE_LIBJPEG
 /**
+ * Get size of JPEG-specific save options structure
+ */
+static size_t get_jpeg_save_options_size(void) {
+    return sizeof(JPEGSaveOptions);
+}
+
+/**
+ * Initialize JPEG-specific save options with defaults
+ */
+static void init_jpeg_save_options(void* plugin_data) {
+    JPEGSaveOptions* opts = (JPEGSaveOptions*)plugin_data;
+    if (opts) {
+        opts->quality = 85; /* Default quality */
+        opts->progressive = false;
+        opts->optimize_huffman = false;
+        memset(opts->reserved, 0, sizeof(opts->reserved));
+    }
+}
+
+/**
  * Save JPEG image using libjpeg
  */
 static PluginError save_jpeg(ImageDocument* doc, const char* filename, const SaveOptions* opts) {
@@ -208,17 +245,28 @@ static PluginError save_jpeg(ImageDocument* doc, const char* filename, const Sav
     guchar* surface_data;
     int surface_stride;
     gint quality;
+    JPEGSaveOptions* jpeg_opts = NULL;
+    bool progressive = false;
+    bool optimize_huffman = false;
 
     if (!doc || !filename) {
         return PLUGIN_ERROR_INVALID_PARAMETERS;
     }
 
-    /* Get quality from options */
-    quality = (opts && opts->quality >= 0) ? opts->quality : 85;
-    if (quality < 0)
-        quality = 0;
-    if (quality > 100)
-        quality = 100;
+    /* Get JPEG-specific options if provided */
+    if (opts && opts->plugin_data) {
+        jpeg_opts = (JPEGSaveOptions*)opts->plugin_data;
+        quality = (jpeg_opts->quality >= 0 && jpeg_opts->quality <= 100)
+                      ? jpeg_opts->quality
+                      : 85;
+        progressive = jpeg_opts->progressive;
+        optimize_huffman = jpeg_opts->optimize_huffman;
+    } else if (opts && opts->quality >= 0) {
+        /* Fallback to base SaveOptions quality if plugin_data not provided */
+        quality = (opts->quality > 100) ? 100 : opts->quality;
+    } else {
+        quality = 85; /* Default quality */
+    }
 
     /* Get composite surface */
     composite = document_export_composite_surface(doc);
@@ -269,6 +317,14 @@ static PluginError save_jpeg(ImageDocument* doc, const char* filename, const Sav
     jpeg_set_defaults(&cinfo);
     jpeg_set_quality(&cinfo, quality, TRUE);
 
+    /* Set progressive encoding if requested */
+    if (progressive) {
+        jpeg_simple_progression(&cinfo);
+    }
+
+    /* Set optimization if requested */
+    cinfo.optimize_coding = optimize_huffman ? TRUE : FALSE;
+
     /* Start compression */
     jpeg_start_compress(&cinfo, TRUE);
 
@@ -312,6 +368,20 @@ static PluginError save_jpeg(ImageDocument* doc, const char* filename, const Sav
     (void)opts;
     return PLUGIN_ERROR_UNSUPPORTED_FEATURE;
 }
+
+/**
+ * Get size of JPEG-specific save options structure (stub when libjpeg not available)
+ */
+static size_t get_jpeg_save_options_size(void) {
+    return 0;
+}
+
+/**
+ * Initialize JPEG-specific save options with defaults (stub when libjpeg not available)
+ */
+static void init_jpeg_save_options(void* plugin_data) {
+    (void)plugin_data;
+}
 #endif
 
 /**
@@ -328,7 +398,7 @@ bool plugin_init_jpeg(const ImageFormatHostAPI* host, ImageFormatPlugin* out_plu
     memset(out_plugin, 0, sizeof(ImageFormatPlugin));
 
     out_plugin->plugin_version = 1;
-    out_plugin->format_info.name = "JPEG";
+    out_plugin->format_info.name = "JPEG - Joint Photographic Experts Group";
     out_plugin->format_info.extensions = "jpg,jpeg";
     out_plugin->format_info.supports_alpha = false;
     out_plugin->format_info.supports_layers = false;
@@ -338,6 +408,8 @@ bool plugin_init_jpeg(const ImageFormatHostAPI* host, ImageFormatPlugin* out_plu
     out_plugin->callbacks.load = load_jpeg;
     out_plugin->callbacks.can_save = can_save_jpeg;
     out_plugin->callbacks.save = save_jpeg;
+    out_plugin->callbacks.get_save_options_size = get_jpeg_save_options_size;
+    out_plugin->callbacks.init_save_options = init_jpeg_save_options;
 
     return true;
 #else

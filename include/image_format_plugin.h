@@ -44,7 +44,7 @@ typedef enum {
 } PluginError;
 
 /**
- * Save options for plugins
+ * Base save options common to all plugins
  */
 typedef struct {
     /* Quality setting (0-100, -1 for default) */
@@ -59,8 +59,12 @@ typedef struct {
     /* Flatten layers to single layer */
     bool flatten_layers;
 
+    /* Plugin-specific options data (cast to plugin's options structure) */
+    /* Plugins should define their own options structures and cast this pointer */
+    void* plugin_data;
+
     /* Reserved for future use - must be zero */
-    uint32_t reserved[8];
+    uint32_t reserved[7];
 } SaveOptions;
 
 /**
@@ -217,6 +221,15 @@ typedef struct {
     /* Optional: Get format information */
     /* If NULL, will use default info from plugin registration */
     FormatInfo* (*get_format_info)(void);
+
+    /* Optional: Get size of plugin-specific save options structure */
+    /* Returns size in bytes, or 0 if plugin doesn't use custom options */
+    size_t (*get_save_options_size)(void);
+
+    /* Optional: Initialize plugin-specific save options with defaults */
+    /* Called to initialize plugin_data in SaveOptions */
+    /* plugin_data points to a buffer of size returned by get_save_options_size */
+    void (*init_save_options)(void* plugin_data);
 
     /* Optional: Plugin cleanup/shutdown */
     /* Called when plugin is unloaded */
