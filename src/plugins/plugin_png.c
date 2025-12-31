@@ -877,21 +877,17 @@ static PluginError save_png(ImageDocument* doc, const char* filename, const Save
         int best_filter = PNG_FILTER_NONE;
         int best_strategy = PNG_Z_DEFAULT_STRATEGY;
 
-        /* Test combinations of filter types and compression strategies */
+        /* Test a limited set of filter types and compression strategies for better performance */
+        /* PNG_FILTER_SUB and PNG_FILTER_PAETH are typically the most effective */
         int filter_types[] = {
             PNG_FILTER_NONE,
             PNG_FILTER_SUB,
-            PNG_FILTER_UP,
-            PNG_FILTER_AVG,
             PNG_FILTER_PAETH};
         int strategies[] = {
-            PNG_Z_DEFAULT_STRATEGY,
-#ifdef HAVE_ZLIB
-            Z_FILTERED,
-            Z_HUFFMAN_ONLY
-#else
-            PNG_Z_DEFAULT_STRATEGY,
             PNG_Z_DEFAULT_STRATEGY
+#ifdef HAVE_ZLIB
+            ,
+            Z_FILTERED
 #endif
         };
 
