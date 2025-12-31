@@ -1,6 +1,7 @@
 #include "ui/dialogs/save_options_dialog.h"
 #include "plugins/format_registry.h"
 #include "ui/dialogs/formats/jpeg_options_dialog.h"
+#include "ui/dialogs/formats/png_options_dialog.h"
 #include <glib.h>
 #include <gtk/gtk.h>
 #include <string.h>
@@ -33,7 +34,9 @@ gboolean save_options_dialog_show(GtkWindow* parent, const char* filename, SaveO
     if (g_ascii_strcasecmp(ext, "jpg") == 0 || g_ascii_strcasecmp(ext, "jpeg") == 0) {
         return jpeg_options_dialog_show(parent, opts);
     }
-    /* PNG dialog will be added later */
+    if (g_ascii_strcasecmp(ext, "png") == 0) {
+        return png_options_dialog_show(parent, opts);
+    }
 
     /* No dialog for this format */
     return TRUE; /* Continue with save (no dialog needed) */

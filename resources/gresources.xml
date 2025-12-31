@@ -46,6 +46,7 @@
         <file>ui/new_layer_dialog.glade</file>
         <file>ui/canvas_size_dialog.glade</file>
         <file>ui/jpeg_options_dialog.glade</file>
+        <file>ui/png_options_dialog.glade</file>
         <file>ui/main_window.glade</file>
     </gresource>
 </gresources>

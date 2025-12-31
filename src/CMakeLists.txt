@@ -72,6 +72,7 @@ set(SOURCES
     ui/dialogs/recovery_dialog.c
     ui/dialogs/save_options_dialog.c
     ui/dialogs/formats/jpeg_options_dialog.c
+    ui/dialogs/formats/png_options_dialog.c
     ui/dialogs/retinex_dialog.c
     ui/dialogs/selection_radius_dialog.c
     tools.c

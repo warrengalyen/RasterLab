@@ -39,6 +39,15 @@ typedef enum {
 } PNGTransparencyFormat;
 
 /**
+ * PNG depth options
+ */
+typedef enum {
+    PNG_DEPTH_HDR = 0,
+    PNG_DEPTH_STANDARD = 1,
+    PNG_DEPTH_INDEXED = 2
+} PNGDepth;
+
+/**
  * PNG-specific save options
  */
 typedef struct {
@@ -75,6 +84,17 @@ typedef struct {
     uint8_t transparency_color_r;
     uint8_t transparency_color_g;
     uint8_t transparency_color_b;
+
+    /* Depth: HDR, standard, or indexed (used when color_format = color or grayscale) */
+    PNGDepth depth;
+
+    /* Palette size (2-256, default 256, used when color_format = grayscale) */
+    int palette_size;
+
+    /* Compositing color RGB values (0-255, default rgb(255,255,255), used when transparency_format = binary color, binary cut-off, or none) */
+    uint8_t compositing_color_r;
+    uint8_t compositing_color_g;
+    uint8_t compositing_color_b;
 
     /* Reserved for future use */
     uint32_t reserved[1];
@@ -504,20 +524,39 @@ static int convert_image_data_for_png(guchar* surface_data,
             guchar g = src_row[x * 4 + 1];
             guchar r = src_row[x * 4 + 2];
             guchar a = src_row[x * 4 + 3];
+            guchar original_a = a; /* Store original alpha for compositing */
 
             /* Handle transparency format */
             if (transparency_format == PNG_TRANSPARENCY_BINARY_CUTOFF) {
-                a = (a >= (png_opts ? png_opts->transparency_cutoff : 128)) ? 255 : 0;
+                a = (a >= (png_opts ? png_opts->transparency_cutoff : 64)) ? 255 : 0;
+                /* Composite with compositing color when transparent */
+                if (a == 0 && png_opts) {
+                    r = png_opts->compositing_color_r;
+                    g = png_opts->compositing_color_g;
+                    b = png_opts->compositing_color_b;
+                }
             } else if (transparency_format == PNG_TRANSPARENCY_BINARY_COLOR) {
                 if (png_opts && r == png_opts->transparency_color_r &&
                     g == png_opts->transparency_color_g &&
                     b == png_opts->transparency_color_b) {
                     a = 0;
+                    /* Composite with compositing color when transparent */
+                    if (png_opts) {
+                        r = png_opts->compositing_color_r;
+                        g = png_opts->compositing_color_g;
+                        b = png_opts->compositing_color_b;
+                    }
                 } else {
                     a = 255;
                 }
             } else if (transparency_format == PNG_TRANSPARENCY_NONE) {
                 a = 255;
+                /* Composite fully transparent areas with compositing color */
+                if (png_opts && original_a == 0) {
+                    r = png_opts->compositing_color_r;
+                    g = png_opts->compositing_color_g;
+                    b = png_opts->compositing_color_b;
+                }
             }
 
             if (is_gray) {
@@ -1082,20 +1121,25 @@ static size_t get_png_save_options_size(void) {
 static void init_png_save_options(void* plugin_data) {
     PNGSaveOptions* opts = (PNGSaveOptions*)plugin_data;
     if (opts) {
-        opts->compression_level = 6; /* Default compression */
+        opts->compression_level = 9;
         opts->filter_type = PNG_FILTER_NONE;
         opts->compression_strategy = PNG_Z_DEFAULT_STRATEGY;
-        opts->automatic_mode = true; /* Default to automatic mode */
+        opts->automatic_mode = true;
         opts->embed_background_color = false;
         opts->background_color_r = 255;
         opts->background_color_g = 255;
         opts->background_color_b = 255;
         opts->color_format = PNG_COLOR_FORMAT_AUTO;
         opts->transparency_format = PNG_TRANSPARENCY_AUTO;
-        opts->transparency_cutoff = 128; /* Default cutoff for binary transparency */
-        opts->transparency_color_r = 0;
+        opts->transparency_cutoff = 64;
+        opts->transparency_color_r = 255;
         opts->transparency_color_g = 0;
-        opts->transparency_color_b = 0;
+        opts->transparency_color_b = 255;
+        opts->depth = PNG_DEPTH_STANDARD;
+        opts->palette_size = 256;
+        opts->compositing_color_r = 255;
+        opts->compositing_color_g = 255;
+        opts->compositing_color_b = 255;
         memset(opts->reserved, 0, sizeof(opts->reserved));
     }
 }
@@ -1129,7 +1173,7 @@ bool plugin_init_png(const ImageFormatHostAPI* host, ImageFormatPlugin* out_plug
     memset(out_plugin, 0, sizeof(ImageFormatPlugin));
 
     out_plugin->plugin_version = 1;
-    out_plugin->format_info.name = "PNG";
+    out_plugin->format_info.name = "PNG - Portable Network Graphic";
     out_plugin->format_info.extensions = "png";
     out_plugin->format_info.supports_alpha = true;
     out_plugin->format_info.supports_layers = false;
