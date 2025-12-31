@@ -507,12 +507,32 @@ void on_file_save(GtkWidget* widget, gpointer data) {
 
     /* Save using existing filename with default options */
     SaveOptions default_opts;
+    FormatHandler* handler;
+    void* plugin_data = NULL;
+    size_t plugin_options_size = 0;
+
     memset(&default_opts, 0, sizeof(SaveOptions));
     default_opts.quality = -1;           /* Use default */
     default_opts.compression_level = -1; /* Use default */
     default_opts.preserve_alpha = doc->has_alpha ? true : false;
     default_opts.flatten_layers = FALSE;
-    default_opts.plugin_data = NULL;
+
+    /* Find handler to determine if we need plugin-specific options */
+    handler = format_registry_find_saver(doc->file_path);
+    if (handler && handler->plugin && handler->plugin->callbacks.get_save_options_size) {
+        plugin_options_size = handler->plugin->callbacks.get_save_options_size();
+        if (plugin_options_size > 0) {
+            plugin_data = g_malloc0(plugin_options_size);
+            if (plugin_data && handler->plugin->callbacks.init_save_options) {
+                /* Initialize plugin-specific options with defaults */
+                /* For PNG, init_png_save_options already sets transparency_format to PNG_TRANSPARENCY_AUTO */
+                handler->plugin->callbacks.init_save_options(plugin_data);
+            }
+            default_opts.plugin_data = plugin_data;
+        }
+    } else {
+        default_opts.plugin_data = NULL;
+    }
 
     if (document_save_as(doc, doc->file_path, &default_opts)) {
         /* Mark document as saved */
@@ -526,6 +546,11 @@ void on_file_save(GtkWidget* widget, gpointer data) {
         ui_update_menu_and_button_states(ctx);
     } else {
         g_warning("Failed to save document to %s", doc->file_path);
+    }
+
+    /* Clean up plugin data */
+    if (plugin_data) {
+        g_free(plugin_data);
     }
 }
 

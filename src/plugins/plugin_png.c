@@ -418,22 +418,6 @@ static bool is_image_grayscale(guchar* surface_data, int surface_stride, guint w
 }
 
 /**
- * Helper function to check if an image has transparency (non-opaque alpha values)
- */
-static bool has_transparency(guchar* surface_data, int surface_stride, guint width, guint height) {
-    for (guint y = 0; y < height; y += 10) {
-        for (guint x = 0; x < width; x += 10) {
-            guchar* pixel = surface_data + y * surface_stride + x * 4;
-            guchar a = pixel[3];
-            if (a < 255) {
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
-/**
  * Structure to hold converted image data and metadata
  */
 struct converted_image_data {
@@ -454,11 +438,11 @@ static int convert_image_data_for_png(guchar* surface_data,
                                       guint width,
                                       guint height,
                                       PNGSaveOptions* png_opts,
+                                      bool document_has_alpha,
                                       struct converted_image_data* out) {
     PNGColorFormat color_format;
     PNGTransparencyFormat transparency_format;
     bool is_gray = false;
-    bool has_alpha = false;
     bool needs_transparency = false;
     png_uint_32 rowbytes;
     png_bytep* row_pointers = NULL;
@@ -478,8 +462,8 @@ static int convert_image_data_for_png(guchar* surface_data,
 
     /* Determine transparency format */
     if (png_opts && png_opts->transparency_format == PNG_TRANSPARENCY_AUTO) {
-        has_alpha = has_transparency(surface_data, surface_stride, width, height);
-        transparency_format = has_alpha ? PNG_TRANSPARENCY_FULL : PNG_TRANSPARENCY_NONE;
+        /* Use document's has_alpha flag to determine transparency */
+        transparency_format = document_has_alpha ? PNG_TRANSPARENCY_FULL : PNG_TRANSPARENCY_NONE;
     } else if (png_opts) {
         transparency_format = png_opts->transparency_format;
     } else {
@@ -525,6 +509,26 @@ static int convert_image_data_for_png(guchar* surface_data,
             guchar r = src_row[x * 4 + 2];
             guchar a = src_row[x * 4 + 3];
             guchar original_a = a; /* Store original alpha for compositing */
+
+            /* Un-premultiply alpha: Cairo uses premultiplied alpha, PNG uses straight alpha */
+            /* This must be done before handling transparency format */
+            if (a > 0 && a < 255) {
+                /* Un-premultiply: convert from pre-multiplied to straight alpha */
+                r = (r * 255 + a / 2) / a; /* Add rounding */
+                g = (g * 255 + a / 2) / a;
+                b = (b * 255 + a / 2) / a;
+                /* Clamp to valid range */
+                if (r > 255)
+                    r = 255;
+                if (g > 255)
+                    g = 255;
+                if (b > 255)
+                    b = 255;
+            } else if (a == 0) {
+                /* Fully transparent pixel - set RGB to 0 to ensure transparency */
+                r = g = b = 0;
+            }
+            /* If a == 255, no un-premultiplication needed (already straight alpha) */
 
             /* Handle transparency format */
             if (transparency_format == PNG_TRANSPARENCY_BINARY_CUTOFF) {
@@ -649,7 +653,8 @@ static GByteArray* save_png_to_memory(ImageDocument* doc,
                                       png_bytep image_data,
                                       int compression_level,
                                       int filter_type,
-                                      int compression_strategy) {
+                                      int compression_strategy,
+                                      int png_color_type) {
     png_structp png_ptr;
     png_infop info_ptr;
     struct png_error_info error_info = {0};
@@ -693,9 +698,9 @@ static GByteArray* save_png_to_memory(ImageDocument* doc,
     png_set_compression_strategy(png_ptr, compression_strategy);
     png_set_filter(png_ptr, PNG_FILTER_TYPE_BASE, filter_type);
 
-    /* Set PNG header */
+    /* Set PNG header with specified color type */
     png_set_IHDR(png_ptr, info_ptr, doc->width, doc->height, 8,
-                 PNG_COLOR_TYPE_RGBA, PNG_INTERLACE_NONE,
+                 png_color_type, PNG_INTERLACE_NONE,
                  PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
 
     /* Write info */
@@ -704,25 +709,9 @@ static GByteArray* save_png_to_memory(ImageDocument* doc,
     /* Calculate rowbytes */
     rowbytes = png_get_rowbytes(png_ptr, info_ptr);
 
-    /* Convert from Cairo's ARGB32 (BGRA in memory) to RGBA */
-    for (guint y = 0; y < doc->height; y++) {
-        guchar* src_row = surface_data + y * surface_stride;
-        png_bytep dst_row = image_data + y * rowbytes;
-        row_pointers[y] = dst_row;
-
-        for (guint x = 0; x < doc->width; x++) {
-            guchar b = src_row[x * 4 + 0];
-            guchar g = src_row[x * 4 + 1];
-            guchar r = src_row[x * 4 + 2];
-            guchar a = src_row[x * 4 + 3];
-
-            /* PNG RGBA format */
-            dst_row[x * 4 + 0] = r;
-            dst_row[x * 4 + 1] = g;
-            dst_row[x * 4 + 2] = b;
-            dst_row[x * 4 + 3] = a;
-        }
-    }
+    /* Convert from Cairo's ARGB32 (BGRA in memory) to PNG format */
+    /* Note: row_pointers and image_data should already be set up by caller */
+    /* This function just writes the data that's already in the correct format */
 
     /* Write image data */
     png_write_image(png_ptr, row_pointers);
@@ -753,7 +742,7 @@ static PluginError save_png(ImageDocument* doc, const char* filename, const Save
     png_bytep* row_pointers = NULL;
     png_bytep image_data = NULL;
     PNGSaveOptions* png_opts = NULL;
-    int compression_level = 6; /* Default PNG compression */
+    int compression_level = 9;
     int filter_type = PNG_FILTER_NONE;
     int compression_strategy = PNG_Z_DEFAULT_STRATEGY;
 
@@ -761,9 +750,9 @@ static PluginError save_png(ImageDocument* doc, const char* filename, const Save
     bool automatic_mode = false;
     if (opts && opts->plugin_data) {
         png_opts = (PNGSaveOptions*)opts->plugin_data;
-        compression_level = (png_opts->compression_level >= 0 && png_opts->compression_level <= 9)
+        compression_level = (png_opts->compression_level >= 0 && png_opts->compression_level <= 12)
                                 ? png_opts->compression_level
-                                : 6;
+                                : 9;
         filter_type = png_opts->filter_type;
         compression_strategy = png_opts->compression_strategy;
         automatic_mode = png_opts->automatic_mode;
@@ -796,11 +785,12 @@ static PluginError save_png(ImageDocument* doc, const char* filename, const Save
     int png_color_type = PNG_COLOR_TYPE_RGB_ALPHA; /* Default to RGBA */
     bool use_converted_data = false;
 
-    /* For manual mode, use advanced conversion if options are provided */
-    if (!automatic_mode && png_opts) {
+    /* Use advanced conversion if PNG options are provided (for both manual and automatic mode) */
+    /* This ensures transparency is properly handled when PNG_TRANSPARENCY_AUTO is set */
+    if (png_opts) {
         /* Convert image data based on options */
         if (convert_image_data_for_png(surface_data, surface_stride, doc->width, doc->height,
-                                       png_opts, &converted) == 0) {
+                                       png_opts, doc->has_alpha, &converted) == 0) {
             row_pointers = converted.row_pointers;
             image_data = converted.image_data;
             png_color_type = converted.png_color_type;
@@ -808,10 +798,18 @@ static PluginError save_png(ImageDocument* doc, const char* filename, const Save
         }
     }
 
-    /* For automatic mode or if conversion failed, use default RGBA format */
+    /* For automatic mode or if conversion failed, use default format */
     if (!use_converted_data) {
+        /* Determine color type based on document's has_alpha flag */
+        if (doc->has_alpha) {
+            png_color_type = PNG_COLOR_TYPE_RGB_ALPHA; /* RGBA = 4 bytes per pixel */
+        } else {
+            png_color_type = PNG_COLOR_TYPE_RGB; /* RGB = 3 bytes per pixel */
+        }
+
         /* Pre-allocate image data buffers (needed for automatic mode or fallback) */
-        png_uint_32 rowbytes = (png_uint_32)(doc->width * 4); /* RGBA = 4 bytes per pixel */
+        png_uint_32 bytes_per_pixel = (png_color_type == PNG_COLOR_TYPE_RGB_ALPHA) ? 4 : 3;
+        png_uint_32 rowbytes = (png_uint_32)(doc->width * bytes_per_pixel);
         row_pointers = g_malloc(sizeof(png_bytep) * doc->height);
         if (!row_pointers) {
             cairo_surface_destroy(composite);
@@ -825,7 +823,7 @@ static PluginError save_png(ImageDocument* doc, const char* filename, const Save
             return PLUGIN_ERROR_OUT_OF_MEMORY;
         }
 
-        /* Convert from Cairo's ARGB32 (BGRA in memory) to RGBA */
+        /* Convert from Cairo's ARGB32 (BGRA in memory, premultiplied alpha) to PNG format (non-premultiplied) */
         for (guint y = 0; y < doc->height; y++) {
             guchar* src_row = surface_data + y * surface_stride;
             png_bytep dst_row = image_data + y * rowbytes;
@@ -837,11 +835,37 @@ static PluginError save_png(ImageDocument* doc, const char* filename, const Save
                 guchar r = src_row[x * 4 + 2];
                 guchar a = src_row[x * 4 + 3];
 
-                /* PNG RGBA format */
-                dst_row[x * 4 + 0] = r;
-                dst_row[x * 4 + 1] = g;
-                dst_row[x * 4 + 2] = b;
-                dst_row[x * 4 + 3] = a;
+                /* Un-premultiply alpha: Cairo uses premultiplied alpha, PNG uses straight alpha */
+                if (a > 0 && a < 255) {
+                    /* Un-premultiply: convert from pre-multiplied to straight alpha */
+                    r = (r * 255 + a / 2) / a; /* Add rounding */
+                    g = (g * 255 + a / 2) / a;
+                    b = (b * 255 + a / 2) / a;
+                    /* Clamp to valid range */
+                    if (r > 255)
+                        r = 255;
+                    if (g > 255)
+                        g = 255;
+                    if (b > 255)
+                        b = 255;
+                } else if (a == 0) {
+                    /* Fully transparent pixel - set RGB to 0 to ensure transparency */
+                    r = g = b = 0;
+                }
+                /* If a == 255, no un-premultiplication needed (already straight alpha) */
+
+                if (png_color_type == PNG_COLOR_TYPE_RGB_ALPHA) {
+                    /* PNG RGBA format */
+                    dst_row[x * 4 + 0] = r;
+                    dst_row[x * 4 + 1] = g;
+                    dst_row[x * 4 + 2] = b;
+                    dst_row[x * 4 + 3] = a;
+                } else {
+                    /* PNG RGB format (no alpha) */
+                    dst_row[x * 3 + 0] = r;
+                    dst_row[x * 3 + 1] = g;
+                    dst_row[x * 3 + 2] = b;
+                }
             }
         }
     }
@@ -880,7 +904,8 @@ static PluginError save_png(ImageDocument* doc, const char* filename, const Save
                                                              row_pointers, image_data,
                                                              test_compression_level,
                                                              filter_types[f],
-                                                             strategies[s]);
+                                                             strategies[s],
+                                                             png_color_type);
                 if (test_result && test_result->len < best_size) {
                     /* Found a better compression */
                     if (best_result) {
@@ -1037,8 +1062,7 @@ static PluginError save_png(ImageDocument* doc, const char* filename, const Save
         /* Row pointers are already set in converted data */
     } else {
         rowbytes = png_get_rowbytes(png_ptr, info_ptr);
-        /* For RGBA format, rowbytes should always be width * 4, so we can reuse pre-allocated data */
-        /* Just ensure row_pointers point to the correct locations */
+        /* Ensure row_pointers point to the correct locations */
         for (guint y = 0; y < doc->height; y++) {
             row_pointers[y] = image_data + y * rowbytes;
         }
