@@ -548,6 +548,33 @@ void on_file_save_as_response(GtkDialog* dialog, gint response_id, gpointer user
 }
 
 /**
+ * Idle callback to set default filter after dialog is shown
+ */
+static gboolean set_default_filter_idle(gpointer user_data) {
+    GtkWidget* dialog = GTK_WIDGET(user_data);
+
+    /* Check if dialog still exists */
+    if (!dialog || !GTK_IS_WIDGET(dialog)) {
+        return FALSE;
+    }
+
+    GtkFileChooser* chooser = GTK_FILE_CHOOSER(dialog);
+    GtkFileFilter* filter = (GtkFileFilter*)g_object_get_data(G_OBJECT(dialog), "default_filter");
+
+    if (chooser && filter && GTK_IS_FILE_CHOOSER(chooser)) {
+        gtk_file_chooser_set_filter(chooser, filter);
+    }
+
+    /* Clean up: unref the filter and remove from object data */
+    if (filter) {
+        g_object_unref(filter);
+        g_object_set_data(G_OBJECT(dialog), "default_filter", NULL);
+    }
+
+    return FALSE; /* Remove from idle queue */
+}
+
+/**
  * File > Save As callback
  */
 void on_file_save_as(GtkWidget* widget, gpointer data) {
@@ -580,6 +607,10 @@ void on_file_save_as(GtkWidget* widget, gpointer data) {
     handlers = format_registry_get_all_handlers();
     seen_formats = g_hash_table_new(g_str_hash, g_str_equal);
 
+    /* Track filters for default selection */
+    GtkFileFilter* first_filter = NULL;
+    GtkFileFilter* png_filter = NULL;
+
     /* Create filters for each format */
     if (handlers) {
         for (GList* iter = handlers; iter; iter = iter->next) {
@@ -611,6 +642,17 @@ void on_file_save_as(GtkWidget* widget, gpointer data) {
             g_strfreev(exts);
 
             gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
+
+            /* Track first filter */
+            if (!first_filter) {
+                first_filter = filter;
+            }
+
+            /* Track PNG filter if found (prefer as default) */
+            if (!png_filter && handler->format_info.name &&
+                g_str_has_prefix(handler->format_info.name, "PNG")) {
+                png_filter = filter;
+            }
         }
     }
 
@@ -622,6 +664,16 @@ void on_file_save_as(GtkWidget* widget, gpointer data) {
         gtk_file_filter_set_name(filter, "All Files");
         gtk_file_filter_add_pattern(filter, "*");
         gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
+        first_filter = filter;
+    }
+
+    /* Determine default filter (prefer PNG, otherwise use first filter) */
+    GtkFileFilter* default_filter = png_filter ? png_filter : first_filter;
+
+    /* Store default filter for idle callback */
+    if (default_filter) {
+        g_object_ref(default_filter); /* Keep filter alive */
+        g_object_set_data(G_OBJECT(dialog), "default_filter", default_filter);
     }
 
     /* Set current filename if document has a path */
@@ -634,11 +686,21 @@ void on_file_save_as(GtkWidget* widget, gpointer data) {
         g_free(suggested);
     }
 
+    /* Try to set filter immediately */
+    if (default_filter) {
+        gtk_file_chooser_set_filter(GTK_FILE_CHOOSER(dialog), default_filter);
+    }
+
     /* Connect response signal */
     g_signal_connect(dialog, "response", G_CALLBACK(on_file_save_as_response), ctx);
 
     /* Show dialog */
     gtk_widget_show(dialog);
+
+    /* Also set filter in idle callback to ensure it's set after dialog is fully shown */
+    if (default_filter) {
+        g_idle_add(set_default_filter_idle, dialog);
+    }
 }
 
 /**
