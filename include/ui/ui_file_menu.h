@@ -9,6 +9,7 @@
  */
 void on_file_open(GtkWidget* widget, gpointer data);
 void on_file_open_response(GtkDialog* dialog, gint response_id, gpointer user_data);
+void on_file_save(GtkWidget* widget, gpointer data);
 void on_file_save_as(GtkWidget* widget, gpointer data);
 void on_file_save_as_response(GtkDialog* dialog, gint response_id, gpointer user_data);
 void on_file_close(GtkWidget* widget, gpointer data);

@@ -284,6 +284,7 @@ void ui_file_menu_setup(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* acc
     /* Connect File menu signals */
     GtkWidget* file_menu_open = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_open"));
     GtkWidget* file_menu_open_recent = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_open_recent"));
+    GtkWidget* file_menu_save = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_save"));
     GtkWidget* file_menu_save_as = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_save_as"));
     GtkWidget* file_menu_close = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_close"));
     GtkWidget* file_menu_exit = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_exit"));
@@ -304,6 +305,14 @@ void ui_file_menu_setup(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* acc
             g_object_set_data(G_OBJECT(file_menu), "recent_files_submenu", recent_submenu);
             /* Don't update menu here - it will be updated after window is fully created */
         }
+    }
+
+    /* Store Save menu item in context for state updates */
+    ctx->file_menu_save = file_menu_save;
+    if (file_menu_save) {
+        g_signal_connect(file_menu_save, "activate", G_CALLBACK(on_file_save), ctx);
+        gtk_widget_add_accelerator(file_menu_save, "activate", accel_group,
+                                   GDK_KEY_s, GDK_CONTROL_MASK, GTK_ACCEL_VISIBLE);
     }
 
     if (file_menu_save_as) {
@@ -472,6 +481,55 @@ void on_file_open(GtkWidget* widget, gpointer data) {
 }
 
 /**
+ * File > Save callback
+ */
+void on_file_save(GtkWidget* widget, gpointer data) {
+    (void)widget; /* Unused */
+
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc = ui_get_active_document(ctx);
+
+    if (!doc) {
+        g_warning("No document open");
+        return;
+    }
+
+    /* Check if document is dirty - if not, nothing to save */
+    if (!document_is_dirty(doc)) {
+        return; /* Nothing to save */
+    }
+
+    /* If document doesn't have a filename, trigger Save As */
+    if (!doc->file_path || strlen(doc->file_path) == 0) {
+        on_file_save_as(NULL, ctx);
+        return;
+    }
+
+    /* Save using existing filename with default options */
+    SaveOptions default_opts;
+    memset(&default_opts, 0, sizeof(SaveOptions));
+    default_opts.quality = -1;           /* Use default */
+    default_opts.compression_level = -1; /* Use default */
+    default_opts.preserve_alpha = doc->has_alpha ? true : false;
+    default_opts.flatten_layers = FALSE;
+    default_opts.plugin_data = NULL;
+
+    if (document_save_as(doc, doc->file_path, &default_opts)) {
+        /* Mark document as saved */
+        document_mark_saved(doc);
+
+        /* Update window title and status bar */
+        ui_update_window_title(ctx, NULL);
+        ui_update_status_bar(ctx, NULL);
+
+        /* Update menu states */
+        ui_update_menu_and_button_states(ctx);
+    } else {
+        g_warning("Failed to save document to %s", doc->file_path);
+    }
+}
+
+/**
  * File > Save As response callback
  */
 void on_file_save_as_response(GtkDialog* dialog, gint response_id, gpointer user_data) {
@@ -519,6 +577,19 @@ void on_file_save_as_response(GtkDialog* dialog, gint response_id, gpointer user
                 if (dialog_result) {
                     /* User clicked OK, proceed with save */
                     if (document_save_as(doc, file_path, &opts)) {
+                        /* Update document filename and path */
+                        if (doc->file_path) {
+                            g_free(doc->file_path);
+                        }
+                        if (doc->filename) {
+                            g_free(doc->filename);
+                        }
+                        doc->file_path = g_strdup(file_path);
+                        doc->filename = g_path_get_basename(file_path);
+
+                        /* Mark document as saved */
+                        document_mark_saved(doc);
+
                         /* Add to recent files */
                         recent_files_add(file_path);
                         recent_files_save(); /* This syncs to settings if connected */
@@ -527,6 +598,9 @@ void on_file_save_as_response(GtkDialog* dialog, gint response_id, gpointer user
                         ui_update_window_title(ctx, NULL);
                         ui_update_status_bar(ctx, NULL);
                         ui_update_recent_files_menu(ctx);
+
+                        /* Update menu states */
+                        ui_update_menu_and_button_states(ctx);
                     } else {
                         g_warning("Failed to save document");
                     }
