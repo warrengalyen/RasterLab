@@ -361,7 +361,7 @@ static PluginError load_png(ImageDocument* doc, const char* filename) {
     /* Read image data */
     png_read_image(png_ptr, row_pointers);
 
-    /* Convert RGBA to Cairo's ARGB32 (BGRA in memory) */
+    /* Convert RGBA (straight alpha) to Cairo's ARGB32 (BGRA in memory, premultiplied alpha) */
     for (png_uint_32 y = 0; y < height; y++) {
         png_bytep src_row = row_pointers[y];
         guchar* dst_row = surface_data + y * surface_stride;
@@ -371,6 +371,18 @@ static PluginError load_png(ImageDocument* doc, const char* filename) {
             guchar g = src_row[x * 4 + 1];
             guchar b = src_row[x * 4 + 2];
             guchar a = src_row[x * 4 + 3];
+
+            /* Premultiply alpha: PNG uses straight alpha, Cairo uses premultiplied alpha */
+            if (a == 0) {
+                /* Fully transparent pixel - set RGB to 0 */
+                r = g = b = 0;
+            } else if (a < 255) {
+                /* Partially transparent - premultiply RGB by alpha */
+                r = (r * a + 127) / 255; /* Add rounding */
+                g = (g * a + 127) / 255;
+                b = (b * a + 127) / 255;
+            }
+            /* If a == 255, no premultiplication needed (fully opaque) */
 
             /* Cairo ARGB32: BGRA in memory (little-endian) */
             dst_row[x * 4 + 0] = b;
@@ -508,12 +520,19 @@ static int convert_image_data_for_png(guchar* surface_data,
             guchar g = src_row[x * 4 + 1];
             guchar r = src_row[x * 4 + 2];
             guchar a = src_row[x * 4 + 3];
-            guchar original_a = a; /* Store original alpha for compositing */
+            guchar original_a = a; /* Store original alpha before any modifications */
 
             /* Un-premultiply alpha: Cairo uses premultiplied alpha, PNG uses straight alpha */
             /* This must be done before handling transparency format */
-            if (a > 0 && a < 255) {
-                /* Un-premultiply: convert from pre-multiplied to straight alpha */
+            if (a == 0) {
+                /* Fully transparent pixel - set RGB to 0 and preserve alpha = 0 */
+                r = g = b = 0;
+            } else if (a == 255) {
+                /* Fully opaque - no un-premultiplication needed (already straight alpha) */
+                /* RGB values are already correct, no conversion needed */
+            } else {
+                /* Partially transparent - un-premultiply: convert from pre-multiplied to straight alpha */
+                /* Use same formula as cairo_surface_to_pixbuf for consistency */
                 r = (r * 255 + a / 2) / a; /* Add rounding */
                 g = (g * 255 + a / 2) / a;
                 b = (b * 255 + a / 2) / a;
@@ -524,13 +543,10 @@ static int convert_image_data_for_png(guchar* surface_data,
                     g = 255;
                 if (b > 255)
                     b = 255;
-            } else if (a == 0) {
-                /* Fully transparent pixel - set RGB to 0 to ensure transparency */
-                r = g = b = 0;
             }
-            /* If a == 255, no un-premultiplication needed (already straight alpha) */
 
             /* Handle transparency format */
+            /* Note: PNG_TRANSPARENCY_FULL preserves alpha and RGB as-is (no modification needed) */
             if (transparency_format == PNG_TRANSPARENCY_BINARY_CUTOFF) {
                 a = (a >= (png_opts ? png_opts->transparency_cutoff : 64)) ? 255 : 0;
                 /* Composite with compositing color when transparent */
@@ -562,6 +578,7 @@ static int convert_image_data_for_png(guchar* surface_data,
                     b = png_opts->compositing_color_b;
                 }
             }
+            /* PNG_TRANSPARENCY_FULL: alpha and RGB are preserved as-is (no modification) */
 
             if (is_gray) {
                 /* Convert to grayscale using ITU-R BT.601 luminance formula */
@@ -781,16 +798,34 @@ static PluginError save_png(ImageDocument* doc, const char* filename, const Save
         return PLUGIN_ERROR_FILE_WRITE_ERROR;
     }
 
+    /* Check composite surface for transparency by sampling alpha channel */
+    /* This is more reliable than doc->has_alpha flag which may not be set correctly.
+     * For example, if a JPEG (no alpha) is loaded and then transparency is added
+     * (e.g., by erasing parts or adding transparent layers), doc->has_alpha might
+     * still be FALSE even though the composite surface now has transparency. */
+    bool composite_has_alpha = false;
+    for (guint y = 0; y < doc->height && !composite_has_alpha; y++) {
+        guchar* row = surface_data + y * surface_stride;
+        for (guint x = 0; x < doc->width; x++) {
+            guchar a = row[x * 4 + 3];
+            if (a < 255) {
+                composite_has_alpha = true;
+                break;
+            }
+        }
+    }
+
     struct converted_image_data converted = {0};
     int png_color_type = PNG_COLOR_TYPE_RGB_ALPHA; /* Default to RGBA */
     bool use_converted_data = false;
 
     /* Use advanced conversion if PNG options are provided (for both manual and automatic mode) */
     /* This ensures transparency is properly handled when PNG_TRANSPARENCY_AUTO is set */
+    /* Use composite_has_alpha instead of doc->has_alpha for more accurate detection */
     if (png_opts) {
         /* Convert image data based on options */
         if (convert_image_data_for_png(surface_data, surface_stride, doc->width, doc->height,
-                                       png_opts, doc->has_alpha, &converted) == 0) {
+                                       png_opts, composite_has_alpha, &converted) == 0) {
             row_pointers = converted.row_pointers;
             image_data = converted.image_data;
             png_color_type = converted.png_color_type;
@@ -800,8 +835,9 @@ static PluginError save_png(ImageDocument* doc, const char* filename, const Save
 
     /* For automatic mode or if conversion failed, use default format */
     if (!use_converted_data) {
-        /* Determine color type based on document's has_alpha flag */
-        if (doc->has_alpha) {
+        /* Determine color type based on composite surface transparency detection */
+        /* Use composite_has_alpha instead of doc->has_alpha for more accurate detection */
+        if (composite_has_alpha) {
             png_color_type = PNG_COLOR_TYPE_RGB_ALPHA; /* RGBA = 4 bytes per pixel */
         } else {
             png_color_type = PNG_COLOR_TYPE_RGB; /* RGB = 3 bytes per pixel */
@@ -836,8 +872,15 @@ static PluginError save_png(ImageDocument* doc, const char* filename, const Save
                 guchar a = src_row[x * 4 + 3];
 
                 /* Un-premultiply alpha: Cairo uses premultiplied alpha, PNG uses straight alpha */
-                if (a > 0 && a < 255) {
-                    /* Un-premultiply: convert from pre-multiplied to straight alpha */
+                if (a == 0) {
+                    /* Fully transparent pixel - set RGB to 0 and preserve alpha = 0 */
+                    r = g = b = 0;
+                } else if (a == 255) {
+                    /* Fully opaque - no un-premultiplication needed (already straight alpha) */
+                    /* RGB values are already correct, no conversion needed */
+                } else {
+                    /* Partially transparent - un-premultiply: convert from pre-multiplied to straight alpha */
+                    /* Use same formula as cairo_surface_to_pixbuf for consistency */
                     r = (r * 255 + a / 2) / a; /* Add rounding */
                     g = (g * 255 + a / 2) / a;
                     b = (b * 255 + a / 2) / a;
@@ -848,11 +891,7 @@ static PluginError save_png(ImageDocument* doc, const char* filename, const Save
                         g = 255;
                     if (b > 255)
                         b = 255;
-                } else if (a == 0) {
-                    /* Fully transparent pixel - set RGB to 0 to ensure transparency */
-                    r = g = b = 0;
                 }
-                /* If a == 255, no un-premultiplication needed (already straight alpha) */
 
                 if (png_color_type == PNG_COLOR_TYPE_RGB_ALPHA) {
                     /* PNG RGBA format */
