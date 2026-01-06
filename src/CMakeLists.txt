@@ -54,6 +54,7 @@ set(SOURCES
     ui/widgets/curves_widget.c
     ui/widgets/filter_preview.c
     ui/widgets/filter_dialog.c
+    ui/widgets/vertical_spin_button.c
     ui/dialogs/beeps_dialog.c
     ui/dialogs/canvas_size_dialog.c
     ui/dialogs/clouds_dialog.c
@@ -64,6 +65,7 @@ set(SOURCES
     ui/dialogs/palettize_dialog.c
     ui/dialogs/recovery_dialog.c
     ui/dialogs/retinex_dialog.c
+    ui/dialogs/convolution_dialog.c
     ui/dialogs/selection_radius_dialog.c
     tools.c
     tools/tool_manager.c
@@ -148,6 +150,7 @@ set(SOURCES
     ui/filters/filter_relief.c
     ui/filters/filter_render_clouds.c
     ui/filters/filter_retinex.c
+    ui/filters/filter_convolution.c
     ui/filters/filter_roberts_edge.c
     ui/filters/filter_sobel_edge.c
     ui/filters/filter_sharpen.c

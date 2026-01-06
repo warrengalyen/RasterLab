@@ -3,15 +3,18 @@
 #include "document.h"
 #include "filters.h"
 #include "render/layer.h"
+#include "selection.h"
 #include "ui.h"
 #include "ui/dialogs/beeps_dialog.h"
 #include "ui/dialogs/clouds_dialog.h"
+#include "ui/dialogs/convolution_dialog.h"
 #include "ui/filters/filter_average_blur.h"
 #include "ui/filters/filter_beeps.h"
 #include "ui/filters/filter_bilateral.h"
 #include "ui/filters/filter_box_blur.h"
 #include "ui/filters/filter_canny_edge.h"
 #include "ui/filters/filter_color_halftone.h"
+#include "ui/filters/filter_convolution.h"
 #include "ui/filters/filter_crystallize.h"
 #include "ui/filters/filter_despeckle.h"
 #include "ui/filters/filter_dilate.h"
@@ -2062,6 +2065,47 @@ static void on_render_clouds(GtkWidget* widget, gpointer data) {
 }
 
 /**
+ * BEEPS filter preview update callback
+ * Called when control values change to update the preview
+ */
+static gboolean on_beeps_preview_update(void* dialog_ptr,
+                                        gfloat photometric_std_dev,
+                                        gfloat spatial_decay,
+                                        gint range_filter,
+                                        gpointer user_data) {
+    BEEPSDialog* dialog = (BEEPSDialog*)dialog_ptr;
+    ImageLayer* temp_layer = (ImageLayer*)user_data;
+    ImageLayer* original_layer;
+    ImageDocument* doc = NULL;
+
+    if (!dialog || !temp_layer) {
+        return FALSE;
+    }
+
+    /* Get original layer from dialog window */
+    original_layer = (ImageLayer*)g_object_get_data(G_OBJECT(beeps_dialog_get_window(dialog)), "original_layer");
+    doc = (ImageDocument*)g_object_get_data(G_OBJECT(beeps_dialog_get_window(dialog)), "filter_doc");
+    if (!original_layer) {
+        return FALSE;
+    }
+
+    /* Copy original layer to temp layer */
+    if (!ui_filter_utils_copy_layer_surface(temp_layer, original_layer)) {
+        return FALSE;
+    }
+
+    /* Apply BEEPS filter to temp layer */
+    if (!filter_beeps_apply(temp_layer, photometric_std_dev, spatial_decay, range_filter)) {
+        return FALSE;
+    }
+
+    /* Update preview */
+    beeps_dialog_update_after_layer(dialog, temp_layer);
+
+    return TRUE;
+}
+
+/**
  * Effects > Denoise > BEEPS callback
  */
 static void on_effects_beeps(GtkWidget* widget, gpointer data) {
@@ -2109,6 +2153,9 @@ static void on_effects_beeps(GtkWidget* widget, gpointer data) {
     /* Store original layer reference and document BEFORE set_layers so masked preview can use them */
     g_object_set_data(G_OBJECT(beeps_dialog_get_window(dialog)), "original_layer", layer);
     g_object_set_data(G_OBJECT(beeps_dialog_get_window(dialog)), "filter_doc", doc);
+
+    /* Set up live preview callback BEFORE set_layers so initial update triggers it */
+    beeps_dialog_set_preview_callback(dialog, on_beeps_preview_update, temp_layer);
 
     /* Set layers in dialog */
     beeps_dialog_set_layers(dialog, layer, temp_layer);
@@ -2159,8 +2206,203 @@ static void on_effects_beeps(GtkWidget* widget, gpointer data) {
 
     /* Clean up */
     g_object_set_data(G_OBJECT(beeps_dialog_get_window(dialog)), "original_layer", NULL);
-    g_object_set_data(G_OBJECT(beeps_dialog_get_window(dialog)), "beeps_params", NULL);
     beeps_dialog_free(dialog);
+    layer_free(temp_layer);
+}
+
+/**
+ * Convolution filter preview update callback
+ * Called when control values change to update the preview
+ */
+static gboolean on_convolution_preview_update(void* dialog_ptr,
+                                              float* kernel,
+                                              unsigned char divisor,
+                                              unsigned char bias,
+                                              gboolean auto_normalize,
+                                              gpointer user_data) {
+    ConvolutionDialog* dialog = (ConvolutionDialog*)dialog_ptr;
+    ImageLayer* temp_layer = (ImageLayer*)user_data;
+    ImageLayer* original_layer;
+    float kernel_copy[25];
+    unsigned char divisor_calc = divisor;
+    unsigned char bias_calc = bias;
+
+    if (!dialog || !kernel || !temp_layer) {
+        return FALSE;
+    }
+
+    /* Get original layer from dialog window */
+    original_layer = (ImageLayer*)g_object_get_data(G_OBJECT(convolution_dialog_get_window(dialog)), "original_layer");
+    if (!original_layer) {
+        return FALSE;
+    }
+
+    /* Copy original layer to temp layer */
+    if (!ui_filter_utils_copy_layer_surface(temp_layer, original_layer)) {
+        return FALSE;
+    }
+
+    /* Copy kernel and always calculate divisor from kernel sum */
+    memcpy(kernel_copy, kernel, sizeof(float) * 25);
+    /* Normalize kernel to calculate divisor */
+    {
+        float sum = 0.0f;
+        int i;
+        for (i = 0; i < 25; i++) {
+            sum += kernel_copy[i];
+        }
+        if (sum == 0.0f) {
+            divisor_calc = 1;
+            bias_calc = 127;
+        } else if (sum > 0.0f) {
+            divisor_calc = (unsigned char)fminf(sum, 255.0f);
+            bias_calc = 0;
+        } else {
+            divisor_calc = (unsigned char)fminf(fabsf(sum), 255.0f);
+            bias_calc = 255;
+        }
+    }
+
+    /* Apply convolution filter to temp layer */
+    if (!filter_convolution_apply(temp_layer, kernel_copy, divisor_calc, bias_calc)) {
+        return FALSE;
+    }
+
+    /* Update preview */
+    convolution_dialog_update_after_layer(dialog, temp_layer);
+
+    return TRUE;
+}
+
+/**
+ * Effects > Custom Filter (Convolution) callback
+ */
+static void on_effects_custom(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc;
+    ImageLayer* layer;
+    ConvolutionDialog* dialog;
+    ImageLayer* temp_layer;
+    cairo_t* cr;
+    gint response;
+    float kernel[25]; /* 5x5 matrix */
+    unsigned char divisor;
+    unsigned char bias;
+
+    if (!ctx) {
+        return;
+    }
+
+    doc = ui_get_active_document(ctx);
+    if (!doc) {
+        g_warning("No document open");
+        return;
+    }
+
+    layer = document_get_selected_layer(doc);
+    if (!layer) {
+        g_warning("No layer selected");
+        return;
+    }
+
+    /* Create convolution dialog */
+    dialog = convolution_dialog_new("Custom filter");
+    if (!dialog) {
+        g_warning("Failed to create convolution dialog");
+        return;
+    }
+
+    /* Create a copy of the layer for preview */
+    temp_layer = ui_filter_utils_create_temp_layer(layer);
+    if (!temp_layer) {
+        g_warning("Failed to create temporary layer for preview");
+        convolution_dialog_free(dialog);
+        return;
+    }
+
+    /* Store original layer reference and document BEFORE set_layers so masked preview can use them */
+    g_object_set_data(G_OBJECT(convolution_dialog_get_window(dialog)), "original_layer", layer);
+    g_object_set_data(G_OBJECT(convolution_dialog_get_window(dialog)), "filter_doc", doc);
+
+    /* Set up live preview callback BEFORE set_layers so initial update triggers it */
+    convolution_dialog_set_preview_callback(dialog, on_convolution_preview_update, temp_layer);
+
+    /* Set layers in dialog */
+    convolution_dialog_set_layers(dialog, layer, temp_layer);
+
+    /* Set dialog as transient for main window */
+    if (ctx->window) {
+        gtk_window_set_transient_for(convolution_dialog_get_window(dialog), GTK_WINDOW(ctx->window));
+    }
+
+    /* Run dialog */
+    response = convolution_dialog_run(dialog, GTK_WINDOW(ctx->window), kernel, &divisor, &bias);
+
+    if (response == GTK_RESPONSE_OK) {
+        /* Apply convolution filter directly */
+        Command* cmd = command_create_draw(layer, "Custom filter");
+        if (cmd) {
+            /* Start timing */
+            gint64 start_time = g_get_monotonic_time();
+
+            /* Create a copy of the original surface for selection masking */
+            cairo_surface_t* original_surface = NULL;
+            if (layer->surface) {
+                gint width = cairo_image_surface_get_width(layer->surface);
+                gint height = cairo_image_surface_get_height(layer->surface);
+                original_surface = cairo_image_surface_create(
+                    cairo_image_surface_get_format(layer->surface), width, height);
+                if (original_surface) {
+                    cairo_t* cr = cairo_create(original_surface);
+                    cairo_set_source_surface(cr, layer->surface, 0, 0);
+                    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+                    cairo_paint(cr);
+                    cairo_destroy(cr);
+                }
+            }
+
+            gboolean success = filter_convolution_apply(layer, kernel, divisor, bias);
+
+            /* Apply selection masking if there's a selection */
+            if (success && original_surface && layer->surface) {
+                filter_utils_apply_selection_mask(layer->surface, original_surface, doc, layer);
+            }
+
+            /* Free original surface copy */
+            if (original_surface) {
+                cairo_surface_destroy(original_surface);
+            }
+
+            if (success) {
+                /* Get processing time */
+                gint64 current_time = g_get_monotonic_time();
+                gdouble processing_time = (gdouble)(current_time - start_time) / 1000000.0;
+
+                command_finalize_draw(cmd);
+                if (doc->undo_stack) {
+                    command_stack_push(doc->undo_stack, cmd);
+                    if (doc->redo_stack) {
+                        command_stack_clear(doc->redo_stack);
+                    }
+                } else {
+                    command_free(cmd);
+                }
+                layer_invalidate_cache(layer);
+                doc->modified = TRUE;
+                document_invalidate_composite(doc);
+                ui_update_status_bar_time(ctx, processing_time);
+                ui_update_window_title(ctx, NULL);
+                ui_update_menu_and_button_states(ctx);
+            } else {
+                command_free(cmd);
+            }
+        }
+    }
+
+    /* Clean up */
+    g_object_set_data(G_OBJECT(convolution_dialog_get_window(dialog)), "original_layer", NULL);
+    convolution_dialog_free(dialog);
     layer_free(temp_layer);
 }
 
@@ -2366,5 +2608,11 @@ void ui_filter_effects_setup_menu(GtkBuilder* builder, AppContext* ctx) {
     GtkWidget* render_menu_clouds = GTK_WIDGET(gtk_builder_get_object(builder, "render_menu_clouds"));
     if (render_menu_clouds) {
         g_signal_connect(render_menu_clouds, "activate", G_CALLBACK(on_render_clouds), ctx);
+    }
+
+    /* Connect Custom Filter (Convolution) menu signal */
+    GtkWidget* effects_menu_custom = GTK_WIDGET(gtk_builder_get_object(builder, "effects_menu_custom"));
+    if (effects_menu_custom) {
+        g_signal_connect(effects_menu_custom, "activate", G_CALLBACK(on_effects_custom), ctx);
     }
 }

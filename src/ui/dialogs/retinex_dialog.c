@@ -43,101 +43,6 @@ typedef struct {
 } RetinexParams;
 
 /**
- * Helper function to wrap retinex filter for viewport system
- */
-static cairo_surface_t* apply_retinex_filter_to_viewport_surface(cairo_surface_t* viewport_surface, gpointer params) {
-    RetinexParams* retinex_params = (RetinexParams*)params;
-    ImageLayer* temp_layer;
-    cairo_surface_t* result;
-    cairo_surface_t* original_viewport = NULL;
-    struct ImageDocument* doc = NULL;
-    struct ImageLayer* layer = NULL;
-
-    if (!viewport_surface || !retinex_params) {
-        return NULL;
-    }
-
-    /* Get document and layer from dialog if available */
-    if (retinex_params->dialog) {
-        GtkWindow* window = retinex_dialog_get_window(retinex_params->dialog);
-        if (window) {
-            doc = (struct ImageDocument*)g_object_get_data(G_OBJECT(window), "filter_doc");
-            layer = (struct ImageLayer*)g_object_get_data(G_OBJECT(window), "original_layer");
-        }
-    }
-
-    /* Get viewport dimensions */
-    gint width = cairo_image_surface_get_width(viewport_surface);
-    gint height = cairo_image_surface_get_height(viewport_surface);
-
-    if (width <= 0 || height <= 0) {
-        return NULL;
-    }
-
-    /* Create a copy of the original viewport for selection masking */
-    if (doc && layer) {
-        original_viewport = cairo_image_surface_create(
-            cairo_image_surface_get_format(viewport_surface), width, height);
-        if (original_viewport) {
-            cairo_t* cr = cairo_create(original_viewport);
-            cairo_set_source_surface(cr, viewport_surface, 0, 0);
-            cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
-            cairo_paint(cr);
-            cairo_destroy(cr);
-        }
-    }
-
-    /* Create a temporary layer with the viewport surface */
-    temp_layer = layer_new("TempViewport", width, height, TRUE,
-                           LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL, NULL);
-    if (!temp_layer) {
-        if (original_viewport) {
-            cairo_surface_destroy(original_viewport);
-        }
-        return NULL;
-    }
-
-    /* Copy viewport surface to layer */
-    cairo_t* cr = cairo_create(temp_layer->surface);
-    cairo_set_source_surface(cr, viewport_surface, 0, 0);
-    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
-    cairo_paint(cr);
-    cairo_destroy(cr);
-
-    /* Apply filter to the layer */
-    if (!filter_retinex_apply(temp_layer, retinex_params->mode, retinex_params->scale,
-                              retinex_params->num_scales, retinex_params->dynamic)) {
-        layer_free(temp_layer);
-        if (original_viewport) {
-            cairo_surface_destroy(original_viewport);
-        }
-        return NULL;
-    }
-
-    /* Apply selection masking if there's a selection */
-    if (original_viewport && doc && layer) {
-        /* Create a temporary layer structure for the viewport with correct offset */
-        /* Note: viewport is at (0,0) relative to layer for scaled preview, which is the common case */
-        ImageLayer viewport_layer = *layer;
-        viewport_layer.surface = temp_layer->surface;
-        viewport_layer.width = width;
-        viewport_layer.height = height;
-        /* Viewport coordinates are relative to layer */
-        viewport_layer.offset_x = layer->offset_x;
-        viewport_layer.offset_y = layer->offset_y;
-
-        filter_utils_apply_selection_mask(temp_layer->surface, original_viewport, doc, &viewport_layer);
-        cairo_surface_destroy(original_viewport);
-    }
-
-    /* Return a reference to the filtered surface */
-    result = cairo_surface_reference(temp_layer->surface);
-    layer_free(temp_layer);
-
-    return result;
-}
-
-/**
  * Update preview callback
  */
 static void update_preview(RetinexDialog* dialog) {
@@ -161,26 +66,6 @@ static void update_preview(RetinexDialog* dialog) {
     } else {
         dialog->mode = OC_RETINEX_HIGH;
     }
-
-    /* Get or create stored params */
-    stored_params = (RetinexParams*)g_object_get_data(G_OBJECT(dialog->dialog), "retinex_params");
-
-    if (!stored_params) {
-        stored_params = g_malloc(sizeof(RetinexParams));
-        g_object_set_data_full(G_OBJECT(dialog->dialog), "retinex_params",
-                               stored_params, g_free);
-    }
-
-    /* Copy params */
-    stored_params->mode = dialog->mode;
-    stored_params->scale = dialog->scale;
-    stored_params->num_scales = dialog->num_scales;
-    stored_params->dynamic = dialog->dynamic;
-    stored_params->dialog = dialog;
-
-    /* Set filter function on preview to use viewport-based filtering */
-    filter_preview_set_filter_function(dialog->preview, apply_retinex_filter_to_viewport_surface, stored_params);
-    filter_preview_refresh(dialog->preview);
 
     /* Call user callback if provided */
     if (dialog->preview_callback) {

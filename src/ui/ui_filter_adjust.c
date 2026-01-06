@@ -1757,6 +1757,46 @@ static void on_adjust_palettize(GtkWidget* widget, gpointer data) {
 }
 
 /**
+ * Retinex filter preview update callback
+ * Called when control values change to update the preview
+ */
+static gboolean on_retinex_preview_update(void* dialog_ptr,
+                                          OcRetinexMode mode,
+                                          gint scale,
+                                          gint numScales,
+                                          gfloat dynamic,
+                                          gpointer user_data) {
+    RetinexDialog* dialog = (RetinexDialog*)dialog_ptr;
+    ImageLayer* temp_layer = (ImageLayer*)user_data;
+    ImageLayer* original_layer;
+
+    if (!dialog || !temp_layer) {
+        return FALSE;
+    }
+
+    /* Get original layer from dialog window */
+    original_layer = (ImageLayer*)g_object_get_data(G_OBJECT(retinex_dialog_get_window(dialog)), "original_layer");
+    if (!original_layer) {
+        return FALSE;
+    }
+
+    /* Copy original layer to temp layer */
+    if (!ui_filter_utils_copy_layer_surface(temp_layer, original_layer)) {
+        return FALSE;
+    }
+
+    /* Apply retinex filter to temp layer */
+    if (!filter_retinex_apply(temp_layer, mode, scale, (gfloat)numScales, dynamic)) {
+        return FALSE;
+    }
+
+    /* Update preview */
+    retinex_dialog_update_after_layer(dialog, temp_layer);
+
+    return TRUE;
+}
+
+/**
  * Adjustments > Retinex callback
  */
 static void on_adjust_retinex(GtkWidget* widget, gpointer data) {
@@ -1797,24 +1837,19 @@ static void on_adjust_retinex(GtkWidget* widget, gpointer data) {
     }
 
     /* Create a copy of the layer for preview */
-    temp_layer = layer_new("Temp", layer->width, layer->height, TRUE,
-                           LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL, NULL);
+    temp_layer = ui_filter_utils_create_temp_layer(layer);
     if (!temp_layer) {
         g_warning("Failed to create temporary layer for preview");
         retinex_dialog_free(dialog);
         return;
     }
 
-    /* Copy layer surface to temp layer */
-    cr = cairo_create(temp_layer->surface);
-    cairo_set_source_surface(cr, layer->surface, 0, 0);
-    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
-    cairo_paint(cr);
-    cairo_destroy(cr);
-
     /* Store original layer reference and document BEFORE set_layers so masked preview can use them */
     g_object_set_data(G_OBJECT(retinex_dialog_get_window(dialog)), "original_layer", layer);
     g_object_set_data(G_OBJECT(retinex_dialog_get_window(dialog)), "filter_doc", doc);
+
+    /* Set up live preview callback BEFORE set_layers so initial update triggers it */
+    retinex_dialog_set_preview_callback(dialog, on_retinex_preview_update, temp_layer);
 
     /* Set layers in dialog */
     retinex_dialog_set_layers(dialog, layer, temp_layer);
@@ -1890,7 +1925,6 @@ static void on_adjust_retinex(GtkWidget* widget, gpointer data) {
 
     /* Clean up */
     g_object_set_data(G_OBJECT(retinex_dialog_get_window(dialog)), "original_layer", NULL);
-    g_object_set_data(G_OBJECT(retinex_dialog_get_window(dialog)), "retinex_params", NULL);
     retinex_dialog_free(dialog);
     layer_free(temp_layer);
 }

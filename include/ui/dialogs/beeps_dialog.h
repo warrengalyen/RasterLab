@@ -53,4 +53,25 @@ gint beeps_dialog_run(BEEPSDialog* dialog, GtkWindow* parent, BEEPSParams* param
  */
 void beeps_dialog_reset(BEEPSDialog* dialog);
 
+/**
+ * Callback function type for BEEPS dialog preview updates
+ */
+typedef gboolean (*BEEPSDialogPreviewCallback)(void* dialog,
+                                               gfloat photometric_std_dev,
+                                               gfloat spatial_decay,
+                                               gint range_filter,
+                                               gpointer user_data);
+
+/**
+ * Set preview callback for live updates
+ */
+void beeps_dialog_set_preview_callback(BEEPSDialog* dialog,
+                                       BEEPSDialogPreviewCallback callback,
+                                       gpointer user_data);
+
+/**
+ * Update the after layer in preview
+ */
+void beeps_dialog_update_after_layer(BEEPSDialog* dialog, ImageLayer* layer);
+
 #endif /* BEEPS_DIALOG_H */

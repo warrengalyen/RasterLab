@@ -24,110 +24,15 @@ struct _BEEPSDialog {
     gfloat photometric_std_dev;
     gfloat spatial_decay;
     gint range_filter;
+    BEEPSDialogPreviewCallback preview_callback;
+    gpointer preview_user_data;
 };
-
-/**
- * Helper function to wrap BEEPS filter for viewport system
- */
-static cairo_surface_t* apply_beeps_filter_to_viewport_surface(cairo_surface_t* viewport_surface, gpointer params) {
-    BEEPSParams* beeps_params = (BEEPSParams*)params;
-    ImageLayer* temp_layer;
-    cairo_surface_t* result;
-    cairo_surface_t* original_viewport = NULL;
-    struct ImageDocument* doc = NULL;
-    struct ImageLayer* layer = NULL;
-
-    if (!viewport_surface || !beeps_params) {
-        return NULL;
-    }
-
-    /* Get document and layer from dialog if available */
-    if (beeps_params->dialog) {
-        GtkWindow* window = beeps_dialog_get_window(beeps_params->dialog);
-        if (window) {
-            doc = (struct ImageDocument*)g_object_get_data(G_OBJECT(window), "filter_doc");
-            layer = (struct ImageLayer*)g_object_get_data(G_OBJECT(window), "original_layer");
-        }
-    }
-
-    /* Get viewport dimensions */
-    gint width = cairo_image_surface_get_width(viewport_surface);
-    gint height = cairo_image_surface_get_height(viewport_surface);
-
-    if (width <= 0 || height <= 0) {
-        return NULL;
-    }
-
-    /* Create a copy of the original viewport for selection masking */
-    if (doc && layer) {
-        original_viewport = cairo_image_surface_create(
-            cairo_image_surface_get_format(viewport_surface), width, height);
-        if (original_viewport) {
-            cairo_t* cr = cairo_create(original_viewport);
-            cairo_set_source_surface(cr, viewport_surface, 0, 0);
-            cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
-            cairo_paint(cr);
-            cairo_destroy(cr);
-        }
-    }
-
-    /* Create a temporary layer with the viewport surface */
-    temp_layer = layer_new("TempViewport", width, height, TRUE,
-                           LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL, NULL);
-    if (!temp_layer) {
-        if (original_viewport) {
-            cairo_surface_destroy(original_viewport);
-        }
-        return NULL;
-    }
-
-    /* Copy viewport surface to layer */
-    cairo_t* cr = cairo_create(temp_layer->surface);
-    cairo_set_source_surface(cr, viewport_surface, 0, 0);
-    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
-    cairo_paint(cr);
-    cairo_destroy(cr);
-
-    /* Apply filter to the layer */
-    if (!filter_beeps_apply(temp_layer, beeps_params->photometric_std_dev,
-                            beeps_params->spatial_decay, beeps_params->range_filter)) {
-        layer_free(temp_layer);
-        if (original_viewport) {
-            cairo_surface_destroy(original_viewport);
-        }
-        return NULL;
-    }
-
-    /* Apply selection masking if there's a selection */
-    if (original_viewport && doc && layer) {
-        /* Create a temporary layer structure for the viewport with correct offset */
-        /* Note: viewport is at (0,0) relative to layer for scaled preview, which is the common case */
-        ImageLayer viewport_layer = *layer;
-        viewport_layer.surface = temp_layer->surface;
-        viewport_layer.width = width;
-        viewport_layer.height = height;
-        /* Viewport coordinates are relative to layer */
-        viewport_layer.offset_x = layer->offset_x;
-        viewport_layer.offset_y = layer->offset_y;
-
-        filter_utils_apply_selection_mask(temp_layer->surface, original_viewport, doc, &viewport_layer);
-        cairo_surface_destroy(original_viewport);
-    }
-
-    /* Return a reference to the filtered surface */
-    result = cairo_surface_reference(temp_layer->surface);
-    layer_free(temp_layer);
-
-    return result;
-}
 
 /**
  * Update preview callback
  */
 static void update_preview(BEEPSDialog* dialog) {
-    BEEPSParams* stored_params;
-
-    if (!dialog || !dialog->preview) {
+    if (!dialog) {
         return;
     }
 
@@ -139,24 +44,12 @@ static void update_preview(BEEPSDialog* dialog) {
     gint active = gtk_combo_box_get_active(GTK_COMBO_BOX(dialog->range_filter_combo));
     dialog->range_filter = active;
 
-    /* Get or create stored params */
-    stored_params = (BEEPSParams*)g_object_get_data(G_OBJECT(dialog->dialog), "beeps_params");
-
-    if (!stored_params) {
-        stored_params = g_malloc(sizeof(BEEPSParams));
-        g_object_set_data_full(G_OBJECT(dialog->dialog), "beeps_params",
-                               stored_params, g_free);
+    /* Call user callback if provided */
+    if (dialog->preview_callback) {
+        dialog->preview_callback(dialog, dialog->photometric_std_dev,
+                                 dialog->spatial_decay, dialog->range_filter,
+                                 dialog->preview_user_data);
     }
-
-    /* Copy params */
-    stored_params->photometric_std_dev = dialog->photometric_std_dev;
-    stored_params->spatial_decay = dialog->spatial_decay;
-    stored_params->range_filter = dialog->range_filter;
-    stored_params->dialog = dialog;
-
-    /* Set filter function on preview to use viewport-based filtering */
-    filter_preview_set_filter_function(dialog->preview, apply_beeps_filter_to_viewport_surface, stored_params);
-    filter_preview_refresh(dialog->preview);
 }
 
 /**
@@ -276,9 +169,12 @@ BEEPSDialog* beeps_dialog_new(const gchar* title) {
     dialog->spatial_decay_spin = NULL;
 
     /* Set default parameters */
+    /* Initialize */
     dialog->photometric_std_dev = 255.0f;
     dialog->spatial_decay = 0.01f;
     dialog->range_filter = 1; /* balanced */
+    dialog->preview_callback = NULL;
+    dialog->preview_user_data = NULL;
 
     /* Create dialog window */
     dialog->dialog = gtk_dialog_new_with_buttons(title,
@@ -546,4 +442,54 @@ void beeps_dialog_reset(BEEPSDialog* dialog) {
     gtk_combo_box_set_active(GTK_COMBO_BOX(dialog->range_filter_combo), 1); /* balanced */
 
     update_preview(dialog);
+}
+
+/**
+ * Set preview callback
+ */
+void beeps_dialog_set_preview_callback(BEEPSDialog* dialog,
+                                       BEEPSDialogPreviewCallback callback,
+                                       gpointer user_data) {
+    if (!dialog) {
+        return;
+    }
+
+    dialog->preview_callback = callback;
+    dialog->preview_user_data = user_data;
+}
+
+/**
+ * Update the after layer in preview
+ */
+void beeps_dialog_update_after_layer(BEEPSDialog* dialog, ImageLayer* layer) {
+    cairo_surface_t* after_surface = NULL;
+    struct ImageDocument* doc = NULL;
+    struct ImageLayer* original_layer = NULL;
+
+    if (!dialog || !dialog->preview) {
+        return;
+    }
+
+    /* Get document and original layer from dialog if available */
+    GtkWindow* window = beeps_dialog_get_window(dialog);
+    if (window) {
+        doc = (struct ImageDocument*)g_object_get_data(G_OBJECT(window), "filter_doc");
+        original_layer = (struct ImageLayer*)g_object_get_data(G_OBJECT(window), "original_layer");
+    }
+
+    if (layer && layer->surface) {
+        /* If there's a selection, create masked surface showing only selected pixels */
+        if (doc && original_layer) {
+            after_surface = filter_utils_create_masked_preview_surface(layer->surface, doc, original_layer);
+        } else {
+            after_surface = cairo_surface_reference(layer->surface);
+        }
+    }
+
+    filter_preview_set_after_surface(dialog->preview, after_surface);
+    filter_preview_refresh(dialog->preview);
+
+    if (after_surface) {
+        cairo_surface_destroy(after_surface);
+    }
 }
