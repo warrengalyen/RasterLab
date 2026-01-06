@@ -476,37 +476,19 @@ void color_balance_dialog_set_layers(ColorBalanceDialog* dialog,
                                      ImageLayer* after_layer) {
     cairo_surface_t* before_surface = NULL;
     cairo_surface_t* after_surface = NULL;
-    struct ImageDocument* doc = NULL;
-    struct ImageLayer* layer = NULL;
 
     if (!dialog || !dialog->preview) {
         return;
     }
 
-    /* Get document and layer from dialog if available */
-    GtkWindow* window = color_balance_dialog_get_window(dialog);
-    if (window) {
-        doc = (struct ImageDocument*)g_object_get_data(G_OBJECT(window), "filter_doc");
-        layer = (struct ImageLayer*)g_object_get_data(G_OBJECT(window), "original_layer");
-    }
-
-    /* Get composite surfaces from layers if available */
+    /* Get composite surfaces from layers - pass full unmasked surfaces
+       The preview widget will handle masking display based on selection */
     if (before_layer && before_layer->surface) {
-        /* If there's a selection, create masked surface showing only selected pixels */
-        if (doc && layer) {
-            before_surface = filter_utils_create_masked_preview_surface(before_layer->surface, doc, layer);
-        } else {
-            before_surface = cairo_surface_reference(before_layer->surface);
-        }
+        before_surface = cairo_surface_reference(before_layer->surface);
     }
 
     if (after_layer && after_layer->surface) {
-        /* If there's a selection, create masked surface showing only selected pixels */
-        if (doc && layer) {
-            after_surface = filter_utils_create_masked_preview_surface(after_layer->surface, doc, layer);
-        } else {
-            after_surface = cairo_surface_reference(after_layer->surface);
-        }
+        after_surface = cairo_surface_reference(after_layer->surface);
     }
 
     filter_preview_set_before_surface(dialog->preview, before_surface);
@@ -541,12 +523,8 @@ void color_balance_dialog_update_after_layer(ColorBalanceDialog* dialog, ImageLa
     }
 
     if (layer && layer->surface) {
-        /* If there's a selection, create masked surface showing only selected pixels */
-        if (doc && original_layer) {
-            after_surface = filter_utils_create_masked_preview_surface(layer->surface, doc, original_layer);
-        } else {
-            after_surface = cairo_surface_reference(layer->surface);
-        }
+        /* Pass the full unmasked surface - preview widget will handle masking display */
+        after_surface = cairo_surface_reference(layer->surface);
     }
 
     filter_preview_set_after_surface(dialog->preview, after_surface);

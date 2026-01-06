@@ -550,37 +550,19 @@ GtkWindow* gamma_dialog_get_window(GammaDialog* dialog) {
 void gamma_dialog_set_layers(GammaDialog* dialog, ImageLayer* original, ImageLayer* temp) {
     cairo_surface_t* before_surface = NULL;
     cairo_surface_t* after_surface = NULL;
-    struct ImageDocument* doc = NULL;
-    struct ImageLayer* layer = NULL;
 
     if (!dialog || !dialog->preview) {
         return;
     }
 
-    /* Get document and layer from dialog if available */
-    GtkWindow* window = gamma_dialog_get_window(dialog);
-    if (window) {
-        doc = (struct ImageDocument*)g_object_get_data(G_OBJECT(window), "filter_doc");
-        layer = (struct ImageLayer*)g_object_get_data(G_OBJECT(window), "original_layer");
-    }
-
-    /* Get composite surfaces from layers if available */
+    /* Get composite surfaces from layers - pass full unmasked surfaces
+       The preview widget will handle masking display based on selection */
     if (original && original->surface) {
-        /* If there's a selection, create masked surface showing only selected pixels */
-        if (doc && layer) {
-            before_surface = filter_utils_create_masked_preview_surface(original->surface, doc, layer);
-        } else {
-            before_surface = cairo_surface_reference(original->surface);
-        }
+        before_surface = cairo_surface_reference(original->surface);
     }
 
     if (temp && temp->surface) {
-        /* If there's a selection, create masked surface showing only selected pixels */
-        if (doc && layer) {
-            after_surface = filter_utils_create_masked_preview_surface(temp->surface, doc, layer);
-        } else {
-            after_surface = cairo_surface_reference(temp->surface);
-        }
+        after_surface = cairo_surface_reference(temp->surface);
     }
 
     filter_preview_set_before_surface(dialog->preview, before_surface);
@@ -593,6 +575,9 @@ void gamma_dialog_set_layers(GammaDialog* dialog, ImageLayer* original, ImageLay
     if (after_surface) {
         cairo_surface_destroy(after_surface);
     }
+
+    /* Trigger initial preview update after layers are set */
+    update_preview(dialog);
 }
 
 /**
@@ -640,12 +625,8 @@ void gamma_dialog_update_after_layer(GammaDialog* dialog, ImageLayer* layer) {
     }
 
     if (layer && layer->surface) {
-        /* If there's a selection, create masked surface showing only selected pixels */
-        if (doc && original_layer) {
-            after_surface = filter_utils_create_masked_preview_surface(layer->surface, doc, original_layer);
-        } else {
-            after_surface = cairo_surface_reference(layer->surface);
-        }
+        /* Pass the full unmasked surface - preview widget will handle masking display */
+        after_surface = cairo_surface_reference(layer->surface);
     }
 
     filter_preview_set_after_surface(dialog->preview, after_surface);

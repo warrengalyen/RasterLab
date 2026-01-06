@@ -115,9 +115,9 @@ gboolean filter_utils_rgba_to_cairo(cairo_surface_t* surface,
  * @return TRUE if successful, FALSE otherwise
  */
 gboolean filter_utils_apply_selection_mask(cairo_surface_t* filtered_surface,
-                                          cairo_surface_t* original_surface,
-                                          struct ImageDocument* doc,
-                                          struct ImageLayer* layer);
+                                           cairo_surface_t* original_surface,
+                                           struct ImageDocument* doc,
+                                           struct ImageLayer* layer);
 
 /**
  * Create a masked surface showing only selected pixels
@@ -129,7 +129,7 @@ gboolean filter_utils_apply_selection_mask(cairo_surface_t* filtered_surface,
  *         Caller must free with cairo_surface_destroy()
  */
 cairo_surface_t* filter_utils_create_masked_preview_surface(cairo_surface_t* layer_surface,
-                                                           struct ImageDocument* doc,
-                                                           struct ImageLayer* layer);
+                                                            struct ImageDocument* doc,
+                                                            struct ImageLayer* layer);
 
 #endif /* FILTER_UTILS_H */
