@@ -103,10 +103,20 @@ void selection_mask_free(SelectionMask* mask) {
  * Clear selection mask to all zeros
  */
 void selection_mask_clear(SelectionMask* mask) {
-    if (!mask || !mask->data)
+    if (!mask || !mask->base_mask)
         return;
 
-    memset(mask->data, 0, mask->stride * mask->height);
+    /* Clear authoritative mask */
+    memset(mask->base_mask, 0, mask->stride * mask->height);
+
+    /* Clear derived preview if present */
+    if (mask->feathered_preview) {
+        memset(mask->feathered_preview, 0, mask->stride * mask->height);
+    }
+
+    /* Reset active data view to authoritative storage */
+    mask->data = mask->base_mask;
+    mask->feather_dirty = FALSE;
     selection_mask_mark_dirty(mask, 0, 0, mask->width, mask->height);
 }
 
@@ -114,11 +124,16 @@ void selection_mask_clear(SelectionMask* mask) {
  * Check if selection is empty
  */
 gboolean selection_mask_is_empty(SelectionMask* mask) {
-    if (!mask || !mask->data)
+    /* IMPORTANT:
+     * `base_mask` is the authoritative combined hard-edged selection.
+     * `data` may point at the derived `feathered_preview` (for preview/display),
+     * so checking `data` can incorrectly report "empty" if the preview buffer is
+     * stale or has been cleared. */
+    if (!mask || !mask->base_mask)
         return TRUE;
 
     for (int y = 0; y < mask->height; y++) {
-        uint8_t* row = mask->data + y * mask->stride;
+        uint8_t* row = mask->base_mask + y * mask->stride;
         for (int x = 0; x < mask->width; x++) {
             if (row[x] != 0)
                 return FALSE;
@@ -1042,6 +1057,8 @@ void selection_mask_regenerate_combined_feather_preview(SelectionMask* mask) {
         }
         mask->data = mask->base_mask;
         mask->feather_dirty = FALSE;
+        /* Data source potentially changed; cached surface must be rebuilt */
+        mask->dirty = TRUE;
         return;
     }
 
@@ -1103,6 +1120,8 @@ void selection_mask_regenerate_combined_feather_preview(SelectionMask* mask) {
 
     mask->data = mask->feathered_preview;
     mask->feather_dirty = FALSE;
+    /* Feathered preview updated; cached surface must be rebuilt */
+    mask->dirty = TRUE;
 }
 
 /* ============================================================

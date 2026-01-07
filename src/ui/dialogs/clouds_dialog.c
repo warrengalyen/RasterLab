@@ -50,21 +50,9 @@ static cairo_surface_t* apply_clouds_filter_to_viewport_surface(cairo_surface_t*
     CloudParams* cloud_params = wrapper ? &wrapper->params : NULL;
     ImageLayer* temp_layer;
     cairo_surface_t* result;
-    cairo_surface_t* original_viewport = NULL;
-    struct ImageDocument* doc = NULL;
-    struct ImageLayer* layer = NULL;
 
     if (!viewport_surface || !cloud_params) {
         return NULL;
-    }
-
-    /* Get document and layer from dialog if available */
-    if (wrapper && wrapper->dialog) {
-        GtkWindow* window = clouds_dialog_get_window(wrapper->dialog);
-        if (window) {
-            doc = (struct ImageDocument*)g_object_get_data(G_OBJECT(window), "filter_doc");
-            layer = (struct ImageLayer*)g_object_get_data(G_OBJECT(window), "original_layer");
-        }
     }
 
     /* Get viewport dimensions */
@@ -75,26 +63,14 @@ static cairo_surface_t* apply_clouds_filter_to_viewport_surface(cairo_surface_t*
         return NULL;
     }
 
-    /* Create a copy of the original viewport for selection masking */
-    if (doc && layer) {
-        original_viewport = cairo_image_surface_create(
-            cairo_image_surface_get_format(viewport_surface), width, height);
-        if (original_viewport) {
-            cairo_t* cr = cairo_create(original_viewport);
-            cairo_set_source_surface(cr, viewport_surface, 0, 0);
-            cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
-            cairo_paint(cr);
-            cairo_destroy(cr);
-        }
-    }
+    /* NOTE: Selection masking is handled by the FilterPreview draw path.
+     * This viewport filter should operate purely on the viewport pixels to avoid
+     * coordinate bugs when panning / 1:1 mode is enabled. */
 
     /* Create a temporary layer with the viewport surface */
     temp_layer = layer_new("TempViewport", width, height, TRUE,
                            LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL, NULL);
     if (!temp_layer) {
-        if (original_viewport) {
-            cairo_surface_destroy(original_viewport);
-        }
         return NULL;
     }
 
@@ -108,90 +84,7 @@ static cairo_surface_t* apply_clouds_filter_to_viewport_surface(cairo_surface_t*
     /* Apply filter to the layer */
     if (!filter_render_clouds_apply(temp_layer, cloud_params)) {
         layer_free(temp_layer);
-        if (original_viewport) {
-            cairo_surface_destroy(original_viewport);
-        }
         return NULL;
-    }
-
-    /* Apply selection masking if there's a selection */
-    if (original_viewport && doc && layer) {
-        /* Create a temporary layer structure for the viewport with correct offset */
-        ImageLayer viewport_layer = *layer;
-        viewport_layer.surface = temp_layer->surface;
-        viewport_layer.width = width;
-        viewport_layer.height = height;
-
-        /* Check if preview was cropped (viewport smaller than layer) */
-        /* If cropped, the viewport is at (0,0) relative to cropped surface, */
-        /* which corresponds to (sel_x_min, sel_y_min) relative to original layer */
-        gint layer_width = cairo_image_surface_get_width(layer->surface);
-        gint layer_height = cairo_image_surface_get_height(layer->surface);
-
-        if (width < layer_width || height < layer_height) {
-            /* Preview was cropped - need to find selection bounding box to get crop offset */
-            /* Build selection mask for a small region to find where selection starts */
-            DirtyRect test_rect;
-            dirty_rect_set(&test_rect, layer->offset_x, layer->offset_y, layer_width, layer_height);
-            DirtyRect actual_region;
-            SelectionMask* test_mask = selection_build_combined_mask(
-                doc->selection_mask, &test_rect, FEATHER_QUALITY_NORMAL, &actual_region);
-
-            if (test_mask && test_mask->data) {
-                /* Find selection bounding box */
-                gint sel_x_min_doc = actual_region.x + actual_region.width;
-                gint sel_y_min_doc = actual_region.y + actual_region.height;
-                gint sel_x_max_doc = actual_region.x - 1;
-                gint sel_y_max_doc = actual_region.y - 1;
-
-                for (gint y = 0; y < test_mask->height; y++) {
-                    const uint8_t* mask_row = test_mask->data + y * test_mask->stride;
-                    for (gint x = 0; x < test_mask->width; x++) {
-                        if (mask_row[x] > 0) {
-                            gint doc_x = actual_region.x + x;
-                            gint doc_y = actual_region.y + y;
-                            if (doc_x < sel_x_min_doc)
-                                sel_x_min_doc = doc_x;
-                            if (doc_y < sel_y_min_doc)
-                                sel_y_min_doc = doc_y;
-                            if (doc_x > sel_x_max_doc)
-                                sel_x_max_doc = doc_x;
-                            if (doc_y > sel_y_max_doc)
-                                sel_y_max_doc = doc_y;
-                        }
-                    }
-                }
-
-                if (sel_x_max_doc >= sel_x_min_doc && sel_y_max_doc >= sel_y_min_doc) {
-                    /* Convert to layer coordinates */
-                    gint sel_x_min = sel_x_min_doc - layer->offset_x;
-                    gint sel_y_min = sel_y_min_doc - layer->offset_y;
-
-                    /* Viewport at (0,0) in cropped surface = (sel_x_min, sel_y_min) in layer */
-                    viewport_layer.offset_x = layer->offset_x + sel_x_min;
-                    viewport_layer.offset_y = layer->offset_y + sel_y_min;
-                } else {
-                    /* Fallback to original layer offset */
-                    viewport_layer.offset_x = layer->offset_x;
-                    viewport_layer.offset_y = layer->offset_y;
-                }
-            } else {
-                /* Fallback to original layer offset */
-                viewport_layer.offset_x = layer->offset_x;
-                viewport_layer.offset_y = layer->offset_y;
-            }
-
-            if (test_mask) {
-                selection_mask_free(test_mask);
-            }
-        } else {
-            /* Preview not cropped - viewport is at (0,0) relative to layer */
-            viewport_layer.offset_x = layer->offset_x;
-            viewport_layer.offset_y = layer->offset_y;
-        }
-
-        filter_utils_apply_selection_mask(temp_layer->surface, original_viewport, doc, &viewport_layer);
-        cairo_surface_destroy(original_viewport);
     }
 
     /* Return a reference to the filtered surface */
@@ -482,7 +375,7 @@ CloudsDialog* clouds_dialog_new(const gchar* title) {
     /* Create dialog window */
     dialog->dialog = gtk_dialog_new_with_buttons(title,
                                                  NULL,
-                                                 GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+                                                 (GtkDialogFlags)((GtkDialogFlags)GTK_DIALOG_MODAL | (GtkDialogFlags)GTK_DIALOG_DESTROY_WITH_PARENT),
                                                  "_OK",
                                                  GTK_RESPONSE_OK,
                                                  "_Cancel",
@@ -827,18 +720,9 @@ gint clouds_dialog_run(CloudsDialog* dialog, GtkWindow* parent, CloudParams* par
  */
 void clouds_dialog_update_after_layer(CloudsDialog* dialog, ImageLayer* layer) {
     cairo_surface_t* after_surface = NULL;
-    struct ImageDocument* doc = NULL;
-    struct ImageLayer* original_layer = NULL;
 
     if (!dialog || !dialog->preview) {
         return;
-    }
-
-    /* Get document and original layer from dialog if available */
-    GtkWindow* window = clouds_dialog_get_window(dialog);
-    if (window) {
-        doc = (struct ImageDocument*)g_object_get_data(G_OBJECT(window), "filter_doc");
-        original_layer = (struct ImageLayer*)g_object_get_data(G_OBJECT(window), "original_layer");
     }
 
     if (layer && layer->surface) {

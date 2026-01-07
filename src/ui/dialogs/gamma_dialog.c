@@ -575,9 +575,6 @@ void gamma_dialog_set_layers(GammaDialog* dialog, ImageLayer* original, ImageLay
     if (after_surface) {
         cairo_surface_destroy(after_surface);
     }
-
-    /* Trigger initial preview update after layers are set */
-    update_preview(dialog);
 }
 
 /**

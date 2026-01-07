@@ -1,5 +1,8 @@
 #include "ui/widgets/filter_preview.h"
+#include "document.h"
+#include "render/layer.h"
 #include "render/render_utils.h"
+#include "selection/selection_render.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -13,6 +16,10 @@ struct _FilterPreview {
     /* Full resolution surfaces (original data) */
     cairo_surface_t* before_surface_full;
     cairo_surface_t* after_surface_full;
+
+    /* Context for selection-aware preview rendering (not owned) */
+    struct ImageDocument* doc;
+    struct ImageLayer* layer;
 
     /* Viewport cache - only the visible portion with filter applied */
     cairo_surface_t* viewport_cache;
@@ -87,6 +94,357 @@ static gdouble calculate_fit_scale(gint img_width, gint img_height,
 static gboolean on_preview_size_allocate(GtkWidget* widget, GdkRectangle* allocation, gpointer user_data);
 static void on_preview_realize(GtkWidget* widget, gpointer user_data);
 static gboolean trigger_viewport_update_idle(gpointer user_data);
+
+static void maybe_update_context_from_toplevel(FilterPreview* preview) {
+    if (!preview) {
+        return;
+    }
+
+    GtkWidget* toplevel = gtk_widget_get_toplevel(GTK_WIDGET(preview));
+    if (!toplevel || !GTK_IS_WINDOW(toplevel)) {
+        return;
+    }
+
+    /* Many filter dialogs store these on the dialog window */
+    struct ImageDocument* doc =
+        (struct ImageDocument*)g_object_get_data(G_OBJECT(toplevel), "filter_doc");
+    struct ImageLayer* layer =
+        (struct ImageLayer*)g_object_get_data(G_OBJECT(toplevel), "original_layer");
+
+    preview->doc = doc;
+    preview->layer = layer;
+}
+
+static gboolean selection_active_for_preview(FilterPreview* preview) {
+    if (!preview || !preview->doc || !preview->layer) {
+        return FALSE;
+    }
+
+    if (!preview->doc->selection_mask) {
+        return FALSE;
+    }
+
+    return !selection_mask_is_empty(preview->doc->selection_mask);
+}
+
+/* For temporary/region masks (e.g. returned by selection_build_combined_mask),
+ * the authoritative data may be in `mask->data` even if `base_mask` is empty. */
+static gboolean selection_mask_data_is_empty(SelectionMask* mask) {
+    if (!mask || !mask->data) {
+        return TRUE;
+    }
+
+    for (int y = 0; y < mask->height; y++) {
+        uint8_t* row = mask->data + y * mask->stride;
+        for (int x = 0; x < mask->width; x++) {
+            if (row[x] != 0) {
+                return FALSE;
+            }
+        }
+    }
+
+    return TRUE;
+}
+
+/* Returns selection bounds in LAYER coordinates (relative to layer surface origin). */
+static gboolean get_selection_bounds_layer(FilterPreview* preview,
+                                           gint* out_x,
+                                           gint* out_y,
+                                           gint* out_width,
+                                           gint* out_height) {
+    if (!preview || !out_x || !out_y || !out_width || !out_height) {
+        return FALSE;
+    }
+
+    *out_x = 0;
+    *out_y = 0;
+    *out_width = 0;
+    *out_height = 0;
+
+    if (!selection_active_for_preview(preview)) {
+        return FALSE;
+    }
+
+    if (preview->original_width <= 0 || preview->original_height <= 0) {
+        return FALSE;
+    }
+
+    DirtyRect layer_rect_doc;
+    dirty_rect_set(&layer_rect_doc,
+                   preview->layer->offset_x,
+                   preview->layer->offset_y,
+                   preview->original_width,
+                   preview->original_height);
+
+    DirtyRect actual_region_doc;
+    SelectionMask* region_mask = selection_build_combined_mask(
+        preview->doc->selection_mask,
+        &layer_rect_doc,
+        FEATHER_QUALITY_NORMAL,
+        &actual_region_doc);
+
+    if (!region_mask || !region_mask->data) {
+        selection_mask_free(region_mask);
+        return FALSE;
+    }
+
+    gint sel_x_min_doc = actual_region_doc.x + actual_region_doc.width;
+    gint sel_y_min_doc = actual_region_doc.y + actual_region_doc.height;
+    gint sel_x_max_doc = actual_region_doc.x - 1;
+    gint sel_y_max_doc = actual_region_doc.y - 1;
+
+    for (gint y = 0; y < region_mask->height; y++) {
+        const uint8_t* mask_row = region_mask->data + y * region_mask->stride;
+        for (gint x = 0; x < region_mask->width; x++) {
+            if (mask_row[x] > 0) {
+                gint doc_x = actual_region_doc.x + x;
+                gint doc_y = actual_region_doc.y + y;
+                if (doc_x < sel_x_min_doc)
+                    sel_x_min_doc = doc_x;
+                if (doc_y < sel_y_min_doc)
+                    sel_y_min_doc = doc_y;
+                if (doc_x > sel_x_max_doc)
+                    sel_x_max_doc = doc_x;
+                if (doc_y > sel_y_max_doc)
+                    sel_y_max_doc = doc_y;
+            }
+        }
+    }
+
+    selection_mask_free(region_mask);
+
+    if (sel_x_max_doc < sel_x_min_doc || sel_y_max_doc < sel_y_min_doc) {
+        return FALSE;
+    }
+
+    gint sel_x_min = sel_x_min_doc - preview->layer->offset_x;
+    gint sel_y_min = sel_y_min_doc - preview->layer->offset_y;
+    gint sel_x_max = sel_x_max_doc - preview->layer->offset_x;
+    gint sel_y_max = sel_y_max_doc - preview->layer->offset_y;
+
+    if (sel_x_min < 0)
+        sel_x_min = 0;
+    if (sel_y_min < 0)
+        sel_y_min = 0;
+    if (sel_x_max >= preview->original_width)
+        sel_x_max = preview->original_width - 1;
+    if (sel_y_max >= preview->original_height)
+        sel_y_max = preview->original_height - 1;
+
+    gint w = sel_x_max - sel_x_min + 1;
+    gint h = sel_y_max - sel_y_min + 1;
+    if (w <= 0 || h <= 0) {
+        return FALSE;
+    }
+
+    *out_x = sel_x_min;
+    *out_y = sel_y_min;
+    *out_width = w;
+    *out_height = h;
+    return TRUE;
+}
+
+static cairo_surface_t* create_selection_cropped_masked_surface(FilterPreview* preview,
+                                                                cairo_surface_t* full_surface) {
+    if (!preview || !full_surface) {
+        return NULL;
+    }
+
+    if (!selection_active_for_preview(preview)) {
+        return cairo_surface_reference(full_surface);
+    }
+
+    gint full_w = cairo_image_surface_get_width(full_surface);
+    gint full_h = cairo_image_surface_get_height(full_surface);
+    if (full_w <= 0 || full_h <= 0) {
+        return NULL;
+    }
+
+    /* Build selection mask for the entire layer area (document coordinates) */
+    DirtyRect layer_rect_doc;
+    dirty_rect_set(&layer_rect_doc, preview->layer->offset_x, preview->layer->offset_y, full_w, full_h);
+
+    DirtyRect actual_region_doc;
+    SelectionMask* region_mask = selection_build_combined_mask(
+        preview->doc->selection_mask, &layer_rect_doc, FEATHER_QUALITY_NORMAL, &actual_region_doc);
+
+    if (!region_mask || !region_mask->data) {
+        selection_mask_free(region_mask);
+        return cairo_surface_reference(full_surface);
+    }
+
+    /* Find bounds of selected pixels within the layer */
+    gint sel_x_min_doc = actual_region_doc.x + actual_region_doc.width;
+    gint sel_y_min_doc = actual_region_doc.y + actual_region_doc.height;
+    gint sel_x_max_doc = actual_region_doc.x - 1;
+    gint sel_y_max_doc = actual_region_doc.y - 1;
+
+    for (gint y = 0; y < region_mask->height; y++) {
+        const uint8_t* mask_row = region_mask->data + y * region_mask->stride;
+        for (gint x = 0; x < region_mask->width; x++) {
+            if (mask_row[x] > 0) {
+                gint doc_x = actual_region_doc.x + x;
+                gint doc_y = actual_region_doc.y + y;
+                if (doc_x < sel_x_min_doc)
+                    sel_x_min_doc = doc_x;
+                if (doc_y < sel_y_min_doc)
+                    sel_y_min_doc = doc_y;
+                if (doc_x > sel_x_max_doc)
+                    sel_x_max_doc = doc_x;
+                if (doc_y > sel_y_max_doc)
+                    sel_y_max_doc = doc_y;
+            }
+        }
+    }
+
+    if (sel_x_max_doc < sel_x_min_doc || sel_y_max_doc < sel_y_min_doc) {
+        /* Selection exists, but not on this layer region */
+        selection_mask_free(region_mask);
+        return NULL;
+    }
+
+    gint sel_x_min = sel_x_min_doc - preview->layer->offset_x;
+    gint sel_y_min = sel_y_min_doc - preview->layer->offset_y;
+    gint sel_x_max = sel_x_max_doc - preview->layer->offset_x;
+    gint sel_y_max = sel_y_max_doc - preview->layer->offset_y;
+
+    /* Clamp to layer bounds */
+    if (sel_x_min < 0)
+        sel_x_min = 0;
+    if (sel_y_min < 0)
+        sel_y_min = 0;
+    if (sel_x_max >= full_w)
+        sel_x_max = full_w - 1;
+    if (sel_y_max >= full_h)
+        sel_y_max = full_h - 1;
+
+    gint crop_w = sel_x_max - sel_x_min + 1;
+    gint crop_h = sel_y_max - sel_y_min + 1;
+    if (crop_w <= 0 || crop_h <= 0) {
+        selection_mask_free(region_mask);
+        return NULL;
+    }
+
+    /* Build a mask surface for just the crop region for efficiency */
+    DirtyRect crop_rect_doc;
+    dirty_rect_set(&crop_rect_doc,
+                   preview->layer->offset_x + sel_x_min,
+                   preview->layer->offset_y + sel_y_min,
+                   crop_w, crop_h);
+
+    DirtyRect crop_actual_doc;
+    SelectionMask* crop_mask = selection_build_combined_mask(
+        preview->doc->selection_mask, &crop_rect_doc, FEATHER_QUALITY_NORMAL, &crop_actual_doc);
+
+    /* We no longer need the full-layer region mask */
+    selection_mask_free(region_mask);
+
+    if (!crop_mask) {
+        return NULL;
+    }
+
+    cairo_surface_t* mask_surface = selection_mask_get_surface(crop_mask);
+
+    cairo_surface_t* out = cairo_image_surface_create(
+        cairo_image_surface_get_format(full_surface), crop_w, crop_h);
+    if (!out || cairo_surface_status(out) != CAIRO_STATUS_SUCCESS) {
+        if (out) {
+            cairo_surface_destroy(out);
+        }
+        selection_mask_free(crop_mask);
+        return NULL;
+    }
+
+    cairo_t* cr = cairo_create(out);
+    cairo_set_operator(cr, CAIRO_OPERATOR_CLEAR);
+    cairo_paint(cr);
+    cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+
+    /* Paint the crop region from the full surface through the selection mask */
+    cairo_set_source_surface(cr, full_surface, -sel_x_min, -sel_y_min);
+
+    if (mask_surface) {
+        /* Align the (potentially smaller) actual region mask within the crop */
+        gdouble mask_x = (gdouble)(crop_actual_doc.x - crop_rect_doc.x);
+        gdouble mask_y = (gdouble)(crop_actual_doc.y - crop_rect_doc.y);
+        cairo_mask_surface(cr, mask_surface, mask_x, mask_y);
+    } else {
+        /* Fallback: no mask surface available, just paint crop */
+        cairo_paint(cr);
+    }
+
+    cairo_destroy(cr);
+    selection_mask_free(crop_mask);
+
+    return out;
+}
+
+/**
+ * Paint a surface through the current CTM at (0,0), optionally masked by the document selection.
+ *
+ * @param layer_origin_x Layer-space X coordinate of the surface's (0,0) in the original layer
+ * @param layer_origin_y Layer-space Y coordinate of the surface's (0,0) in the original layer
+ */
+static void paint_surface_with_optional_selection_mask(FilterPreview* preview,
+                                                       cairo_t* cr,
+                                                       cairo_surface_t* surface,
+                                                       gint layer_origin_x,
+                                                       gint layer_origin_y) {
+    if (!preview || !cr || !surface) {
+        return;
+    }
+
+    cairo_set_source_surface(cr, surface, 0, 0);
+
+    if (!selection_active_for_preview(preview)) {
+        cairo_paint(cr);
+        return;
+    }
+
+    gint width = cairo_image_surface_get_width(surface);
+    gint height = cairo_image_surface_get_height(surface);
+    if (width <= 0 || height <= 0) {
+        return;
+    }
+
+    /* Region in document coordinates covered by this surface */
+    DirtyRect region_doc;
+    dirty_rect_set(&region_doc,
+                   preview->layer->offset_x + layer_origin_x,
+                   preview->layer->offset_y + layer_origin_y,
+                   width, height);
+
+    DirtyRect actual_region_doc;
+    SelectionMask* region_mask = selection_build_combined_mask(
+        preview->doc->selection_mask,
+        &region_doc,
+        FEATHER_QUALITY_NORMAL,
+        &actual_region_doc);
+
+    if (!region_mask) {
+        /* Selection exists, but nothing selected in this region: paint nothing (transparent). */
+        return;
+    }
+
+    if (selection_mask_data_is_empty(region_mask)) {
+        selection_mask_free(region_mask);
+        return;
+    }
+
+    cairo_surface_t* mask_surface = selection_mask_get_surface(region_mask);
+    if (!mask_surface) {
+        selection_mask_free(region_mask);
+        return;
+    }
+
+    /* Align mask surface within the drawn surface */
+    gdouble mask_x = (gdouble)(actual_region_doc.x - region_doc.x);
+    gdouble mask_y = (gdouble)(actual_region_doc.y - region_doc.y);
+
+    cairo_mask_surface(cr, mask_surface, mask_x, mask_y);
+
+    selection_mask_free(region_mask);
+}
 
 /**
  * Calculate the viewport rectangle in image coordinates
@@ -163,34 +521,57 @@ static ViewportRect calculate_viewport(FilterPreview* preview) {
         viewport.width = preview->original_width;
         viewport.height = preview->original_height;
     } else {
-        /* In 1:1 mode, calculate visible rectangle with some padding */
-        viewport.x = (gint)preview->pan_x - VIEWPORT_CACHE_PADDING;
-        viewport.y = (gint)preview->pan_y - VIEWPORT_CACHE_PADDING;
-        viewport.width = widget_width + (VIEWPORT_CACHE_PADDING * 2);
-        viewport.height = widget_height + (VIEWPORT_CACHE_PADDING * 2);
+        /* In 1:1 mode, calculate visible rectangle with some padding.
+         * If a selection is active, treat the selection bounds as the "virtual image" space,
+         * then convert back into full-image coordinates for extraction/caching. */
+        gint virtual_origin_x = 0;
+        gint virtual_origin_y = 0;
+        gint virtual_width = preview->original_width;
+        gint virtual_height = preview->original_height;
 
-        /* Clamp to image bounds */
-        if (viewport.x < 0) {
-            viewport.width += viewport.x;
-            viewport.x = 0;
-        }
-        if (viewport.y < 0) {
-            viewport.height += viewport.y;
-            viewport.y = 0;
-        }
-
-        if (viewport.x + viewport.width > preview->original_width) {
-            viewport.width = preview->original_width - viewport.x;
-        }
-        if (viewport.y + viewport.height > preview->original_height) {
-            viewport.height = preview->original_height - viewport.y;
+        if (selection_active_for_preview(preview)) {
+            gint sel_x, sel_y, sel_w, sel_h;
+            if (get_selection_bounds_layer(preview, &sel_x, &sel_y, &sel_w, &sel_h)) {
+                virtual_origin_x = sel_x;
+                virtual_origin_y = sel_y;
+                virtual_width = sel_w;
+                virtual_height = sel_h;
+            }
         }
 
-        /* Ensure positive dimensions */
-        if (viewport.width < 0)
-            viewport.width = 0;
-        if (viewport.height < 0)
-            viewport.height = 0;
+        /* Viewport in VIRTUAL coords */
+        gint vx = (gint)preview->pan_x - VIEWPORT_CACHE_PADDING;
+        gint vy = (gint)preview->pan_y - VIEWPORT_CACHE_PADDING;
+        gint vw = widget_width + (VIEWPORT_CACHE_PADDING * 2);
+        gint vh = widget_height + (VIEWPORT_CACHE_PADDING * 2);
+
+        /* Clamp to virtual bounds */
+        if (vx < 0) {
+            vw += vx;
+            vx = 0;
+        }
+        if (vy < 0) {
+            vh += vy;
+            vy = 0;
+        }
+
+        if (vx + vw > virtual_width) {
+            vw = virtual_width - vx;
+        }
+        if (vy + vh > virtual_height) {
+            vh = virtual_height - vy;
+        }
+
+        if (vw < 0)
+            vw = 0;
+        if (vh < 0)
+            vh = 0;
+
+        /* Convert to FULL image coordinates */
+        viewport.x = vx + virtual_origin_x;
+        viewport.y = vy + virtual_origin_y;
+        viewport.width = vw;
+        viewport.height = vh;
     }
 
     return viewport;
@@ -508,6 +889,16 @@ static void clamp_pan(FilterPreview* preview, gint container_width, gint contain
     gint virtual_width = preview->original_width;
     gint virtual_height = preview->original_height;
 
+    if (preview->mode == FILTER_PREVIEW_MODE_1TO1 && selection_active_for_preview(preview)) {
+        gint sel_x, sel_y, sel_w, sel_h;
+        if (get_selection_bounds_layer(preview, &sel_x, &sel_y, &sel_w, &sel_h)) {
+            (void)sel_x;
+            (void)sel_y;
+            virtual_width = sel_w;
+            virtual_height = sel_h;
+        }
+    }
+
     /* Clamp pan so image doesn't go outside container */
     gint max_pan_x = (virtual_width > container_width) ? (virtual_width - container_width) : 0;
     gint max_pan_y = (virtual_height > container_height) ? (virtual_height - container_height) : 0;
@@ -532,6 +923,8 @@ static gboolean on_preview_draw(GtkWidget* widget, cairo_t* cr,
                                 gpointer user_data) {
     FilterPreview* preview = FILTER_PREVIEW(user_data);
     cairo_surface_t* surface;
+    gboolean cache_locked = FALSE;
+    gboolean using_viewport_cache = FALSE;
     gint widget_width, widget_height;
     gdouble scale;
     gdouble draw_x, draw_y;
@@ -539,6 +932,9 @@ static gboolean on_preview_draw(GtkWidget* widget, cairo_t* cr,
     if (!preview) {
         return FALSE;
     }
+
+    /* Try to pick up doc/layer context from the toplevel (for selection masking) */
+    maybe_update_context_from_toplevel(preview);
 
     widget_width = gtk_widget_get_allocated_width(widget);
     widget_height = gtk_widget_get_allocated_height(widget);
@@ -554,44 +950,18 @@ static gboolean on_preview_draw(GtkWidget* widget, cairo_t* cr,
         if (preview->filter_apply_func) {
             /* Async filter mode - use viewport cache */
             g_mutex_lock(&preview->cache_mutex);
+            cache_locked = TRUE;
             surface = preview->viewport_cache;
 
             if (!surface) {
-                /* No cache yet, show before image with "Processing..." overlay */
+                /* No cache yet: fall back to drawing the BEFORE surface using the normal
+                 * sizing/cropping logic (prevents fit-mode flicker when selection-cropped). */
                 g_mutex_unlock(&preview->cache_mutex);
-
-                /* Draw before image first */
-                if (preview->before_surface_full) {
-                    gint img_width = preview->original_width;
-                    gint img_height = preview->original_height;
-                    gdouble scale = calculate_fit_scale(img_width, img_height, widget_width, widget_height);
-                    gdouble scaled_width = img_width * scale;
-                    gdouble scaled_height = img_height * scale;
-                    gdouble draw_x = (widget_width - scaled_width) / 2.0;
-                    gdouble draw_y = (widget_height - scaled_height) / 2.0;
-
-                    cairo_save(cr);
-                    cairo_translate(cr, draw_x, draw_y);
-                    cairo_scale(cr, scale, scale);
-                    cairo_set_source_surface(cr, preview->before_surface_full, 0, 0);
-                    cairo_paint(cr);
-                    cairo_restore(cr);
-                }
-
-                /* Draw loading indicator overlay - TEMPORARILY DISABLED */
-                /*
-                cairo_set_source_rgba(cr, 0, 0, 0, 0.5);
-                cairo_paint(cr);
-
-                cairo_set_source_rgb(cr, 1, 1, 1);
-                cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL,
-                                       CAIRO_FONT_WEIGHT_BOLD);
-                cairo_set_font_size(cr, 20);
-                cairo_move_to(cr, widget_width / 2 - 50, widget_height / 2);
-                cairo_show_text(cr, "Processing...");
-                */
-
-                return FALSE;
+                cache_locked = FALSE;
+                surface = preview->before_surface_full;
+                using_viewport_cache = FALSE;
+            } else {
+                using_viewport_cache = TRUE;
             }
         } else {
             /* Direct surface mode - use after_surface_full directly */
@@ -607,8 +977,9 @@ static gboolean on_preview_draw(GtkWidget* widget, cairo_t* cr,
         /* Fit mode: scale to fit container */
         gint img_width, img_height;
         gboolean is_scaled_cache = FALSE;
+        cairo_surface_t* selection_surface = NULL;
 
-        if (preview->view == FILTER_PREVIEW_VIEW_AFTER && preview->filter_apply_func) {
+        if (preview->view == FILTER_PREVIEW_VIEW_AFTER && preview->filter_apply_func && using_viewport_cache) {
             img_width = preview->cache_width;
             img_height = preview->cache_height;
             /* If zoom/pan is disabled, cache is already at scaled size, no need to scale again */
@@ -620,6 +991,28 @@ static gboolean on_preview_draw(GtkWidget* widget, cairo_t* cr,
             img_height = preview->original_height;
         }
 
+        /* If a selection is active, zoom preview to the selection bounds (fit mode only).
+         * Skip when cache is already scaled (no reliable coordinate mapping). */
+        if (!is_scaled_cache && selection_active_for_preview(preview) && surface) {
+            gboolean can_crop = TRUE;
+            if (using_viewport_cache && preview->view == FILTER_PREVIEW_VIEW_AFTER && preview->filter_apply_func) {
+                /* Only safe if cache represents the full image (fit mode does this) */
+                if (preview->cache_x != 0 || preview->cache_y != 0 ||
+                    preview->cache_width != preview->original_width ||
+                    preview->cache_height != preview->original_height) {
+                    can_crop = FALSE;
+                }
+            }
+
+            if (can_crop) {
+                selection_surface = create_selection_cropped_masked_surface(preview, surface);
+                if (selection_surface) {
+                    surface = selection_surface;
+                    get_surface_size(surface, &img_width, &img_height);
+                }
+            }
+        }
+
         if (is_scaled_cache) {
             /* Cache is already scaled to fit widget, draw at 1:1 */
             draw_x = (widget_width - img_width) / 2.0;
@@ -627,6 +1020,7 @@ static gboolean on_preview_draw(GtkWidget* widget, cairo_t* cr,
 
             cairo_save(cr);
             cairo_translate(cr, draw_x, draw_y);
+            /* For scaled cache mode we currently skip selection masking (cache is in scaled space). */
             cairo_set_source_surface(cr, surface, 0, 0);
             cairo_paint(cr);
             cairo_restore(cr);
@@ -643,41 +1037,103 @@ static gboolean on_preview_draw(GtkWidget* widget, cairo_t* cr,
             cairo_save(cr);
             cairo_translate(cr, draw_x, draw_y);
             cairo_scale(cr, scale, scale);
-            cairo_set_source_surface(cr, surface, 0, 0);
-            cairo_paint(cr);
+            if (selection_surface) {
+                /* Already selection-cropped + masked */
+                cairo_set_source_surface(cr, surface, 0, 0);
+                cairo_paint(cr);
+            } else if (preview->view == FILTER_PREVIEW_VIEW_AFTER && preview->filter_apply_func) {
+                /* Viewport cache represents a sub-rect of the full image */
+                paint_surface_with_optional_selection_mask(preview, cr, surface, preview->cache_x, preview->cache_y);
+            } else {
+                /* Full-surface path */
+                paint_surface_with_optional_selection_mask(preview, cr, surface, 0, 0);
+            }
             cairo_restore(cr);
         }
 
-        if (preview->view == FILTER_PREVIEW_VIEW_AFTER && preview->filter_apply_func) {
+        if (cache_locked) {
             g_mutex_unlock(&preview->cache_mutex);
+        }
+
+        if (selection_surface) {
+            cairo_surface_destroy(selection_surface);
         }
     } else {
         /* 1:1 mode: display at actual size */
         if (preview->view == FILTER_PREVIEW_VIEW_AFTER) {
-            if (preview->filter_apply_func) {
+            if (preview->filter_apply_func && using_viewport_cache) {
+                gint sel_origin_x = 0;
+                gint sel_origin_y = 0;
+                gint sel_w = 0;
+                gint sel_h = 0;
+                if (selection_active_for_preview(preview)) {
+                    if (get_selection_bounds_layer(preview, &sel_origin_x, &sel_origin_y, &sel_w, &sel_h)) {
+                        /* ok */
+                    } else {
+                        sel_origin_x = 0;
+                        sel_origin_y = 0;
+                    }
+                }
+
                 /* Draw cached viewport at its correct position */
-                draw_x = preview->cache_x - preview->pan_x;
-                draw_y = preview->cache_y - preview->pan_y;
+                draw_x = (preview->cache_x - sel_origin_x) - preview->pan_x;
+                draw_y = (preview->cache_y - sel_origin_y) - preview->pan_y;
 
-                cairo_set_source_surface(cr, surface, draw_x, draw_y);
-                cairo_paint(cr);
+                cairo_save(cr);
+                cairo_translate(cr, draw_x, draw_y);
+                paint_surface_with_optional_selection_mask(preview, cr, surface, preview->cache_x, preview->cache_y);
+                cairo_restore(cr);
 
-                g_mutex_unlock(&preview->cache_mutex);
+                if (cache_locked) {
+                    g_mutex_unlock(&preview->cache_mutex);
+                }
             } else {
                 /* Draw full after image */
+                cairo_surface_t* selection_surface = NULL;
+                if (selection_active_for_preview(preview) && surface) {
+                    selection_surface = create_selection_cropped_masked_surface(preview, surface);
+                }
+
                 draw_x = -preview->pan_x;
                 draw_y = -preview->pan_y;
 
-                cairo_set_source_surface(cr, surface, draw_x, draw_y);
-                cairo_paint(cr);
+                cairo_save(cr);
+                cairo_translate(cr, draw_x, draw_y);
+                if (selection_surface) {
+                    cairo_set_source_surface(cr, selection_surface, 0, 0);
+                    cairo_paint(cr);
+                } else {
+                    paint_surface_with_optional_selection_mask(preview, cr, surface, 0, 0);
+                }
+                cairo_restore(cr);
+
+                if (selection_surface) {
+                    cairo_surface_destroy(selection_surface);
+                }
             }
         } else {
             /* Draw full before image */
+            cairo_surface_t* selection_surface = NULL;
+            if (selection_active_for_preview(preview) && surface) {
+                selection_surface = create_selection_cropped_masked_surface(preview, surface);
+            }
+
             draw_x = -preview->pan_x;
             draw_y = -preview->pan_y;
 
-            cairo_set_source_surface(cr, surface, draw_x, draw_y);
-            cairo_paint(cr);
+            cairo_save(cr);
+            cairo_translate(cr, draw_x, draw_y);
+            if (selection_surface) {
+                cairo_set_source_surface(cr, selection_surface, 0, 0);
+                cairo_paint(cr);
+            } else {
+                paint_surface_with_optional_selection_mask(preview, cr, surface, 0, 0);
+            }
+            cairo_restore(cr);
+
+            if (selection_surface) {
+                cairo_surface_destroy(selection_surface);
+            }
         }
     }
 
