@@ -27,6 +27,7 @@
 #include "ui/filters/filter_gradient_edge.h"
 #include "ui/filters/filter_guided.h"
 #include "ui/filters/filter_highpass.h"
+#include "ui/filters/filter_kaleidoscope.h"
 #include "ui/filters/filter_laplacian_edge.h"
 #include "ui/filters/filter_max.h"
 #include "ui/filters/filter_median_blur.h"
@@ -34,18 +35,24 @@
 #include "ui/filters/filter_mosaic.h"
 #include "ui/filters/filter_motion_blur.h"
 #include "ui/filters/filter_oil_paint.h"
+#include "ui/filters/filter_pinch.h"
 #include "ui/filters/filter_pointillize.h"
+#include "ui/filters/filter_polar_coordinates.h"
 #include "ui/filters/filter_prewitt_edge.h"
 #include "ui/filters/filter_radial_blur.h"
 #include "ui/filters/filter_relief.h"
 #include "ui/filters/filter_render_clouds.h"
+#include "ui/filters/filter_ripple.h"
 #include "ui/filters/filter_roberts_edge.h"
 #include "ui/filters/filter_sharpen.h"
 #include "ui/filters/filter_skin_smooth.h"
 #include "ui/filters/filter_sobel_edge.h"
+#include "ui/filters/filter_spherize.h"
 #include "ui/filters/filter_surface_blur.h"
+#include "ui/filters/filter_twirl.h"
 #include "ui/filters/filter_unsharp.h"
 #include "ui/filters/filter_utils.h"
+#include "ui/filters/filter_wave.h"
 #include "ui/filters/filter_zoom_blur.h"
 #include "ui/ui_filter.h"
 #include "ui/ui_filter_utils.h"
@@ -66,6 +73,97 @@ static gboolean on_average_blur_preview_update(FilterDialog* dialog,
     static FilterApplyFuncData func_data = {
         .filter_apply_func = (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_average_blur_apply,
         .num_values = 1};
+    return ui_filter_utils_preview_update_scaled(dialog, values, num_values, &func_data);
+}
+
+/**
+ * Distort > Pinch preview update callback
+ */
+static gboolean on_pinch_preview_update(FilterDialog* dialog,
+                                        const gdouble* values,
+                                        gint num_values,
+                                        gpointer user_data) {
+    static FilterApplyFuncData func_data = {
+        .filter_apply_func = (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_pinch_apply,
+        .num_values = 1};
+    return ui_filter_utils_preview_update_scaled(dialog, values, num_values, &func_data);
+}
+
+/**
+ * Distort > Twirl preview update callback
+ */
+static gboolean on_twirl_preview_update(FilterDialog* dialog,
+                                        const gdouble* values,
+                                        gint num_values,
+                                        gpointer user_data) {
+    static FilterApplyFuncData func_data = {
+        .filter_apply_func = (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_twirl_apply,
+        .num_values = 1};
+    return ui_filter_utils_preview_update_scaled(dialog, values, num_values, &func_data);
+}
+
+/**
+ * Distort > Ripple preview update callback
+ */
+static gboolean on_ripple_preview_update(FilterDialog* dialog,
+                                         const gdouble* values,
+                                         gint num_values,
+                                         gpointer user_data) {
+    static FilterApplyFuncData func_data = {
+        .filter_apply_func = (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_ripple_apply,
+        .num_values = 6};
+    return ui_filter_utils_preview_update_scaled(dialog, values, num_values, &func_data);
+}
+
+/**
+ * Distort > Spherize preview update callback
+ */
+static gboolean on_spherize_preview_update(FilterDialog* dialog,
+                                           const gdouble* values,
+                                           gint num_values,
+                                           gpointer user_data) {
+    static FilterApplyFuncData func_data = {
+        .filter_apply_func = (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_spherize_apply,
+        .num_values = 2};
+    return ui_filter_utils_preview_update_scaled(dialog, values, num_values, &func_data);
+}
+
+/**
+ * Distort > Polar Coordinates preview update callback
+ */
+static gboolean on_polar_preview_update(FilterDialog* dialog,
+                                        const gdouble* values,
+                                        gint num_values,
+                                        gpointer user_data) {
+    static FilterApplyFuncData func_data = {
+        .filter_apply_func = (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_polar_coordinates_apply,
+        .num_values = 1};
+    return ui_filter_utils_preview_update_scaled(dialog, values, num_values, &func_data);
+}
+
+/**
+ * Distort > Wave preview update callback
+ */
+static gboolean on_wave_preview_update(FilterDialog* dialog,
+                                       const gdouble* values,
+                                       gint num_values,
+                                       gpointer user_data) {
+    static FilterApplyFuncData func_data = {
+        .filter_apply_func = (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_wave_apply,
+        .num_values = 9};
+    return ui_filter_utils_preview_update_scaled(dialog, values, num_values, &func_data);
+}
+
+/**
+ * Distort > Kaleidoscope preview update callback
+ */
+static gboolean on_kaleidoscope_preview_update(FilterDialog* dialog,
+                                               const gdouble* values,
+                                               gint num_values,
+                                               gpointer user_data) {
+    static FilterApplyFuncData func_data = {
+        .filter_apply_func = (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_kaleidoscope_apply,
+        .num_values = 6};
     return ui_filter_utils_preview_update_scaled(dialog, values, num_values, &func_data);
 }
 
@@ -121,6 +219,441 @@ static void on_effects_average_blur(GtkWidget* widget, gpointer data) {
         if (ui_filter_utils_scale_values(values, filter_values, controls, 1)) {
             ui_apply_layer_filter_with_value(ctx, filter_average_blur_apply,
                                              "Average Blur", filter_values, 1);
+        }
+    }
+}
+
+/**
+ * Effects > Distort > Pinch callback
+ */
+static void on_distort_pinch(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    FilterControlParam controls[1];
+    gdouble values[1];
+    gint response;
+
+    if (!ctx) {
+        return;
+    }
+
+    controls[0].type = FILTER_CONTROL_DOUBLE;
+    controls[0].label = "amount";
+    controls[0].min_value = -100.0;
+    controls[0].max_value = 100.0;
+    controls[0].default_value = 50.0;
+    controls[0].step = 1.0;
+    controls[0].decimals = 0;
+    controls[0].filter_min = -100.0;
+    controls[0].filter_max = 100.0;
+
+    response = ui_show_filter_dialog(ctx, "Pinch", controls, 1,
+                                     on_pinch_preview_update, values);
+    if (response == GTK_RESPONSE_OK) {
+        gfloat filter_values[1];
+        if (ui_filter_utils_scale_values(values, filter_values, controls, 1)) {
+            ui_apply_layer_filter_with_value(ctx, filter_pinch_apply,
+                                             "Pinch", filter_values, 1);
+        }
+    }
+}
+
+/**
+ * Effects > Distort > Twirl callback
+ */
+static void on_distort_twirl(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    FilterControlParam controls[1];
+    gdouble values[1];
+    gint response;
+
+    if (!ctx) {
+        return;
+    }
+
+    controls[0].type = FILTER_CONTROL_DOUBLE;
+    controls[0].label = "angle";
+    controls[0].min_value = -360.0;
+    controls[0].max_value = 360.0;
+    controls[0].default_value = 90.0;
+    controls[0].step = 1.0;
+    controls[0].decimals = 0;
+    controls[0].filter_min = -360.0;
+    controls[0].filter_max = 360.0;
+
+    response = ui_show_filter_dialog(ctx, "Twirl", controls, 1,
+                                     on_twirl_preview_update, values);
+    if (response == GTK_RESPONSE_OK) {
+        gfloat filter_values[1];
+        if (ui_filter_utils_scale_values(values, filter_values, controls, 1)) {
+            ui_apply_layer_filter_with_value(ctx, filter_twirl_apply,
+                                             "Twirl", filter_values, 1);
+        }
+    }
+}
+
+/**
+ * Effects > Distort > Ripple callback
+ */
+static void on_distort_ripple(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    FilterControlParam controls[6];
+    gdouble values[6];
+    gint response;
+
+    if (!ctx) {
+        return;
+    }
+
+    controls[0].type = FILTER_CONTROL_DOUBLE;
+    controls[0].label = "wavelength";
+    controls[0].min_value = 1.0;
+    controls[0].max_value = 200.0;
+    controls[0].default_value = 200.0;
+    controls[0].step = 1.0;
+    controls[0].decimals = 0;
+    controls[0].filter_min = 1.0;
+    controls[0].filter_max = 200.0;
+
+    controls[1].type = FILTER_CONTROL_DOUBLE;
+    controls[1].label = "amplitude";
+    controls[1].min_value = 1.0;
+    controls[1].max_value = 100.0;
+    controls[1].default_value = 100.0;
+    controls[1].step = 1.0;
+    controls[1].decimals = 0;
+    controls[1].filter_min = 1.0;
+    controls[1].filter_max = 100.0;
+
+    controls[2].type = FILTER_CONTROL_DOUBLE;
+    controls[2].label = "center X";
+    controls[2].min_value = 0.0;
+    controls[2].max_value = 1.0;
+    controls[2].default_value = 0.5;
+    controls[2].step = 0.01;
+    controls[2].decimals = 2;
+    controls[2].filter_min = 0.0;
+    controls[2].filter_max = 1.0;
+
+    controls[3].type = FILTER_CONTROL_DOUBLE;
+    controls[3].label = "center Y";
+    controls[3].min_value = 0.0;
+    controls[3].max_value = 1.0;
+    controls[3].default_value = 0.5;
+    controls[3].step = 0.01;
+    controls[3].decimals = 2;
+    controls[3].filter_min = 0.0;
+    controls[3].filter_max = 1.0;
+
+    controls[4].type = FILTER_CONTROL_DOUBLE;
+    controls[4].label = "radius";
+    controls[4].min_value = 0.0;
+    controls[4].max_value = 100.0;
+    controls[4].default_value = 100.0;
+    controls[4].step = 1.0;
+    controls[4].decimals = 0;
+    controls[4].filter_min = 0.0;
+    controls[4].filter_max = 100.0;
+
+    controls[5].type = FILTER_CONTROL_DOUBLE;
+    controls[5].label = "phase";
+    controls[5].min_value = 0.0;
+    controls[5].max_value = 360.0;
+    controls[5].default_value = 0.0;
+    controls[5].step = 1.0;
+    controls[5].decimals = 0;
+    controls[5].filter_min = 0.0;
+    controls[5].filter_max = 360.0;
+
+    response = ui_show_filter_dialog(ctx, "Ripple", controls, 6,
+                                     on_ripple_preview_update, values);
+    if (response == GTK_RESPONSE_OK) {
+        gfloat filter_values[6];
+        if (ui_filter_utils_scale_values(values, filter_values, controls, 6)) {
+            ui_apply_layer_filter_with_value(ctx, filter_ripple_apply,
+                                             "Ripple", filter_values, 6);
+        }
+    }
+}
+
+/**
+ * Effects > Distort > Spherize callback
+ */
+static void on_distort_spherize(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    FilterControlParam controls[2];
+    gdouble values[2];
+    gint response;
+
+    if (!ctx) {
+        return;
+    }
+
+    controls[0].type = FILTER_CONTROL_DOUBLE;
+    controls[0].label = "amount";
+    controls[0].min_value = -100.0;
+    controls[0].max_value = 100.0;
+    controls[0].default_value = 50.0;
+    controls[0].step = 1.0;
+    controls[0].decimals = 0;
+    controls[0].filter_min = -100.0;
+    controls[0].filter_max = 100.0;
+
+    controls[1].type = FILTER_CONTROL_DOUBLE;
+    controls[1].label = "mode (0=N,1=H,2=V)";
+    controls[1].min_value = 0.0;
+    controls[1].max_value = 2.0;
+    controls[1].default_value = 0.0;
+    controls[1].step = 1.0;
+    controls[1].decimals = 0;
+    controls[1].filter_min = 0.0;
+    controls[1].filter_max = 2.0;
+
+    response = ui_show_filter_dialog(ctx, "Spherize", controls, 2,
+                                     on_spherize_preview_update, values);
+    if (response == GTK_RESPONSE_OK) {
+        gfloat filter_values[2];
+        if (ui_filter_utils_scale_values(values, filter_values, controls, 2)) {
+            ui_apply_layer_filter_with_value(ctx, filter_spherize_apply,
+                                             "Spherize", filter_values, 2);
+        }
+    }
+}
+
+/**
+ * Effects > Distort > Polar Coordinates callback
+ */
+static void on_distort_polar(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    FilterControlParam controls[1];
+    gdouble values[1];
+    gint response;
+
+    if (!ctx) {
+        return;
+    }
+
+    controls[0].type = FILTER_CONTROL_DOUBLE;
+    controls[0].label = "mode (0=Rect->Polar,1=Polar->Rect)";
+    controls[0].min_value = 0.0;
+    controls[0].max_value = 1.0;
+    controls[0].default_value = 0.0;
+    controls[0].step = 1.0;
+    controls[0].decimals = 0;
+    controls[0].filter_min = 0.0;
+    controls[0].filter_max = 1.0;
+
+    response = ui_show_filter_dialog(ctx, "Polar Coordinates", controls, 1,
+                                     on_polar_preview_update, values);
+    if (response == GTK_RESPONSE_OK) {
+        gfloat filter_values[1];
+        if (ui_filter_utils_scale_values(values, filter_values, controls, 1)) {
+            ui_apply_layer_filter_with_value(ctx, filter_polar_coordinates_apply,
+                                             "Polar Coordinates", filter_values, 1);
+        }
+    }
+}
+
+/**
+ * Effects > Distort > Wave callback
+ */
+static void on_distort_wave(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    FilterControlParam controls[9];
+    gdouble values[9];
+    gint response;
+
+    if (!ctx) {
+        return;
+    }
+
+    controls[0].type = FILTER_CONTROL_DOUBLE;
+    controls[0].label = "generators";
+    controls[0].min_value = 1.0;
+    controls[0].max_value = 100.0;
+    controls[0].default_value = 1.0;
+    controls[0].step = 1.0;
+    controls[0].decimals = 0;
+    controls[0].filter_min = 1.0;
+    controls[0].filter_max = 100.0;
+
+    controls[1].type = FILTER_CONTROL_DOUBLE;
+    controls[1].label = "min wavelength";
+    controls[1].min_value = 1.0;
+    controls[1].max_value = 999.0;
+    controls[1].default_value = 201.0;
+    controls[1].step = 1.0;
+    controls[1].decimals = 0;
+    controls[1].filter_min = 1.0;
+    controls[1].filter_max = 999.0;
+
+    controls[2].type = FILTER_CONTROL_DOUBLE;
+    controls[2].label = "max wavelength";
+    controls[2].min_value = 1.0;
+    controls[2].max_value = 999.0;
+    controls[2].default_value = 202.0;
+    controls[2].step = 1.0;
+    controls[2].decimals = 0;
+    controls[2].filter_min = 1.0;
+    controls[2].filter_max = 200.0;
+
+    controls[3].type = FILTER_CONTROL_DOUBLE;
+    controls[3].label = "min amplitude";
+    controls[3].min_value = 1.0;
+    controls[3].max_value = 999.0;
+    controls[3].default_value = 27.0;
+    controls[3].step = 1.0;
+    controls[3].decimals = 0;
+    controls[3].filter_min = 1.0;
+    controls[3].filter_max = 999.0;
+
+    controls[4].type = FILTER_CONTROL_DOUBLE;
+    controls[4].label = "max amplitude";
+    controls[4].min_value = 1.0;
+    controls[4].max_value = 999.0;
+    controls[4].default_value = 36.0;
+    controls[4].step = 1.0;
+    controls[4].decimals = 0;
+    controls[4].filter_min = 1.0;
+    controls[4].filter_max = 999.0;
+
+    controls[5].type = FILTER_CONTROL_DOUBLE;
+    controls[5].label = "scale X";
+    controls[5].min_value = 1.0;
+    controls[5].max_value = 100.0;
+    controls[5].default_value = 100.0;
+    controls[5].step = 1.0;
+    controls[5].decimals = 0;
+    controls[5].filter_min = 1.0;
+    controls[5].filter_max = 100.0;
+
+    controls[6].type = FILTER_CONTROL_DOUBLE;
+    controls[6].label = "scale Y";
+    controls[6].min_value = 1.0;
+    controls[6].max_value = 100.0;
+    controls[6].default_value = 100.0;
+    controls[6].step = 1.0;
+    controls[6].decimals = 0;
+    controls[6].filter_min = 1.0;
+    controls[6].filter_max = 100.0;
+
+    controls[7].type = FILTER_CONTROL_DOUBLE;
+    controls[7].label = "wave type";
+    controls[7].min_value = 0.0;
+    controls[7].max_value = 2.0;
+    controls[7].default_value = 0.0;
+    controls[7].step = 1.0;
+    controls[7].decimals = 0;
+    controls[7].filter_min = 0.0;
+    controls[7].filter_max = 2.0;
+
+    controls[8].type = FILTER_CONTROL_DOUBLE;
+    controls[8].label = "seed";
+    controls[8].min_value = 0.0;
+    controls[8].max_value = 10000.0;
+    controls[8].default_value = 0.0;
+    controls[8].step = 1.0;
+    controls[8].decimals = 0;
+    controls[8].filter_min = 0.0;
+    controls[8].filter_max = 10000.0;
+
+    response = ui_show_filter_dialog(ctx, "Wave", controls, 9,
+                                     on_wave_preview_update, values);
+    if (response == GTK_RESPONSE_OK) {
+        gfloat filter_values[9];
+        if (ui_filter_utils_scale_values(values, filter_values, controls, 9)) {
+            ui_apply_layer_filter_with_value(ctx, filter_wave_apply,
+                                             "Wave", filter_values, 9);
+        }
+    }
+}
+
+/**
+ * Effects > Distort > Kaleidoscope callback
+ */
+static void on_distort_kaleidoscope(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    FilterControlParam controls[6];
+    gdouble values[6];
+    gint response;
+
+    if (!ctx) {
+        return;
+    }
+
+    controls[0].type = FILTER_CONTROL_DOUBLE;
+    controls[0].label = "mirrors";
+    controls[0].min_value = 2.0;
+    controls[0].max_value = 20.0;
+    controls[0].default_value = 6.0;
+    controls[0].step = 1.0;
+    controls[0].decimals = 0;
+    controls[0].filter_min = 2.0;
+    controls[0].filter_max = 20.0;
+
+    controls[1].type = FILTER_CONTROL_DOUBLE;
+    controls[1].label = "angle";
+    controls[1].min_value = 0.0;
+    controls[1].max_value = 360.0;
+    controls[1].default_value = 0.0;
+    controls[1].step = 1.0;
+    controls[1].decimals = 0;
+    controls[1].filter_min = 0.0;
+    controls[1].filter_max = 360.0;
+
+    controls[2].type = FILTER_CONTROL_DOUBLE;
+    controls[2].label = "angle2";
+    controls[2].min_value = 0.0;
+    controls[2].max_value = 360.0;
+    controls[2].default_value = 0.0;
+    controls[2].step = 1.0;
+    controls[2].decimals = 0;
+    controls[2].filter_min = 0.0;
+    controls[2].filter_max = 360.0;
+
+    controls[3].type = FILTER_CONTROL_DOUBLE;
+    controls[3].label = "center X";
+    controls[3].min_value = 0.0;
+    controls[3].max_value = 1.0;
+    controls[3].default_value = 0.5;
+    controls[3].step = 0.01;
+    controls[3].decimals = 2;
+    controls[3].filter_min = 0.0;
+    controls[3].filter_max = 1.0;
+
+    controls[4].type = FILTER_CONTROL_DOUBLE;
+    controls[4].label = "center Y";
+    controls[4].min_value = 0.0;
+    controls[4].max_value = 1.0;
+    controls[4].default_value = 0.5;
+    controls[4].step = 0.01;
+    controls[4].decimals = 2;
+    controls[4].filter_min = 0.0;
+    controls[4].filter_max = 1.0;
+
+    controls[5].type = FILTER_CONTROL_DOUBLE;
+    controls[5].label = "radius %";
+    controls[5].min_value = 0.0;
+    controls[5].max_value = 1.0;
+    controls[5].default_value = 1.0;
+    controls[5].step = 0.01;
+    controls[5].decimals = 2;
+    controls[5].filter_min = 0.0;
+    controls[5].filter_max = 1.0;
+
+    response = ui_show_filter_dialog(ctx, "Kaleidoscope", controls, 6,
+                                     on_kaleidoscope_preview_update, values);
+    if (response == GTK_RESPONSE_OK) {
+        gfloat filter_values[6];
+        if (ui_filter_utils_scale_values(values, filter_values, controls, 6)) {
+            ui_apply_layer_filter_with_value(ctx, filter_kaleidoscope_apply,
+                                             "Kaleidoscope", filter_values, 6);
         }
     }
 }
@@ -2076,7 +2609,6 @@ static gboolean on_beeps_preview_update(void* dialog_ptr,
     BEEPSDialog* dialog = (BEEPSDialog*)dialog_ptr;
     ImageLayer* temp_layer = (ImageLayer*)user_data;
     ImageLayer* original_layer;
-    ImageDocument* doc = NULL;
 
     if (!dialog || !temp_layer) {
         return FALSE;
@@ -2084,7 +2616,6 @@ static gboolean on_beeps_preview_update(void* dialog_ptr,
 
     /* Get original layer from dialog window */
     original_layer = (ImageLayer*)g_object_get_data(G_OBJECT(beeps_dialog_get_window(dialog)), "original_layer");
-    doc = (ImageDocument*)g_object_get_data(G_OBJECT(beeps_dialog_get_window(dialog)), "filter_doc");
     if (!original_layer) {
         return FALSE;
     }
@@ -2271,12 +2802,13 @@ static gboolean on_convolution_preview_update(void* dialog_ptr,
     }
 
     /* Copy kernel and always calculate divisor from kernel sum */
-    memcpy(kernel_copy, kernel, sizeof(float) * 25);
+    for (int i = 0; i < 25; i++) {
+        kernel_copy[i] = kernel[i];
+    }
     /* Normalize kernel to calculate divisor */
     {
         float sum = 0.0f;
-        int i;
-        for (i = 0; i < 25; i++) {
+        for (int i = 0; i < 25; i++) {
             sum += kernel_copy[i];
         }
         if (sum == 0.0f) {
@@ -2489,6 +3021,42 @@ void ui_filter_effects_setup_menu(GtkBuilder* builder, AppContext* ctx) {
     GtkWidget* blur_menu_zoom_blur = GTK_WIDGET(gtk_builder_get_object(builder, "blur_menu_zoom_blur"));
     if (blur_menu_zoom_blur) {
         g_signal_connect(blur_menu_zoom_blur, "activate", G_CALLBACK(on_effects_zoom_blur), ctx);
+    }
+
+    /* Connect Distort submenu signals */
+    GtkWidget* distort_menu_kaleidoscope = GTK_WIDGET(gtk_builder_get_object(builder, "distort_menu_kaleidoscope"));
+    if (distort_menu_kaleidoscope) {
+        g_signal_connect(distort_menu_kaleidoscope, "activate", G_CALLBACK(on_distort_kaleidoscope), ctx);
+    }
+
+    GtkWidget* distort_menu_pinch = GTK_WIDGET(gtk_builder_get_object(builder, "distort_menu_pinch"));
+    if (distort_menu_pinch) {
+        g_signal_connect(distort_menu_pinch, "activate", G_CALLBACK(on_distort_pinch), ctx);
+    }
+
+    GtkWidget* distort_menu_polar = GTK_WIDGET(gtk_builder_get_object(builder, "distort_menu_polar"));
+    if (distort_menu_polar) {
+        g_signal_connect(distort_menu_polar, "activate", G_CALLBACK(on_distort_polar), ctx);
+    }
+
+    GtkWidget* distort_menu_ripple = GTK_WIDGET(gtk_builder_get_object(builder, "distort_menu_ripple"));
+    if (distort_menu_ripple) {
+        g_signal_connect(distort_menu_ripple, "activate", G_CALLBACK(on_distort_ripple), ctx);
+    }
+
+    GtkWidget* distort_menu_spherize = GTK_WIDGET(gtk_builder_get_object(builder, "distort_menu_spherize"));
+    if (distort_menu_spherize) {
+        g_signal_connect(distort_menu_spherize, "activate", G_CALLBACK(on_distort_spherize), ctx);
+    }
+
+    GtkWidget* distort_menu_twirl = GTK_WIDGET(gtk_builder_get_object(builder, "distort_menu_twirl"));
+    if (distort_menu_twirl) {
+        g_signal_connect(distort_menu_twirl, "activate", G_CALLBACK(on_distort_twirl), ctx);
+    }
+
+    GtkWidget* distort_menu_wave = GTK_WIDGET(gtk_builder_get_object(builder, "distort_menu_wave"));
+    if (distort_menu_wave) {
+        g_signal_connect(distort_menu_wave, "activate", G_CALLBACK(on_distort_wave), ctx);
     }
 
     /* Connect Sharpen submenu signals */

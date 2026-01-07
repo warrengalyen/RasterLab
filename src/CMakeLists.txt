@@ -88,6 +88,7 @@ set(SOURCES
     ui/layers_panel.c
     filters/filters.c
     ui/filters/filter_utils.c
+    ui/filters/filter_distort_utils.c
     ui/filters/filter_grayscale.c
     ui/filters/filter_vibrance.c
     ui/filters/filter_whitebalance.c
@@ -138,6 +139,7 @@ set(SOURCES
     ui/filters/filter_color_halftone.c
     ui/filters/filter_crystallize.c
     ui/filters/filter_fragment.c
+    ui/filters/filter_kaleidoscope.c
     ui/filters/filter_gradient_edge.c
     ui/filters/filter_guided.c
     ui/filters/filter_highpass.c
@@ -146,6 +148,8 @@ set(SOURCES
     ui/filters/filter_mosaic.c
     ui/filters/filter_min.c
     ui/filters/filter_prewitt_edge.c
+    ui/filters/filter_pinch.c
+    ui/filters/filter_polar_coordinates.c
     ui/filters/filter_radial_blur.c
     ui/filters/filter_relief.c
     ui/filters/filter_render_clouds.c
@@ -153,9 +157,13 @@ set(SOURCES
     ui/filters/filter_convolution.c
     ui/filters/filter_roberts_edge.c
     ui/filters/filter_sobel_edge.c
+    ui/filters/filter_ripple.c
+    ui/filters/filter_spherize.c
     ui/filters/filter_sharpen.c
     ui/filters/filter_skin_smooth.c
     ui/filters/filter_unsharp.c
+    ui/filters/filter_twirl.c
+    ui/filters/filter_wave.c
     render/render_utils.c
     render/layer.c
     render/compositor.c
