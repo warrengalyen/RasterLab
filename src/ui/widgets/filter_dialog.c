@@ -17,6 +17,7 @@ struct _FilterDialog {
     GtkWidget** spin_widgets;     /* Array of spin button widgets (for double controls) */
     GtkWidget** checkbox_widgets; /* Array of checkbox widgets (for boolean controls) */
     GtkWidget** color_widgets;    /* Array of color button widgets (for RGB controls) */
+    GtkWidget** combo_widgets;    /* Array of combo box widgets (for enum controls) */
     FilterControlParam* params;   /* Copy of control parameters */
     gint num_controls;
     FilterDialogPreviewCallback preview_callback; /* Callback for live preview */
@@ -151,6 +152,30 @@ static void on_color_set(GtkColorButton* color_button, gpointer user_data) {
 }
 
 /**
+ * Combo box changed callback - triggers preview
+ */
+static void on_combo_changed(GtkComboBox* combo, gpointer user_data) {
+    FilterDialog* dialog = (FilterDialog*)user_data;
+    gdouble* values;
+    gint total_values;
+
+    if (!dialog) {
+        return;
+    }
+
+    /* Trigger preview update if callback is set */
+    if (dialog->preview_callback) {
+        total_values = filter_dialog_get_total_values_count(dialog);
+        values = (gdouble*)g_malloc(sizeof(gdouble) * total_values);
+        if (values) {
+            filter_dialog_get_values(dialog, values, total_values);
+            dialog->preview_callback(dialog, values, total_values, dialog->preview_user_data);
+            g_free(values);
+        }
+    }
+}
+
+/**
  * Reset button clicked callback
  */
 static void on_reset_clicked(GtkWidget* widget, gpointer user_data) {
@@ -187,21 +212,25 @@ FilterDialog* filter_dialog_new(const gchar* title,
     dialog->spin_widgets = (GtkWidget**)g_malloc(sizeof(GtkWidget*) * num_controls);
     dialog->checkbox_widgets = (GtkWidget**)g_malloc(sizeof(GtkWidget*) * num_controls);
     dialog->color_widgets = (GtkWidget**)g_malloc(sizeof(GtkWidget*) * num_controls);
+    dialog->combo_widgets = (GtkWidget**)g_malloc(sizeof(GtkWidget*) * num_controls);
     dialog->params = (FilterControlParam*)g_malloc(sizeof(FilterControlParam) * num_controls);
 
     if (!dialog->scale_widgets || !dialog->spin_widgets || !dialog->checkbox_widgets ||
-        !dialog->color_widgets || !dialog->params) {
+        !dialog->color_widgets || !dialog->combo_widgets || !dialog->params) {
         g_free(dialog->scale_widgets);
         g_free(dialog->spin_widgets);
         g_free(dialog->checkbox_widgets);
         g_free(dialog->color_widgets);
+        g_free(dialog->combo_widgets);
         g_free(dialog->params);
         g_free(dialog);
         return NULL;
     }
 
-    /* Copy control parameters */
-    memcpy(dialog->params, controls, sizeof(FilterControlParam) * num_controls);
+    /* Copy control parameters (avoid memcpy warnings) */
+    for (i = 0; i < num_controls; i++) {
+        dialog->params[i] = controls[i];
+    }
     dialog->num_controls = num_controls;
 
     /* Initialize widget arrays */
@@ -210,17 +239,22 @@ FilterDialog* filter_dialog_new(const gchar* title,
         dialog->spin_widgets[i] = NULL;
         dialog->checkbox_widgets[i] = NULL;
         dialog->color_widgets[i] = NULL;
+        dialog->combo_widgets[i] = NULL;
     }
 
     /* Create dialog window */
     dialog->dialog = gtk_dialog_new_with_buttons(title,
                                                  NULL,
-                                                 GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+                                                 (GtkDialogFlags)0,
                                                  "_OK",
                                                  GTK_RESPONSE_OK,
                                                  "_Cancel",
                                                  GTK_RESPONSE_CANCEL,
                                                  NULL);
+
+    /* Apply modal + destroy-with-parent behavior without enum bitwise warnings */
+    gtk_window_set_modal(GTK_WINDOW(dialog->dialog), TRUE);
+    gtk_window_set_destroy_with_parent(GTK_WINDOW(dialog->dialog), TRUE);
 
     /* Don't set a fixed default size - let dialog size to content */
     gtk_window_set_resizable(GTK_WINDOW(dialog->dialog), TRUE);
@@ -352,6 +386,36 @@ FilterDialog* filter_dialog_new(const gchar* title,
             /* Connect signal for preview updates */
             g_signal_connect(color_button, "color-set",
                              G_CALLBACK(on_color_set), dialog);
+        } else if (controls[i].type == FILTER_CONTROL_ENUM) {
+            GtkWidget* combo;
+            gint active = 0;
+
+            combo = gtk_combo_box_text_new();
+            gtk_widget_set_hexpand(combo, TRUE);
+            gtk_widget_set_size_request(combo, -1, 35);
+
+            if (controls[i].enum_labels && controls[i].enum_n_labels > 0) {
+                for (gint j = 0; j < controls[i].enum_n_labels; j++) {
+                    const gchar* opt = controls[i].enum_labels[j] ? controls[i].enum_labels[j] : "";
+                    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), opt);
+                }
+            }
+
+            active = controls[i].default_enum_index;
+            if (active < 0) {
+                active = 0;
+            }
+            if (controls[i].enum_n_labels > 0 && active >= controls[i].enum_n_labels) {
+                active = controls[i].enum_n_labels - 1;
+            }
+            gtk_combo_box_set_active(GTK_COMBO_BOX(combo), active);
+
+            gtk_box_pack_start(GTK_BOX(control_vbox), combo, FALSE, FALSE, 0);
+
+            dialog->combo_widgets[i] = combo;
+
+            g_signal_connect(combo, "changed",
+                             G_CALLBACK(on_combo_changed), dialog);
         }
     }
 
@@ -435,18 +499,9 @@ void filter_dialog_set_layers(FilterDialog* dialog,
  */
 void filter_dialog_update_after_layer(FilterDialog* dialog, ImageLayer* after_layer) {
     cairo_surface_t* after_surface = NULL;
-    struct ImageDocument* doc = NULL;
-    struct ImageLayer* layer = NULL;
 
     if (!dialog || !dialog->preview) {
         return;
-    }
-
-    /* Get document and layer from dialog if available */
-    GtkWindow* window = filter_dialog_get_window(dialog);
-    if (window) {
-        doc = (struct ImageDocument*)g_object_get_data(G_OBJECT(window), "filter_doc");
-        layer = (struct ImageLayer*)g_object_get_data(G_OBJECT(window), "original_layer");
     }
 
     if (after_layer && after_layer->surface) {
@@ -526,7 +581,7 @@ gint filter_dialog_get_total_values_count(FilterDialog* dialog) {
         if (dialog->params[i].type == FILTER_CONTROL_RGB) {
             total += 3; /* RGB takes 3 values */
         } else {
-            total += 1; /* Double and boolean take 1 value */
+            total += 1; /* Double, boolean, and enum take 1 value */
         }
     }
 
@@ -576,6 +631,13 @@ void filter_dialog_get_values(FilterDialog* dialog,
                 values[value_index + 2] = dialog->params[i].default_b;
             }
             value_index += 3;
+        } else if (dialog->params[i].type == FILTER_CONTROL_ENUM) {
+            if (dialog->combo_widgets[i]) {
+                values[value_index] = (gdouble)gtk_combo_box_get_active(GTK_COMBO_BOX(dialog->combo_widgets[i]));
+            } else {
+                values[value_index] = (gdouble)dialog->params[i].default_enum_index;
+            }
+            value_index++;
         }
     }
 }
@@ -624,6 +686,17 @@ void filter_dialog_reset(FilterDialog* dialog) {
                 color.alpha = 1.0;
                 gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(dialog->color_widgets[i]), &color);
             }
+        } else if (dialog->params[i].type == FILTER_CONTROL_ENUM) {
+            if (dialog->combo_widgets[i]) {
+                gint active = dialog->params[i].default_enum_index;
+                if (active < 0) {
+                    active = 0;
+                }
+                if (dialog->params[i].enum_n_labels > 0 && active >= dialog->params[i].enum_n_labels) {
+                    active = dialog->params[i].enum_n_labels - 1;
+                }
+                gtk_combo_box_set_active(GTK_COMBO_BOX(dialog->combo_widgets[i]), active);
+            }
         }
     }
 }
@@ -656,6 +729,10 @@ void filter_dialog_free(FilterDialog* dialog) {
 
     if (dialog->color_widgets) {
         g_free(dialog->color_widgets);
+    }
+
+    if (dialog->combo_widgets) {
+        g_free(dialog->combo_widgets);
     }
 
     if (dialog->params) {

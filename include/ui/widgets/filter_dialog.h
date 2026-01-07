@@ -11,7 +11,8 @@
 typedef enum {
     FILTER_CONTROL_DOUBLE,  /* Double value with scale and spin button */
     FILTER_CONTROL_BOOLEAN, /* Boolean value with checkbox */
-    FILTER_CONTROL_RGB      /* RGB color with color picker (takes 3 values: R, G, B in 0.0-1.0 range) */
+    FILTER_CONTROL_RGB,     /* RGB color with color picker (takes 3 values: R, G, B in 0.0-1.0 range) */
+    FILTER_CONTROL_ENUM     /* Enum value with combo box (returns selected index as a numeric value) */
 } FilterControlType;
 
 /**
@@ -19,25 +20,23 @@ typedef enum {
  * Defines a single control in the filter dialog
  */
 typedef struct {
-    FilterControlType type; /* Type of control */
-    const gchar* label;     /* Label text for the control */
+    const gchar* label;              /* Label text for the control */
+    gdouble min_value;               /* Minimum value (UI range) */
+    gdouble max_value;               /* Maximum value (UI range) */
+    gdouble default_value;           /* Default value (UI range) */
+    gdouble step;                    /* Step increment (0.0 for default) */
+    gdouble filter_min;              /* Minimum value for filter function (defaults to min_value) */
+    gdouble filter_max;              /* Maximum value for filter function (defaults to max_value) */
+    gdouble default_r;               /* Default red component (0.0-1.0) */
+    gdouble default_g;               /* Default green component (0.0-1.0) */
+    gdouble default_b;               /* Default blue component (0.0-1.0) */
+    const gchar* const* enum_labels; /* Array of option labels */
+    FilterControlType type;          /* Type of control */
+    gint decimals;                   /* Number of decimal places to display */
+    gboolean default_bool;           /* Default boolean value */
+    gint enum_n_labels;              /* Number of options */
+    gint default_enum_index;         /* Default selected index */
 
-    /* For FILTER_CONTROL_DOUBLE: */
-    gdouble min_value;     /* Minimum value (UI range) */
-    gdouble max_value;     /* Maximum value (UI range) */
-    gdouble default_value; /* Default value (UI range) */
-    gdouble step;          /* Step increment (0.0 for default) */
-    gint decimals;         /* Number of decimal places to display */
-    gdouble filter_min;    /* Minimum value for filter function (defaults to min_value) */
-    gdouble filter_max;    /* Maximum value for filter function (defaults to max_value) */
-
-    /* For FILTER_CONTROL_BOOLEAN: */
-    gboolean default_bool; /* Default boolean value */
-
-    /* For FILTER_CONTROL_RGB: */
-    gdouble default_r; /* Default red component (0.0-1.0) */
-    gdouble default_g; /* Default green component (0.0-1.0) */
-    gdouble default_b; /* Default blue component (0.0-1.0) */
 } FilterControlParam;
 
 /**

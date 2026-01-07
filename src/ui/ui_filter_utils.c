@@ -85,7 +85,9 @@ void ui_filter_utils_setup_viewport_filter(FilterDialog* dialog,
 
     /* Update filter function and values */
     wrapper_data->filter_apply_func = filter_func;
-    memcpy(wrapper_data->filter_values, filter_values, sizeof(gfloat) * num_values);
+    for (gint i = 0; i < num_values; i++) {
+        wrapper_data->filter_values[i] = filter_values[i];
+    }
     wrapper_data->doc = doc;
     wrapper_data->layer = layer;
 
@@ -154,13 +156,18 @@ gboolean ui_filter_utils_scale_values(const gdouble* ui_values,
     }
 
     for (i = 0; i < num_values; i++) {
-        gdouble scaled = adjustments_scale_value(
-            ui_values[i],
-            controls[i].min_value,
-            controls[i].max_value,
-            controls[i].filter_min,
-            controls[i].filter_max);
-        filter_values[i] = (gfloat)scaled;
+        if (controls[i].type == FILTER_CONTROL_DOUBLE) {
+            gdouble scaled = adjustments_scale_value(
+                ui_values[i],
+                controls[i].min_value,
+                controls[i].max_value,
+                controls[i].filter_min,
+                controls[i].filter_max);
+            filter_values[i] = (gfloat)scaled;
+        } else {
+            /* Boolean and enum values already come in as the final numeric value */
+            filter_values[i] = (gfloat)ui_values[i];
+        }
     }
 
     return TRUE;

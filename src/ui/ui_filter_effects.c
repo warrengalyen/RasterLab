@@ -402,15 +402,15 @@ static void on_distort_spherize(GtkWidget* widget, gpointer data) {
     controls[0].filter_min = -100.0;
     controls[0].filter_max = 100.0;
 
-    controls[1].type = FILTER_CONTROL_DOUBLE;
-    controls[1].label = "mode (0=N,1=H,2=V)";
-    controls[1].min_value = 0.0;
-    controls[1].max_value = 2.0;
-    controls[1].default_value = 0.0;
-    controls[1].step = 1.0;
-    controls[1].decimals = 0;
-    controls[1].filter_min = 0.0;
-    controls[1].filter_max = 2.0;
+    static const gchar* const spherize_modes[] = {
+        "Normal",
+        "Horizontal",
+        "Vertical"};
+    controls[1].type = FILTER_CONTROL_ENUM;
+    controls[1].label = "mode";
+    controls[1].enum_labels = spherize_modes;
+    controls[1].enum_n_labels = 3;
+    controls[1].default_enum_index = 0;
 
     response = ui_show_filter_dialog(ctx, "Spherize", controls, 2,
                                      on_spherize_preview_update, values);
@@ -437,15 +437,14 @@ static void on_distort_polar(GtkWidget* widget, gpointer data) {
         return;
     }
 
-    controls[0].type = FILTER_CONTROL_DOUBLE;
-    controls[0].label = "mode (0=Rect->Polar,1=Polar->Rect)";
-    controls[0].min_value = 0.0;
-    controls[0].max_value = 1.0;
-    controls[0].default_value = 0.0;
-    controls[0].step = 1.0;
-    controls[0].decimals = 0;
-    controls[0].filter_min = 0.0;
-    controls[0].filter_max = 1.0;
+    static const gchar* const polar_modes[] = {
+        "Rect -> Polar",
+        "Polar -> Rect"};
+    controls[0].type = FILTER_CONTROL_ENUM;
+    controls[0].label = "mode";
+    controls[0].enum_labels = polar_modes;
+    controls[0].enum_n_labels = 2;
+    controls[0].default_enum_index = 0;
 
     response = ui_show_filter_dialog(ctx, "Polar Coordinates", controls, 1,
                                      on_polar_preview_update, values);
@@ -543,14 +542,16 @@ static void on_distort_wave(GtkWidget* widget, gpointer data) {
     controls[6].filter_max = 100.0;
 
     controls[7].type = FILTER_CONTROL_DOUBLE;
+    static const gchar* const wave_types[] = {
+        "Sine",
+        "Triangle",
+        "Square",
+        "Sawtooth"};
+    controls[7].type = FILTER_CONTROL_ENUM;
     controls[7].label = "wave type";
-    controls[7].min_value = 0.0;
-    controls[7].max_value = 2.0;
-    controls[7].default_value = 0.0;
-    controls[7].step = 1.0;
-    controls[7].decimals = 0;
-    controls[7].filter_min = 0.0;
-    controls[7].filter_max = 2.0;
+    controls[7].enum_labels = wave_types;
+    controls[7].enum_n_labels = 4;
+    controls[7].default_enum_index = 0;
 
     controls[8].type = FILTER_CONTROL_DOUBLE;
     controls[8].label = "seed";
@@ -598,7 +599,7 @@ static void on_distort_kaleidoscope(GtkWidget* widget, gpointer data) {
     controls[0].filter_max = 20.0;
 
     controls[1].type = FILTER_CONTROL_DOUBLE;
-    controls[1].label = "angle";
+    controls[1].label = "primary angle";
     controls[1].min_value = 0.0;
     controls[1].max_value = 360.0;
     controls[1].default_value = 0.0;
@@ -608,7 +609,7 @@ static void on_distort_kaleidoscope(GtkWidget* widget, gpointer data) {
     controls[1].filter_max = 360.0;
 
     controls[2].type = FILTER_CONTROL_DOUBLE;
-    controls[2].label = "angle2";
+    controls[2].label = "secondary angle";
     controls[2].min_value = 0.0;
     controls[2].max_value = 360.0;
     controls[2].default_value = 0.0;
@@ -640,12 +641,12 @@ static void on_distort_kaleidoscope(GtkWidget* widget, gpointer data) {
     controls[5].type = FILTER_CONTROL_DOUBLE;
     controls[5].label = "radius %";
     controls[5].min_value = 0.0;
-    controls[5].max_value = 1.0;
-    controls[5].default_value = 1.0;
-    controls[5].step = 0.01;
-    controls[5].decimals = 2;
+    controls[5].max_value = 100.0;
+    controls[5].default_value = 100.0;
+    controls[5].step = 1.0;
+    controls[5].decimals = 0;
     controls[5].filter_min = 0.0;
-    controls[5].filter_max = 1.0;
+    controls[5].filter_max = 100.0;
 
     response = ui_show_filter_dialog(ctx, "Kaleidoscope", controls, 6,
                                      on_kaleidoscope_preview_update, values);
