@@ -1421,7 +1421,11 @@ gboolean selection_mask_shrink(SelectionMask* mask, gint radius,
 }
 
 /**
- * Create border selection (dilate then subtract original)
+ * Create border selection (original minus eroded)
+ *
+ * Note: This creates an INNER border of the given radius (similar to Photoshop's
+ * Select > Modify > Border). This avoids returning an empty selection when the
+ * selection already touches the image edges (e.g. Select All).
  * Processes each selection individually, preserving its feathering parameters
  */
 gboolean selection_mask_border(SelectionMask* mask, gint radius,
@@ -1458,19 +1462,19 @@ gboolean selection_mask_border(SelectionMask* mask, gint radius,
             }
         }
 
-        /* Allocate temporary buffers */
+        /* Allocate temporary buffer */
         uint8_t* temp_buffer = g_malloc0(mask->stride * mask->height);
         if (!temp_buffer) {
             current++;
             continue;
         }
 
-        /* Dilate this selection's mask */
-        dilate_mask(sel->mask, temp_buffer, mask->width, mask->height, mask->stride, radius);
+        /* Erode this selection's mask */
+        erode_mask(sel->mask, temp_buffer, mask->width, mask->height, mask->stride, radius);
 
-        /* Subtract original from dilated (border = dilated - original) */
+        /* Border = original - eroded (inner border) */
         for (int i = 0; i < mask->height * mask->stride; i++) {
-            if (temp_buffer[i] >= 128 && sel->mask[i] < 128) {
+            if (sel->mask[i] >= 128 && temp_buffer[i] < 128) {
                 sel->mask[i] = 255; /* Border pixel */
             } else {
                 sel->mask[i] = 0; /* Not border */
