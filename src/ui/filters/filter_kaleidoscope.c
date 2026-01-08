@@ -22,12 +22,9 @@ gboolean filter_kaleidoscope_apply(ImageLayer* layer, const gfloat* values, gint
         return FALSE;
     }
 
-    const gint min_dim = (buffers.width < buffers.height) ? buffers.width : buffers.height;
-    const gfloat radius = radius_percent * ((gfloat)min_dim * 0.5f);
-
     status = ocularKaleidoscopeFilter(buffers.rgb_input, buffers.rgb_output,
                                       buffers.width, buffers.height, buffers.width * 3,
-                                      mirrors, angle, angle2, center_x, center_y, radius);
+                                      mirrors, angle, angle2, center_x, center_y, radius_percent);
     if (status != OC_STATUS_OK) {
         g_warning("Kaleidoscope: Ocular filter returned error %d", status);
         filter_distort_utils_free(&buffers);

@@ -499,7 +499,7 @@ static void on_distort_wave(GtkWidget* widget, gpointer data) {
     controls[2].step = 1.0;
     controls[2].decimals = 0;
     controls[2].filter_min = 1.0;
-    controls[2].filter_max = 200.0;
+    controls[2].filter_max = 999.0;
 
     controls[3].type = FILTER_CONTROL_DOUBLE;
     controls[3].label = "min amplitude";
