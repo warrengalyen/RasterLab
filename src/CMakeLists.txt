@@ -63,6 +63,7 @@ set(SOURCES
     ui/dialogs/gamma_dialog.c
     ui/dialogs/new_layer_dialog.c
     ui/dialogs/palettize_dialog.c
+    ui/dialogs/rotate_dialog.c
     ui/dialogs/recovery_dialog.c
     ui/dialogs/retinex_dialog.c
     ui/dialogs/convolution_dialog.c

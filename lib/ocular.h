@@ -467,7 +467,7 @@ OC_STATUS ocularResamplingFilter(unsigned char* Input, int Width, int Height, in
                                  int newWidth, int newHeight, int dstStride, OcInterpolationMode InterpolationMode);
 
 OC_STATUS ocularRotateImage(unsigned char* Input, int Width, int Height, int Stride, unsigned char* Output,
-                            unsigned char newWidth, unsigned char newHeight, float angle, bool useTransparency,
+                            int* newWidth, int* newHeight, float angle, bool preserveSize, bool useTransparency,
                             OcInterpolationMode InterpolationMode, unsigned char fillColorR, unsigned char fillColorG,
                             unsigned char fillColorB);
 

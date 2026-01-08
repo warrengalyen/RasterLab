@@ -16,6 +16,10 @@ void on_image_flip_vertical(GtkWidget* widget, gpointer data);
 void on_image_transpose(GtkWidget* widget, gpointer data);
 void on_image_merge_visible(GtkWidget* widget, gpointer data);
 void on_image_flatten(GtkWidget* widget, gpointer data);
+void on_image_rotate_arbitrary(GtkWidget* widget, gpointer data);
+void on_image_rotate_90_cw(GtkWidget* widget, gpointer data);
+void on_image_rotate_90_ccw(GtkWidget* widget, gpointer data);
+void on_image_rotate_180(GtkWidget* widget, gpointer data);
 
 /**
  * Setup Image menu from Glade builder

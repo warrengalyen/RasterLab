@@ -1,14 +1,19 @@
 #include "ui/ui_image_menu.h"
 #include "command.h"
 #include "document.h"
+#include "filters.h"
+#include "render/compositor.h"
 #include "render/layer.h"
 #include "render/tile.h"
 #include "ui.h"
 #include "ui/dialogs/canvas_size_dialog.h"
+#include "ui/dialogs/rotate_dialog.h"
 #include "ui/layers_panel.h"
 #include <cairo/cairo.h>
 #include <glib.h>
 #include <gtk/gtk.h>
+#include <math.h>
+#include <stdbool.h>
 
 /**
  * Image > Canvas Size callback
@@ -712,6 +717,298 @@ void on_image_transpose(GtkWidget* widget, gpointer data) {
     doc->modified = TRUE;
 }
 
+typedef struct {
+    cairo_surface_t* before_surface; /* not owned */
+} RotatePreviewData;
+
+static cairo_surface_t* rotate_surface_ocular(cairo_surface_t* src_surface,
+                                              gdouble angle_degrees,
+                                              gboolean preserve_size,
+                                              gboolean use_transparency,
+                                              OcInterpolationMode interpolation,
+                                              const GdkRGBA* fill_color) {
+    gint width = 0, height = 0;
+    if (!src_surface || !adjustments_validate_surface(src_surface, &width, &height)) {
+        return NULL;
+    }
+
+    guchar fill_r = 0, fill_g = 0, fill_b = 0;
+    if (fill_color) {
+        fill_r = (guchar)CLAMP((gint)(fill_color->red * 255.0 + 0.5), 0, 255);
+        fill_g = (guchar)CLAMP((gint)(fill_color->green * 255.0 + 0.5), 0, 255);
+        fill_b = (guchar)CLAMP((gint)(fill_color->blue * 255.0 + 0.5), 0, 255);
+    }
+
+    guchar* rgba_input = (guchar*)g_malloc((gsize)width * (gsize)height * 4);
+    if (!rgba_input) {
+        return NULL;
+    }
+    if (!adjustments_cairo_to_rgba(src_surface, rgba_input)) {
+        g_free(rgba_input);
+        return NULL;
+    }
+
+    guint new_w = (guint)width;
+    guint new_h = (guint)height;
+    if (!preserve_size) {
+        /* Avoid +1px from floating point error at exact right angles */
+        gdouble a = fmod(fabs(angle_degrees), 360.0);
+        if (fabs(a - 90.0) < 1e-6 || fabs(a - 270.0) < 1e-6) {
+            new_w = (guint)height;
+            new_h = (guint)width;
+        } else if (fabs(a - 180.0) < 1e-6 || fabs(a) < 1e-6) {
+            new_w = (guint)width;
+            new_h = (guint)height;
+        } else {
+            gdouble rad = angle_degrees * (G_PI / 180.0);
+            gdouble c = fabs(cos(rad));
+            gdouble s = fabs(sin(rad));
+            if (c < 1e-12)
+                c = 0.0;
+            if (s < 1e-12)
+                s = 0.0;
+            if (fabs(1.0 - c) < 1e-12)
+                c = 1.0;
+            if (fabs(1.0 - s) < 1e-12)
+                s = 1.0;
+            new_w = (guint)ceil((gdouble)width * c + (gdouble)height * s);
+            new_h = (guint)ceil((gdouble)width * s + (gdouble)height * c);
+        }
+        if (new_w == 0)
+            new_w = (guint)width;
+        if (new_h == 0)
+            new_h = (guint)height;
+    }
+
+    guchar* rgba_output = (guchar*)g_malloc((gsize)new_w * (gsize)new_h * 4);
+    if (!rgba_output) {
+        g_free(rgba_input);
+        return NULL;
+    }
+
+    gint out_w = (gint)new_w;
+    gint out_h = (gint)new_h;
+    OC_STATUS status = ocularRotateImage(rgba_input, width, height, width * 4, rgba_output,
+                                         &out_w, &out_h,
+                                         (float)angle_degrees,
+                                         preserve_size,
+                                         use_transparency,
+                                         interpolation,
+                                         fill_r, fill_g, fill_b);
+
+    g_free(rgba_input);
+
+    if (status != OC_STATUS_OK) {
+        g_warning("Rotate preview: Ocular rotate returned error %d", status);
+        g_free(rgba_output);
+        return NULL;
+    }
+
+    if (out_w <= 0 || out_h <= 0) {
+        g_free(rgba_output);
+        return NULL;
+    }
+
+    cairo_surface_t* out_surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, out_w, out_h);
+    if (!out_surface || cairo_surface_status(out_surface) != CAIRO_STATUS_SUCCESS) {
+        if (out_surface) {
+            cairo_surface_destroy(out_surface);
+        }
+        g_free(rgba_output);
+        return NULL;
+    }
+
+    if (!adjustments_rgba_to_cairo(out_surface, rgba_output)) {
+        cairo_surface_destroy(out_surface);
+        g_free(rgba_output);
+        return NULL;
+    }
+
+    g_free(rgba_output);
+    return out_surface;
+}
+
+static gboolean on_rotate_preview_update(RotateDialog* dialog,
+                                         gdouble angle_degrees,
+                                         gboolean preserve_size,
+                                         OcInterpolationMode interpolation,
+                                         gboolean use_transparency,
+                                         const GdkRGBA* fill_color,
+                                         gpointer user_data) {
+    RotatePreviewData* pdata = (RotatePreviewData*)user_data;
+    if (!dialog || !pdata || !pdata->before_surface) {
+        return FALSE;
+    }
+
+    cairo_surface_t* after = rotate_surface_ocular(pdata->before_surface,
+                                                   angle_degrees,
+                                                   preserve_size,
+                                                   use_transparency,
+                                                   interpolation,
+                                                   fill_color);
+    rotate_dialog_set_after_surface(dialog, after);
+    if (after) {
+        cairo_surface_destroy(after);
+    }
+    return TRUE;
+}
+
+static void apply_fixed_rotation(AppContext* ctx, const gchar* command_name, gdouble angle_degrees) {
+    if (!ctx) {
+        return;
+    }
+
+    ImageDocument* doc = ui_get_active_document(ctx);
+    if (!doc) {
+        return;
+    }
+
+    LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window),
+                                                                "layers_panel");
+
+    /* Defaults for fixed rotations: enlarge-to-fit, transparent borders, nearest-neighbor */
+    const gboolean preserve_size = FALSE;
+    const gboolean use_transparency = TRUE;
+    const OcInterpolationMode interpolation = OC_INTERPOLATION_NEAREST;
+    const guchar fill_r = 0, fill_g = 0, fill_b = 0;
+
+    Command* cmd = command_create_rotate_arbitrary_named(command_name,
+                                                         doc,
+                                                         (gfloat)angle_degrees,
+                                                         preserve_size,
+                                                         use_transparency,
+                                                         (gint)interpolation,
+                                                         fill_r, fill_g, fill_b);
+    if (!cmd) {
+        return;
+    }
+
+    command_execute(cmd, doc);
+    if (doc->undo_stack) {
+        command_stack_push(doc->undo_stack, cmd);
+        if (doc->redo_stack) {
+            command_stack_clear(doc->redo_stack);
+        }
+    } else {
+        command_free(cmd);
+    }
+
+    if (layers_panel) {
+        layers_panel_update(layers_panel, doc);
+    }
+
+    doc->modified = TRUE;
+    ui_update_window_title(ctx, NULL);
+    ui_update_status_bar(ctx, NULL);
+    ui_update_menu_and_button_states(ctx);
+}
+
+void on_image_rotate_90_cw(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    /* Clockwise is negative angle in standard mathematical convention */
+    apply_fixed_rotation(ctx, "Rotate 90° clockwise", -90.0);
+}
+
+void on_image_rotate_90_ccw(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    apply_fixed_rotation(ctx, "Rotate 90° counter-clockwise", 90.0);
+}
+
+void on_image_rotate_180(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    apply_fixed_rotation(ctx, "Rotate 180°", 180.0);
+}
+
+/**
+ * Image > Rotate > Rotate arbitrary... callback
+ */
+void on_image_rotate_arbitrary(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    if (!ctx) {
+        return;
+    }
+
+    ImageDocument* doc = ui_get_active_document(ctx);
+    if (!doc) {
+        return;
+    }
+
+    LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window),
+                                                                "layers_panel");
+
+    /* Ensure composite is up to date for preview */
+    cairo_surface_t* before_surface = document_export_composite_surface(doc);
+    if (!before_surface) {
+        return;
+    }
+
+    RotateDialog* dialog = rotate_dialog_new("Rotate image");
+    if (!dialog) {
+        cairo_surface_destroy(before_surface);
+        return;
+    }
+
+    rotate_dialog_set_before_surface(dialog, before_surface);
+
+    RotatePreviewData pdata = {.before_surface = before_surface};
+    rotate_dialog_set_preview_callback(dialog, on_rotate_preview_update, &pdata);
+
+    gdouble angle_degrees = 0.0;
+    gboolean preserve_size = FALSE;
+    OcInterpolationMode interpolation = OC_INTERPOLATION_NEAREST;
+    gboolean use_transparency = TRUE;
+    GdkRGBA fill_color = {0};
+
+    gint response = rotate_dialog_run(dialog,
+                                      GTK_IS_WINDOW(ctx->window) ? GTK_WINDOW(ctx->window) : NULL,
+                                      &angle_degrees,
+                                      &preserve_size,
+                                      &interpolation,
+                                      &use_transparency,
+                                      &fill_color);
+
+    if (response == GTK_RESPONSE_OK) {
+        guchar fill_r = (guchar)CLAMP((gint)(fill_color.red * 255.0 + 0.5), 0, 255);
+        guchar fill_g = (guchar)CLAMP((gint)(fill_color.green * 255.0 + 0.5), 0, 255);
+        guchar fill_b = (guchar)CLAMP((gint)(fill_color.blue * 255.0 + 0.5), 0, 255);
+
+        Command* cmd = command_create_rotate_arbitrary_named("Rotate image",
+                                                             doc,
+                                                             (gfloat)angle_degrees,
+                                                             preserve_size,
+                                                             use_transparency,
+                                                             (gint)interpolation,
+                                                             fill_r, fill_g, fill_b);
+        if (cmd) {
+            command_execute(cmd, doc);
+            if (doc->undo_stack) {
+                command_stack_push(doc->undo_stack, cmd);
+                if (doc->redo_stack) {
+                    command_stack_clear(doc->redo_stack);
+                }
+            } else {
+                command_free(cmd);
+            }
+
+            /* Update layers panel thumbnails */
+            if (layers_panel) {
+                layers_panel_update(layers_panel, doc);
+            }
+
+            doc->modified = TRUE;
+            ui_update_window_title(ctx, NULL);
+            ui_update_status_bar(ctx, NULL);
+            ui_update_menu_and_button_states(ctx);
+        }
+    }
+
+    cairo_surface_destroy(before_surface);
+    rotate_dialog_free(dialog);
+}
 /**
  * Image > Merge visible layers callback
  */
@@ -853,6 +1150,26 @@ void ui_image_menu_setup(GtkBuilder* builder, AppContext* ctx) {
     GtkWidget* image_menu_fit_all_layer = GTK_WIDGET(gtk_builder_get_object(builder, "image_menu_fit_all_layer"));
     if (image_menu_fit_all_layer) {
         g_signal_connect(image_menu_fit_all_layer, "activate", G_CALLBACK(on_image_fit_all_layers), ctx);
+    }
+
+    GtkWidget* rotate_menu_arbitrary = GTK_WIDGET(gtk_builder_get_object(builder, "rotate_menu_arbitrary"));
+    if (rotate_menu_arbitrary) {
+        g_signal_connect(rotate_menu_arbitrary, "activate", G_CALLBACK(on_image_rotate_arbitrary), ctx);
+    }
+
+    GtkWidget* rotate_menu_90_cw = GTK_WIDGET(gtk_builder_get_object(builder, "rotate_menu_90_cw"));
+    if (rotate_menu_90_cw) {
+        g_signal_connect(rotate_menu_90_cw, "activate", G_CALLBACK(on_image_rotate_90_cw), ctx);
+    }
+
+    GtkWidget* rotate_menu_90_ccw = GTK_WIDGET(gtk_builder_get_object(builder, "rotate_menu_90_ccw"));
+    if (rotate_menu_90_ccw) {
+        g_signal_connect(rotate_menu_90_ccw, "activate", G_CALLBACK(on_image_rotate_90_ccw), ctx);
+    }
+
+    GtkWidget* rotate_menu_180 = GTK_WIDGET(gtk_builder_get_object(builder, "rotate_menu_180"));
+    if (rotate_menu_180) {
+        g_signal_connect(rotate_menu_180, "activate", G_CALLBACK(on_image_rotate_180), ctx);
     }
 
     GtkWidget* image_menu_flip_horizontal = GTK_WIDGET(gtk_builder_get_object(builder, "image_menu_flip_horizontal"));

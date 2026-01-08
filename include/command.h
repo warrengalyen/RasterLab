@@ -534,6 +534,40 @@ Command* command_create_flip_vertical(struct ImageDocument* doc);
 Command* command_create_transpose(struct ImageDocument* doc);
 
 /**
+ * Create a rotate arbitrary command (rotates all layers).
+ * @param doc The document
+ * @param angle_degrees Rotation angle in degrees
+ * @param preserve_size If TRUE, keep original size (crop). If FALSE, enlarge to fit.
+ * @param use_transparency If TRUE, fill outside with transparent; otherwise fillColor is used.
+ * @param interpolation_mode OcInterpolationMode value (stored as int to avoid header coupling)
+ * @param fill_r Fill color R (0-255)
+ * @param fill_g Fill color G (0-255)
+ * @param fill_b Fill color B (0-255)
+ */
+Command* command_create_rotate_arbitrary(struct ImageDocument* doc,
+                                         gfloat angle_degrees,
+                                         gboolean preserve_size,
+                                         gboolean use_transparency,
+                                         gint interpolation_mode,
+                                         guchar fill_r,
+                                         guchar fill_g,
+                                         guchar fill_b);
+
+/**
+ * Same as command_create_rotate_arbitrary but allows specifying the command name
+ * shown in Undo/Redo history.
+ */
+Command* command_create_rotate_arbitrary_named(const gchar* name,
+                                               struct ImageDocument* doc,
+                                               gfloat angle_degrees,
+                                               gboolean preserve_size,
+                                               gboolean use_transparency,
+                                               gint interpolation_mode,
+                                               guchar fill_r,
+                                               guchar fill_g,
+                                               guchar fill_b);
+
+/**
  * Create a fit canvas to active layer command
  * @param old_width Canvas width before resize
  * @param old_height Canvas height before resize

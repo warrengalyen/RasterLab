@@ -10,6 +10,8 @@
 #include "selection/selection_render.h"
 #include "selection/selection_undo.h"
 #include "undo/undo_disk.h"
+#include <math.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -2680,6 +2682,424 @@ static gboolean transpose_layer_impl(struct ImageLayer* layer) {
     layer_invalidate_cache(layer);
 
     return TRUE;
+}
+
+/**
+ * Helper: Rotate a layer using Ocular library
+ */
+static gboolean rotate_layer_impl(struct ImageLayer* layer,
+                                  gfloat angle_degrees,
+                                  gboolean preserve_size,
+                                  gboolean use_transparency,
+                                  OcInterpolationMode interpolation_mode,
+                                  guchar fill_r,
+                                  guchar fill_g,
+                                  guchar fill_b,
+                                  gint target_width,
+                                  gint target_height,
+                                  gint doc_width,
+                                  gint doc_height) {
+    if (!layer || !layer->surface) {
+        return FALSE;
+    }
+
+    cairo_surface_t* old_surface = layer->surface;
+    gint layer_w, layer_h;
+    if (!adjustments_validate_surface(old_surface, &layer_w, &layer_h)) {
+        return FALSE;
+    }
+
+    if (layer_w <= 0 || layer_h <= 0 || doc_width <= 0 || doc_height <= 0) {
+        return FALSE;
+    }
+
+    /* Build a full-canvas surface with the layer painted at its document offset.
+     * This makes Image-menu rotation apply to ALL layers consistently in document space. */
+    cairo_surface_t* doc_surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, doc_width, doc_height);
+    if (!doc_surface || cairo_surface_status(doc_surface) != CAIRO_STATUS_SUCCESS) {
+        if (doc_surface) {
+            cairo_surface_destroy(doc_surface);
+        }
+        return FALSE;
+    }
+
+    cairo_t* cr = cairo_create(doc_surface);
+    cairo_set_operator(cr, CAIRO_OPERATOR_CLEAR);
+    cairo_paint(cr);
+    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+    cairo_set_source_surface(cr, old_surface, layer->offset_x, layer->offset_y);
+    cairo_paint(cr);
+    cairo_destroy(cr);
+
+    /* Convert to RGBA for Ocular */
+    guchar* rgba_input = (guchar*)g_malloc((gsize)doc_width * (gsize)doc_height * 4);
+    if (!rgba_input) {
+        cairo_surface_destroy(doc_surface);
+        return FALSE;
+    }
+    if (!adjustments_cairo_to_rgba(doc_surface, rgba_input)) {
+        cairo_surface_destroy(doc_surface);
+        g_free(rgba_input);
+        return FALSE;
+    }
+    cairo_surface_destroy(doc_surface);
+
+    gint new_w = target_width;
+    gint new_h = target_height;
+    if (preserve_size) {
+        new_w = doc_width;
+        new_h = doc_height;
+    }
+    if (new_w <= 0 || new_h <= 0) {
+        g_free(rgba_input);
+        return FALSE;
+    }
+
+    guchar* rgba_output = (guchar*)g_malloc((gsize)new_w * (gsize)new_h * 4);
+    if (!rgba_output) {
+        g_free(rgba_input);
+        return FALSE;
+    }
+
+    OC_STATUS status = ocularRotateImage(rgba_input, doc_width, doc_height, doc_width * 4, rgba_output,
+                                         &new_w, &new_h,
+                                         angle_degrees,
+                                         preserve_size ? true : false,
+                                         use_transparency ? true : false,
+                                         interpolation_mode,
+                                         fill_r, fill_g, fill_b);
+    g_free(rgba_input);
+
+    if (status != OC_STATUS_OK) {
+        g_warning("Rotate layer: Ocular rotate returned error %d", status);
+        g_free(rgba_output);
+        return FALSE;
+    }
+
+    if (new_w <= 0 || new_h <= 0) {
+        g_free(rgba_output);
+        return FALSE;
+    }
+
+    cairo_surface_t* new_surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, new_w, new_h);
+    if (!new_surface || cairo_surface_status(new_surface) != CAIRO_STATUS_SUCCESS) {
+        if (new_surface) {
+            cairo_surface_destroy(new_surface);
+        }
+        g_free(rgba_output);
+        return FALSE;
+    }
+
+    if (!adjustments_rgba_to_cairo(new_surface, rgba_output)) {
+        cairo_surface_destroy(new_surface);
+        g_free(rgba_output);
+        return FALSE;
+    }
+
+    g_free(rgba_output);
+
+    /* Replace surface (layer becomes full-canvas after document-space rotation) */
+    cairo_surface_destroy(layer->surface);
+    layer->surface = new_surface;
+    layer->width = new_w;
+    layer->height = new_h;
+    layer->offset_x = 0;
+    layer->offset_y = 0;
+    layer_invalidate_cache(layer);
+
+    return TRUE;
+}
+
+typedef struct {
+    struct ImageDocument* doc;
+    GList* layer_snapshots;
+    GList* layers;
+    GList* layer_offsets; /* List of LayerOffset* */
+    guint old_width;
+    guint old_height;
+    guint new_width;
+    guint new_height;
+    gfloat angle_degrees;
+    gboolean preserve_size;
+    gboolean use_transparency;
+    gint interpolation_mode;
+    guchar fill_r, fill_g, fill_b;
+} RotateCommandData;
+
+typedef struct {
+    gint x;
+    gint y;
+} LayerOffset;
+
+static void rotate_command_data_free(RotateCommandData* data) {
+    if (!data) {
+        return;
+    }
+
+    if (data->layer_snapshots) {
+        for (GList* iter = data->layer_snapshots; iter; iter = iter->next) {
+            cairo_surface_t* snapshot = (cairo_surface_t*)iter->data;
+            if (snapshot) {
+                cairo_surface_destroy(snapshot);
+            }
+        }
+        g_list_free(data->layer_snapshots);
+    }
+
+    if (data->layers) {
+        g_list_free(data->layers);
+    }
+
+    if (data->layer_offsets) {
+        for (GList* iter = data->layer_offsets; iter; iter = iter->next) {
+            LayerOffset* off = (LayerOffset*)iter->data;
+            g_free(off);
+        }
+        g_list_free(data->layer_offsets);
+    }
+
+    g_free(data);
+}
+
+static void rotate_command_apply(Command* cmd, struct ImageDocument* doc) {
+    RotateCommandData* data;
+    if (!cmd || !cmd->user_data || !doc) {
+        return;
+    }
+    data = (RotateCommandData*)cmd->user_data;
+
+    OcInterpolationMode interp = (OcInterpolationMode)data->interpolation_mode;
+
+    for (GList* iter = data->layers; iter; iter = iter->next) {
+        struct ImageLayer* layer = (struct ImageLayer*)iter->data;
+        if (!layer || !layer->surface) {
+            continue;
+        }
+        if (!rotate_layer_impl(layer,
+                               data->angle_degrees,
+                               data->preserve_size,
+                               data->use_transparency,
+                               interp,
+                               data->fill_r, data->fill_g, data->fill_b,
+                               (gint)data->new_width, (gint)data->new_height,
+                               (gint)data->old_width, (gint)data->old_height)) {
+            g_warning("Failed to rotate layer: %s", layer->name);
+        }
+    }
+
+    doc->width = data->new_width;
+    doc->height = data->new_height;
+
+    if (doc->drawing_area) {
+        gint display_width = (gint)(doc->width * doc->zoom_factor);
+        gint display_height = (gint)(doc->height * doc->zoom_factor);
+        gtk_widget_set_size_request(doc->drawing_area, display_width, display_height);
+        gtk_widget_queue_draw(doc->drawing_area);
+    }
+
+    if (doc->tile_grid) {
+        tile_grid_free(doc->tile_grid);
+        doc->tile_grid = NULL;
+    }
+    doc->tile_grid = tile_grid_create(data->new_width, data->new_height, 128);
+    if (!doc->tile_grid) {
+        g_warning("Failed to create tile grid after rotate");
+    }
+
+    document_invalidate_composite(doc);
+}
+
+static void rotate_command_revert(Command* cmd, struct ImageDocument* doc) {
+    RotateCommandData* data;
+    if (!cmd || !cmd->user_data || !doc) {
+        return;
+    }
+    data = (RotateCommandData*)cmd->user_data;
+
+    GList* layer_iter = data->layers;
+    GList* snapshot_iter = data->layer_snapshots;
+    GList* offset_iter = data->layer_offsets;
+    while (layer_iter && snapshot_iter && offset_iter) {
+        struct ImageLayer* layer = (struct ImageLayer*)layer_iter->data;
+        cairo_surface_t* snapshot = (cairo_surface_t*)snapshot_iter->data;
+        LayerOffset* off = (LayerOffset*)offset_iter->data;
+        if (layer && snapshot) {
+            gint w = cairo_image_surface_get_width(snapshot);
+            gint h = cairo_image_surface_get_height(snapshot);
+
+            if (layer->surface) {
+                cairo_surface_destroy(layer->surface);
+            }
+            layer->surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, w, h);
+            if (layer->surface) {
+                cairo_t* cr = cairo_create(layer->surface);
+                cairo_set_source_surface(cr, snapshot, 0, 0);
+                cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+                cairo_paint(cr);
+                cairo_destroy(cr);
+                layer->width = w;
+                layer->height = h;
+                if (off) {
+                    layer->offset_x = off->x;
+                    layer->offset_y = off->y;
+                }
+                layer_invalidate_cache(layer);
+            }
+        }
+        layer_iter = layer_iter->next;
+        snapshot_iter = snapshot_iter->next;
+        offset_iter = offset_iter->next;
+    }
+
+    doc->width = data->old_width;
+    doc->height = data->old_height;
+
+    if (doc->drawing_area) {
+        gint display_width = (gint)(doc->width * doc->zoom_factor);
+        gint display_height = (gint)(doc->height * doc->zoom_factor);
+        gtk_widget_set_size_request(doc->drawing_area, display_width, display_height);
+        gtk_widget_queue_draw(doc->drawing_area);
+    }
+
+    if (doc->tile_grid) {
+        tile_grid_free(doc->tile_grid);
+        doc->tile_grid = NULL;
+    }
+    doc->tile_grid = tile_grid_create(data->old_width, data->old_height, 128);
+    if (!doc->tile_grid) {
+        g_warning("Failed to create tile grid after rotate revert");
+    }
+
+    document_invalidate_composite(doc);
+}
+
+static void rotate_command_destroy(Command* cmd) {
+    RotateCommandData* data;
+    if (!cmd || !cmd->user_data) {
+        return;
+    }
+    data = (RotateCommandData*)cmd->user_data;
+    rotate_command_data_free(data);
+}
+
+Command* command_create_rotate_arbitrary_named(const gchar* name,
+                                               struct ImageDocument* doc,
+                                               gfloat angle_degrees,
+                                               gboolean preserve_size,
+                                               gboolean use_transparency,
+                                               gint interpolation_mode,
+                                               guchar fill_r,
+                                               guchar fill_g,
+                                               guchar fill_b) {
+    if (!doc || !doc->layers || g_list_length(doc->layers) == 0) {
+        return NULL;
+    }
+
+    RotateCommandData* data = (RotateCommandData*)g_malloc0(sizeof(RotateCommandData));
+    if (!data) {
+        return NULL;
+    }
+
+    data->doc = doc;
+    data->old_width = doc->width;
+    data->old_height = doc->height;
+    data->angle_degrees = angle_degrees;
+    data->preserve_size = preserve_size;
+    data->use_transparency = use_transparency;
+    data->interpolation_mode = interpolation_mode;
+    data->fill_r = fill_r;
+    data->fill_g = fill_g;
+    data->fill_b = fill_b;
+
+    /* Compute new doc dimensions */
+    if (preserve_size) {
+        data->new_width = doc->width;
+        data->new_height = doc->height;
+    } else {
+        /* Avoid +1px from floating point error at exact right angles */
+        gdouble a = fmod(fabs((gdouble)angle_degrees), 360.0);
+        if (fabs(a - 90.0) < 1e-6 || fabs(a - 270.0) < 1e-6) {
+            data->new_width = doc->height;
+            data->new_height = doc->width;
+        } else if (fabs(a - 180.0) < 1e-6 || fabs(a) < 1e-6) {
+            data->new_width = doc->width;
+            data->new_height = doc->height;
+        } else {
+            gdouble rad = (gdouble)angle_degrees * (G_PI / 180.0);
+            gdouble c = fabs(cos(rad));
+            gdouble s = fabs(sin(rad));
+            if (c < 1e-12)
+                c = 0.0;
+            if (s < 1e-12)
+                s = 0.0;
+            if (fabs(1.0 - c) < 1e-12)
+                c = 1.0;
+            if (fabs(1.0 - s) < 1e-12)
+                s = 1.0;
+            data->new_width = (guint)ceil((gdouble)doc->width * c + (gdouble)doc->height * s);
+            data->new_height = (guint)ceil((gdouble)doc->width * s + (gdouble)doc->height * c);
+        }
+        if (data->new_width == 0)
+            data->new_width = doc->width;
+        if (data->new_height == 0)
+            data->new_height = doc->height;
+    }
+
+    /* Snapshot all layers */
+    for (GList* iter = doc->layers; iter; iter = iter->next) {
+        struct ImageLayer* layer = (struct ImageLayer*)iter->data;
+        if (!layer || !layer->surface) {
+            continue;
+        }
+        cairo_surface_t* snapshot = cairo_surface_snapshot(layer->surface);
+        if (snapshot) {
+            data->layer_snapshots = g_list_append(data->layer_snapshots, snapshot);
+            data->layers = g_list_append(data->layers, layer);
+            LayerOffset* off = (LayerOffset*)g_malloc(sizeof(LayerOffset));
+            if (off) {
+                off->x = layer->offset_x;
+                off->y = layer->offset_y;
+                data->layer_offsets = g_list_append(data->layer_offsets, off);
+            } else {
+                data->layer_offsets = g_list_append(data->layer_offsets, NULL);
+            }
+        }
+    }
+
+    if (!data->layers) {
+        rotate_command_data_free(data);
+        return NULL;
+    }
+
+    const gchar* cmd_name = (name && name[0]) ? name : "Arbitrary image rotation";
+    Command* cmd = command_new(cmd_name,
+                               COMMAND_LAYER_EDIT,
+                               rotate_command_apply,
+                               rotate_command_revert,
+                               rotate_command_destroy);
+    if (!cmd) {
+        rotate_command_data_free(data);
+        return NULL;
+    }
+    cmd->user_data = data;
+    return cmd;
+}
+
+Command* command_create_rotate_arbitrary(struct ImageDocument* doc,
+                                         gfloat angle_degrees,
+                                         gboolean preserve_size,
+                                         gboolean use_transparency,
+                                         gint interpolation_mode,
+                                         guchar fill_r,
+                                         guchar fill_g,
+                                         guchar fill_b) {
+    return command_create_rotate_arbitrary_named("Arbitrary image rotation",
+                                                 doc,
+                                                 angle_degrees,
+                                                 preserve_size,
+                                                 use_transparency,
+                                                 interpolation_mode,
+                                                 fill_r, fill_g, fill_b);
 }
 
 /**
