@@ -26,7 +26,9 @@ typedef enum {
 /**
  * Tool option flags - indicate which options a tool supports
  */
-typedef enum {
+typedef guint ToolOptionFlags;
+
+enum {
     TOOL_OPT_NONE = 0,
     TOOL_OPT_SIZE = (1 << 0),             /* Tool supports size parameter */
     TOOL_OPT_OPACITY = (1 << 1),          /* Tool supports opacity parameter */
@@ -35,7 +37,7 @@ typedef enum {
     TOOL_OPT_SPACING = (1 << 4),          /* Tool supports spacing parameter */
     TOOL_OPT_SELECTION_MODE = (1 << 5),   /* Tool supports selection combine modes */
     TOOL_OPT_SELECTION_SMOOTH = (1 << 6), /* Tool supports selection smoothing modes */
-} ToolOptionFlags;
+};
 
 /**
  * Mouse event data structure

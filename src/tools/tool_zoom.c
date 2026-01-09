@@ -35,27 +35,47 @@ static void zoom_tool_mouse_down(Tool* tool, struct ImageDocument* doc, MouseEve
 }
 
 /**
- * Create a cursor from the zoom_cursor.png resource
+ * Create a cursor from resource
  */
 static GdkCursor* create_zoom_cursor(void) {
     GdkDisplay* display;
     GdkPixbuf* pixbuf;
     GdkCursor* cursor;
     GError* error = NULL;
+    GBytes* bytes;
+    GInputStream* stream;
 
     display = gdk_display_get_default();
     if (!display) {
         return NULL;
     }
 
-    /* Load cursor image from resource */
-    pixbuf = gdk_pixbuf_new_from_resource("/cursors/zoom_cursor.png", &error);
-    if (!pixbuf) {
+    /* Load cursor file from resource as bytes */
+    bytes = g_resources_lookup_data("/cursors/zoom_cursor.cur",
+                                    G_RESOURCE_LOOKUP_FLAGS_NONE,
+                                    &error);
+    if (!bytes) {
         if (error) {
-            g_warning("Failed to load zoom cursor: %s", error->message);
+            g_warning("Failed to load zoom cursor resource: %s", error->message);
             g_error_free(error);
         }
-        /* Fallback to default cursor */
+        return gdk_cursor_new_for_display(display, GDK_ARROW);
+    }
+
+    /* Create input stream from bytes */
+    stream = g_memory_input_stream_new_from_bytes(bytes);
+
+    /* Load pixbuf from stream */
+    pixbuf = gdk_pixbuf_new_from_stream(stream, NULL, &error);
+
+    g_object_unref(stream);
+    g_bytes_unref(bytes);
+
+    if (!pixbuf) {
+        if (error) {
+            g_warning("Failed to parse zoom cursor: %s", error->message);
+            g_error_free(error);
+        }
         return gdk_cursor_new_for_display(display, GDK_ARROW);
     }
 
@@ -65,11 +85,9 @@ static GdkCursor* create_zoom_cursor(void) {
 
     /* Create cursor from pixbuf with hotspot at center */
     cursor = gdk_cursor_new_from_pixbuf(display, pixbuf, width / 2, height / 2);
-
     g_object_unref(pixbuf);
 
     if (!cursor) {
-        /* Fallback to default cursor */
         return gdk_cursor_new_for_display(display, GDK_ARROW);
     }
 
@@ -97,8 +115,6 @@ Tool* tool_zoom_create(void) {
     tool->mouse_down = zoom_tool_mouse_down;
     tool->mouse_move = NULL; /* Zoom tool doesn't need mouse move */
     tool->mouse_up = NULL;   /* Zoom tool doesn't need mouse up */
-
-    // printf("Zoom tool created\n");
 
     return tool;
 }

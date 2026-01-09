@@ -8,7 +8,9 @@
 #include "tool_manager.h"
 #include "tool_options.h"
 #include "ui.h"
+#include <gdk-pixbuf/gdk-pixbuf.h>
 #include <gdk/gdk.h>
+#include <gio/gio.h>
 #include <gtk/gtk.h>
 #include <math.h>
 #include <stdio.h>
@@ -17,6 +19,66 @@
 /* Static wrapper for backwards compatibility with internal timer calls */
 static gboolean on_rect_select_tool_animation_timer(gpointer user_data) {
     return tool_rect_select_animation_timer(user_data);
+}
+
+/**
+ * Create a cursor from resource
+ */
+static GdkCursor* create_rect_select_cursor(void) {
+    GdkDisplay* display;
+    GdkPixbuf* pixbuf;
+    GdkCursor* cursor;
+    GError* error = NULL;
+    GBytes* bytes;
+    GInputStream* stream;
+
+    display = gdk_display_get_default();
+    if (!display) {
+        return NULL;
+    }
+
+    /* Load cursor file from resource as bytes */
+    bytes = g_resources_lookup_data("/cursors/rect_select_cursor.cur",
+                                    G_RESOURCE_LOOKUP_FLAGS_NONE,
+                                    &error);
+    if (!bytes) {
+        if (error) {
+            g_warning("Failed to load rect select cursor resource: %s", error->message);
+            g_error_free(error);
+        }
+        return gdk_cursor_new_for_display(display, GDK_CROSSHAIR);
+    }
+
+    /* Create input stream from bytes */
+    stream = g_memory_input_stream_new_from_bytes(bytes);
+
+    /* Load pixbuf from stream */
+    pixbuf = gdk_pixbuf_new_from_stream(stream, NULL, &error);
+
+    g_object_unref(stream);
+    g_bytes_unref(bytes);
+
+    if (!pixbuf) {
+        if (error) {
+            g_warning("Failed to parse rect select cursor: %s", error->message);
+            g_error_free(error);
+        }
+        return gdk_cursor_new_for_display(display, GDK_CROSSHAIR);
+    }
+
+    /* Get pixbuf dimensions for hotspot calculation */
+    gint width = gdk_pixbuf_get_width(pixbuf);
+    gint height = gdk_pixbuf_get_height(pixbuf);
+
+    /* Create cursor from pixbuf with hotspot at center */
+    cursor = gdk_cursor_new_from_pixbuf(display, pixbuf, width / 2, height / 2);
+    g_object_unref(pixbuf);
+
+    if (!cursor) {
+        return gdk_cursor_new_for_display(display, GDK_CROSSHAIR);
+    }
+
+    return cursor;
 }
 
 /**
@@ -148,15 +210,8 @@ static void rect_select_tool_mouse_down(Tool* tool, struct ImageDocument* doc, M
     /* Change cursor to crosshair */
     GdkWindow* window = gtk_widget_get_window(doc->drawing_area);
     if (window) {
-        GdkDisplay* display = gdk_window_get_display(window);
-        GdkCursor* cursor = gdk_cursor_new_from_name(display, "crosshair");
-        if (!cursor) {
-            cursor = gdk_cursor_new_for_display(display, GDK_CROSSHAIR);
-        }
-        if (cursor) {
-            gdk_window_set_cursor(window, cursor);
-            g_object_unref(cursor);
-        }
+        /* Default cursor for this tool */
+        gdk_window_set_cursor(window, tool->cursor);
     }
 
     /* Request redraw of selection overlay */
@@ -168,7 +223,7 @@ static void rect_select_tool_mouse_down(Tool* tool, struct ImageDocument* doc, M
 /**
  * Helper to set cursor based on handle
  */
-static void set_cursor_for_handle(GdkWindow* window, gint handle) {
+static void set_cursor_for_handle(GdkWindow* window, gint handle, GdkCursor* default_cursor) {
     if (!window)
         return;
 
@@ -195,7 +250,7 @@ static void set_cursor_for_handle(GdkWindow* window, gint handle) {
         cursor = gdk_cursor_new_from_name(display, "nwse-resize");
     } else {
         /* Default cursor */
-        gdk_window_set_cursor(window, NULL);
+        gdk_window_set_cursor(window, default_cursor);
         return;
     }
 
@@ -221,7 +276,7 @@ static void rect_select_tool_mouse_move(Tool* tool, struct ImageDocument* doc, M
     /* Handle resize/move during edit drag */
     if (state->dragging_handle >= -1 && state->is_dragging) {
         /* Update cursor while dragging */
-        set_cursor_for_handle(window, state->dragging_handle);
+        set_cursor_for_handle(window, state->dragging_handle, tool->cursor);
 
         if (state->dragging_handle == -1) {
             /* Move mode - translate selection */
@@ -341,18 +396,10 @@ static void rect_select_tool_mouse_move(Tool* tool, struct ImageDocument* doc, M
 
         /* Update cursor based on hover */
         if (hovered_handle >= -1) {
-            set_cursor_for_handle(window, hovered_handle);
+            set_cursor_for_handle(window, hovered_handle, tool->cursor);
         } else {
             /* Default cursor outside selection */
-            GdkDisplay* display = gdk_window_get_display(window);
-            GdkCursor* cursor = gdk_cursor_new_from_name(display, "crosshair");
-            if (!cursor) {
-                cursor = gdk_cursor_new_for_display(display, GDK_CROSSHAIR);
-            }
-            if (cursor) {
-                gdk_window_set_cursor(window, cursor);
-                g_object_unref(cursor);
-            }
+            gdk_window_set_cursor(window, tool->cursor);
         }
 
         if (doc->drawing_area) {
@@ -644,7 +691,9 @@ void tool_rect_select_reset(Tool* tool) {
  * Create the Rectangular Selection Tool
  */
 Tool* tool_rect_select_create(void) {
-    Tool* tool = tool_new("Rectangular Select", TOOL_RECT_SELECT, GDK_CROSSHAIR,
+    Tool* tool = tool_new("Rectangular Select",
+                          TOOL_RECT_SELECT,
+                          GDK_CROSSHAIR,
                           TOOL_OPT_SELECTION_MODE | TOOL_OPT_SELECTION_SMOOTH);
 
     if (!tool) {
@@ -654,6 +703,12 @@ Tool* tool_rect_select_create(void) {
     tool->mouse_down = rect_select_tool_mouse_down;
     tool->mouse_move = rect_select_tool_mouse_move;
     tool->mouse_up = rect_select_tool_mouse_up;
+
+    /* Replace cursor with custom rect select cursor */
+    if (tool->cursor) {
+        g_object_unref(tool->cursor);
+    }
+    tool->cursor = create_rect_select_cursor();
 
     return tool;
 }

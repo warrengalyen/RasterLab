@@ -1,8 +1,72 @@
 #include "tools/tool_hand.h"
 #include "document.h"
+#include <gdk-pixbuf/gdk-pixbuf.h>
 #include <gdk/gdk.h>
+#include <gio/gio.h>
 #include <gtk/gtk.h>
 #include <math.h>
+
+/**
+ * Create a cursor from resource
+ */
+static GdkCursor* cursor_from_resource(const char* resource_path, GdkCursorType fallback) {
+    GdkDisplay* display;
+    GdkPixbuf* pixbuf;
+    GdkCursor* cursor;
+    GError* error = NULL;
+    GBytes* bytes;
+    GInputStream* stream;
+
+    display = gdk_display_get_default();
+    if (!display) {
+        return NULL;
+    }
+
+    bytes = g_resources_lookup_data(resource_path,
+                                    G_RESOURCE_LOOKUP_FLAGS_NONE,
+                                    &error);
+    if (!bytes) {
+        if (error) {
+            g_warning("Failed to load cursor resource '%s': %s", resource_path, error->message);
+            g_error_free(error);
+        }
+        return gdk_cursor_new_for_display(display, fallback);
+    }
+
+    stream = g_memory_input_stream_new_from_bytes(bytes);
+    pixbuf = gdk_pixbuf_new_from_stream(stream, NULL, &error);
+    g_object_unref(stream);
+    g_bytes_unref(bytes);
+
+    if (!pixbuf) {
+        if (error) {
+            g_warning("Failed to parse cursor '%s': %s", resource_path, error->message);
+            g_error_free(error);
+        }
+        return gdk_cursor_new_for_display(display, fallback);
+    }
+
+    gint width = gdk_pixbuf_get_width(pixbuf);
+    gint height = gdk_pixbuf_get_height(pixbuf);
+
+    cursor = gdk_cursor_new_from_pixbuf(display, pixbuf, width / 2, height / 2);
+    g_object_unref(pixbuf);
+
+    if (!cursor) {
+        return gdk_cursor_new_for_display(display, fallback);
+    }
+
+    return cursor;
+}
+
+static GdkCursor* create_hand_up_cursor(void) {
+    return cursor_from_resource("/cursors/hand_up_cursor.cur", GDK_HAND2);
+}
+
+static GdkCursor* create_hand_down_cursor(void) {
+    /* When dragging, keep the prior behavior's fallback to something "move/pan"-ish */
+    return cursor_from_resource("/cursors/hand_down_cursor.cur", GDK_FLEUR);
+}
 
 /**
  * Hand Tool state
@@ -64,18 +128,9 @@ static void hand_tool_mouse_down(Tool* tool, struct ImageDocument* doc, MouseEve
     /* Change cursor to closed hand */
     GdkWindow* window = gtk_widget_get_window(doc->drawing_area);
     if (window) {
-        GdkDisplay* display = gdk_window_get_display(window);
-        GdkCursor* cursor = gdk_cursor_new_from_name(display, "grabbing");
-        if (!cursor) {
-            /* Fallback to closedhand if grabbing not available */
-            cursor = gdk_cursor_new_from_name(display, "closedhand");
-        }
-        if (!cursor) {
-            /* Final fallback to fleur cursor */
-            cursor = gdk_cursor_new_for_display(display, GDK_FLEUR);
-        }
+        GdkCursor* cursor = create_hand_down_cursor();
+        gdk_window_set_cursor(window, cursor);
         if (cursor) {
-            gdk_window_set_cursor(window, cursor);
             g_object_unref(cursor);
         }
     }
@@ -198,20 +253,8 @@ static void hand_tool_mouse_up(Tool* tool, struct ImageDocument* doc, MouseEvent
     /* Change cursor back to open hand */
     GdkWindow* window = gtk_widget_get_window(doc->drawing_area);
     if (window) {
-        GdkDisplay* display = gdk_window_get_display(window);
-        GdkCursor* cursor = gdk_cursor_new_from_name(display, "grab");
-        if (!cursor) {
-            /* Fallback to openhand if grab not available */
-            cursor = gdk_cursor_new_from_name(display, "openhand");
-        }
-        if (!cursor) {
-            /* Final fallback to hand2 cursor */
-            cursor = gdk_cursor_new_for_display(display, GDK_HAND2);
-        }
-        if (cursor) {
-            gdk_window_set_cursor(window, cursor);
-            g_object_unref(cursor);
-        }
+        /* tool->cursor is our default "hand up" cursor */
+        gdk_window_set_cursor(window, tool->cursor);
     }
 }
 
@@ -220,8 +263,6 @@ static void hand_tool_mouse_up(Tool* tool, struct ImageDocument* doc, MouseEvent
  */
 Tool* tool_hand_create(void) {
     Tool* tool;
-    GdkDisplay* display;
-    GdkCursor* cursor;
 
     /* Hand tool doesn't have options */
     /* Use a default cursor type for tool_new, then replace with custom cursor */
@@ -230,23 +271,11 @@ Tool* tool_hand_create(void) {
         return NULL;
     }
 
-    /* Replace cursor with open hand cursor */
-    display = gdk_display_get_default();
-    if (display) {
-        if (tool->cursor) {
-            g_object_unref(tool->cursor);
-        }
-        cursor = gdk_cursor_new_from_name(display, "grab");
-        if (!cursor) {
-            /* Fallback to openhand if grab not available */
-            cursor = gdk_cursor_new_from_name(display, "openhand");
-        }
-        if (!cursor) {
-            /* Final fallback to hand2 cursor */
-            cursor = gdk_cursor_new_for_display(display, GDK_HAND2);
-        }
-        tool->cursor = cursor;
+    /* Replace cursor with custom "hand up" cursor */
+    if (tool->cursor) {
+        g_object_unref(tool->cursor);
     }
+    tool->cursor = create_hand_up_cursor();
 
     tool->mouse_down = hand_tool_mouse_down;
     tool->mouse_move = hand_tool_mouse_move;

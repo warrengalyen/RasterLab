@@ -10,6 +10,9 @@
 #include "tool_options.h"
 #include "tools/tool_fill.h"
 #include "ui/tools_panel.h"
+#include <gdk-pixbuf/gdk-pixbuf.h>
+#include <gdk/gdk.h>
+#include <gio/gio.h>
 #include <glib.h>
 #include <math.h>
 #include <stdio.h>
@@ -20,6 +23,66 @@ typedef struct AppContext AppContext;
 typedef struct ImageDocument ImageDocument;
 extern void ui_update_menu_and_button_states(AppContext* ctx);
 extern void ui_update_window_title(AppContext* ctx, ImageDocument* doc);
+
+/**
+ * Create a cursor from resource
+ */
+static GdkCursor* create_paintbucket_cursor(void) {
+    GdkDisplay* display;
+    GdkPixbuf* pixbuf;
+    GdkCursor* cursor;
+    GError* error = NULL;
+    GBytes* bytes;
+    GInputStream* stream;
+
+    display = gdk_display_get_default();
+    if (!display) {
+        return NULL;
+    }
+
+    /* Load cursor file from resource as bytes */
+    bytes = g_resources_lookup_data("/cursors/paintbucket_cursor.cur",
+                                    G_RESOURCE_LOOKUP_FLAGS_NONE,
+                                    &error);
+    if (!bytes) {
+        if (error) {
+            g_warning("Failed to load paintbucket cursor resource: %s", error->message);
+            g_error_free(error);
+        }
+        return gdk_cursor_new_for_display(display, GDK_CROSSHAIR);
+    }
+
+    /* Create input stream from bytes */
+    stream = g_memory_input_stream_new_from_bytes(bytes);
+
+    /* Load pixbuf from stream */
+    pixbuf = gdk_pixbuf_new_from_stream(stream, NULL, &error);
+
+    g_object_unref(stream);
+    g_bytes_unref(bytes);
+
+    if (!pixbuf) {
+        if (error) {
+            g_warning("Failed to parse paintbucket cursor: %s", error->message);
+            g_error_free(error);
+        }
+        return gdk_cursor_new_for_display(display, GDK_CROSSHAIR);
+    }
+
+    /* Get pixbuf dimensions for hotspot calculation */
+    gint width = gdk_pixbuf_get_width(pixbuf);
+    gint height = gdk_pixbuf_get_height(pixbuf);
+
+    /* Create cursor from pixbuf with hotspot at center */
+    cursor = gdk_cursor_new_from_pixbuf(display, pixbuf, width / 2, height / 2);
+    g_object_unref(pixbuf);
+
+    if (!cursor) {
+        return gdk_cursor_new_for_display(display, GDK_CROSSHAIR);
+    }
+
+    return cursor;
+}
 
 /**
  * Fill Tool state
@@ -593,6 +656,12 @@ Tool* tool_fill_create(void) {
     tool->mouse_down = paint_bucket_tool_mouse_down;
     tool->mouse_move = paint_bucket_tool_mouse_move;
     tool->mouse_up = paint_bucket_tool_mouse_up;
+
+    /* Replace cursor with custom paintbucket cursor */
+    if (tool->cursor) {
+        g_object_unref(tool->cursor);
+    }
+    tool->cursor = create_paintbucket_cursor();
 
     // printf("Fill tool created\n");
 
