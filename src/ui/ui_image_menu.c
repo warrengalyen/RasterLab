@@ -1,5 +1,6 @@
 #include "ui/ui_image_menu.h"
 #include "command.h"
+#include "commands/command_image.h"
 #include "document.h"
 #include "filters.h"
 #include "render/compositor.h"

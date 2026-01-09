@@ -258,7 +258,7 @@ static void paint_bucket_flood_fill(cairo_surface_t* surface, struct ImageDocume
         /* Contiguous fill: flood fill from start point */
         point.x = start_x;
         point.y = start_y;
-        g_queue_push_tail(queue, g_memdup(&point, sizeof(FloodFillPoint)));
+        g_queue_push_tail(queue, g_memdup2(&point, sizeof(FloodFillPoint)));
         visited[start_y * width + start_x] = TRUE;
 
         /* Process queue */
@@ -401,7 +401,7 @@ static void paint_bucket_flood_fill(cairo_surface_t* surface, struct ImageDocume
                             visited[ny * width + nx] = TRUE;
                             point.x = nx;
                             point.y = ny;
-                            g_queue_push_tail(queue, g_memdup(&point, sizeof(FloodFillPoint)));
+                            g_queue_push_tail(queue, g_memdup2(&point, sizeof(FloodFillPoint)));
                         }
                     }
                 }

@@ -1,5 +1,6 @@
 #include "ui/ui_edit_menu.h"
 #include "command.h"
+#include "commands/command_layer.h"
 #include "document.h"
 #include "render/compositor.h"
 #include "render/dirty.h"

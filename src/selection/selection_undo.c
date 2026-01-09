@@ -1,5 +1,6 @@
 #include "selection/selection_undo.h"
 #include "command.h"
+#include "commands/command_selection.h"
 #include "document.h"
 #include "selection/selection_mask.h"
 #include "ui.h"

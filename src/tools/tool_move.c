@@ -1,5 +1,6 @@
 #include "tools/tool_move.h"
 #include "command.h"
+#include "commands/command_move.h"
 #include "document.h"
 #include "render/compositor.h"
 #include "render/dirty.h"
@@ -11,6 +12,7 @@
 #include <cairo.h>
 #include <stdio.h>
 #include <stdlib.h>
+
 extern void ui_update_menu_and_button_states(AppContext* ctx);
 extern void ui_update_window_title(AppContext* ctx, ImageDocument* doc);
 

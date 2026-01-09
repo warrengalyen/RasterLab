@@ -79,6 +79,10 @@ set(SOURCES
     tools/tool_rect_select.c
     tool_options.c
     command.c
+    commands/command_image.c
+    commands/command_layer.c
+    commands/command_move.c
+    commands/command_selection.c
     selection.c
     selection/selection_mask.c
     selection/selection_render.c

@@ -6,7 +6,8 @@
         "*.c": "c",
         "*.h": "c",
         "*.glade": "xml",
-        "random": "c"
+        "random": "c",
+        "source_location": "c"
     },
     "editor.tabSize": 4,
     "editor.insertSpaces": true,
@@ -16,7 +17,7 @@
     "[c]": {
         "editor.tabSize": 4,
         "editor.insertSpaces": true,
-        "editor.defaultFormatter": "ms-vscode.cpptools",
+        "editor.defaultFormatter": "xaver.clang-format",
         "editor.formatOnSave": true
     },
     "[cpp]": {
@@ -29,5 +30,8 @@
     "C_Cpp.clang_format_fallbackStyle": "{ BasedOnStyle: LLVM, IndentWidth: 4, UseTab: Never }",
     "C_Cpp.clang_format_path": "",
     "clang-format.executable": "",
-    "clang-format.style": "file"
+    "clang-format.style": "file",
+    "clangd.diagnostics": {
+        "unusedIncludes": "Strict"
+    }
 }

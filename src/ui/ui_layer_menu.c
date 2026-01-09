@@ -1,5 +1,5 @@
 #include "ui/ui_layer_menu.h"
-#include "command.h"
+#include "commands/command_layer.h"
 #include "document.h"
 #include "ui.h"
 #include "ui/dialogs/new_layer_dialog.h"
