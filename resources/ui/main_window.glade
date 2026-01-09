@@ -1058,6 +1058,28 @@
       </object>
     </child>
     <child>
+      <object class="GtkMenuItem" id="image_menu_crop_selection">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Crop to selection</property>
+        <property name="use-underline">True</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="image_menu_trim_borders">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Trim to borders</property>
+        <property name="use-underline">True</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkSeparatorMenuItem" id="image_menu_separator4">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+      </object>
+    </child>
+    <child>
       <object class="GtkMenuItem" id="rotate_menu">
         <property name="visible">True</property>
         <property name="can-focus">False</property>
@@ -1130,7 +1152,7 @@
       </object>
     </child>
     <child>
-      <object class="GtkSeparatorMenuItem" id="image_menu_separator4">
+      <object class="GtkSeparatorMenuItem" id="image_menu_separator5">
         <property name="visible">True</property>
         <property name="can-focus">False</property>
       </object>
