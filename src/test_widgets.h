@@ -1,5 +1,6 @@
 #include "../lib/ocular.h"
 #include "ui/widgets/anchor_position_widget.h"
+#include "ui/widgets/color_wheel.h"
 #include "ui/widgets/curves_widget.h"
 #include "ui/widgets/filter_dialog.h"
 #include "ui/widgets/filter_preview.h"
@@ -822,4 +823,20 @@ static void test_anchor_position_widget(void) {
     /* Clean up */
     anchor_position_widget_free(anchor_widget);
     gtk_widget_destroy(dialog);
+}
+
+static void test_color_wheel(void) {
+    ColorWheel* wheel = color_wheel_new();
+
+    GtkWidget* window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+    gtk_window_set_title(GTK_WINDOW(window), "HSL Color Wheel");
+    gtk_window_set_default_size(GTK_WINDOW(window), 400, 400);
+    g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
+
+    gtk_container_add(GTK_CONTAINER(window), color_wheel_get_widget(wheel));
+    gtk_widget_show_all(window);
+
+    gtk_main();
+
+    color_wheel_free(wheel);
 }

@@ -27,6 +27,10 @@ int main(int argc, char* argv[]) {
     /* Initialize GTK */
     gtk_init(&argc, &argv);
 
+    test_color_wheel();
+
+    return 0;
+
     /* Initialize plugin system */
     plugin_loader_init();
     format_registry_init();
