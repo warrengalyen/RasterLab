@@ -1,6 +1,9 @@
 #include "app/autosave.h"
 #include "app/recent_files.h"
 #include "app/settings.h"
+#include "plugins/builtin_plugins.h"
+#include "plugins/format_registry.h"
+#include "plugins/plugin_loader.h"
 #include "render/layer.h"
 #include "test_widgets.h"
 #include "ui.h"
@@ -23,6 +26,16 @@ int main(int argc, char* argv[]) {
 
     /* Initialize GTK */
     gtk_init(&argc, &argv);
+
+    /* Initialize plugin system */
+    plugin_loader_init();
+    format_registry_init();
+
+    /* Register built-in plugins (PNG, JPEG) */
+    builtin_plugins_register();
+
+    /* TODO: Scan and load plugins from ./plugins/ and ./plugins/formats/ directories */
+    /* For now, we only use built-in plugins */
 
     app_dir = settings_get_executable_dir();
 
@@ -88,6 +101,10 @@ int main(int argc, char* argv[]) {
 
     /* Shutdown autosave system */
     autosave_shutdown();
+
+    /* Shutdown plugin system */
+    format_registry_shutdown();
+    plugin_loader_shutdown();
 
     /* Cleanup - free context and all resources */
     if (app) {

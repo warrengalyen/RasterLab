@@ -6,3 +6,6 @@ bin/
 *.glade~
 *.txt
 *.imgtmp
+
+# file format plugin libraries
+lib/libjpeg/

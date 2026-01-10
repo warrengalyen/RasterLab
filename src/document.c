@@ -1,6 +1,7 @@
 #include "document.h"
 #include "app/settings.h"
 #include "command.h"
+#include "io/image_io.h"
 #include "render/compositor.h"
 #include "render/layer.h"
 #include "render/render_utils.h"
@@ -1061,34 +1062,13 @@ const gchar* document_get_filename(ImageDocument* doc) {
 }
 
 /**
- * Load an image from file into the document
+ * Initialize document rendering structures after image dimensions are set
+ * This should be called after loading an image
  */
-gboolean document_load_image_from_file(ImageDocument* doc, const gchar* file_path) {
-    GdkPixbuf* pixbuf;
-    GError* error = NULL;
-    gchar* basename;
-
-    if (!doc || !file_path) {
+static gboolean document_init_rendering_structures(ImageDocument* doc) {
+    if (!doc || doc->width == 0 || doc->height == 0) {
         return FALSE;
     }
-
-    /* Load image file with GdkPixbuf */
-    pixbuf = gdk_pixbuf_new_from_file(file_path, &error);
-
-    if (!pixbuf) {
-        g_warning("Failed to load image: %s", error ? error->message : "Unknown error");
-        if (error) {
-            g_error_free(error);
-        }
-        return FALSE;
-    }
-
-    /* Store metadata first */
-    doc->width = gdk_pixbuf_get_width(pixbuf);
-    doc->height = gdk_pixbuf_get_height(pixbuf);
-    doc->channels = gdk_pixbuf_get_n_channels(pixbuf);
-    doc->bit_depth = 8;                                /* GdkPixbuf always uses 8 bits per channel */
-    doc->has_alpha = gdk_pixbuf_get_has_alpha(pixbuf); /* Preserve original format info */
 
     /* Free old tile grid if exists */
     if (doc->tile_grid) {
@@ -1101,7 +1081,6 @@ gboolean document_load_image_from_file(ImageDocument* doc, const gchar* file_pat
     doc->tile_grid = tile_grid_create(doc->width, doc->height, 128);
     if (!doc->tile_grid) {
         g_warning("Failed to create tile grid");
-        g_object_unref(pixbuf);
         return FALSE;
     }
 
@@ -1112,7 +1091,6 @@ gboolean document_load_image_from_file(ImageDocument* doc, const gchar* file_pat
     doc->selection_mask = selection_mask_new(doc->width, doc->height);
     if (!doc->selection_mask) {
         g_warning("Failed to create selection mask");
-        g_object_unref(pixbuf);
         return FALSE;
     }
 
@@ -1130,6 +1108,19 @@ gboolean document_load_image_from_file(ImageDocument* doc, const gchar* file_pat
     /* Legacy thread pool (disabled - kept for reference) */
     doc->tile_thread_pool = NULL;
 
+    return TRUE;
+}
+
+/**
+ * Load an image from file into the document using the plugin system
+ */
+gboolean document_load_image_from_file(ImageDocument* doc, const gchar* file_path) {
+    gboolean result;
+
+    if (!doc || !file_path) {
+        return FALSE;
+    }
+
     /* Free old layers if exists */
     for (GList* iter = doc->layers; iter; iter = iter->next) {
         layer_free((ImageLayer*)iter->data);
@@ -1137,30 +1128,19 @@ gboolean document_load_image_from_file(ImageDocument* doc, const gchar* file_pat
     g_list_free(doc->layers);
     doc->layers = NULL;
 
-    /* Create base layer from loaded image - always with alpha support
-       This allows tools like the eraser to work on any image type */
-    ImageLayer* base_layer = layer_new("Background", doc->width, doc->height, TRUE,
-                                       LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL, doc);
+    /* Load image using plugin system */
+    result = image_io_load(doc, file_path);
 
-    /* Convert pixbuf to Cairo surface and copy to layer */
-    cairo_surface_t* temp_surface = pixbuf_to_cairo_surface(pixbuf);
-    if (!temp_surface) {
-        g_object_unref(pixbuf);
-        layer_free(base_layer);
+    if (!result) {
         return FALSE;
     }
 
-    /* Copy temp surface to layer surface */
-    cairo_t* cr = cairo_create(base_layer->surface);
-    cairo_set_source_surface(cr, temp_surface, 0, 0);
-    cairo_paint(cr);
-    cairo_destroy(cr);
-    cairo_surface_destroy(temp_surface);
+    /* Initialize rendering structures after dimensions are set */
+    if (!document_init_rendering_structures(doc)) {
+        return FALSE;
+    }
 
-    /* Add layer to document */
-    doc->layers = g_list_append(doc->layers, base_layer);
-
-    /* Set the selected layer to index 0 (base layer) */
+    /* Ensure we have at least one layer selected */
     ImageLayer* layer_0 = document_get_layer(doc, 0);
     if (layer_0) {
         document_set_selected_layer(doc, layer_0);
@@ -1168,17 +1148,6 @@ gboolean document_load_image_from_file(ImageDocument* doc, const gchar* file_pat
 
     /* Mark composite as needing re-render */
     document_invalidate_composite(doc);
-
-    /* Update filename to basename */
-    basename = g_path_get_basename(file_path);
-    g_free(doc->filename);
-    doc->filename = basename;
-
-    /* Store full file path */
-    if (doc->file_path) {
-        g_free(doc->file_path);
-    }
-    doc->file_path = g_strdup(file_path);
 
     /* Update drawing area size to match image dimensions */
     if (doc->drawing_area) {
@@ -1190,12 +1159,6 @@ gboolean document_load_image_from_file(ImageDocument* doc, const gchar* file_pat
         /* Queue redraw to display the image */
         gtk_widget_queue_draw(doc->drawing_area);
     }
-
-    g_object_unref(pixbuf);
-
-    // printf("Loaded image: %s (%ux%u, %u channels, alpha=%s)\n",
-    //        doc->filename, doc->width, doc->height, doc->channels,
-    //        doc->has_alpha ? "yes" : "no");
 
     return TRUE;
 }
@@ -1499,36 +1462,35 @@ gboolean document_save_as_jpeg(ImageDocument* doc, const gchar* filename, gint q
 }
 
 /**
- * Save document with auto-detection by file extension
+ * Save document with auto-detection by file extension using plugin system
+ * @param doc Document to save
+ * @param filename Filename to save to
+ * @param opts Save options (can be NULL to use defaults)
  */
-gboolean document_save_as(ImageDocument* doc, const gchar* filename) {
-    const gchar* ext;
-    gboolean result;
+gboolean document_save_as(ImageDocument* doc, const gchar* filename, const SaveOptions* opts) {
+    SaveOptions default_opts;
 
     if (!doc || !filename) {
         return FALSE;
     }
 
-    /* Get file extension */
-    ext = strrchr(filename, '.');
-    if (!ext) {
-        g_warning("No file extension provided");
-        return FALSE;
+    /* Use provided options or defaults */
+    if (opts) {
+        /* Use plugin system to save with provided options */
+        /* Note: plugin_data should already be allocated and initialized by caller */
+        return image_io_save(doc, filename, opts);
     }
 
-    ext++; /* Skip the dot */
+    /* Set default save options */
+    memset(&default_opts, 0, sizeof(SaveOptions));
+    default_opts.quality = -1;           /* Use default */
+    default_opts.compression_level = -1; /* Use default */
+    default_opts.preserve_alpha = doc->has_alpha ? true : false;
+    default_opts.flatten_layers = FALSE; /* Keep layers for now */
+    default_opts.plugin_data = NULL;
 
-    /* Save based on extension */
-    if (g_ascii_strcasecmp(ext, "png") == 0) {
-        result = document_save_as_png(doc, filename);
-    } else if (g_ascii_strcasecmp(ext, "jpg") == 0 || g_ascii_strcasecmp(ext, "jpeg") == 0) {
-        result = document_save_as_jpeg(doc, filename, 85); /* Default quality */
-    } else {
-        g_warning("Unsupported file format: %s", ext);
-        return FALSE;
-    }
-
-    return result;
+    /* Use plugin system to save */
+    return image_io_save(doc, filename, &default_opts);
 }
 
 /**

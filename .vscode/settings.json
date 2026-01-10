@@ -7,7 +7,8 @@
         "*.h": "c",
         "*.glade": "xml",
         "random": "c",
-        "source_location": "c"
+        "source_location": "c",
+        "cstdlib": "c"
     },
     "editor.tabSize": 4,
     "editor.insertSpaces": true,
@@ -33,5 +34,8 @@
     "clang-format.style": "file",
     "clangd.diagnostics": {
         "unusedIncludes": "Strict"
+    },
+    "[xml]": {
+        "editor.formatOnSave": false
     }
 }

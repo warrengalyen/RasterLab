@@ -1408,6 +1408,13 @@ void ui_update_menu_and_button_states(AppContext* ctx) {
         layers_panel_update_opacity_controls(layers_panel);
     }
 
+    /* Update File menu item states (save) */
+    /* Save is enabled only if document is dirty (if no filename, Save As will be triggered) */
+    if (ctx->file_menu_save && GTK_IS_WIDGET(ctx->file_menu_save)) {
+        gboolean can_save = has_document && doc && document_is_dirty(doc);
+        gtk_widget_set_sensitive(ctx->file_menu_save, can_save);
+    }
+
     /* Update Edit menu item states (undo/redo) */
     if (ctx->edit_menu_undo && GTK_IS_WIDGET(ctx->edit_menu_undo)) {
         gboolean can_undo = has_document && document_can_undo(doc);
