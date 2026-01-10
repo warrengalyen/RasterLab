@@ -430,7 +430,9 @@ const gchar* command_get_name_string(CommandName name) {
         "Deselect All",
         "Invert Selection",
         "Feather Selection",
-        "Move Selected Pixels"};
+        "Move Selected Pixels",
+        "Crop to Selection",
+        "Trim Borders"};
 
     if (name < 0 || name >= CMD_NAME_COUNT) {
         return NULL;

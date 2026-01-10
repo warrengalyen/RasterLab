@@ -5,6 +5,7 @@
 #include "filters.h"
 #include "render/layer.h"
 #include "render/tile.h"
+#include "selection/selection_mask.h"
 #include <cairo.h>
 #include <glib.h>
 #include <stdlib.h>
@@ -2171,6 +2172,548 @@ Command* command_create_flatten(struct ImageDocument* doc) {
             g_list_free(data->layer_infos);
         }
         g_free(data);
+        return NULL;
+    }
+
+    cmd->user_data = data;
+
+    return cmd;
+}
+
+/* ============================================================
+ * Crop Commands (Crop to Selection, Trim Borders)
+ * ============================================================ */
+
+/**
+ * Free crop command data
+ */
+static void crop_command_data_free(CropCommandData* data) {
+    GList* iter;
+
+    if (!data) {
+        return;
+    }
+
+    /* Free layer snapshots */
+    if (data->layer_snapshots) {
+        for (iter = data->layer_snapshots; iter; iter = iter->next) {
+            cairo_surface_t* snapshot = (cairo_surface_t*)iter->data;
+            if (snapshot) {
+                cairo_surface_destroy(snapshot);
+            }
+        }
+        g_list_free(data->layer_snapshots);
+    }
+
+    /* Free layers list (don't free the layers themselves) */
+    if (data->layers) {
+        g_list_free(data->layers);
+    }
+
+    /* Free layer offsets */
+    if (data->layer_offsets) {
+        for (iter = data->layer_offsets; iter; iter = iter->next) {
+            LayerOffsetPair* pair = (LayerOffsetPair*)iter->data;
+            if (pair) {
+                g_free(pair);
+            }
+        }
+        g_list_free(data->layer_offsets);
+    }
+
+    g_free(data);
+}
+
+/**
+ * Crop command apply callback
+ * Crops all layers by creating new surfaces with cropped content
+ */
+static void crop_command_apply(Command* cmd, struct ImageDocument* doc) {
+    CropCommandData* data;
+    GList* iter;
+
+    if (!cmd || !cmd->user_data || !doc) {
+        return;
+    }
+
+    data = (CropCommandData*)cmd->user_data;
+
+    /* Crop each layer */
+    for (iter = data->layers; iter; iter = iter->next) {
+        struct ImageLayer* layer = (struct ImageLayer*)iter->data;
+        if (!layer || !layer->surface) {
+            continue;
+        }
+
+        /* Calculate the intersection of layer bounds with crop region */
+        gint layer_left = layer->offset_x;
+        gint layer_top = layer->offset_y;
+        gint layer_right = layer->offset_x + (gint)layer->width;
+        gint layer_bottom = layer->offset_y + (gint)layer->height;
+
+        gint crop_left = data->crop_x;
+        gint crop_top = data->crop_y;
+        gint crop_right = data->crop_x + (gint)data->new_width;
+        gint crop_bottom = data->crop_y + (gint)data->new_height;
+
+        /* Find intersection */
+        gint intersect_left = MAX(layer_left, crop_left);
+        gint intersect_top = MAX(layer_top, crop_top);
+        gint intersect_right = MIN(layer_right, crop_right);
+        gint intersect_bottom = MIN(layer_bottom, crop_bottom);
+
+        if (intersect_left >= intersect_right || intersect_top >= intersect_bottom) {
+            /* Layer doesn't intersect crop region - create empty 1x1 layer */
+            cairo_surface_t* new_surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 1, 1);
+            if (new_surface) {
+                cairo_surface_destroy(layer->surface);
+                layer->surface = new_surface;
+                layer->width = 1;
+                layer->height = 1;
+                layer->offset_x = 0;
+                layer->offset_y = 0;
+                layer_invalidate_cache(layer);
+            }
+            continue;
+        }
+
+        /* Calculate new layer dimensions and offsets */
+        gint new_width = intersect_right - intersect_left;
+        gint new_height = intersect_bottom - intersect_top;
+        gint src_x = intersect_left - layer_left;       /* Source x in layer coords */
+        gint src_y = intersect_top - layer_top;         /* Source y in layer coords */
+        gint new_offset_x = intersect_left - crop_left; /* New offset in cropped canvas coords */
+        gint new_offset_y = intersect_top - crop_top;
+
+        /* Create new cropped surface */
+        cairo_surface_t* new_surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32,
+                                                                  new_width, new_height);
+        if (!new_surface) {
+            g_warning("Failed to create cropped surface for layer: %s", layer->name);
+            continue;
+        }
+
+        /* Copy cropped region from old surface */
+        cairo_t* cr = cairo_create(new_surface);
+        cairo_set_source_surface(cr, layer->surface, -src_x, -src_y);
+        cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+        cairo_paint(cr);
+        cairo_destroy(cr);
+
+        /* Replace layer surface */
+        cairo_surface_destroy(layer->surface);
+        layer->surface = new_surface;
+        layer->width = (guint)new_width;
+        layer->height = (guint)new_height;
+        layer->offset_x = new_offset_x;
+        layer->offset_y = new_offset_y;
+        layer_invalidate_cache(layer);
+    }
+
+    /* Update document dimensions */
+    doc->width = data->new_width;
+    doc->height = data->new_height;
+
+    /* Recreate tile grid with new dimensions */
+    if (doc->tile_grid) {
+        tile_grid_free(doc->tile_grid);
+        doc->tile_grid = NULL;
+    }
+    doc->tile_grid = tile_grid_create(data->new_width, data->new_height, 128);
+    if (!doc->tile_grid) {
+        g_warning("Failed to create tile grid after crop");
+    }
+
+    /* Update drawing area size */
+    if (doc->drawing_area) {
+        gint display_width = (gint)(doc->width * doc->zoom_factor);
+        gint display_height = (gint)(doc->height * doc->zoom_factor);
+        gtk_widget_set_size_request(doc->drawing_area, display_width, display_height);
+        gtk_widget_queue_draw(doc->drawing_area);
+    }
+
+    /* Clear selection after crop */
+    if (doc->selection_mask) {
+        selection_mask_free(doc->selection_mask);
+        doc->selection_mask = selection_mask_new(data->new_width, data->new_height);
+    }
+
+    /* Invalidate composite */
+    document_invalidate_composite(doc);
+}
+
+/**
+ * Crop command revert callback
+ * Restores layers from snapshots
+ */
+static void crop_command_revert(Command* cmd, struct ImageDocument* doc) {
+    CropCommandData* data;
+    GList *layer_iter, *snapshot_iter, *offset_iter;
+
+    if (!cmd || !cmd->user_data || !doc) {
+        return;
+    }
+
+    data = (CropCommandData*)cmd->user_data;
+
+    /* Restore all layers from snapshots */
+    layer_iter = data->layers;
+    snapshot_iter = data->layer_snapshots;
+    offset_iter = data->layer_offsets;
+    while (layer_iter && snapshot_iter && offset_iter) {
+        struct ImageLayer* layer = (struct ImageLayer*)layer_iter->data;
+        cairo_surface_t* snapshot = (cairo_surface_t*)snapshot_iter->data;
+        LayerOffsetPair* offset = (LayerOffsetPair*)offset_iter->data;
+
+        if (layer && snapshot) {
+            gint old_width = cairo_image_surface_get_width(snapshot);
+            gint old_height = cairo_image_surface_get_height(snapshot);
+
+            /* Destroy current surface and create new one with original dimensions */
+            if (layer->surface) {
+                cairo_surface_destroy(layer->surface);
+            }
+            layer->surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, old_width, old_height);
+            if (layer->surface) {
+                /* Restore layer from snapshot */
+                cairo_t* cr = cairo_create(layer->surface);
+                cairo_set_source_surface(cr, snapshot, 0, 0);
+                cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+                cairo_paint(cr);
+                cairo_destroy(cr);
+
+                /* Update layer dimensions */
+                layer->width = (guint)old_width;
+                layer->height = (guint)old_height;
+
+                /* Restore offset */
+                if (offset) {
+                    layer->offset_x = offset->old_offset_x;
+                    layer->offset_y = offset->old_offset_y;
+                }
+
+                layer_invalidate_cache(layer);
+            }
+        }
+
+        layer_iter = layer_iter->next;
+        snapshot_iter = snapshot_iter->next;
+        offset_iter = offset_iter->next;
+    }
+
+    /* Restore document dimensions */
+    doc->width = data->old_width;
+    doc->height = data->old_height;
+
+    /* Recreate tile grid with old dimensions */
+    if (doc->tile_grid) {
+        tile_grid_free(doc->tile_grid);
+        doc->tile_grid = NULL;
+    }
+    doc->tile_grid = tile_grid_create(data->old_width, data->old_height, 128);
+    if (!doc->tile_grid) {
+        g_warning("Failed to create tile grid after crop revert");
+    }
+
+    /* Update drawing area size */
+    if (doc->drawing_area) {
+        gint display_width = (gint)(doc->width * doc->zoom_factor);
+        gint display_height = (gint)(doc->height * doc->zoom_factor);
+        gtk_widget_set_size_request(doc->drawing_area, display_width, display_height);
+        gtk_widget_queue_draw(doc->drawing_area);
+    }
+
+    /* Recreate selection mask with original dimensions */
+    if (doc->selection_mask) {
+        selection_mask_free(doc->selection_mask);
+        doc->selection_mask = selection_mask_new(data->old_width, data->old_height);
+    }
+
+    /* Invalidate composite */
+    document_invalidate_composite(doc);
+}
+
+/**
+ * Crop command destroy callback
+ */
+static void crop_command_destroy(Command* cmd) {
+    if (!cmd || !cmd->user_data) {
+        return;
+    }
+    crop_command_data_free((CropCommandData*)cmd->user_data);
+}
+
+/**
+ * Helper: Calculate selection bounds from selection mask
+ * Returns TRUE if there is a selection, FALSE if empty
+ */
+static gboolean get_selection_bounds(SelectionMask* mask,
+                                     gint* out_x, gint* out_y,
+                                     gint* out_width, gint* out_height) {
+    if (!mask || !mask->base_mask || selection_mask_is_empty(mask)) {
+        return FALSE;
+    }
+
+    gint min_x = mask->width;
+    gint min_y = mask->height;
+    gint max_x = -1;
+    gint max_y = -1;
+
+    /* Scan mask to find bounds of selected pixels */
+    for (gint y = 0; y < mask->height; y++) {
+        uint8_t* row = mask->base_mask + y * mask->stride;
+        for (gint x = 0; x < mask->width; x++) {
+            if (row[x] > 0) {
+                if (x < min_x)
+                    min_x = x;
+                if (y < min_y)
+                    min_y = y;
+                if (x > max_x)
+                    max_x = x;
+                if (y > max_y)
+                    max_y = y;
+            }
+        }
+    }
+
+    if (max_x < min_x || max_y < min_y) {
+        return FALSE;
+    }
+
+    *out_x = min_x;
+    *out_y = min_y;
+    *out_width = max_x - min_x + 1;
+    *out_height = max_y - min_y + 1;
+    return TRUE;
+}
+
+/**
+ * Create a crop to selection command
+ */
+Command* command_create_crop_to_selection(struct ImageDocument* doc) {
+    Command* cmd;
+    CropCommandData* data;
+    GList* iter;
+    gint sel_x, sel_y, sel_width, sel_height;
+
+    if (!doc || !doc->layers || g_list_length(doc->layers) == 0) {
+        return NULL;
+    }
+
+    /* Get selection bounds */
+    if (!doc->selection_mask || selection_mask_is_empty(doc->selection_mask)) {
+        g_warning("No selection to crop to");
+        return NULL;
+    }
+
+    if (!get_selection_bounds(doc->selection_mask, &sel_x, &sel_y, &sel_width, &sel_height)) {
+        g_warning("Failed to get selection bounds");
+        return NULL;
+    }
+
+    if (sel_width <= 0 || sel_height <= 0) {
+        g_warning("Selection has invalid dimensions");
+        return NULL;
+    }
+
+    /* Create command data */
+    data = (CropCommandData*)g_malloc0(sizeof(CropCommandData));
+    data->doc = doc;
+    data->old_width = doc->width;
+    data->old_height = doc->height;
+    data->new_width = (guint)sel_width;
+    data->new_height = (guint)sel_height;
+    data->crop_x = sel_x;
+    data->crop_y = sel_y;
+    data->layer_snapshots = NULL;
+    data->layers = NULL;
+    data->layer_offsets = NULL;
+
+    /* Create snapshots of all layers */
+    for (iter = doc->layers; iter; iter = iter->next) {
+        struct ImageLayer* layer = (struct ImageLayer*)iter->data;
+        if (layer && layer->surface) {
+            cairo_surface_t* snapshot = cairo_surface_snapshot(layer->surface);
+            if (snapshot) {
+                data->layer_snapshots = g_list_append(data->layer_snapshots, snapshot);
+                data->layers = g_list_append(data->layers, layer);
+
+                LayerOffsetPair* offset = (LayerOffsetPair*)g_malloc(sizeof(LayerOffsetPair));
+                offset->layer = layer;
+                offset->old_offset_x = layer->offset_x;
+                offset->old_offset_y = layer->offset_y;
+                data->layer_offsets = g_list_append(data->layer_offsets, offset);
+            }
+        }
+    }
+
+    if (!data->layers) {
+        crop_command_data_free(data);
+        return NULL;
+    }
+
+    /* Create command */
+    cmd = command_new(command_get_name_string(CMD_NAME_CROP_TO_SELECTION),
+                      COMMAND_CANVAS_RESIZE,
+                      crop_command_apply,
+                      crop_command_revert,
+                      crop_command_destroy);
+
+    if (!cmd) {
+        crop_command_data_free(data);
+        return NULL;
+    }
+
+    cmd->user_data = data;
+
+    return cmd;
+}
+
+/**
+ * Helper: Calculate non-transparent bounds from composited image
+ * Returns TRUE if there are non-transparent pixels, FALSE if empty
+ */
+static gboolean get_content_bounds(struct ImageDocument* doc,
+                                   gint* out_x, gint* out_y,
+                                   gint* out_width, gint* out_height) {
+    if (!doc || !doc->layers || g_list_length(doc->layers) == 0) {
+        return FALSE;
+    }
+
+    gint min_x = (gint)doc->width;
+    gint min_y = (gint)doc->height;
+    gint max_x = -1;
+    gint max_y = -1;
+
+    /* Iterate through all layers and find content bounds */
+    for (GList* iter = doc->layers; iter; iter = iter->next) {
+        struct ImageLayer* layer = (struct ImageLayer*)iter->data;
+        if (!layer || !layer->surface || !layer->visible) {
+            continue;
+        }
+
+        cairo_surface_flush(layer->surface);
+        guchar* surface_data = cairo_image_surface_get_data(layer->surface);
+        gint stride = cairo_image_surface_get_stride(layer->surface);
+
+        if (!surface_data) {
+            continue;
+        }
+
+        /* Scan layer surface for non-transparent pixels */
+        for (gint y = 0; y < (gint)layer->height; y++) {
+            guint32* row = (guint32*)(surface_data + y * stride);
+            for (gint x = 0; x < (gint)layer->width; x++) {
+                /* Check alpha channel (high byte in ARGB32) */
+                guchar alpha = (row[x] >> 24) & 0xFF;
+                if (alpha > 0) {
+                    gint doc_x = layer->offset_x + x;
+                    gint doc_y = layer->offset_y + y;
+
+                    /* Only consider pixels within document bounds */
+                    if (doc_x >= 0 && doc_x < (gint)doc->width &&
+                        doc_y >= 0 && doc_y < (gint)doc->height) {
+                        if (doc_x < min_x)
+                            min_x = doc_x;
+                        if (doc_y < min_y)
+                            min_y = doc_y;
+                        if (doc_x > max_x)
+                            max_x = doc_x;
+                        if (doc_y > max_y)
+                            max_y = doc_y;
+                    }
+                }
+            }
+        }
+    }
+
+    if (max_x < min_x || max_y < min_y) {
+        return FALSE;
+    }
+
+    *out_x = min_x;
+    *out_y = min_y;
+    *out_width = max_x - min_x + 1;
+    *out_height = max_y - min_y + 1;
+    return TRUE;
+}
+
+/**
+ * Create a trim borders command
+ */
+Command* command_create_trim_borders(struct ImageDocument* doc) {
+    Command* cmd;
+    CropCommandData* data;
+    GList* iter;
+    gint content_x, content_y, content_width, content_height;
+
+    if (!doc || !doc->layers || g_list_length(doc->layers) == 0) {
+        return NULL;
+    }
+
+    /* Get content bounds (non-transparent area) */
+    if (!get_content_bounds(doc, &content_x, &content_y, &content_width, &content_height)) {
+        g_warning("No non-transparent content to trim to");
+        return NULL;
+    }
+
+    if (content_width <= 0 || content_height <= 0) {
+        g_warning("Content has invalid dimensions");
+        return NULL;
+    }
+
+    /* Check if already trimmed */
+    if (content_x == 0 && content_y == 0 &&
+        (guint)content_width == doc->width && (guint)content_height == doc->height) {
+        g_warning("Image already trimmed - no transparent borders to remove");
+        return NULL;
+    }
+
+    /* Create command data */
+    data = (CropCommandData*)g_malloc0(sizeof(CropCommandData));
+    data->doc = doc;
+    data->old_width = doc->width;
+    data->old_height = doc->height;
+    data->new_width = (guint)content_width;
+    data->new_height = (guint)content_height;
+    data->crop_x = content_x;
+    data->crop_y = content_y;
+    data->layer_snapshots = NULL;
+    data->layers = NULL;
+    data->layer_offsets = NULL;
+
+    /* Create snapshots of all layers */
+    for (iter = doc->layers; iter; iter = iter->next) {
+        struct ImageLayer* layer = (struct ImageLayer*)iter->data;
+        if (layer && layer->surface) {
+            cairo_surface_t* snapshot = cairo_surface_snapshot(layer->surface);
+            if (snapshot) {
+                data->layer_snapshots = g_list_append(data->layer_snapshots, snapshot);
+                data->layers = g_list_append(data->layers, layer);
+
+                LayerOffsetPair* offset = (LayerOffsetPair*)g_malloc(sizeof(LayerOffsetPair));
+                offset->layer = layer;
+                offset->old_offset_x = layer->offset_x;
+                offset->old_offset_y = layer->offset_y;
+                data->layer_offsets = g_list_append(data->layer_offsets, offset);
+            }
+        }
+    }
+
+    if (!data->layers) {
+        crop_command_data_free(data);
+        return NULL;
+    }
+
+    /* Create command */
+    cmd = command_new(command_get_name_string(CMD_NAME_TRIM_BORDERS),
+                      COMMAND_CANVAS_RESIZE,
+                      crop_command_apply,
+                      crop_command_revert,
+                      crop_command_destroy);
+
+    if (!cmd) {
+        crop_command_data_free(data);
         return NULL;
     }
 

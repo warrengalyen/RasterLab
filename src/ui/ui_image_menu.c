@@ -1122,6 +1122,114 @@ void on_image_flatten(GtkWidget* widget, gpointer data) {
 }
 
 /**
+ * Image > Crop to selection callback
+ */
+void on_image_crop_to_selection(GtkWidget* widget, gpointer data) {
+    (void)widget; /* Unused */
+
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc = ui_get_active_document(ctx);
+    LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window),
+                                                                "layers_panel");
+    Command* cmd;
+
+    if (!doc) {
+        g_warning("No document open");
+        return;
+    }
+
+    if (!doc->layers || g_list_length(doc->layers) == 0) {
+        g_warning("Document has no layers");
+        return;
+    }
+
+    /* Create crop to selection command */
+    cmd = command_create_crop_to_selection(doc);
+    if (!cmd) {
+        /* Warning already shown in command_create_crop_to_selection */
+        return;
+    }
+
+    /* Execute the command */
+    command_execute(cmd, doc);
+
+    /* Push to undo stack */
+    if (doc->undo_stack) {
+        command_stack_push(doc->undo_stack, cmd);
+        if (doc->redo_stack) {
+            command_stack_clear(doc->redo_stack);
+        }
+    } else {
+        command_free(cmd);
+    }
+
+    /* Update layers panel */
+    if (layers_panel) {
+        layers_panel_update(layers_panel, doc);
+    }
+
+    /* Update UI state */
+    ui_update_menu_and_button_states(ctx);
+    ui_update_window_title(ctx, NULL);
+    ui_update_status_bar(ctx, NULL);
+    doc->modified = TRUE;
+}
+
+/**
+ * Image > Trim borders callback
+ */
+void on_image_trim_borders(GtkWidget* widget, gpointer data) {
+    (void)widget; /* Unused */
+
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc = ui_get_active_document(ctx);
+    LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window),
+                                                                "layers_panel");
+    Command* cmd;
+
+    if (!doc) {
+        g_warning("No document open");
+        return;
+    }
+
+    if (!doc->layers || g_list_length(doc->layers) == 0) {
+        g_warning("Document has no layers");
+        return;
+    }
+
+    /* Create trim borders command */
+    cmd = command_create_trim_borders(doc);
+    if (!cmd) {
+        /* Warning already shown in command_create_trim_borders */
+        return;
+    }
+
+    /* Execute the command */
+    command_execute(cmd, doc);
+
+    /* Push to undo stack */
+    if (doc->undo_stack) {
+        command_stack_push(doc->undo_stack, cmd);
+        if (doc->redo_stack) {
+            command_stack_clear(doc->redo_stack);
+        }
+    } else {
+        command_free(cmd);
+    }
+
+    /* Update layers panel */
+    if (layers_panel) {
+        layers_panel_update(layers_panel, doc);
+    }
+
+    /* Update UI state */
+    ui_update_menu_and_button_states(ctx);
+    ui_update_window_title(ctx, NULL);
+    ui_update_status_bar(ctx, NULL);
+    doc->modified = TRUE;
+}
+
+/**
  * Setup Image menu from Glade builder
  */
 void ui_image_menu_setup(GtkBuilder* builder, AppContext* ctx) {
@@ -1196,5 +1304,15 @@ void ui_image_menu_setup(GtkBuilder* builder, AppContext* ctx) {
     GtkWidget* image_menu_flatten = GTK_WIDGET(gtk_builder_get_object(builder, "image_menu_flatten"));
     if (image_menu_flatten) {
         g_signal_connect(image_menu_flatten, "activate", G_CALLBACK(on_image_flatten), ctx);
+    }
+
+    GtkWidget* image_menu_crop_selection = GTK_WIDGET(gtk_builder_get_object(builder, "image_menu_crop_selection"));
+    if (image_menu_crop_selection) {
+        g_signal_connect(image_menu_crop_selection, "activate", G_CALLBACK(on_image_crop_to_selection), ctx);
+    }
+
+    GtkWidget* image_menu_trim_borders = GTK_WIDGET(gtk_builder_get_object(builder, "image_menu_trim_borders"));
+    if (image_menu_trim_borders) {
+        g_signal_connect(image_menu_trim_borders, "activate", G_CALLBACK(on_image_trim_borders), ctx);
     }
 }

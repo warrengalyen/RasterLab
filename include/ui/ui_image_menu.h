@@ -20,6 +20,8 @@ void on_image_rotate_arbitrary(GtkWidget* widget, gpointer data);
 void on_image_rotate_90_cw(GtkWidget* widget, gpointer data);
 void on_image_rotate_90_ccw(GtkWidget* widget, gpointer data);
 void on_image_rotate_180(GtkWidget* widget, gpointer data);
+void on_image_crop_to_selection(GtkWidget* widget, gpointer data);
+void on_image_trim_borders(GtkWidget* widget, gpointer data);
 
 /**
  * Setup Image menu from Glade builder

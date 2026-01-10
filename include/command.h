@@ -53,6 +53,8 @@ typedef enum {
     CMD_NAME_INVERT_SELECTION,
     CMD_NAME_FEATHER_SELECTION,
     CMD_NAME_MOVE_SELECTED_PIXELS,
+    CMD_NAME_CROP_TO_SELECTION,
+    CMD_NAME_TRIM_BORDERS,
     CMD_NAME_COUNT /* Total number of predefined command names */
 } CommandName;
 

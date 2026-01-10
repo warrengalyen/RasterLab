@@ -197,4 +197,37 @@ typedef struct {
  */
 Command* command_create_flatten(struct ImageDocument* doc);
 
+/**
+ * Crop command data structure
+ * Stores layer snapshots and positions for crop operations (crop to selection, trim borders)
+ */
+typedef struct {
+    struct ImageDocument* doc; /* Document containing the layers */
+    GList* layer_snapshots;    /* List of cairo_surface_t* snapshots (before operation) */
+    GList* layers;             /* List of ImageLayer* pointers */
+    GList* layer_offsets;      /* List of LayerOffsetPair* for old offsets */
+    guint old_width;           /* Document width before crop */
+    guint old_height;          /* Document height before crop */
+    guint new_width;           /* Document width after crop */
+    guint new_height;          /* Document height after crop */
+    gint crop_x;               /* X offset of crop region (document coords) */
+    gint crop_y;               /* Y offset of crop region (document coords) */
+} CropCommandData;
+
+/**
+ * Create a crop to selection command
+ * Crops all layers and canvas to the bounding box of the current selection
+ * @param doc The document
+ * @return Newly created Command, or NULL on failure (e.g., no selection)
+ */
+Command* command_create_crop_to_selection(struct ImageDocument* doc);
+
+/**
+ * Create a trim borders command
+ * Crops all layers and canvas to remove transparent borders
+ * @param doc The document
+ * @return Newly created Command, or NULL on failure
+ */
+Command* command_create_trim_borders(struct ImageDocument* doc);
+
 #endif /* COMMAND_IMAGE_H */
