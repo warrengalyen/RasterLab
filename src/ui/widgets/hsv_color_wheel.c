@@ -483,10 +483,6 @@ static gboolean on_draw(GtkWidget* widget, cairo_t* cr, gpointer data) {
         wheel->height = new_height;
     }
 
-    // Clear background
-    cairo_set_source_rgb(cr, 0.2, 0.2, 0.2);
-    cairo_paint(cr);
-
     // Render and draw cached wheel surface
     render_wheel_surface(wheel);
     if (wheel->wheel_surface) {

@@ -1,10 +1,10 @@
 #ifndef TOOLS_PANEL_H
 #define TOOLS_PANEL_H
 
-#include <gtk/gtk.h>
-#include "tools.h"
 #include "tool_manager.h"
+#include "tools.h"
 #include "ui/tool_options_panel.h"
+#include <gtk/gtk.h>
 
 /**
  * Initialize tools panel from an existing builder (used when panel is in main window)
@@ -12,20 +12,25 @@
  * @param tool_registry The tool registry for tool selection callbacks
  * @return The tools panel widget
  */
-GtkWidget* tools_panel_initialize_from_builder(GtkBuilder *builder, ToolRegistry *tool_registry);
+GtkWidget* tools_panel_initialize_from_builder(GtkBuilder* builder, ToolRegistry* tool_registry);
 
 /**
  * Set the tool options panel reference for tool selection callbacks
  * @param panel The tool options panel to update when tools are selected
  */
-void tools_panel_set_options_panel(ToolOptionsPanel *panel);
+void tools_panel_set_options_panel(ToolOptionsPanel* panel);
+
+/**
+ * Set the main window reference for dialog parent
+ * @param window The main window to use as parent for dialogs
+ */
+void tools_panel_set_main_window(GtkWindow* window);
 
 /**
  * Get the current foreground color from the color picker
  * @param rgba Pointer to GdkRGBA to fill with foreground color
  * @return TRUE if color was retrieved, FALSE if color button not available
  */
-gboolean tools_panel_get_foreground_color(GdkRGBA *rgba);
+gboolean tools_panel_get_foreground_color(GdkRGBA* rgba);
 
 #endif /* TOOLS_PANEL_H */
-

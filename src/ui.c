@@ -190,6 +190,9 @@ AppContext* ui_create_main_window(void) {
     /* Connect tools panel to tool options panel for title updates */
     tools_panel_set_options_panel(ctx->tool_options_panel);
 
+    /* Set main window reference for color chooser dialogs */
+    tools_panel_set_main_window(GTK_WINDOW(ctx->window));
+
     /* ==== RIGHT PANEL: Layers ==== */
     ctx->layers_panel = create_layers_panel();
     layers_panel_widget = ctx->layers_panel->panel;

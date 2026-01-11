@@ -27,9 +27,7 @@ int main(int argc, char* argv[]) {
     /* Initialize GTK */
     gtk_init(&argc, &argv);
 
-    test_color_chooser();
-
-    return 0;
+    // test_color_chooser();
 
     /* Initialize plugin system */
     plugin_loader_init();

@@ -1541,14 +1541,13 @@
                         <property name="visible">True</property>
                         <property name="can-focus">False</property>
                         <child>
-                          <object class="GtkColorButton" id="bg_color_button">
+                          <object class="GtkButton" id="bg_color_button">
                             <property name="width-request">20</property>
                             <property name="height-request">20</property>
                             <property name="visible">True</property>
                             <property name="can-focus">True</property>
                             <property name="receives-default">True</property>
-                            <property name="title">Select Background Color</property>
-                            <property name="show-editor">True</property>
+                            <property name="tooltip-text">Background Color</property>
                           </object>
                           <packing>
                             <property name="x">15</property>
@@ -1556,14 +1555,13 @@
                           </packing>
                         </child>
                         <child>
-                          <object class="GtkColorButton" id="fg_color_button">
+                          <object class="GtkButton" id="fg_color_button">
                             <property name="width-request">20</property>
                             <property name="height-request">20</property>
                             <property name="visible">True</property>
                             <property name="can-focus">True</property>
                             <property name="receives-default">True</property>
-                            <property name="title">Select Foreground Color</property>
-                            <property name="show-editor">True</property>
+                            <property name="tooltip-text">Foreground Color</property>
                           </object>
                         </child>
                       </object>
