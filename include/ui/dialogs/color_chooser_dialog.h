@@ -11,13 +11,15 @@
  * @param initial_color Initial color to display (RGB, 0-1 range)
  * @param callback Callback function called whenever color changes
  * @param callback_data User data passed to callback
+ * @param realtime_updates If TRUE, callback is called on every change; if FALSE, only on dialog close
  * @return The dialog widget (caller should connect to response signal)
  */
 GtkWidget* color_chooser_dialog_new(GtkWindow* parent,
                                     const char* title,
                                     GdkRGBA* initial_color,
                                     void (*callback)(double r, double g, double b, gpointer user_data),
-                                    gpointer callback_data);
+                                    gpointer callback_data,
+                                    gboolean realtime_updates);
 
 /**
  * Get the currently selected color from the dialog

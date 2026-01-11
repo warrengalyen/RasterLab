@@ -18,7 +18,8 @@ typedef struct {
     RgbScale* blue_scale;
     GtkWidget* hex_entry;
     GtkWidget* color_preview;
-    gboolean updating; // Prevent recursive updates
+    gboolean updating;         // Prevent recursive updates
+    gboolean realtime_updates; // If FALSE, only call callback on dialog close
     void (*callback)(double r, double g, double b, gpointer user_data);
     gpointer callback_data;
 } ColorChooserData;
@@ -50,8 +51,8 @@ static void update_hex_and_preview(ColorChooserData* data) {
         gtk_widget_queue_draw(data->color_preview);
     }
 
-    // Call the update callback
-    if (data->callback) {
+    // Call the update callback (only if realtime updates are enabled)
+    if (data->realtime_updates && data->callback) {
         data->callback(r, g, b, data->callback_data);
     }
 }
@@ -354,8 +355,8 @@ static void on_hex_entry_changed(GtkEditable* editable, gpointer user_data) {
 
     gtk_widget_queue_draw(data->color_preview);
 
-    // Call the update callback
-    if (data->callback) {
+    // Call the update callback (only if realtime updates are enabled)
+    if (data->realtime_updates && data->callback) {
         data->callback(r, g, b, data->callback_data);
     }
 
@@ -384,10 +385,12 @@ GtkWidget* color_chooser_dialog_new(GtkWindow* parent,
                                     const char* title,
                                     GdkRGBA* initial_color,
                                     void (*callback)(double r, double g, double b, gpointer user_data),
-                                    gpointer callback_data) {
+                                    gpointer callback_data,
+                                    gboolean realtime_updates) {
     ColorChooserData* data = g_new0(ColorChooserData, 1);
     data->callback = callback;
     data->callback_data = callback_data;
+    data->realtime_updates = realtime_updates;
 
     ColorWheel* wheel = color_wheel_new();
     data->wheel = wheel;
