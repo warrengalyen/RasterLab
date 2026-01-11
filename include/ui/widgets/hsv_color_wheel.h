@@ -7,7 +7,7 @@ typedef struct {
     GtkWidget* drawing_area;
     double hue;        // 0-360
     double saturation; // 0-1
-    double lightness;  // 0-1
+    double value;      // 0-1
     gboolean dragging_wheel;
     gboolean dragging_triangle;
     int width;
@@ -35,10 +35,10 @@ void color_wheel_get_rgb(ColorWheel* wheel, double* r, double* g, double* b);
 // Set color from RGB (0-1 range)
 void color_wheel_set_rgb(ColorWheel* wheel, double r, double g, double b);
 
-// Get current HSL values
-void color_wheel_get_hsl(ColorWheel* wheel, double* h, double* s, double* l);
+// Get current HSV values
+void color_wheel_get_hsv(ColorWheel* wheel, double* h, double* s, double* v);
 
-// Set HSL values
-void color_wheel_set_hsl(ColorWheel* wheel, double h, double s, double l);
+// Set HSV values
+void color_wheel_set_hsv(ColorWheel* wheel, double h, double s, double v);
 
 #endif /* COLOR_WHEEL_H */

@@ -1,4 +1,4 @@
-#include "ui/widgets/color_wheel.h"
+#include "ui/widgets/hsv_color_wheel.h"
 #include <math.h>
 #include <stdio.h>
 
@@ -7,11 +7,11 @@
 #endif
 
 // Forward declarations of static functions
-static void hsl_to_rgb(double h, double s, double l, double* r, double* g, double* b);
-static void rgb_to_hsl(double r, double g, double b, double* h, double* s, double* l);
+static void hsv_to_rgb(double h, double s, double v, double* r, double* g, double* b);
+static void rgb_to_hsv(double r, double g, double b, double* h, double* s, double* v);
 static void get_triangle_vertices(ColorWheel* wheel, double* x1, double* y1,
                                   double* x2, double* y2, double* x3, double* y3);
-static void sl_to_triangle(ColorWheel* wheel, double s, double l, double* x, double* y);
+static void sl_to_triangle(ColorWheel* wheel, double s, double v, double* x, double* y);
 static void triangle_to_sl(ColorWheel* wheel, double x, double y, double* s, double* l);
 static gboolean on_draw(GtkWidget* widget, cairo_t* cr, gpointer data);
 static gboolean on_button_press(GtkWidget* widget, GdkEventButton* event, gpointer data);
@@ -23,9 +23,9 @@ static void invalidate_caches(ColorWheel* wheel);
 static void render_wheel_surface(ColorWheel* wheel);
 static void render_triangle_surface(ColorWheel* wheel);
 
-// Convert HSL to RGB
-static void hsl_to_rgb(double h, double s, double l, double* r, double* g, double* b) {
-    double c = (1.0 - fabs(2.0 * l - 1.0)) * s;
+// Convert HSV to RGB
+static void hsv_to_rgb(double h, double s, double v, double* r, double* g, double* b) {
+    double c = v * s;
     double hp = h / 60.0;
     double x = c * (1.0 - fabs(fmod(hp, 2.0) - 1.0));
     double r1, g1, b1;
@@ -56,34 +56,39 @@ static void hsl_to_rgb(double h, double s, double l, double* r, double* g, doubl
         b1 = x;
     }
 
-    double m = l - c / 2.0;
+    double m = v - c;
     *r = r1 + m;
     *g = g1 + m;
     *b = b1 + m;
 }
 
-// Convert RGB to HSL
-static void rgb_to_hsl(double r, double g, double b, double* h, double* s, double* l) {
+// Convert RGB to HSV
+static void rgb_to_hsv(double r, double g, double b, double* h, double* s, double* v) {
     double max = fmax(r, fmax(g, b));
     double min = fmin(r, fmin(g, b));
     double delta = max - min;
 
-    *l = (max + min) / 2.0;
+    *v = max;
 
-    if (delta < 0.00001) {
+    if (max < 0.0001) {
         *s = 0;
         *h = 0;
         return;
     }
 
-    *s = (*l > 0.5) ? delta / (2.0 - max - min) : delta / (max + min);
+    *s = delta / max;
+
+    if (delta < 0.0001) {
+        *h = 0;
+        return;
+    }
 
     if (max == r) {
-        *h = 60.0 * fmod(((g - b) / delta), 6.0);
+        *h = 60.0 * fmod((g - b) / delta, 6.0);
     } else if (max == g) {
-        *h = 60.0 * (((b - r) / delta) + 2.0);
+        *h = 60.0 * ((b - r) / delta + 2.0);
     } else {
-        *h = 60.0 * (((r - g) / delta) + 4.0);
+        *h = 60.0 * ((r - g) / delta + 4.0);
     }
 
     if (*h < 0)
@@ -109,9 +114,9 @@ static double angle_to_hue(double angle_rad) {
 }
 
 // Get triangle vertices (rotated by hue)
-// vertex1 = pure hue (pointing toward hue on wheel)
-// vertex2 = white (120° clockwise from hue)
-// vertex3 = black (240° clockwise from hue)
+// vertex1 = pure hue (pointing toward hue on wheel) - H, S=1, V=1
+// vertex2 = white (120° clockwise from hue) - H, S=0, V=1
+// vertex3 = black (240° clockwise from hue) - H, S=1, V=0
 static void get_triangle_vertices(ColorWheel* wheel, double* x1, double* y1,
                                   double* x2, double* y2, double* x3, double* y3) {
     double cx = wheel->width / 2.0;
@@ -136,19 +141,19 @@ static void get_triangle_vertices(ColorWheel* wheel, double* x1, double* y1,
 }
 
 // Convert saturation/lightness to triangle coordinates
-static void sl_to_triangle(ColorWheel* wheel, double s, double l, double* x, double* y) {
+static void sl_to_triangle(ColorWheel* wheel, double s, double v, double* x, double* y) {
     double x1, y1, x2, y2, x3, y3;
     get_triangle_vertices(wheel, &x1, &y1, &x2, &y2, &x3, &y3);
 
     // Barycentric weights derived from:
     // s = w1  (saturation = weight of pure hue vertex)
-    // l = 0.5*w1 + w2  (lightness interpolated from vertices)
+    // v = 0.5*w1 + w2  (value interpolated from vertices)
     // w1 + w2 + w3 = 1
     //
-    // Solving: w1 = s, w2 = l - 0.5*s, w3 = 1 - 0.5*s - l
+    // Solving: w1 = s, w2 = v - 0.5*s, w3 = 1 - 0.5*s - v
     double w1 = s;
-    double w2 = l - 0.5 * s;
-    double w3 = 1.0 - 0.5 * s - l;
+    double w2 = v - 0.5 * s;
+    double w3 = 1.0 - 0.5 * s - v;
 
     // Clamp to valid range (handles edge cases from floating point)
     w1 = fmax(0, w1);
@@ -284,7 +289,7 @@ static void triangle_to_sl(ColorWheel* wheel, double x, double y, double* s, dou
     *l = w1 * 0.5 + w2 * 1.0 + w3 * 0.0;
     *s = w1 * 1.0 + w2 * 0.0 + w3 * 0.0;
 
-    // Final clamp to ensure valid HSL values
+    // Final clamp to ensure valid HSV values
     *s = fmax(0, fmin(1, *s));
     *l = fmax(0, fmin(1, *l));
 }
@@ -330,7 +335,7 @@ static void render_wheel_surface(ColorWheel* wheel) {
         double rad = hue_to_angle(hue);
         double rad_next = hue_to_angle(hue + 1.0);
         double r, g, b;
-        hsl_to_rgb(hue, 1.0, 0.5, &r, &g, &b);
+        hsv_to_rgb(hue, 1.0, 1.0, &r, &g, &b);
 
         cairo_set_source_rgb(cr, r, g, b);
         cairo_move_to(cr, cx + inner_radius * cos(rad), cy + inner_radius * sin(rad));
@@ -427,15 +432,15 @@ static void render_triangle_surface(ColorWheel* wheel) {
                     cw3 /= sum;
                 }
 
-                // Map barycentric to HSL:
-                // vertex1 (x1,y1) = pure hue (L=0.5, S=1)
-                // vertex2 (x2,y2) = white (L=1, S=0)
-                // vertex3 (x3,y3) = black (L=0, S=0)
-                double l = cw1 * 0.5 + cw2 * 1.0 + cw3 * 0.0;
-                double s = cw1 * 1.0 + cw2 * 0.0 + cw3 * 0.0;
+                // Map barycentric to HSV:
+                // vertex1 (x1,y1) = pure hue (S=1, V=1)
+                // vertex2 (x2,y2) = white (S=0, V=1)
+                // vertex3 (x3,y3) = black (S=1, V=0)
+                double v = cw1 * 1.0 + cw2 * 1.0 + cw3 * 0.0;
+                double s = cw1 * 1.0 + cw2 * 0.0 + cw3 * 1.0;
 
                 double r, g, b;
-                hsl_to_rgb(wheel->hue, s, l, &r, &g, &b);
+                hsv_to_rgb(wheel->hue, s, v, &r, &g, &b);
 
                 // Calculate alpha for edge anti-aliasing
                 double alpha = 1.0;
@@ -537,7 +542,7 @@ static gboolean on_draw(GtkWidget* widget, cairo_t* cr, gpointer data) {
 
     // Draw triangle indicator (saturation/lightness selector)
     double tri_x, tri_y;
-    sl_to_triangle(wheel, wheel->saturation, wheel->lightness, &tri_x, &tri_y);
+    sl_to_triangle(wheel, wheel->saturation, wheel->value, &tri_x, &tri_y);
 
     // Outer ring (black)
     cairo_set_source_rgb(cr, 0, 0, 0);
@@ -577,7 +582,7 @@ static gboolean on_button_press(GtkWidget* widget, GdkEventButton* event, gpoint
         gtk_widget_queue_draw(widget);
     } else if (dist < inner_radius) {
         wheel->dragging_triangle = TRUE;
-        triangle_to_sl(wheel, event->x, event->y, &wheel->saturation, &wheel->lightness);
+        triangle_to_sl(wheel, event->x, event->y, &wheel->saturation, &wheel->value);
         gtk_widget_queue_draw(widget);
     }
 
@@ -611,7 +616,7 @@ static gboolean on_motion_notify(GtkWidget* widget, GdkEventMotion* event, gpoin
         wheel->hue = angle_to_hue(atan2(dy, dx));
         gtk_widget_queue_draw(widget);
     } else if (wheel->dragging_triangle) {
-        triangle_to_sl(wheel, event->x, event->y, &wheel->saturation, &wheel->lightness);
+        triangle_to_sl(wheel, event->x, event->y, &wheel->saturation, &wheel->value);
         gtk_widget_queue_draw(widget);
     }
 
@@ -656,18 +661,18 @@ static gboolean on_motion_notify(GtkWidget* widget, GdkEventMotion* event, gpoin
     double r, g, b;
     if (dist >= inner_radius && dist <= outer_radius) {
         double h = angle_to_hue(atan2(dy, dx));
-        hsl_to_rgb(h, 1.0, 0.5, &r, &g, &b);
+        hsv_to_rgb(h, 1.0, 1.0, &r, &g, &b);
     } else {
-        double s, l;
-        triangle_to_sl(wheel, event->x, event->y, &s, &l);
-        hsl_to_rgb(wheel->hue, s, l, &r, &g, &b);
+        double s, v;
+        triangle_to_sl(wheel, event->x, event->y, &s, &v);
+        hsv_to_rgb(wheel->hue, s, v, &r, &g, &b);
     }
 
     char tooltip[100];
     snprintf(tooltip, sizeof(tooltip), "#%02X%02X%02X\nRGB(%d, %d, %d)\nHSL(%.0f°, %.0f%%, %.0f%%)",
              (int)(r * 255), (int)(g * 255), (int)(b * 255),
              (int)(r * 255), (int)(g * 255), (int)(b * 255),
-             wheel->hue, wheel->saturation * 100, wheel->lightness * 100);
+             wheel->hue, wheel->saturation * 100, wheel->value * 100);
     gtk_widget_set_tooltip_text(widget, tooltip);
 
     return TRUE;
@@ -733,7 +738,7 @@ ColorWheel* color_wheel_new(void) {
     ColorWheel* wheel = g_malloc0(sizeof(ColorWheel));
     wheel->hue = 240; // Start with blue (at top of wheel)
     wheel->saturation = 1.0;
-    wheel->lightness = 0.5;
+    wheel->value = 0.5;
     wheel->dragging_wheel = FALSE;
     wheel->dragging_triangle = FALSE;
     wheel->width = 300;
@@ -777,23 +782,31 @@ GtkWidget* color_wheel_get_widget(ColorWheel* wheel) {
 }
 
 void color_wheel_get_rgb(ColorWheel* wheel, double* r, double* g, double* b) {
-    hsl_to_rgb(wheel->hue, wheel->saturation, wheel->lightness, r, g, b);
+    hsv_to_rgb(wheel->hue, wheel->saturation, wheel->value, r, g, b);
 }
 
 void color_wheel_set_rgb(ColorWheel* wheel, double r, double g, double b) {
-    rgb_to_hsl(r, g, b, &wheel->hue, &wheel->saturation, &wheel->lightness);
+    rgb_to_hsv(r, g, b, &wheel->hue, &wheel->saturation, &wheel->value);
     gtk_widget_queue_draw(wheel->drawing_area);
 }
 
-void color_wheel_get_hsl(ColorWheel* wheel, double* h, double* s, double* l) {
-    *h = wheel->hue;
-    *s = wheel->saturation;
-    *l = wheel->lightness;
+void color_wheel_get_hsv(ColorWheel* wheel, double* h, double* s, double* v) {
+    if (!wheel)
+        return;
+    if (h)
+        *h = wheel->hue;
+    if (s)
+        *s = wheel->saturation;
+    if (v)
+        *v = wheel->value;
 }
 
-void color_wheel_set_hsl(ColorWheel* wheel, double h, double s, double l) {
+void color_wheel_set_hsv(ColorWheel* wheel, double h, double s, double v) {
+    if (!wheel)
+        return;
     wheel->hue = h;
     wheel->saturation = s;
-    wheel->lightness = l;
-    gtk_widget_queue_draw(wheel->drawing_area);
+    wheel->value = v;
+    if (wheel->drawing_area)
+        gtk_widget_queue_draw(wheel->drawing_area);
 }
