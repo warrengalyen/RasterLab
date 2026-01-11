@@ -2,6 +2,7 @@
 #include "ui/widgets/hsv_color_wheel.h"
 #include "ui/widgets/hsv_scale.h"
 #include "ui/widgets/rgb_scale.h"
+#include "ui/widgets/vertical_spin_button.h"
 #include <math.h>
 
 #ifndef M_PI
@@ -16,6 +17,12 @@ typedef struct {
     RgbScale* red_scale;
     RgbScale* green_scale;
     RgbScale* blue_scale;
+    GtkWidget* hue_spin;
+    GtkWidget* saturation_spin;
+    GtkWidget* value_spin;
+    GtkWidget* red_spin;
+    GtkWidget* green_spin;
+    GtkWidget* blue_spin;
     GtkWidget* hex_entry;
     GtkWidget* color_preview;
     gboolean updating;         // Prevent recursive updates
@@ -113,6 +120,20 @@ static gboolean sync_scales_from_wheel(gpointer user_data) {
             rgb_scale_set_value(data->blue_scale, b);
             rgb_scale_set_rgb(data->blue_scale, r, g, b);
         }
+
+        // Update spin buttons
+        if (data->hue_spin)
+            vertical_spin_button_set_value(VERTICAL_SPIN_BUTTON(data->hue_spin), h);
+        if (data->saturation_spin)
+            vertical_spin_button_set_value(VERTICAL_SPIN_BUTTON(data->saturation_spin), s * 100.0);
+        if (data->value_spin)
+            vertical_spin_button_set_value(VERTICAL_SPIN_BUTTON(data->value_spin), v * 100.0);
+        if (data->red_spin)
+            vertical_spin_button_set_value(VERTICAL_SPIN_BUTTON(data->red_spin), r * 255.0);
+        if (data->green_spin)
+            vertical_spin_button_set_value(VERTICAL_SPIN_BUTTON(data->green_spin), g * 255.0);
+        if (data->blue_spin)
+            vertical_spin_button_set_value(VERTICAL_SPIN_BUTTON(data->blue_spin), b * 255.0);
 
         update_hex_and_preview(data);
 
@@ -270,6 +291,169 @@ static void on_blue_scale_changed(GtkRange* range, gpointer user_data) {
         rgb_scale_set_rgb(data->green_scale, r, g, b);
     if (data->blue_scale)
         rgb_scale_set_rgb(data->blue_scale, r, g, b);
+
+    update_hex_and_preview(data);
+
+    data->updating = FALSE;
+}
+
+// Spin button change callbacks
+static void on_hue_spin_changed(GtkWidget* spin, gpointer user_data) {
+    ColorChooserData* data = (ColorChooserData*)user_data;
+    if (!data || !data->wheel || data->updating)
+        return;
+
+    data->updating = TRUE;
+
+    double h = vertical_spin_button_get_value(VERTICAL_SPIN_BUTTON(spin));
+    double s, v;
+    color_wheel_get_hsv(data->wheel, NULL, &s, &v);
+
+    color_wheel_set_hsv(data->wheel, h, s, v);
+
+    // Update HSV scales
+    if (data->hue_scale) {
+        hsv_scale_set_value(data->hue_scale, h);
+        hsv_scale_set_hsv(data->hue_scale, h, s, v);
+    }
+    if (data->saturation_scale)
+        hsv_scale_set_hsv(data->saturation_scale, h, s, v);
+    if (data->value_scale)
+        hsv_scale_set_hsv(data->value_scale, h, s, v);
+
+    data->updating = FALSE;
+}
+
+static void on_saturation_spin_changed(GtkWidget* spin, gpointer user_data) {
+    ColorChooserData* data = (ColorChooserData*)user_data;
+    if (!data || !data->wheel || data->updating)
+        return;
+
+    data->updating = TRUE;
+
+    double s = vertical_spin_button_get_value(VERTICAL_SPIN_BUTTON(spin)) / 100.0;
+    double h, v;
+    color_wheel_get_hsv(data->wheel, &h, NULL, &v);
+
+    color_wheel_set_hsv(data->wheel, h, s, v);
+
+    // Update HSV scales
+    if (data->saturation_scale) {
+        hsv_scale_set_value(data->saturation_scale, s);
+        hsv_scale_set_hsv(data->saturation_scale, h, s, v);
+    }
+    if (data->hue_scale)
+        hsv_scale_set_hsv(data->hue_scale, h, s, v);
+    if (data->value_scale)
+        hsv_scale_set_hsv(data->value_scale, h, s, v);
+
+    data->updating = FALSE;
+}
+
+static void on_value_spin_changed(GtkWidget* spin, gpointer user_data) {
+    ColorChooserData* data = (ColorChooserData*)user_data;
+    if (!data || !data->wheel || data->updating)
+        return;
+
+    data->updating = TRUE;
+
+    double v = vertical_spin_button_get_value(VERTICAL_SPIN_BUTTON(spin)) / 100.0;
+    double h, s;
+    color_wheel_get_hsv(data->wheel, &h, &s, NULL);
+
+    color_wheel_set_hsv(data->wheel, h, s, v);
+
+    // Update HSV scales
+    if (data->value_scale) {
+        hsv_scale_set_value(data->value_scale, v);
+        hsv_scale_set_hsv(data->value_scale, h, s, v);
+    }
+    if (data->hue_scale)
+        hsv_scale_set_hsv(data->hue_scale, h, s, v);
+    if (data->saturation_scale)
+        hsv_scale_set_hsv(data->saturation_scale, h, s, v);
+
+    data->updating = FALSE;
+}
+
+static void on_red_spin_changed(GtkWidget* spin, gpointer user_data) {
+    ColorChooserData* data = (ColorChooserData*)user_data;
+    if (!data || !data->wheel || data->updating)
+        return;
+
+    data->updating = TRUE;
+
+    double r = vertical_spin_button_get_value(VERTICAL_SPIN_BUTTON(spin)) / 255.0;
+    double current_r, g, b;
+    color_wheel_get_rgb(data->wheel, &current_r, &g, &b);
+
+    color_wheel_set_rgb(data->wheel, r, g, b);
+
+    // Update RGB scales
+    if (data->red_scale) {
+        rgb_scale_set_value(data->red_scale, r);
+        rgb_scale_set_rgb(data->red_scale, r, g, b);
+    }
+    if (data->green_scale)
+        rgb_scale_set_rgb(data->green_scale, r, g, b);
+    if (data->blue_scale)
+        rgb_scale_set_rgb(data->blue_scale, r, g, b);
+
+    update_hex_and_preview(data);
+
+    data->updating = FALSE;
+}
+
+static void on_green_spin_changed(GtkWidget* spin, gpointer user_data) {
+    ColorChooserData* data = (ColorChooserData*)user_data;
+    if (!data || !data->wheel || data->updating)
+        return;
+
+    data->updating = TRUE;
+
+    double g = vertical_spin_button_get_value(VERTICAL_SPIN_BUTTON(spin)) / 255.0;
+    double r, current_g, b;
+    color_wheel_get_rgb(data->wheel, &r, &current_g, &b);
+
+    color_wheel_set_rgb(data->wheel, r, g, b);
+
+    // Update RGB scales
+    if (data->green_scale) {
+        rgb_scale_set_value(data->green_scale, g);
+        rgb_scale_set_rgb(data->green_scale, r, g, b);
+    }
+    if (data->red_scale)
+        rgb_scale_set_rgb(data->red_scale, r, g, b);
+    if (data->blue_scale)
+        rgb_scale_set_rgb(data->blue_scale, r, g, b);
+
+    update_hex_and_preview(data);
+
+    data->updating = FALSE;
+}
+
+static void on_blue_spin_changed(GtkWidget* spin, gpointer user_data) {
+    ColorChooserData* data = (ColorChooserData*)user_data;
+    if (!data || !data->wheel || data->updating)
+        return;
+
+    data->updating = TRUE;
+
+    double b = vertical_spin_button_get_value(VERTICAL_SPIN_BUTTON(spin)) / 255.0;
+    double r, g, current_b;
+    color_wheel_get_rgb(data->wheel, &r, &g, &current_b);
+
+    color_wheel_set_rgb(data->wheel, r, g, b);
+
+    // Update RGB scales
+    if (data->blue_scale) {
+        rgb_scale_set_value(data->blue_scale, b);
+        rgb_scale_set_rgb(data->blue_scale, r, g, b);
+    }
+    if (data->red_scale)
+        rgb_scale_set_rgb(data->red_scale, r, g, b);
+    if (data->green_scale)
+        rgb_scale_set_rgb(data->green_scale, r, g, b);
 
     update_hex_and_preview(data);
 
@@ -457,6 +641,14 @@ GtkWidget* color_chooser_dialog_new(GtkWindow* parent,
     gtk_widget_set_size_request(GTK_WIDGET(data->hue_scale), 200, 30);
     g_signal_connect(data->hue_scale, "value-changed", G_CALLBACK(on_hue_scale_changed), data);
     gtk_box_pack_start(GTK_BOX(hue_hbox), GTK_WIDGET(data->hue_scale), TRUE, TRUE, 0);
+
+    // Add spin button for hue (0-360)
+    GtkAdjustment* hue_adj = gtk_adjustment_new(h, 0.0, 360.0, 1.0, 10.0, 0.0);
+    data->hue_spin = vertical_spin_button_new(hue_adj, 1.0, 0);
+    gtk_widget_set_size_request(data->hue_spin, 45, 30);
+    g_signal_connect(data->hue_spin, "value-changed", G_CALLBACK(on_hue_spin_changed), data);
+    gtk_box_pack_start(GTK_BOX(hue_hbox), data->hue_spin, FALSE, FALSE, 0);
+
     gtk_box_pack_start(GTK_BOX(vbox), hue_hbox, FALSE, FALSE, 0);
 
     // Saturation scale (0-1)
@@ -472,6 +664,14 @@ GtkWidget* color_chooser_dialog_new(GtkWindow* parent,
     gtk_widget_set_size_request(GTK_WIDGET(data->saturation_scale), 200, 30);
     g_signal_connect(data->saturation_scale, "value-changed", G_CALLBACK(on_saturation_scale_changed), data);
     gtk_box_pack_start(GTK_BOX(saturation_hbox), GTK_WIDGET(data->saturation_scale), TRUE, TRUE, 0);
+
+    // Add spin button for saturation (0-100%)
+    GtkAdjustment* sat_adj = gtk_adjustment_new(s * 100.0, 0.0, 100.0, 1.0, 10.0, 0.0);
+    data->saturation_spin = vertical_spin_button_new(sat_adj, 1.0, 0);
+    gtk_widget_set_size_request(data->saturation_spin, 45, 30);
+    g_signal_connect(data->saturation_spin, "value-changed", G_CALLBACK(on_saturation_spin_changed), data);
+    gtk_box_pack_start(GTK_BOX(saturation_hbox), data->saturation_spin, FALSE, FALSE, 0);
+
     gtk_box_pack_start(GTK_BOX(vbox), saturation_hbox, FALSE, FALSE, 0);
 
     // Value scale (0-1)
@@ -487,6 +687,14 @@ GtkWidget* color_chooser_dialog_new(GtkWindow* parent,
     gtk_widget_set_size_request(GTK_WIDGET(data->value_scale), 200, 30);
     g_signal_connect(data->value_scale, "value-changed", G_CALLBACK(on_lightness_scale_changed), data);
     gtk_box_pack_start(GTK_BOX(value_hbox), GTK_WIDGET(data->value_scale), TRUE, TRUE, 0);
+
+    // Add spin button for value (0-100%)
+    GtkAdjustment* val_adj = gtk_adjustment_new(v * 100.0, 0.0, 100.0, 1.0, 10.0, 0.0);
+    data->value_spin = vertical_spin_button_new(val_adj, 1.0, 0);
+    gtk_widget_set_size_request(data->value_spin, 45, 30);
+    g_signal_connect(data->value_spin, "value-changed", G_CALLBACK(on_value_spin_changed), data);
+    gtk_box_pack_start(GTK_BOX(value_hbox), data->value_spin, FALSE, FALSE, 0);
+
     gtk_box_pack_start(GTK_BOX(vbox), value_hbox, FALSE, FALSE, 0);
 
     // RGB scales
@@ -506,6 +714,14 @@ GtkWidget* color_chooser_dialog_new(GtkWindow* parent,
     gtk_widget_set_size_request(GTK_WIDGET(data->red_scale), 200, 30);
     g_signal_connect(data->red_scale, "value-changed", G_CALLBACK(on_red_scale_changed), data);
     gtk_box_pack_start(GTK_BOX(red_hbox), GTK_WIDGET(data->red_scale), TRUE, TRUE, 0);
+
+    // Add spin button for red (0-255)
+    GtkAdjustment* red_adj = gtk_adjustment_new(r_val * 255.0, 0.0, 255.0, 1.0, 10.0, 0.0);
+    data->red_spin = vertical_spin_button_new(red_adj, 1.0, 0);
+    gtk_widget_set_size_request(data->red_spin, 45, 30);
+    g_signal_connect(data->red_spin, "value-changed", G_CALLBACK(on_red_spin_changed), data);
+    gtk_box_pack_start(GTK_BOX(red_hbox), data->red_spin, FALSE, FALSE, 0);
+
     gtk_box_pack_start(GTK_BOX(vbox), red_hbox, FALSE, FALSE, 0);
 
     // Green scale
@@ -521,6 +737,14 @@ GtkWidget* color_chooser_dialog_new(GtkWindow* parent,
     gtk_widget_set_size_request(GTK_WIDGET(data->green_scale), 200, 30);
     g_signal_connect(data->green_scale, "value-changed", G_CALLBACK(on_green_scale_changed), data);
     gtk_box_pack_start(GTK_BOX(green_hbox), GTK_WIDGET(data->green_scale), TRUE, TRUE, 0);
+
+    // Add spin button for green (0-255)
+    GtkAdjustment* green_adj = gtk_adjustment_new(g_val * 255.0, 0.0, 255.0, 1.0, 10.0, 0.0);
+    data->green_spin = vertical_spin_button_new(green_adj, 1.0, 0);
+    gtk_widget_set_size_request(data->green_spin, 45, 30);
+    g_signal_connect(data->green_spin, "value-changed", G_CALLBACK(on_green_spin_changed), data);
+    gtk_box_pack_start(GTK_BOX(green_hbox), data->green_spin, FALSE, FALSE, 0);
+
     gtk_box_pack_start(GTK_BOX(vbox), green_hbox, FALSE, FALSE, 0);
 
     // Blue scale
@@ -536,6 +760,14 @@ GtkWidget* color_chooser_dialog_new(GtkWindow* parent,
     gtk_widget_set_size_request(GTK_WIDGET(data->blue_scale), 200, 30);
     g_signal_connect(data->blue_scale, "value-changed", G_CALLBACK(on_blue_scale_changed), data);
     gtk_box_pack_start(GTK_BOX(blue_hbox), GTK_WIDGET(data->blue_scale), TRUE, TRUE, 0);
+
+    // Add spin button for blue (0-255)
+    GtkAdjustment* blue_adj = gtk_adjustment_new(b_val * 255.0, 0.0, 255.0, 1.0, 10.0, 0.0);
+    data->blue_spin = vertical_spin_button_new(blue_adj, 1.0, 0);
+    gtk_widget_set_size_request(data->blue_spin, 45, 30);
+    g_signal_connect(data->blue_spin, "value-changed", G_CALLBACK(on_blue_spin_changed), data);
+    gtk_box_pack_start(GTK_BOX(blue_hbox), data->blue_spin, FALSE, FALSE, 0);
+
     gtk_box_pack_start(GTK_BOX(vbox), blue_hbox, FALSE, FALSE, 0);
 
     // HTML/Hex input
