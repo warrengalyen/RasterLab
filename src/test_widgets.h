@@ -1,9 +1,12 @@
 #include "../lib/ocular.h"
 #include "ui/widgets/anchor_position_widget.h"
-#include "ui/widgets/color_wheel.h"
 #include "ui/widgets/curves_widget.h"
 #include "ui/widgets/filter_dialog.h"
 #include "ui/widgets/filter_preview.h"
+#include "ui/widgets/hsv_color_wheel.h"
+#include "ui/widgets/hsv_scale.h"
+#include "ui/widgets/rgb_scale.h"
+#include <math.h>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -825,18 +828,372 @@ static void test_anchor_position_widget(void) {
     gtk_widget_destroy(dialog);
 }
 
-static void test_color_wheel(void) {
+typedef struct {
+    ColorWheel* wheel;
+    HsvScale* hue_scale;
+    HsvScale* saturation_scale;
+    HsvScale* value_scale;
+    RgbScale* red_scale;
+    RgbScale* green_scale;
+    RgbScale* blue_scale;
+    gboolean updating; // Prevent recursive updates
+} ColorWheelTestData;
+
+// Timer to sync scales from color wheel changes
+static guint color_wheel_sync_timer = 0;
+static ColorWheelTestData* g_test_data = NULL;
+
+static gboolean sync_scales_from_wheel(gpointer user_data) {
+    ColorWheelTestData* data = (ColorWheelTestData*)user_data;
+    if (!data || !data->wheel || data->updating)
+        return G_SOURCE_CONTINUE;
+
+    static double last_h = -1, last_s = -1, last_v = -1;
+    static gboolean initialized = FALSE;
+    double h, s, v;
+    color_wheel_get_hsv(data->wheel, &h, &s, &v);
+
+    // Initialize on first run
+    if (!initialized) {
+        last_h = h;
+        last_s = s;
+        last_v = v;
+        initialized = TRUE;
+        return G_SOURCE_CONTINUE;
+    }
+
+    // Check if values changed
+    if (fabs(h - last_h) > 0.01 || fabs(s - last_s) > 0.001 || fabs(v - last_v) > 0.001) {
+        data->updating = TRUE;
+
+        if (data->hue_scale) {
+            hsv_scale_set_value(data->hue_scale, h);
+            hsv_scale_set_hsv(data->hue_scale, h, s, v);
+        }
+
+        if (data->saturation_scale) {
+            hsv_scale_set_value(data->saturation_scale, s);
+            hsv_scale_set_hsv(data->saturation_scale, h, s, v);
+        }
+
+        if (data->value_scale) {
+            hsv_scale_set_value(data->value_scale, v);
+            hsv_scale_set_hsv(data->value_scale, h, s, v);
+        }
+
+        // Also update RGB scales
+        double r, g, b;
+        color_wheel_get_rgb(data->wheel, &r, &g, &b);
+
+        if (data->red_scale) {
+            rgb_scale_set_value(data->red_scale, r);
+            rgb_scale_set_rgb(data->red_scale, r, g, b);
+        }
+
+        if (data->green_scale) {
+            rgb_scale_set_value(data->green_scale, g);
+            rgb_scale_set_rgb(data->green_scale, r, g, b);
+        }
+
+        if (data->blue_scale) {
+            rgb_scale_set_value(data->blue_scale, b);
+            rgb_scale_set_rgb(data->blue_scale, r, g, b);
+        }
+
+        last_h = h;
+        last_s = s;
+        last_v = v;
+
+        data->updating = FALSE;
+    }
+
+    return G_SOURCE_CONTINUE;
+}
+
+static void on_hue_scale_changed(GtkRange* range, gpointer user_data) {
+    ColorWheelTestData* data = (ColorWheelTestData*)user_data;
+    if (!data || !data->wheel || data->updating)
+        return;
+
+    data->updating = TRUE;
+
+    double h = gtk_range_get_value(range);
+    double s, v;
+    color_wheel_get_hsv(data->wheel, NULL, &s, &v);
+
+    color_wheel_set_hsv(data->wheel, h, s, v);
+
+    // Update other scales
+    if (data->hue_scale)
+        hsv_scale_set_hsv(data->hue_scale, h, s, v);
+    if (data->saturation_scale)
+        hsv_scale_set_hsv(data->saturation_scale, h, s, v);
+    if (data->value_scale)
+        hsv_scale_set_hsv(data->value_scale, h, s, v);
+
+    data->updating = FALSE;
+}
+
+static void on_saturation_scale_changed(GtkRange* range, gpointer user_data) {
+    ColorWheelTestData* data = (ColorWheelTestData*)user_data;
+    if (!data || !data->wheel || data->updating)
+        return;
+
+    data->updating = TRUE;
+
+    double s = gtk_range_get_value(range);
+    double h, v;
+    color_wheel_get_hsv(data->wheel, &h, NULL, &v);
+
+    color_wheel_set_hsv(data->wheel, h, s, v);
+
+    // Update other scales
+    if (data->hue_scale)
+        hsv_scale_set_hsv(data->hue_scale, h, s, v);
+    if (data->saturation_scale)
+        hsv_scale_set_hsv(data->saturation_scale, h, s, v);
+    if (data->value_scale)
+        hsv_scale_set_hsv(data->value_scale, h, s, v);
+
+    data->updating = FALSE;
+}
+
+static void on_lightness_scale_changed(GtkRange* range, gpointer user_data) {
+    ColorWheelTestData* data = (ColorWheelTestData*)user_data;
+    if (!data || !data->wheel || data->updating)
+        return;
+
+    data->updating = TRUE;
+
+    double v = gtk_range_get_value(range);
+    double h, s;
+    color_wheel_get_hsv(data->wheel, &h, &s, NULL);
+
+    color_wheel_set_hsv(data->wheel, h, s, v);
+
+    // Update other scales
+    if (data->hue_scale)
+        hsv_scale_set_hsv(data->hue_scale, h, s, v);
+    if (data->saturation_scale)
+        hsv_scale_set_hsv(data->saturation_scale, h, s, v);
+    if (data->value_scale)
+        hsv_scale_set_hsv(data->value_scale, h, s, v);
+
+    data->updating = FALSE;
+}
+
+static void on_red_scale_changed(GtkRange* range, gpointer user_data) {
+    ColorWheelTestData* data = (ColorWheelTestData*)user_data;
+    if (!data || !data->wheel || data->updating)
+        return;
+
+    data->updating = TRUE;
+
+    double r = gtk_range_get_value(range);
+    double current_r, g, b;
+    color_wheel_get_rgb(data->wheel, &current_r, &g, &b);
+
+    color_wheel_set_rgb(data->wheel, r, g, b);
+
+    // Update RGB scales
+    if (data->red_scale)
+        rgb_scale_set_rgb(data->red_scale, r, g, b);
+    if (data->green_scale)
+        rgb_scale_set_rgb(data->green_scale, r, g, b);
+    if (data->blue_scale)
+        rgb_scale_set_rgb(data->blue_scale, r, g, b);
+
+    data->updating = FALSE;
+}
+
+static void on_green_scale_changed(GtkRange* range, gpointer user_data) {
+    ColorWheelTestData* data = (ColorWheelTestData*)user_data;
+    if (!data || !data->wheel || data->updating)
+        return;
+
+    data->updating = TRUE;
+
+    double g = gtk_range_get_value(range);
+    double r, current_g, b;
+    color_wheel_get_rgb(data->wheel, &r, &current_g, &b);
+
+    color_wheel_set_rgb(data->wheel, r, g, b);
+
+    // Update RGB scales
+    if (data->red_scale)
+        rgb_scale_set_rgb(data->red_scale, r, g, b);
+    if (data->green_scale)
+        rgb_scale_set_rgb(data->green_scale, r, g, b);
+    if (data->blue_scale)
+        rgb_scale_set_rgb(data->blue_scale, r, g, b);
+
+    data->updating = FALSE;
+}
+
+static void on_blue_scale_changed(GtkRange* range, gpointer user_data) {
+    ColorWheelTestData* data = (ColorWheelTestData*)user_data;
+    if (!data || !data->wheel || data->updating)
+        return;
+
+    data->updating = TRUE;
+
+    double b = gtk_range_get_value(range);
+    double r, g, current_b;
+    color_wheel_get_rgb(data->wheel, &r, &g, &current_b);
+
+    color_wheel_set_rgb(data->wheel, r, g, b);
+
+    // Update RGB scales
+    if (data->red_scale)
+        rgb_scale_set_rgb(data->red_scale, r, g, b);
+    if (data->green_scale)
+        rgb_scale_set_rgb(data->green_scale, r, g, b);
+    if (data->blue_scale)
+        rgb_scale_set_rgb(data->blue_scale, r, g, b);
+
+    data->updating = FALSE;
+}
+
+static void on_window_destroy(GtkWidget* widget, gpointer user_data) {
+    (void)widget;
+    ColorWheelTestData* data = (ColorWheelTestData*)user_data;
+
+    // Stop sync timer
+    if (color_wheel_sync_timer != 0) {
+        g_source_remove(color_wheel_sync_timer);
+        color_wheel_sync_timer = 0;
+    }
+    g_test_data = NULL;
+
+    // Clean up
+    if (data) {
+        if (data->wheel)
+            color_wheel_free(data->wheel);
+        g_free(data);
+    }
+
+    gtk_main_quit();
+}
+
+static void test_color_chooser(void) {
+    ColorWheelTestData* data = g_new0(ColorWheelTestData, 1);
+    g_test_data = data;
+
     ColorWheel* wheel = color_wheel_new();
+    data->wheel = wheel;
 
     GtkWidget* window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-    gtk_window_set_title(GTK_WINDOW(window), "HSL Color Wheel");
-    gtk_window_set_default_size(GTK_WINDOW(window), 400, 400);
-    g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
+    gtk_window_set_title(GTK_WINDOW(window), "HSV Color Wheel & Scales");
+    gtk_window_set_default_size(GTK_WINDOW(window), 700, 450);
+    g_signal_connect(window, "destroy", G_CALLBACK(on_window_destroy), data);
 
-    gtk_container_add(GTK_CONTAINER(window), color_wheel_get_widget(wheel));
+    // Create main horizontal layout
+    GtkWidget* hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 15);
+    gtk_container_set_border_width(GTK_CONTAINER(hbox), 15);
+    gtk_container_add(GTK_CONTAINER(window), hbox);
+
+    // Left side: Color wheel
+    GtkWidget* wheel_widget = color_wheel_get_widget(wheel);
+    gtk_widget_set_size_request(wheel_widget, 400, 400);
+    gtk_box_pack_start(GTK_BOX(hbox), wheel_widget, FALSE, FALSE, 0);
+
+    // Right side: HSV scales (vertically stacked)
+    GtkWidget* vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 15);
+    gtk_box_pack_start(GTK_BOX(hbox), vbox, TRUE, TRUE, 0);
+
+    // Get initial HSV values
+    double h, s, v;
+    color_wheel_get_hsv(wheel, &h, &s, &v);
+
+    // Hue scale (0-360)
+    GtkWidget* hue_label = gtk_label_new("Hue");
+    gtk_label_set_xalign(GTK_LABEL(hue_label), 0.0);
+    gtk_box_pack_start(GTK_BOX(vbox), hue_label, FALSE, FALSE, 0);
+
+    data->hue_scale = HSV_SCALE(hsv_scale_new(HSV_SCALE_HUE, 0.0, 360.0));
+    hsv_scale_set_value(data->hue_scale, h);
+    hsv_scale_set_hsv(data->hue_scale, h, s, v);
+    gtk_widget_set_size_request(GTK_WIDGET(data->hue_scale), 250, 30);
+    g_signal_connect(data->hue_scale, "value-changed", G_CALLBACK(on_hue_scale_changed), data);
+    gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(data->hue_scale), FALSE, FALSE, 0);
+
+    // Saturation scale (0-1)
+    GtkWidget* saturation_label = gtk_label_new("Saturation");
+    gtk_label_set_xalign(GTK_LABEL(saturation_label), 0.0);
+    gtk_box_pack_start(GTK_BOX(vbox), saturation_label, FALSE, FALSE, 0);
+
+    data->saturation_scale = HSV_SCALE(hsv_scale_new(HSV_SCALE_SATURATION, 0.0, 1.0));
+    hsv_scale_set_value(data->saturation_scale, s);
+    hsv_scale_set_hsv(data->saturation_scale, h, s, v);
+    gtk_widget_set_size_request(GTK_WIDGET(data->saturation_scale), 250, 30);
+    g_signal_connect(data->saturation_scale, "value-changed", G_CALLBACK(on_saturation_scale_changed), data);
+    gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(data->saturation_scale), FALSE, FALSE, 0);
+
+    // Value scale (0-1)
+    GtkWidget* value_label = gtk_label_new("Value");
+    gtk_label_set_xalign(GTK_LABEL(value_label), 0.0);
+    gtk_box_pack_start(GTK_BOX(vbox), value_label, FALSE, FALSE, 0);
+
+    data->value_scale = HSV_SCALE(hsv_scale_new(HSV_SCALE_VALUE, 0.0, 1.0));
+    hsv_scale_set_value(data->value_scale, v);
+    hsv_scale_set_hsv(data->value_scale, h, s, v);
+    gtk_widget_set_size_request(GTK_WIDGET(data->value_scale), 250, 30);
+    g_signal_connect(data->value_scale, "value-changed", G_CALLBACK(on_lightness_scale_changed), data);
+    gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(data->value_scale), FALSE, FALSE, 0);
+
+    // Separator between HSV and RGB
+    GtkWidget* separator = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
+    gtk_box_pack_start(GTK_BOX(vbox), separator, FALSE, FALSE, 10);
+
+    // RGB scales
+    GtkWidget* rgb_label = gtk_label_new("RGB");
+    gtk_label_set_xalign(GTK_LABEL(rgb_label), 0.0);
+    gtk_label_set_markup(GTK_LABEL(rgb_label), "<b>RGB</b>");
+    gtk_box_pack_start(GTK_BOX(vbox), rgb_label, FALSE, FALSE, 0);
+
+    // Red scale
+    GtkWidget* red_label = gtk_label_new("Red");
+    gtk_label_set_xalign(GTK_LABEL(red_label), 0.0);
+    gtk_box_pack_start(GTK_BOX(vbox), red_label, FALSE, FALSE, 0);
+
+    double r_val = 0.0, g_val = 0.0, b_val = 0.0;
+    color_wheel_get_rgb(wheel, &r_val, &g_val, &b_val);
+
+    data->red_scale = RGB_SCALE(rgb_scale_new(RGB_SCALE_RED));
+    rgb_scale_set_value(data->red_scale, r_val);
+    rgb_scale_set_rgb(data->red_scale, r_val, g_val, b_val);
+    gtk_widget_set_size_request(GTK_WIDGET(data->red_scale), 250, 30);
+    g_signal_connect(data->red_scale, "value-changed", G_CALLBACK(on_red_scale_changed), data);
+    gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(data->red_scale), FALSE, FALSE, 0);
+
+    // Green scale
+    GtkWidget* green_label = gtk_label_new("Green");
+    gtk_label_set_xalign(GTK_LABEL(green_label), 0.0);
+    gtk_box_pack_start(GTK_BOX(vbox), green_label, FALSE, FALSE, 0);
+
+    data->green_scale = RGB_SCALE(rgb_scale_new(RGB_SCALE_GREEN));
+    rgb_scale_set_value(data->green_scale, g_val);
+    rgb_scale_set_rgb(data->green_scale, r_val, g_val, b_val);
+    gtk_widget_set_size_request(GTK_WIDGET(data->green_scale), 250, 30);
+    g_signal_connect(data->green_scale, "value-changed", G_CALLBACK(on_green_scale_changed), data);
+    gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(data->green_scale), FALSE, FALSE, 0);
+
+    // Blue scale
+    GtkWidget* blue_label = gtk_label_new("Blue");
+    gtk_label_set_xalign(GTK_LABEL(blue_label), 0.0);
+    gtk_box_pack_start(GTK_BOX(vbox), blue_label, FALSE, FALSE, 0);
+
+    data->blue_scale = RGB_SCALE(rgb_scale_new(RGB_SCALE_BLUE));
+    rgb_scale_set_value(data->blue_scale, b_val);
+    rgb_scale_set_rgb(data->blue_scale, r_val, g_val, b_val);
+    gtk_widget_set_size_request(GTK_WIDGET(data->blue_scale), 250, 30);
+    g_signal_connect(data->blue_scale, "value-changed", G_CALLBACK(on_blue_scale_changed), data);
+    gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(data->blue_scale), FALSE, FALSE, 0);
+
+    // Start timer to sync scales from color wheel changes
+    color_wheel_sync_timer = g_timeout_add(50, sync_scales_from_wheel, data);
+
     gtk_widget_show_all(window);
 
     gtk_main();
-
-    color_wheel_free(wheel);
 }

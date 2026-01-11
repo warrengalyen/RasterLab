@@ -27,7 +27,7 @@ int main(int argc, char* argv[]) {
     /* Initialize GTK */
     gtk_init(&argc, &argv);
 
-    test_color_wheel();
+    test_color_chooser();
 
     return 0;
 
