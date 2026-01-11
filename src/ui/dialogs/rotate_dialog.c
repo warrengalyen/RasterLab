@@ -1,4 +1,5 @@
 #include "ui/dialogs/rotate_dialog.h"
+#include "ui/ui_utils.h"
 #include <glib.h>
 
 struct _RotateDialog {
@@ -46,7 +47,7 @@ static void trigger_preview(RotateDialog* dialog) {
 
     GdkRGBA fill_color = {0};
     if (dialog->fill_color_button) {
-        gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(dialog->fill_color_button), &fill_color);
+        get_custom_color_button_color(dialog->fill_color_button, &fill_color);
     }
 
     dialog->preview_callback(dialog, angle, preserve_size, interpolation, use_transparency, &fill_color, dialog->preview_user_data);
@@ -98,8 +99,7 @@ static void on_radio_changed(GtkToggleButton* toggle, gpointer user_data) {
     trigger_preview(dialog);
 }
 
-static void on_fill_color_set(GtkColorButton* color_button, gpointer user_data) {
-    (void)color_button;
+static void on_fill_color_set(GtkWidget* button, gpointer user_data) {
     RotateDialog* dialog = (RotateDialog*)user_data;
     trigger_preview(dialog);
 }
@@ -294,11 +294,15 @@ RotateDialog* rotate_dialog_new(const gchar* title) {
         g_signal_connect(dialog->border_transparent_radio, "toggled", G_CALLBACK(on_radio_changed), dialog);
         g_signal_connect(dialog->border_fill_radio, "toggled", G_CALLBACK(on_radio_changed), dialog);
 
-        dialog->fill_color_button = gtk_color_button_new();
+        GdkRGBA fill_color = {1.0, 1.0, 1.0, 1.0}; // White default
+        dialog->fill_color_button = create_custom_color_button(
+            GTK_WINDOW(dialog->dialog),
+            &fill_color,
+            on_fill_color_set,
+            dialog);
         gtk_widget_set_hexpand(dialog->fill_color_button, TRUE);
         gtk_widget_set_size_request(dialog->fill_color_button, -1, 35);
         gtk_box_pack_start(GTK_BOX(control_vbox), dialog->fill_color_button, FALSE, FALSE, 0);
-        g_signal_connect(dialog->fill_color_button, "color-set", G_CALLBACK(on_fill_color_set), dialog);
         update_fill_color_visibility(dialog);
     }
 
@@ -386,7 +390,7 @@ void rotate_dialog_reset(RotateDialog* dialog) {
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(dialog->border_transparent_radio), TRUE);
     if (dialog->fill_color_button) {
         GdkRGBA c = {0.2, 0.2, 0.2, 1.0};
-        gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(dialog->fill_color_button), &c);
+        set_custom_color_button_color(dialog->fill_color_button, &c);
     }
     update_fill_color_visibility(dialog);
     trigger_preview(dialog);
@@ -430,7 +434,7 @@ gint rotate_dialog_run(RotateDialog* dialog,
         }
         if (out_fill_color) {
             if (dialog->fill_color_button) {
-                gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(dialog->fill_color_button), out_fill_color);
+                get_custom_color_button_color(dialog->fill_color_button, out_fill_color);
             } else {
                 out_fill_color->red = out_fill_color->green = out_fill_color->blue = 0.0;
                 out_fill_color->alpha = 1.0;

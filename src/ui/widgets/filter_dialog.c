@@ -3,6 +3,7 @@
 #include "render/compositor.h"
 #include "render/layer.h"
 #include "ui/filters/filter_utils.h"
+#include "ui/ui_utils.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -130,7 +131,7 @@ static void on_checkbox_toggled(GtkToggleButton* toggle, gpointer user_data) {
 /**
  * Color button color-set callback - triggers preview
  */
-static void on_color_set(GtkColorButton* color_button, gpointer user_data) {
+static void on_color_set(GtkWidget* button, gpointer user_data) {
     FilterDialog* dialog = (FilterDialog*)user_data;
     gdouble* values;
     gint total_values;
@@ -369,23 +370,24 @@ FilterDialog* filter_dialog_new(const gchar* title,
             GtkWidget* color_button;
             GdkRGBA color;
 
-            /* Create color button */
-            color_button = gtk_color_button_new();
+            /* Create custom color button */
             color.red = controls[i].default_r;
             color.green = controls[i].default_g;
             color.blue = controls[i].default_b;
             color.alpha = 1.0;
-            gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(color_button), &color);
+
+            color_button = create_custom_color_button(
+                GTK_WINDOW(dialog->dialog),
+                &color,
+                on_color_set,
+                dialog);
+
             gtk_widget_set_hexpand(color_button, TRUE);
             gtk_widget_set_size_request(color_button, -1, 35);
             gtk_box_pack_start(GTK_BOX(control_vbox), color_button, TRUE, TRUE, 0);
 
             /* Store widget */
             dialog->color_widgets[i] = color_button;
-
-            /* Connect signal for preview updates */
-            g_signal_connect(color_button, "color-set",
-                             G_CALLBACK(on_color_set), dialog);
         } else if (controls[i].type == FILTER_CONTROL_ENUM) {
             GtkWidget* combo;
             gint active = 0;
@@ -621,7 +623,7 @@ void filter_dialog_get_values(FilterDialog* dialog,
             value_index++;
         } else if (dialog->params[i].type == FILTER_CONTROL_RGB) {
             if (dialog->color_widgets[i] && value_index + 2 < num_values) {
-                gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(dialog->color_widgets[i]), &color);
+                get_custom_color_button_color(dialog->color_widgets[i], &color);
                 values[value_index] = color.red;
                 values[value_index + 1] = color.green;
                 values[value_index + 2] = color.blue;

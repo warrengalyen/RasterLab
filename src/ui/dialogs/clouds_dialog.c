@@ -6,6 +6,7 @@
 #include "selection/selection_render.h"
 #include "ui/filters/filter_render_clouds.h"
 #include "ui/filters/filter_utils.h"
+#include "ui/ui_utils.h"
 #include "ui/widgets/filter_preview.h"
 #include <cairo.h>
 #include <glib.h>
@@ -116,14 +117,14 @@ static void update_preview(CloudsDialog* dialog) {
 
     /* Get shadow color */
     GdkRGBA shadow_color;
-    gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(dialog->shadow_color_button), &shadow_color);
+    get_custom_color_button_color(dialog->shadow_color_button, &shadow_color);
     dialog->params.shadowColorR = (guchar)(shadow_color.red * 255.0);
     dialog->params.shadowColorG = (guchar)(shadow_color.green * 255.0);
     dialog->params.shadowColorB = (guchar)(shadow_color.blue * 255.0);
 
     /* Get highlight color */
     GdkRGBA highlight_color;
-    gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(dialog->highlight_color_button), &highlight_color);
+    get_custom_color_button_color(dialog->highlight_color_button, &highlight_color);
     dialog->params.highlightColorR = (guchar)(highlight_color.red * 255.0);
     dialog->params.highlightColorG = (guchar)(highlight_color.green * 255.0);
     dialog->params.highlightColorB = (guchar)(highlight_color.blue * 255.0);
@@ -216,18 +217,16 @@ static void on_quality_spin_changed(GtkSpinButton* spin, gpointer user_data) {
 /**
  * Shadow color changed callback
  */
-static void on_shadow_color_set(GtkColorButton* button, gpointer user_data) {
+static void on_shadow_color_set(GtkWidget* button, gpointer user_data) {
     CloudsDialog* dialog = (CloudsDialog*)user_data;
-    (void)button;
     update_preview(dialog);
 }
 
 /**
  * Highlight color changed callback
  */
-static void on_highlight_color_set(GtkColorButton* button, gpointer user_data) {
+static void on_highlight_color_set(GtkWidget* button, gpointer user_data) {
     CloudsDialog* dialog = (CloudsDialog*)user_data;
-    (void)button;
     update_preview(dialog);
 }
 
@@ -473,12 +472,15 @@ CloudsDialog* clouds_dialog_new(const gchar* title) {
     color = (GdkRGBA){dialog->params.shadowColorR / 255.0,
                       dialog->params.shadowColorG / 255.0,
                       dialog->params.shadowColorB / 255.0, 1.0};
-    color_button = gtk_color_button_new_with_rgba(&color);
+    color_button = create_custom_color_button(
+        GTK_WINDOW(dialog->dialog),
+        &color,
+        on_shadow_color_set,
+        dialog);
     gtk_widget_set_hexpand(color_button, TRUE);
     gtk_widget_set_size_request(color_button, -1, 35);
     gtk_box_pack_start(GTK_BOX(color_vbox), color_button, FALSE, FALSE, 0);
     dialog->shadow_color_button = color_button;
-    g_signal_connect(color_button, "color-set", G_CALLBACK(on_shadow_color_set), dialog);
 
     /* Create highlight color picker */
     color_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
@@ -493,12 +495,15 @@ CloudsDialog* clouds_dialog_new(const gchar* title) {
     color = (GdkRGBA){dialog->params.highlightColorR / 255.0,
                       dialog->params.highlightColorG / 255.0,
                       dialog->params.highlightColorB / 255.0, 1.0};
-    color_button = gtk_color_button_new_with_rgba(&color);
+    color_button = create_custom_color_button(
+        GTK_WINDOW(dialog->dialog),
+        &color,
+        on_highlight_color_set,
+        dialog);
     gtk_widget_set_hexpand(color_button, TRUE);
     gtk_widget_set_size_request(color_button, -1, 35);
     gtk_box_pack_start(GTK_BOX(color_vbox), color_button, FALSE, FALSE, 0);
     dialog->highlight_color_button = color_button;
-    g_signal_connect(color_button, "color-set", G_CALLBACK(on_highlight_color_set), dialog);
 
     /* Create opacity control */
     control_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
@@ -699,14 +704,14 @@ gint clouds_dialog_run(CloudsDialog* dialog, GtkWindow* parent, CloudParams* par
 
         /* Get shadow color */
         GdkRGBA shadow_color;
-        gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(dialog->shadow_color_button), &shadow_color);
+        get_custom_color_button_color(dialog->shadow_color_button, &shadow_color);
         params->shadowColorR = (guchar)(shadow_color.red * 255.0);
         params->shadowColorG = (guchar)(shadow_color.green * 255.0);
         params->shadowColorB = (guchar)(shadow_color.blue * 255.0);
 
         /* Get highlight color */
         GdkRGBA highlight_color;
-        gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(dialog->highlight_color_button), &highlight_color);
+        get_custom_color_button_color(dialog->highlight_color_button, &highlight_color);
         params->highlightColorR = (guchar)(highlight_color.red * 255.0);
         params->highlightColorG = (guchar)(highlight_color.green * 255.0);
         params->highlightColorB = (guchar)(highlight_color.blue * 255.0);
@@ -768,11 +773,11 @@ void clouds_dialog_reset(CloudsDialog* dialog) {
 
     /* Reset shadow color to black */
     GdkRGBA shadow_color = {0.0, 0.0, 0.0, 1.0};
-    gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(dialog->shadow_color_button), &shadow_color);
+    set_custom_color_button_color(dialog->shadow_color_button, &shadow_color);
 
     /* Reset highlight color to white */
     GdkRGBA highlight_color = {1.0, 1.0, 1.0, 1.0};
-    gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(dialog->highlight_color_button), &highlight_color);
+    set_custom_color_button_color(dialog->highlight_color_button, &highlight_color);
 
     update_preview(dialog);
 }

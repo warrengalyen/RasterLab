@@ -1,6 +1,8 @@
 #include "ui/tools_panel.h"
 #include "tool_options.h"
 #include "ui/dialogs/color_chooser_dialog.h"
+#include "ui/ui_utils.h"
+
 #include <stdio.h>
 
 /**
@@ -25,57 +27,6 @@ static GtkWindow* g_main_window = NULL;
  */
 static GdkRGBA g_fg_color = {0.0, 0.0, 0.0, 1.0}; /* Black */
 static GdkRGBA g_bg_color = {1.0, 1.0, 1.0, 1.0}; /* White */
-
-/**
- * Update button appearance with current color using CSS
- */
-static void update_color_button_appearance(GtkWidget* button, GdkRGBA* color) {
-    if (!button || !color)
-        return;
-
-    // Create CSS to set button background color
-    // Need to override all button states and remove default styling
-    char css_str[512];
-    g_snprintf(css_str, sizeof(css_str),
-               "button { "
-               "background-color: rgb(%d, %d, %d); "
-               "background-image: none; "
-               "border: 1px solid #000; "
-               "border-radius: 0; "
-               "box-shadow: none; "
-               "padding: 0; "
-               "margin: 0; "
-               "min-width: 20px; "
-               "min-height: 20px; "
-               "outline: none; "
-               "} "
-               "button:hover { "
-               "background-color: rgb(%d, %d, %d); "
-               "background-image: none; "
-               "box-shadow: none; "
-               "} "
-               "button:active, button:checked { "
-               "background-color: rgb(%d, %d, %d); "
-               "background-image: none; "
-               "box-shadow: none; "
-               "}",
-               (int)(color->red * 255),
-               (int)(color->green * 255),
-               (int)(color->blue * 255),
-               (int)(color->red * 255),
-               (int)(color->green * 255),
-               (int)(color->blue * 255),
-               (int)(color->red * 255),
-               (int)(color->green * 255),
-               (int)(color->blue * 255));
-
-    GtkCssProvider* css = gtk_css_provider_new();
-    gtk_css_provider_load_from_data(css, css_str, -1, NULL);
-    GtkStyleContext* context = gtk_widget_get_style_context(button);
-    gtk_style_context_add_provider(context, GTK_STYLE_PROVIDER(css),
-                                   GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
-    g_object_unref(css);
-}
 
 /**
  * Swap foreground and background colors
@@ -135,13 +86,14 @@ static void on_fg_color_clicked(GtkButton* button, gpointer user_data) {
         return;
     }
 
-    // Create and show color chooser dialog
+    // Create and show color chooser dialog with real-time updates
     GtkWidget* dialog = color_chooser_dialog_new(
         g_main_window,
         "Choose Foreground Color",
         &g_fg_color,
         on_fg_color_update,
-        NULL);
+        NULL,
+        TRUE); // Enable real-time updates for tools panel
 
     // Run dialog
     gtk_dialog_run(GTK_DIALOG(dialog));
@@ -172,13 +124,14 @@ static void on_bg_color_clicked(GtkButton* button, gpointer user_data) {
         return;
     }
 
-    // Create and show color chooser dialog
+    // Create and show color chooser dialog with real-time updates
     GtkWidget* dialog = color_chooser_dialog_new(
         g_main_window,
         "Choose Background Color",
         &g_bg_color,
         on_bg_color_update,
-        NULL);
+        NULL,
+        TRUE); // Enable real-time updates for tools panel
 
     // Run dialog
     gtk_dialog_run(GTK_DIALOG(dialog));
