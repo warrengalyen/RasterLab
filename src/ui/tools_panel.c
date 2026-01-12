@@ -309,7 +309,7 @@ GtkWidget* tools_panel_initialize_from_builder(GtkBuilder* builder, ToolRegistry
                 "/icons/tool-paintbucket.png",
                 "/icons/tool-rect-select.png",
             };
-            if (i < 7) {
+            if (i < TOOL_COUNT) {
                 GError* error = NULL;
                 GdkPixbuf* pixbuf = gdk_pixbuf_new_from_resource(icon_resources[i], &error);
                 if (pixbuf) {

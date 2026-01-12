@@ -261,13 +261,28 @@
           </packing>
         </child>
         <child>
-          <object class="GtkScale" id="rect_select_feather_scale">
+          <object class="GtkBox" id="rect_select_feather_control_box">
             <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="adjustment">rect_select_feather_adjustment</property>
-            <property name="draw-value">True</property>
-            <property name="value-pos">right</property>
-            <property name="digits">0</property>
+            <property name="can-focus">False</property>
+            <property name="orientation">horizontal</property>
+            <property name="spacing">2</property>
+            <property name="halign">start</property>
+            <property name="hexpand">False</property>
+            <child>
+              <object class="GtkScale" id="rect_select_feather_scale">
+                <property name="width-request">88</property>
+                <property name="visible">True</property>
+                <property name="can-focus">True</property>
+                <property name="adjustment">rect_select_feather_adjustment</property>
+                <property name="digits">0</property>
+                <property name="draw-value">False</property>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">False</property>
+                <property name="position">0</property>
+              </packing>
+            </child>
           </object>
           <packing>
             <property name="expand">False</property>

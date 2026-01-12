@@ -6,7 +6,46 @@
 #include "tools.h"
 #include "tools/tool_rect_select.h"
 #include "ui.h"
+#include "ui/widgets/vertical_spin_button.h"
 #include <stdio.h>
+
+/**
+ * Add a vertical spin button next to a scale widget
+ * @param builder The GtkBuilder containing the widgets
+ * @param scale_id The ID of the scale widget
+ * @param control_box_id The ID of the control box containing the scale
+ */
+static void add_spin_button_to_scale(GtkBuilder* builder, const gchar* scale_id, const gchar* control_box_id) {
+    if (!builder || !scale_id || !control_box_id) {
+        return;
+    }
+
+    GtkWidget* scale = GTK_WIDGET(gtk_builder_get_object(builder, scale_id));
+    GtkWidget* control_box = GTK_WIDGET(gtk_builder_get_object(builder, control_box_id));
+
+    if (!scale || !control_box) {
+        return;
+    }
+
+    /* Get the adjustment from the scale */
+    GtkAdjustment* adjustment = gtk_range_get_adjustment(GTK_RANGE(scale));
+    if (!adjustment) {
+        return;
+    }
+
+    /* Get the number of digits from the scale */
+    guint digits = gtk_scale_get_digits(GTK_SCALE(scale));
+
+    /* Create vertical spin button with the same adjustment */
+    GtkWidget* spin_button = vertical_spin_button_new(adjustment, 1.0, digits);
+    if (!spin_button) {
+        return;
+    }
+
+    /* Add the spin button to the control box */
+    gtk_box_pack_start(GTK_BOX(control_box), spin_button, FALSE, FALSE, 0);
+    gtk_widget_show_all(spin_button);
+}
 
 /**
  * Helper function to save tool options to settings
@@ -402,6 +441,21 @@ static GtkWidget* load_panel_from_glade(const gchar* resource_path, const gchar*
 
     /* Don't show the panel here - let the container handle it */
     /* gtk_widget_show_all(panel); */
+
+    /* Add vertical spin buttons to scale widgets */
+    if (g_strcmp0(panel_id, "brush_options_panel") == 0) {
+        add_spin_button_to_scale(builder, "brush_size_scale", "brush_size_control_box");
+        add_spin_button_to_scale(builder, "brush_opacity_scale", "brush_opacity_control_box");
+        add_spin_button_to_scale(builder, "brush_hardness_scale", "brush_hardness_control_box");
+        add_spin_button_to_scale(builder, "brush_flow_scale", "brush_flow_control_box");
+        add_spin_button_to_scale(builder, "brush_spacing_scale", "brush_spacing_control_box");
+    } else if (g_strcmp0(panel_id, "eraser_options_panel") == 0) {
+        add_spin_button_to_scale(builder, "eraser_size_scale", "eraser_size_control_box");
+        add_spin_button_to_scale(builder, "eraser_opacity_scale", "eraser_opacity_control_box");
+        add_spin_button_to_scale(builder, "eraser_hardness_scale", "eraser_hardness_control_box");
+        add_spin_button_to_scale(builder, "eraser_flow_scale", "eraser_flow_control_box");
+        add_spin_button_to_scale(builder, "eraser_spacing_scale", "eraser_spacing_control_box");
+    }
 
     return panel;
 }
@@ -830,6 +884,10 @@ ToolOptionsPanel* create_tool_options_panel(void) {
             /* Hide pencil panel initially */
             gtk_widget_set_visible(tool_opts_panel->pencil_panel, FALSE);
             gtk_widget_set_no_show_all(tool_opts_panel->pencil_panel, TRUE);
+
+            /* Add vertical spin buttons to scale widgets */
+            add_spin_button_to_scale(pencil_builder, "pencil_size_scale", "pencil_size_control_box");
+            add_spin_button_to_scale(pencil_builder, "pencil_opacity_scale", "pencil_opacity_control_box");
         }
         g_object_unref(pencil_builder);
     } else {
@@ -903,6 +961,9 @@ ToolOptionsPanel* create_tool_options_panel(void) {
             /* Hide paint bucket panel initially */
             gtk_widget_set_visible(tool_opts_panel->paintbucket_panel, FALSE);
             gtk_widget_set_no_show_all(tool_opts_panel->paintbucket_panel, TRUE);
+
+            /* Add vertical spin button to tolerance scale widget */
+            add_spin_button_to_scale(paintbucket_builder, "paintbucket_tolerance_scale", "paintbucket_tolerance_control_box");
         }
         g_object_unref(paintbucket_builder);
     } else {
@@ -992,6 +1053,9 @@ ToolOptionsPanel* create_tool_options_panel(void) {
             /* Hide rect select panel initially */
             gtk_widget_set_visible(tool_opts_panel->rect_select_panel, FALSE);
             gtk_widget_set_no_show_all(tool_opts_panel->rect_select_panel, TRUE);
+
+            /* Add vertical spin button to feather scale widget */
+            add_spin_button_to_scale(rect_select_builder, "rect_select_feather_scale", "rect_select_feather_control_box");
         }
         g_object_unref(rect_select_builder);
     } else {
