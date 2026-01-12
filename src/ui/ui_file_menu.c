@@ -98,6 +98,9 @@ void on_recent_file_activate(GtkMenuItem* menu_item, gpointer user_data) {
             gtk_dialog_run(GTK_DIALOG(dialog));
             gtk_widget_destroy(dialog);
         } else {
+            /* Update status bar with success message */
+            ui_update_status_bar_message(ctx, "Image successfully loaded");
+
             /* Update recent files (move to top) */
             recent_files_add(file_path);
             if (ctx->settings && ctx->app_dir) {
@@ -347,6 +350,9 @@ void on_file_open_response(GtkDialog* dialog, gint response_id, gpointer user_da
                 if (!document_load_image_from_file(doc, file_path)) {
                     g_warning("Failed to load image: %s", file_path);
                 } else {
+                    /* Update status bar with success message */
+                    ui_update_status_bar_message(ctx, "Image successfully loaded");
+
                     /* Add to recent files after successful load */
                     recent_files_add(file_path);
                     recent_files_save(); /* This syncs to settings if connected */

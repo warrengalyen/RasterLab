@@ -108,6 +108,13 @@ void ui_save_document_as(AppContext* ctx);
 void ui_update_status_bar_time(AppContext* ctx, gdouble time_seconds);
 
 /**
+ * Update the status bar status label with a message
+ * @param ctx The application context
+ * @param message The message to display (or NULL to clear)
+ */
+void ui_update_status_bar_message(AppContext* ctx, const gchar* message);
+
+/**
  * Update the cursor position display in the status bar
  * @param ctx The application context
  * @param doc The document

@@ -2126,7 +2126,7 @@
                         <property name="visible">True</property>
                         <property name="can-focus">False</property>
                         <property name="halign">end</property>
-                        <property name="label" translatable="yes">Time taken:</property>
+                        <property name="label" translatable="no"></property>
                       </object>
                       <packing>
                         <property name="expand">True</property>

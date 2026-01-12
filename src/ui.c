@@ -1937,6 +1937,33 @@ void ui_update_status_bar_time(AppContext* ctx, gdouble time_seconds) {
 }
 
 /**
+ * Update the status bar status label with a message
+ */
+void ui_update_status_bar_message(AppContext* ctx, const gchar* message) {
+    GtkWidget* status_label;
+    GtkBuilder* builder;
+
+    if (!ctx || !ctx->status_bar) {
+        return;
+    }
+
+    /* Get builder from window to retrieve status bar labels */
+    builder = GTK_BUILDER(g_object_get_data(G_OBJECT(ctx->window), "main_builder"));
+    if (!builder) {
+        return;
+    }
+
+    /* Get status label */
+    status_label = GTK_WIDGET(gtk_builder_get_object(builder, "sb_status_label"));
+    if (!status_label) {
+        return;
+    }
+
+    /* Update label */
+    gtk_label_set_text(GTK_LABEL(status_label), message ? message : "");
+}
+
+/**
  * Update the cursor position display in the status bar
  */
 void ui_update_cursor_position(AppContext* ctx, ImageDocument* doc, gint image_x, gint image_y) {
