@@ -1494,9 +1494,9 @@ static gboolean zoom_combo_row_separator_func(GtkTreeModel* model, GtkTreeIter* 
  * Update the status bar with document information
  */
 void ui_update_status_bar(AppContext* ctx, ImageDocument* doc) {
-    GtkWidget *size_label, *bitdepth_label, *zoom_combobox;
+    GtkWidget *size_label, *zoom_combobox, *zoom_box, *size_box, *position_box, *status_label;
     GtkBuilder* builder;
-    gchar *size_text, *bitdepth_text;
+    gchar* size_text;
 
     if (!ctx || !ctx->status_bar) {
         return;
@@ -1515,19 +1515,50 @@ void ui_update_status_bar(AppContext* ctx, ImageDocument* doc) {
 
     /* Get status bar widgets */
     size_label = GTK_WIDGET(gtk_builder_get_object(builder, "sb_label_size"));
-    bitdepth_label = GTK_WIDGET(gtk_builder_get_object(builder, "sb_label_bitdepth"));
     zoom_combobox = GTK_WIDGET(gtk_builder_get_object(builder, "sb_zoom_combobox"));
+    zoom_box = GTK_WIDGET(gtk_builder_get_object(builder, "sb_zoom_box"));
+    size_box = GTK_WIDGET(gtk_builder_get_object(builder, "sb_size_box"));
+    position_box = GTK_WIDGET(gtk_builder_get_object(builder, "sb_position_box"));
+    status_label = GTK_WIDGET(gtk_builder_get_object(builder, "sb_status_label"));
 
-    if (!size_label || !bitdepth_label || !zoom_combobox) {
+    if (!size_label || !zoom_combobox) {
         return;
     }
 
     if (!doc || doc->width == 0) {
         /* No document or empty document */
-        size_text = g_strdup("—");
-        bitdepth_text = g_strdup("—");
         gtk_combo_box_set_active(GTK_COMBO_BOX(zoom_combobox), -1);
+
+        /* Hide statusbar widgets when no document */
+        if (zoom_box) {
+            gtk_widget_hide(zoom_box);
+        }
+        if (size_box) {
+            gtk_widget_hide(size_box);
+        }
+        if (position_box) {
+            gtk_widget_hide(position_box);
+        }
+        if (status_label) {
+            gtk_widget_hide(status_label);
+        }
+
+        size_text = g_strdup("—");
     } else {
+        /* Show statusbar widgets when document exists */
+        if (zoom_box) {
+            gtk_widget_show(zoom_box);
+        }
+        if (size_box) {
+            gtk_widget_show(size_box);
+        }
+        if (position_box) {
+            gtk_widget_show(position_box);
+        }
+        if (status_label) {
+            gtk_widget_show(status_label);
+        }
+
         /* Size label: WIDTH x HEIGHT in selected unit */
         gdouble dpi = 96.0; /* Standard screen DPI */
         gdouble width_converted = convert_dimension(doc->width, ctx->size_unit, doc->zoom_factor, dpi);
@@ -1539,17 +1570,6 @@ void ui_update_status_bar(AppContext* ctx, ImageDocument* doc) {
         size_text = g_strdup_printf("%s × %s", width_str, height_str);
         g_free(width_str);
         g_free(height_str);
-
-        /* Bit depth label: BITDEPTH-bit CHANNELS */
-        gchar channels_str[32];
-        if (doc->channels == 3) {
-            snprintf(channels_str, sizeof(channels_str), "RGB");
-        } else if (doc->channels == 4) {
-            snprintf(channels_str, sizeof(channels_str), "RGBA");
-        } else {
-            snprintf(channels_str, sizeof(channels_str), "%u-channel", doc->channels);
-        }
-        bitdepth_text = g_strdup_printf("%u-bit %s", doc->bit_depth, channels_str);
 
         /* Update zoom combobox based on zoom mode */
         GtkTreeModel* model = gtk_combo_box_get_model(GTK_COMBO_BOX(zoom_combobox));
@@ -1599,12 +1619,10 @@ void ui_update_status_bar(AppContext* ctx, ImageDocument* doc) {
         g_free(search_text);
     }
 
-    /* Update labels */
+    /* Update label */
     gtk_label_set_text(GTK_LABEL(size_label), size_text);
-    gtk_label_set_text(GTK_LABEL(bitdepth_label), bitdepth_text);
 
     g_free(size_text);
-    g_free(bitdepth_text);
 }
 
 /**
@@ -1747,6 +1765,145 @@ void ui_hide_cursor_position(AppContext* ctx) {
 
     /* Hide the position box */
     gtk_widget_hide(position_box);
+}
+
+/**
+ * Show and start the progress bar with a message
+ */
+void ui_show_progress(AppContext* ctx, const gchar* message) {
+    GtkWidget* progress_bar;
+    GtkWidget* status_label;
+    GtkBuilder* builder;
+
+    if (!ctx || !ctx->window) {
+        return;
+    }
+
+    /* Get builder from window to retrieve progress bar and status label */
+    builder = GTK_BUILDER(g_object_get_data(G_OBJECT(ctx->window), "main_builder"));
+    if (!builder) {
+        return;
+    }
+
+    /* Get progress bar and status label */
+    progress_bar = GTK_WIDGET(gtk_builder_get_object(builder, "progress_bar"));
+    status_label = GTK_WIDGET(gtk_builder_get_object(builder, "sb_status_label"));
+
+    if (progress_bar) {
+        /* Apply CSS to make trough fill full height (remove padding/margins) */
+        static gboolean css_applied = FALSE;
+        if (!css_applied) {
+            /* Set widget name for CSS targeting */
+            gtk_widget_set_name(progress_bar, "progress_bar");
+
+            GtkCssProvider* css_provider = gtk_css_provider_new();
+            const gchar* css =
+                "progressbar#progress_bar {"
+                "  padding: 0;"
+                "  margin: 0;"
+                "  border: none;"
+                "}"
+                "progressbar#progress_bar trough {"
+                "  padding: 0;"
+                "  margin: 0;"
+                "  border: none;"
+                "  min-height: 15px;"
+                "  border-radius: 0;"
+                "}"
+                "progressbar#progress_bar progress {"
+                "  padding: 0;"
+                "  margin: 0;"
+                "  border: none;"
+                "  min-height: 15px;"
+                "  border-radius: 0;"
+                "}";
+            gtk_css_provider_load_from_data(css_provider, css, -1, NULL);
+            GtkStyleContext* style_context = gtk_widget_get_style_context(progress_bar);
+            gtk_style_context_add_provider(style_context, GTK_STYLE_PROVIDER(css_provider),
+                                           GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+            g_object_unref(css_provider);
+            css_applied = TRUE;
+        }
+
+        /* Show progress bar and start pulse animation */
+        gtk_progress_bar_set_pulse_step(GTK_PROGRESS_BAR(progress_bar), 0.1);
+        gtk_progress_bar_pulse(GTK_PROGRESS_BAR(progress_bar));
+        gtk_widget_show(progress_bar);
+    }
+
+    if (status_label && message) {
+        /* Update status label with progress message */
+        gtk_label_set_text(GTK_LABEL(status_label), message);
+    }
+
+    /* Process pending events to show the progress bar */
+    while (gtk_events_pending()) {
+        gtk_main_iteration();
+    }
+}
+
+/**
+ * Update the progress bar (pulse animation)
+ */
+void ui_update_progress(AppContext* ctx) {
+    GtkWidget* progress_bar;
+    GtkBuilder* builder;
+
+    if (!ctx || !ctx->window) {
+        return;
+    }
+
+    /* Get builder from window to retrieve progress bar */
+    builder = GTK_BUILDER(g_object_get_data(G_OBJECT(ctx->window), "main_builder"));
+    if (!builder) {
+        return;
+    }
+
+    /* Get progress bar */
+    progress_bar = GTK_WIDGET(gtk_builder_get_object(builder, "progress_bar"));
+
+    if (progress_bar) {
+        /* Pulse the progress bar */
+        gtk_progress_bar_pulse(GTK_PROGRESS_BAR(progress_bar));
+    }
+
+    /* Process pending events */
+    while (gtk_events_pending()) {
+        gtk_main_iteration();
+    }
+}
+
+/**
+ * Hide the progress bar
+ */
+void ui_hide_progress(AppContext* ctx) {
+    GtkWidget* progress_bar;
+    GtkWidget* status_label;
+    GtkBuilder* builder;
+
+    if (!ctx || !ctx->window) {
+        return;
+    }
+
+    /* Get builder from window to retrieve progress bar and status label */
+    builder = GTK_BUILDER(g_object_get_data(G_OBJECT(ctx->window), "main_builder"));
+    if (!builder) {
+        return;
+    }
+
+    /* Get progress bar and status label */
+    progress_bar = GTK_WIDGET(gtk_builder_get_object(builder, "progress_bar"));
+    status_label = GTK_WIDGET(gtk_builder_get_object(builder, "sb_status_label"));
+
+    if (progress_bar) {
+        /* Hide progress bar */
+        gtk_widget_hide(progress_bar);
+    }
+
+    if (status_label) {
+        /* Reset status label to default */
+        gtk_label_set_text(GTK_LABEL(status_label), "");
+    }
 }
 
 /**

@@ -7,118 +7,18 @@
 #include <glib.h>
 #include <gtk/gtk.h>
 
-/**
- * Progress dialog structure
- */
-typedef struct {
-    GtkWidget* dialog;
-    GtkWidget* label;
-    GtkWidget* progress_bar;
-    guint pulse_timeout_id;
-} FilterProgressDialog;
-
 /* Forward declaration */
 static gboolean pulse_progress_bar(gpointer user_data);
-
-/**
- * Create and show a progress dialog for filter application
- */
-static FilterProgressDialog* show_filter_progress_dialog(GtkWindow* parent, const gchar* filter_name) {
-    FilterProgressDialog* progress;
-    GtkWidget* content_area;
-    GtkWidget* vbox;
-    GtkWidget* label;
-    GtkWidget* progress_bar;
-
-    progress = (FilterProgressDialog*)g_malloc(sizeof(FilterProgressDialog));
-    if (!progress) {
-        return NULL;
-    }
-
-    /* Initialize */
-    progress->pulse_timeout_id = 0;
-
-    /* Create dialog */
-    progress->dialog = gtk_dialog_new();
-    gtk_window_set_title(GTK_WINDOW(progress->dialog), "Applying Filter");
-    gtk_window_set_modal(GTK_WINDOW(progress->dialog), TRUE);
-    gtk_window_set_resizable(GTK_WINDOW(progress->dialog), FALSE);
-    gtk_window_set_deletable(GTK_WINDOW(progress->dialog), FALSE);
-
-    if (parent) {
-        gtk_window_set_transient_for(GTK_WINDOW(progress->dialog), parent);
-    }
-
-    /* Get content area */
-    content_area = gtk_dialog_get_content_area(GTK_DIALOG(progress->dialog));
-    gtk_container_set_border_width(GTK_CONTAINER(content_area), 15);
-
-    /* Create vertical box */
-    vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
-    gtk_container_add(GTK_CONTAINER(content_area), vbox);
-
-    /* Create label showing filter name */
-    label = gtk_label_new(NULL);
-    gchar* label_text = g_strdup_printf("Applying %s...", filter_name ? filter_name : "filter");
-    gtk_label_set_text(GTK_LABEL(label), label_text);
-    gtk_label_set_justify(GTK_LABEL(label), GTK_JUSTIFY_CENTER);
-    g_free(label_text);
-    gtk_box_pack_start(GTK_BOX(vbox), label, FALSE, FALSE, 0);
-    progress->label = label;
-
-    /* Create progress bar in activity mode (indeterminate) */
-    progress_bar = gtk_progress_bar_new();
-    gtk_progress_bar_set_pulse_step(GTK_PROGRESS_BAR(progress_bar), 0.1);
-    gtk_progress_bar_set_show_text(GTK_PROGRESS_BAR(progress_bar), FALSE);
-    gtk_widget_set_size_request(progress_bar, 300, -1);
-    gtk_box_pack_start(GTK_BOX(vbox), progress_bar, FALSE, FALSE, 0);
-    progress->progress_bar = progress_bar;
-
-    /* Show all widgets */
-    gtk_widget_show_all(progress->dialog);
-
-    /* Start pulsing the progress bar periodically (every 50ms) */
-    progress->pulse_timeout_id = g_timeout_add(50, pulse_progress_bar, progress);
-    gtk_progress_bar_pulse(GTK_PROGRESS_BAR(progress_bar));
-
-    /* Process pending events to show the dialog */
-    while (gtk_events_pending()) {
-        gtk_main_iteration();
-    }
-
-    return progress;
-}
 
 /**
  * Timeout callback to pulse progress bar
  */
 static gboolean pulse_progress_bar(gpointer user_data) {
-    FilterProgressDialog* progress = (FilterProgressDialog*)user_data;
-    if (progress && progress->progress_bar) {
-        gtk_progress_bar_pulse(GTK_PROGRESS_BAR(progress->progress_bar));
+    AppContext* ctx = (AppContext*)user_data;
+    if (ctx) {
+        ui_update_progress(ctx);
     }
     return G_SOURCE_CONTINUE;
-}
-
-/**
- * Hide and destroy progress dialog
- */
-static void hide_filter_progress_dialog(FilterProgressDialog* progress) {
-    if (!progress) {
-        return;
-    }
-
-    /* Remove timeout if it exists */
-    if (progress->pulse_timeout_id > 0) {
-        g_source_remove(progress->pulse_timeout_id);
-        progress->pulse_timeout_id = 0;
-    }
-
-    if (progress->dialog) {
-        gtk_widget_destroy(progress->dialog);
-    }
-
-    g_free(progress);
 }
 
 /**
@@ -150,6 +50,7 @@ gboolean ui_apply_layer_filter(AppContext* ctx,
     Command* cmd;
     gint64 start_time;
     gdouble processing_time;
+    guint pulse_timeout_id = 0;
 
     if (!ctx || !filter_func || !filter_name) {
         return FALSE;
@@ -175,11 +76,13 @@ gboolean ui_apply_layer_filter(AppContext* ctx,
         return FALSE;
     }
 
-    /* Show progress dialog */
-    FilterProgressDialog* progress = NULL;
-    if (ctx->window) {
-        progress = show_filter_progress_dialog(GTK_WINDOW(ctx->window), filter_name);
-    }
+    /* Show progress bar with message */
+    gchar* progress_message = g_strdup_printf("Applying %s...", filter_name ? filter_name : "filter");
+    ui_show_progress(ctx, progress_message);
+    g_free(progress_message);
+
+    /* Start pulsing the progress bar periodically (every 50ms) */
+    pulse_timeout_id = g_timeout_add(50, pulse_progress_bar, ctx);
 
     /* Start timing */
     start_time = start_processing_timer();
@@ -213,25 +116,18 @@ gboolean ui_apply_layer_filter(AppContext* ctx,
         cairo_surface_destroy(original_surface);
     }
 
-    /* Process any pending events after filter completes */
-    if (progress) {
-        while (gtk_events_pending()) {
-            gtk_main_iteration();
-        }
+    /* Remove pulse timeout */
+    if (pulse_timeout_id > 0) {
+        g_source_remove(pulse_timeout_id);
     }
+
+    /* Hide progress bar */
+    ui_hide_progress(ctx);
 
     if (!success) {
         g_warning("Failed to apply %s filter", filter_name);
-        if (progress) {
-            hide_filter_progress_dialog(progress);
-        }
         command_free(cmd);
         return FALSE;
-    }
-
-    /* Hide progress dialog */
-    if (progress) {
-        hide_filter_progress_dialog(progress);
     }
 
     /* Finalize draw command by taking snapshot of state after filter */
@@ -284,6 +180,7 @@ gboolean ui_apply_layer_filter_with_value(AppContext* ctx,
     Command* cmd;
     gint64 start_time;
     gdouble processing_time;
+    guint pulse_timeout_id = 0;
 
     if (!ctx || !filter_func || !filter_name || !values || num_values <= 0) {
         return FALSE;
@@ -309,11 +206,13 @@ gboolean ui_apply_layer_filter_with_value(AppContext* ctx,
         return FALSE;
     }
 
-    /* Show progress dialog */
-    FilterProgressDialog* progress = NULL;
-    if (ctx->window) {
-        progress = show_filter_progress_dialog(GTK_WINDOW(ctx->window), filter_name);
-    }
+    /* Show progress bar with message */
+    gchar* progress_message = g_strdup_printf("Applying %s...", filter_name ? filter_name : "filter");
+    ui_show_progress(ctx, progress_message);
+    g_free(progress_message);
+
+    /* Start pulsing the progress bar periodically (every 50ms) */
+    pulse_timeout_id = g_timeout_add(50, pulse_progress_bar, ctx);
 
     /* Start timing */
     start_time = start_processing_timer();
@@ -347,25 +246,18 @@ gboolean ui_apply_layer_filter_with_value(AppContext* ctx,
         cairo_surface_destroy(original_surface);
     }
 
-    /* Process any pending events after filter completes */
-    if (progress) {
-        while (gtk_events_pending()) {
-            gtk_main_iteration();
-        }
+    /* Remove pulse timeout */
+    if (pulse_timeout_id > 0) {
+        g_source_remove(pulse_timeout_id);
     }
+
+    /* Hide progress bar */
+    ui_hide_progress(ctx);
 
     if (!success) {
         g_warning("Failed to apply %s filter", filter_name);
-        if (progress) {
-            hide_filter_progress_dialog(progress);
-        }
         command_free(cmd);
         return FALSE;
-    }
-
-    /* Hide progress dialog */
-    if (progress) {
-        hide_filter_progress_dialog(progress);
     }
 
     /* Finalize draw command by taking snapshot of state after filter */

@@ -1902,6 +1902,7 @@
                   <object class="GtkProgressBar" id="progress_bar">
                     <property name="height-request">15</property>
                     <property name="can-focus">False</property>
+                    <property name="no-show-all">True</property>
                   </object>
                   <packing>
                     <property name="expand">False</property>

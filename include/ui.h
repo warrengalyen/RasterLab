@@ -123,6 +123,25 @@ void ui_update_cursor_position(AppContext* ctx, ImageDocument* doc, gint image_x
 void ui_hide_cursor_position(AppContext* ctx);
 
 /**
+ * Show and start the progress bar with a message
+ * @param ctx The application context
+ * @param message The progress message to display
+ */
+void ui_show_progress(AppContext* ctx, const gchar* message);
+
+/**
+ * Update the progress bar (pulse animation)
+ * @param ctx The application context
+ */
+void ui_update_progress(AppContext* ctx);
+
+/**
+ * Hide the progress bar
+ * @param ctx The application context
+ */
+void ui_hide_progress(AppContext* ctx);
+
+/**
  * Get canvas background color
  * @param ctx The application context
  * @param r Output parameter for red component (0.0-1.0)
