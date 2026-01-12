@@ -142,6 +142,7 @@ typedef struct ImageDocument {
 
     /* Viewport and zoom */
     gdouble zoom_factor; /* Current zoom level (1.0 = 100%) */
+    gint zoom_mode;      /* 0=manual, 1=fit_image, 2=fit_width, 3=fit_height */
 
     /* Selection - mask-based */
     SelectionMask* selection_mask;      /* Pixel-based selection mask */
@@ -448,6 +449,18 @@ void document_zoom_out(ImageDocument* doc);
  * @param doc The document
  */
 void document_zoom_fit(ImageDocument* doc);
+
+/**
+ * Fit image to viewport width
+ * @param doc The document
+ */
+void document_zoom_fit_width(ImageDocument* doc);
+
+/**
+ * Fit image to viewport height
+ * @param doc The document
+ */
+void document_zoom_fit_height(ImageDocument* doc);
 
 /**
  * Reset zoom to 100%

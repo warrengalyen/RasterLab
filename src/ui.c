@@ -63,6 +63,10 @@ static void on_notebook_switch_page(GtkNotebook* notebook, GtkWidget* page,
 static void on_tab_close_button_clicked(GtkButton* button, gpointer user_data);
 static void setup_adjust_menu(GtkBuilder* builder, AppContext* ctx);
 static void setup_effects_menu(GtkBuilder* builder, AppContext* ctx);
+static void on_statusbar_zoom_out(GtkWidget* widget, gpointer data);
+static void on_statusbar_zoom_in(GtkWidget* widget, gpointer data);
+static void on_statusbar_zoom_changed(GtkComboBox* combo, gpointer data);
+static gboolean zoom_combo_row_separator_func(GtkTreeModel* model, GtkTreeIter* iter, gpointer data);
 
 /**
  * Create the main application UI
@@ -222,7 +226,29 @@ AppContext* ui_create_main_window(void) {
     g_signal_connect(layer_selection, "changed",
                      G_CALLBACK(on_layer_selection_changed), ctx);
 
-    /* Status bar is already in Glade file, no need to add it */
+    /* Setup status bar zoom controls */
+    GtkWidget* sb_zoom_out_button = GTK_WIDGET(gtk_builder_get_object(builder, "sb_zoom_out_button"));
+    GtkWidget* sb_zoom_in_button = GTK_WIDGET(gtk_builder_get_object(builder, "sb_zoom_in_button"));
+    GtkWidget* sb_zoom_combobox = GTK_WIDGET(gtk_builder_get_object(builder, "sb_zoom_combobox"));
+
+    if (sb_zoom_out_button) {
+        g_signal_connect(sb_zoom_out_button, "clicked",
+                         G_CALLBACK(on_statusbar_zoom_out), ctx);
+    }
+    if (sb_zoom_in_button) {
+        g_signal_connect(sb_zoom_in_button, "clicked",
+                         G_CALLBACK(on_statusbar_zoom_in), ctx);
+    }
+    if (sb_zoom_combobox) {
+        /* Set up separator rendering */
+        gtk_combo_box_set_row_separator_func(GTK_COMBO_BOX(sb_zoom_combobox),
+                                             zoom_combo_row_separator_func,
+                                             NULL, NULL);
+
+        /* Connect change signal */
+        g_signal_connect(sb_zoom_combobox, "changed",
+                         G_CALLBACK(on_statusbar_zoom_changed), ctx);
+    }
 
     /* Connect window signals */
     g_signal_connect(ctx->window, "delete-event",
@@ -1270,12 +1296,102 @@ static gboolean transpose_layer(ImageLayer* layer) {
 }
 
 /**
+ * Callback for statusbar zoom out button
+ */
+static void on_statusbar_zoom_out(GtkWidget* widget, gpointer data) {
+    (void)widget; /* Unused */
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc = ui_get_active_document(ctx);
+
+    if (doc) {
+        document_zoom_out(doc);
+        ui_update_status_bar(ctx, doc);
+    }
+}
+
+/**
+ * Callback for statusbar zoom in button
+ */
+static void on_statusbar_zoom_in(GtkWidget* widget, gpointer data) {
+    (void)widget; /* Unused */
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc = ui_get_active_document(ctx);
+
+    if (doc) {
+        document_zoom_in(doc);
+        ui_update_status_bar(ctx, doc);
+    }
+}
+
+/**
+ * Callback for statusbar zoom combobox change
+ */
+static void on_statusbar_zoom_changed(GtkComboBox* combo, gpointer data) {
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc = ui_get_active_document(ctx);
+    gchar* text;
+    GtkTreeIter iter;
+
+    if (!doc || !gtk_combo_box_get_active_iter(combo, &iter)) {
+        return;
+    }
+
+    /* Get the text from the combo box */
+    GtkTreeModel* model = gtk_combo_box_get_model(combo);
+    gtk_tree_model_get(model, &iter, 0, &text, -1);
+
+    if (!text) {
+        return;
+    }
+
+    /* Skip separators */
+    if (g_strcmp0(text, "Separator") == 0) {
+        g_free(text);
+        return;
+    }
+
+    /* Handle special zoom modes */
+    if (g_strcmp0(text, "Fit image") == 0) {
+        document_zoom_fit(doc);
+    } else if (g_strcmp0(text, "Fit width") == 0) {
+        document_zoom_fit_width(doc);
+    } else if (g_strcmp0(text, "Fit height") == 0) {
+        document_zoom_fit_height(doc);
+    } else {
+        /* Parse zoom percentage */
+        int zoom_percent = atoi(text);
+        if (zoom_percent > 0) {
+            doc->zoom_mode = 0; /* Manual zoom */
+            document_set_zoom(doc, zoom_percent / 100.0);
+        }
+    }
+
+    g_free(text);
+    ui_update_status_bar(ctx, doc);
+}
+
+/**
+ * Row separator function for zoom combobox
+ */
+static gboolean zoom_combo_row_separator_func(GtkTreeModel* model, GtkTreeIter* iter, gpointer data) {
+    (void)data; /* Unused */
+    gchar* text;
+    gboolean is_separator;
+
+    gtk_tree_model_get(model, iter, 0, &text, -1);
+    is_separator = (text && g_strcmp0(text, "Separator") == 0);
+    g_free(text);
+
+    return is_separator;
+}
+
+/**
  * Update the status bar with document information
  */
 void ui_update_status_bar(AppContext* ctx, ImageDocument* doc) {
-    GtkWidget *size_label, *bitdepth_label, *zoom_label;
+    GtkWidget *size_label, *bitdepth_label, *zoom_combobox;
     GtkBuilder* builder;
-    gchar *size_text, *bitdepth_text, *zoom_text;
+    gchar *size_text, *bitdepth_text;
 
     if (!ctx || !ctx->status_bar) {
         return;
@@ -1286,18 +1402,18 @@ void ui_update_status_bar(AppContext* ctx, ImageDocument* doc) {
         doc = ui_get_active_document(ctx);
     }
 
-    /* Get builder from window to retrieve status bar labels */
+    /* Get builder from window to retrieve status bar widgets */
     builder = GTK_BUILDER(g_object_get_data(G_OBJECT(ctx->window), "main_builder"));
     if (!builder) {
         return;
     }
 
-    /* Get status bar labels */
+    /* Get status bar widgets */
     size_label = GTK_WIDGET(gtk_builder_get_object(builder, "sb_label_size"));
     bitdepth_label = GTK_WIDGET(gtk_builder_get_object(builder, "sb_label_bitdepth"));
-    zoom_label = GTK_WIDGET(gtk_builder_get_object(builder, "sb_label_zoom"));
+    zoom_combobox = GTK_WIDGET(gtk_builder_get_object(builder, "sb_zoom_combobox"));
 
-    if (!size_label || !bitdepth_label || !zoom_label) {
+    if (!size_label || !bitdepth_label || !zoom_combobox) {
         return;
     }
 
@@ -1305,7 +1421,7 @@ void ui_update_status_bar(AppContext* ctx, ImageDocument* doc) {
         /* No document or empty document */
         size_text = g_strdup("—");
         bitdepth_text = g_strdup("—");
-        zoom_text = g_strdup("—");
+        gtk_combo_box_set_active(GTK_COMBO_BOX(zoom_combobox), -1);
     } else {
         /* Size label: WIDTH x HEIGHT */
         size_text = g_strdup_printf("%u × %u", doc->width, doc->height);
@@ -1321,18 +1437,60 @@ void ui_update_status_bar(AppContext* ctx, ImageDocument* doc) {
         }
         bitdepth_text = g_strdup_printf("%u-bit %s", doc->bit_depth, channels_str);
 
-        /* Zoom label: ZOOM% */
-        zoom_text = g_strdup_printf("%.0f%%", doc->zoom_factor * 100.0);
+        /* Update zoom combobox based on zoom mode */
+        GtkTreeModel* model = gtk_combo_box_get_model(GTK_COMBO_BOX(zoom_combobox));
+        GtkTreeIter iter;
+        gboolean valid = gtk_tree_model_get_iter_first(model, &iter);
+        gboolean found = FALSE;
+        gchar* search_text = NULL;
+
+        /* Block the changed signal while we update */
+        g_signal_handlers_block_by_func(zoom_combobox, on_statusbar_zoom_changed, ctx);
+
+        /* Determine what to search for based on zoom mode */
+        if (doc->zoom_mode == 1) {
+            search_text = g_strdup("Fit image");
+        } else if (doc->zoom_mode == 2) {
+            search_text = g_strdup("Fit width");
+        } else if (doc->zoom_mode == 3) {
+            search_text = g_strdup("Fit height");
+        } else {
+            /* Manual zoom - search for percentage */
+            int zoom_percent = (int)(doc->zoom_factor * 100.0 + 0.5);
+            search_text = g_strdup_printf("%d%%", zoom_percent);
+        }
+
+        /* Search for matching item in combobox */
+        while (valid && !found) {
+            gchar* item_text;
+            gtk_tree_model_get(model, &iter, 0, &item_text, -1);
+
+            if (item_text && g_strcmp0(item_text, search_text) == 0) {
+                gtk_combo_box_set_active_iter(GTK_COMBO_BOX(zoom_combobox), &iter);
+                found = TRUE;
+            }
+
+            g_free(item_text);
+            valid = gtk_tree_model_iter_next(model, &iter);
+        }
+
+        /* If no exact match found, this shouldn't happen with discrete zoom levels */
+        if (!found) {
+            gtk_combo_box_set_active(GTK_COMBO_BOX(zoom_combobox), -1);
+        }
+
+        /* Unblock the signal */
+        g_signal_handlers_unblock_by_func(zoom_combobox, on_statusbar_zoom_changed, ctx);
+
+        g_free(search_text);
     }
 
     /* Update labels */
     gtk_label_set_text(GTK_LABEL(size_label), size_text);
     gtk_label_set_text(GTK_LABEL(bitdepth_label), bitdepth_text);
-    gtk_label_set_text(GTK_LABEL(zoom_label), zoom_text);
 
     g_free(size_text);
     g_free(bitdepth_text);
-    g_free(zoom_text);
 }
 
 /**

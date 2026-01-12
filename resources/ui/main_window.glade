@@ -1233,6 +1233,255 @@
       </object>
     </child>
   </object>
+  <object class="GtkMenu" id="select_menu">
+    <property name="visible">True</property>
+    <property name="can-focus">False</property>
+    <child>
+      <object class="GtkMenuItem" id="select_menu_all">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">All</property>
+        <property name="use-underline">True</property>
+        <accelerator key="a" signal="activate" modifiers="GDK_CONTROL_MASK"/>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="select_menu_none">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">None</property>
+        <property name="use-underline">True</property>
+        <accelerator key="d" signal="activate" modifiers="GDK_CONTROL_MASK"/>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="select_menu_invert">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Invert</property>
+        <property name="use-underline">True</property>
+        <accelerator key="i" signal="activate" modifiers="GDK_SHIFT_MASK | GDK_CONTROL_MASK"/>
+      </object>
+    </child>
+    <child>
+      <object class="GtkSeparatorMenuItem" id="select_menu_separator">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="select_menu_grow">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Grow</property>
+        <property name="use-underline">True</property>
+        <accelerator key="bracketright" signal="activate" modifiers="GDK_CONTROL_MASK | GDK_MOD1_MASK"/>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="select_menu_shrink">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Shrink</property>
+        <property name="use-underline">True</property>
+        <accelerator key="bracketleft" signal="activate" modifiers="GDK_CONTROL_MASK | GDK_MOD1_MASK"/>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="select_menu_border">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Border</property>
+        <property name="use-underline">True</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="select_menu_feather">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Feather</property>
+        <property name="use-underline">True</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="select_menu_sharpen">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Sharpen</property>
+        <property name="use-underline">True</property>
+      </object>
+    </child>
+  </object>
+  <object class="GtkListStore" id="size_unit_list">
+    <columns>
+      <!-- column-name type -->
+      <column type="gchararray"/>
+    </columns>
+    <data>
+      <row>
+        <col id="0" translatable="yes">%</col>
+      </row>
+      <row>
+        <col id="0" translatable="yes">px</col>
+      </row>
+      <row>
+        <col id="0" translatable="yes">in</col>
+      </row>
+      <row>
+        <col id="0" translatable="yes">cm</col>
+      </row>
+      <row>
+        <col id="0" translatable="yes">mm</col>
+      </row>
+      <row>
+        <col id="0" translatable="yes">pt</col>
+      </row>
+      <row>
+        <col id="0" translatable="yes">pc</col>
+      </row>
+    </data>
+  </object>
+  <object class="GtkMenu" id="view_menu">
+    <property name="visible">True</property>
+    <property name="can-focus">False</property>
+    <child>
+      <object class="GtkMenuItem" id="view_menu_zoom_in">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Zoom In</property>
+        <accelerator key="plus" signal="activate" modifiers="GDK_CONTROL_MASK"/>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="view_menu_zoom_out">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Zoom Out</property>
+        <property name="use-underline">True</property>
+        <accelerator key="minus" signal="activate" modifiers="GDK_CONTROL_MASK"/>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="view_menu_zoom_reset">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Actual Pixel Size</property>
+        <accelerator key="0" signal="activate" modifiers="GDK_CONTROL_MASK"/>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="view_menu_zoom_fit">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Fit on Screen</property>
+        <accelerator key="1" signal="activate" modifiers="GDK_CONTROL_MASK"/>
+      </object>
+    </child>
+  </object>
+  <object class="GtkListStore" id="zoom_list">
+    <columns>
+      <!-- column-name level -->
+      <column type="gchararray"/>
+    </columns>
+    <data>
+      <row>
+        <col id="0" translatable="no">3200%</col>
+      </row>
+       <row>
+        <col id="0" translatable="no">2400%</col>
+      </row>
+      <row>
+        <col id="0" translatable="no">1600%</col>
+      </row>
+      <row>
+        <col id="0" translatable="no">1200%</col>
+      </row>
+      <row>
+        <col id="0" translatable="no">800%</col>
+      </row>
+      <row>
+        <col id="0" translatable="no">700%</col>
+      </row>
+      <row>
+        <col id="0" translatable="no">600%</col>
+      </row>
+      <row>
+        <col id="0" translatable="no">500%</col>
+      </row>
+      <row>
+        <col id="0" translatable="no">400%</col>
+      </row>
+      <row>
+        <col id="0" translatable="no">300%</col>
+      </row>
+      <row>
+        <col id="0" translatable="no">200%</col>
+      </row>
+      <row>
+        <col id="0" translatable="no">150%</col>
+      </row>
+      <row>
+        <col id="0" translatable="no">Separator</col>
+      </row>
+      <row>
+        <col id="0" translatable="no">100%</col>
+      </row>
+      <row>
+        <col id="0" translatable="no">Separator</col>
+      </row>
+      <row>
+        <col id="0" translatable="no">75%</col>
+      </row>
+      <row>
+        <col id="0" translatable="no">67%</col>
+      </row>
+      <row>
+        <col id="0" translatable="no">50%</col>
+      </row>
+      <row>
+        <col id="0" translatable="no">33%</col>
+      </row>
+      <row>
+        <col id="0" translatable="no">25%</col>
+      </row>
+      <row>
+        <col id="0" translatable="no">20%</col>
+      </row>
+      <row>
+        <col id="0" translatable="no">16%</col>
+      </row>
+      <row>
+        <col id="0" translatable="no">12%</col>
+      </row>
+      <row>
+        <col id="0" translatable="no">8%</col>
+      </row>
+      <row>
+        <col id="0" translatable="no">4%</col>
+      </row>
+      <row>
+        <col id="0" translatable="no">3%</col>
+      </row>
+      <row>
+        <col id="0" translatable="no">2%</col>
+      </row>
+      <row>
+        <col id="0" translatable="no">1%</col>
+      </row>
+      <row>
+        <col id="0" translatable="no">Separator</col>
+      </row>
+      <row>
+        <col id="0" translatable="yes">Fit width</col>
+      </row>
+      <row>
+        <col id="0" translatable="yes">Fit height</col>
+      </row>
+      <row>
+        <col id="0" translatable="yes">Fit image</col>
+      </row>
+    </data>
+  </object>
   <object class="GtkWindow" id="main_window">
     <property name="can-focus">False</property>
     <property name="title">Image Editor</property>
@@ -1655,17 +1904,162 @@
                     <property name="can-focus">False</property>
                     <property name="halign">start</property>
                     <child>
-                      <object class="GtkLabel" id="sb_label_size">
+                      <object class="GtkBox" id="sb_zoom_box">
                         <property name="visible">True</property>
                         <property name="can-focus">False</property>
-                        <property name="margin-left">10</property>
                         <property name="margin-right">10</property>
-                        <property name="label" translatable="yes">500 x 500</property>
+                        <child>
+                          <object class="GtkButton" id="sb_zoom_out_button">
+                            <property name="visible">True</property>
+                            <property name="can-focus">True</property>
+                            <property name="focus-on-click">False</property>
+                            <property name="receives-default">True</property>
+                            <property name="relief">none</property>
+                            <child>
+                              <object class="GtkImage" id="sb_zoom_out_image">
+                                <property name="visible">True</property>
+                                <property name="can-focus">False</property>
+                                <property name="resource">/icons/sb-zoom-out.png</property>
+                              </object>
+                            </child>
+                          </object>
+                          <packing>
+                            <property name="expand">False</property>
+                            <property name="fill">True</property>
+                            <property name="position">0</property>
+                          </packing>
+                        </child>
+                        <child>
+                          <object class="GtkComboBox" id="sb_zoom_combobox">
+                            <property name="visible">True</property>
+                            <property name="can-focus">False</property>
+                            <property name="model">zoom_list</property>
+                            <property name="active">-1</property>
+                            <property name="has-entry">False</property>
+                            <child>
+                              <object class="GtkCellRendererText" id="sb_zoom_text"/>
+                              <attributes>
+                                <attribute name="text">0</attribute>
+                              </attributes>
+                            </child>
+                          </object>
+                          <packing>
+                            <property name="expand">False</property>
+                            <property name="fill">True</property>
+                            <property name="position">1</property>
+                          </packing>
+                        </child>
+                        <child>
+                          <object class="GtkButton" id="sb_zoom_in_button">
+                            <property name="visible">True</property>
+                            <property name="can-focus">True</property>
+                            <property name="focus-on-click">False</property>
+                            <property name="receives-default">True</property>
+                            <property name="relief">none</property>
+                            <child>
+                              <object class="GtkImage" id="sb_zoom_in_image">
+                                <property name="visible">True</property>
+                                <property name="can-focus">False</property>
+                                <property name="resource">/icons/sb-zoom-in.png</property>
+                              </object>
+                            </child>
+                          </object>
+                          <packing>
+                            <property name="expand">False</property>
+                            <property name="fill">True</property>
+                            <property name="position">2</property>
+                          </packing>
+                        </child>
+                      </object>
+                      <packing>
+                        <property name="expand">False</property>
+                        <property name="fill">True</property>
+                        <property name="position">0</property>
+                      </packing>
+                    </child>
+                    <child>
+                      <object class="GtkSeparator" id="sb_separator">
+                        <property name="visible">True</property>
+                        <property name="can-focus">False</property>
                       </object>
                       <packing>
                         <property name="expand">False</property>
                         <property name="fill">True</property>
                         <property name="position">1</property>
+                      </packing>
+                    </child>
+                    <child>
+                      <object class="GtkBox" id="sb_size_box">
+                        <property name="visible">True</property>
+                        <property name="can-focus">False</property>
+                        <property name="margin-right">10</property>
+                        <child>
+                          <object class="GtkImage" id="sb_size_image">
+                            <property name="visible">True</property>
+                            <property name="can-focus">False</property>
+                            <property name="resource">/icons/sb-dimensions.png</property>
+                          </object>
+                          <packing>
+                            <property name="expand">False</property>
+                            <property name="fill">True</property>
+                            <property name="position">0</property>
+                          </packing>
+                        </child>
+                        <child>
+                          <object class="GtkLabel" id="sb_label_size">
+                            <property name="visible">True</property>
+                            <property name="can-focus">False</property>
+                            <property name="margin-right">5</property>
+                            <property name="label" translatable="yes">500 x 500</property>
+                          </object>
+                          <packing>
+                            <property name="expand">False</property>
+                            <property name="fill">True</property>
+                            <property name="position">1</property>
+                          </packing>
+                        </child>
+                        <child>
+                          <object class="GtkComboBox" id="sb_size_unit_combobox">
+                            <property name="visible">True</property>
+                            <property name="can-focus">False</property>
+                            <property name="model">size_unit_list</property>
+                            <property name="active">1</property>
+                            <property name="id-column">0</property>
+                            <child>
+                              <object class="GtkCellRendererText" id="sb_size_unit_text"/>
+                              <attributes>
+                                <attribute name="text">0</attribute>
+                              </attributes>
+                            </child>
+                          </object>
+                          <packing>
+                            <property name="expand">False</property>
+                            <property name="fill">True</property>
+                            <property name="position">2</property>
+                          </packing>
+                        </child>
+                      </object>
+                      <packing>
+                        <property name="expand">False</property>
+                        <property name="fill">True</property>
+                        <property name="position">2</property>
+                      </packing>
+                    </child>
+                    <child>
+                      <placeholder/>
+                    </child>
+                    <child>
+                      <placeholder/>
+                    </child>
+                    <child>
+                      <object class="GtkSeparator" id="sb_separator1">
+                        <property name="visible">True</property>
+                        <property name="can-focus">False</property>
+                      </object>
+                      <packing>
+                        <property name="expand">False</property>
+                        <property name="fill">True</property>
+                        <property name="position">6</property>
                       </packing>
                     </child>
                     <child>
@@ -1679,7 +2073,7 @@
                       <packing>
                         <property name="expand">False</property>
                         <property name="fill">True</property>
-                        <property name="position">2</property>
+                        <property name="position">7</property>
                       </packing>
                     </child>
                     <child>
@@ -1693,7 +2087,7 @@
                       <packing>
                         <property name="expand">False</property>
                         <property name="fill">True</property>
-                        <property name="position">3</property>
+                        <property name="position">8</property>
                       </packing>
                     </child>
                     <child>
@@ -1705,7 +2099,7 @@
                       <packing>
                         <property name="expand">True</property>
                         <property name="fill">True</property>
-                        <property name="position">4</property>
+                        <property name="position">9</property>
                       </packing>
                     </child>
                   </object>
@@ -1755,122 +2149,6 @@
             <property name="position">2</property>
           </packing>
         </child>
-      </object>
-    </child>
-  </object>
-  <object class="GtkMenu" id="select_menu">
-    <property name="visible">True</property>
-    <property name="can-focus">False</property>
-    <child>
-      <object class="GtkMenuItem" id="select_menu_all">
-        <property name="visible">True</property>
-        <property name="can-focus">False</property>
-        <property name="label" translatable="yes">All</property>
-        <property name="use-underline">True</property>
-        <accelerator key="a" signal="activate" modifiers="GDK_CONTROL_MASK"/>
-      </object>
-    </child>
-    <child>
-      <object class="GtkMenuItem" id="select_menu_none">
-        <property name="visible">True</property>
-        <property name="can-focus">False</property>
-        <property name="label" translatable="yes">None</property>
-        <property name="use-underline">True</property>
-        <accelerator key="d" signal="activate" modifiers="GDK_CONTROL_MASK"/>
-      </object>
-    </child>
-    <child>
-      <object class="GtkMenuItem" id="select_menu_invert">
-        <property name="visible">True</property>
-        <property name="can-focus">False</property>
-        <property name="label" translatable="yes">Invert</property>
-        <property name="use-underline">True</property>
-        <accelerator key="i" signal="activate" modifiers="GDK_SHIFT_MASK | GDK_CONTROL_MASK"/>
-      </object>
-    </child>
-    <child>
-      <object class="GtkSeparatorMenuItem" id="select_menu_separator">
-        <property name="visible">True</property>
-        <property name="can-focus">False</property>
-      </object>
-    </child>
-    <child>
-      <object class="GtkMenuItem" id="select_menu_grow">
-        <property name="visible">True</property>
-        <property name="can-focus">False</property>
-        <property name="label" translatable="yes">Grow</property>
-        <property name="use-underline">True</property>
-        <accelerator key="bracketright" signal="activate" modifiers="GDK_CONTROL_MASK | GDK_MOD1_MASK"/>
-      </object>
-    </child>
-    <child>
-      <object class="GtkMenuItem" id="select_menu_shrink">
-        <property name="visible">True</property>
-        <property name="can-focus">False</property>
-        <property name="label" translatable="yes">Shrink</property>
-        <property name="use-underline">True</property>
-        <accelerator key="bracketleft" signal="activate" modifiers="GDK_CONTROL_MASK | GDK_MOD1_MASK"/>
-      </object>
-    </child>
-    <child>
-      <object class="GtkMenuItem" id="select_menu_border">
-        <property name="visible">True</property>
-        <property name="can-focus">False</property>
-        <property name="label" translatable="yes">Border</property>
-        <property name="use-underline">True</property>
-      </object>
-    </child>
-    <child>
-      <object class="GtkMenuItem" id="select_menu_feather">
-        <property name="visible">True</property>
-        <property name="can-focus">False</property>
-        <property name="label" translatable="yes">Feather</property>
-        <property name="use-underline">True</property>
-      </object>
-    </child>
-    <child>
-      <object class="GtkMenuItem" id="select_menu_sharpen">
-        <property name="visible">True</property>
-        <property name="can-focus">False</property>
-        <property name="label" translatable="yes">Sharpen</property>
-        <property name="use-underline">True</property>
-      </object>
-    </child>
-  </object>
-  <object class="GtkMenu" id="view_menu">
-    <property name="visible">True</property>
-    <property name="can-focus">False</property>
-    <child>
-      <object class="GtkMenuItem" id="view_menu_zoom_in">
-        <property name="visible">True</property>
-        <property name="can-focus">False</property>
-        <property name="label" translatable="yes">Zoom In</property>
-        <accelerator key="plus" signal="activate" modifiers="GDK_CONTROL_MASK"/>
-      </object>
-    </child>
-    <child>
-      <object class="GtkMenuItem" id="view_menu_zoom_out">
-        <property name="visible">True</property>
-        <property name="can-focus">False</property>
-        <property name="label" translatable="yes">Zoom Out</property>
-        <property name="use-underline">True</property>
-        <accelerator key="minus" signal="activate" modifiers="GDK_CONTROL_MASK"/>
-      </object>
-    </child>
-    <child>
-      <object class="GtkMenuItem" id="view_menu_zoom_reset">
-        <property name="visible">True</property>
-        <property name="can-focus">False</property>
-        <property name="label" translatable="yes">Actual Pixel Size</property>
-        <accelerator key="0" signal="activate" modifiers="GDK_CONTROL_MASK"/>
-      </object>
-    </child>
-    <child>
-      <object class="GtkMenuItem" id="view_menu_zoom_fit">
-        <property name="visible">True</property>
-        <property name="can-focus">False</property>
-        <property name="label" translatable="yes">Fit on Screen</property>
-        <accelerator key="1" signal="activate" modifiers="GDK_CONTROL_MASK"/>
       </object>
     </child>
   </object>

@@ -662,6 +662,7 @@ ImageDocument* document_new(const gchar* filename, gboolean create_worker_pool) 
     doc->tile_grid = NULL;        /* Will be created when image is loaded */
     doc->tile_thread_pool = NULL; /* Will be created when image is loaded */
     doc->zoom_factor = 1.0;
+    doc->zoom_mode = 0; /* 0=manual zoom */
 
     /* Initialize mask-based selection (empty) */
     /* Will be allocated when document dimensions are known */
@@ -1209,11 +1210,11 @@ void document_set_zoom(ImageDocument* doc, gdouble zoom_factor) {
         return;
     }
 
-    /* Clamp zoom to reasonable range (10% - 400%) */
-    if (zoom_factor < 0.1) {
-        zoom_factor = 0.1;
-    } else if (zoom_factor > 4.0) {
-        zoom_factor = 4.0;
+    /* Clamp zoom to reasonable range (1% - 3200%) */
+    if (zoom_factor < 0.01) {
+        zoom_factor = 0.01;
+    } else if (zoom_factor > 32.0) {
+        zoom_factor = 32.0;
     }
 
     doc->zoom_factor = zoom_factor;
@@ -1516,6 +1517,31 @@ gboolean document_is_dirty(ImageDocument* doc) {
     return doc->modified;
 }
 
+/* Discrete zoom levels (as integer percentages) */
+static const int zoom_levels[] = {
+    1, 2, 3, 4, 8, 12, 16, 20, 25, 33, 50, 67, 75, 100,
+    150, 200, 300, 400, 500, 600, 700, 800, 1200, 1600, 2400, 3200};
+static const int num_zoom_levels = sizeof(zoom_levels) / sizeof(zoom_levels[0]);
+
+/**
+ * Find the closest zoom level index for the given zoom factor
+ */
+static int find_closest_zoom_level(double zoom_factor) {
+    int zoom_percent = (int)(zoom_factor * 100.0 + 0.5); /* Round to nearest integer */
+    int closest_index = 0;
+    int min_diff = abs(zoom_percent - zoom_levels[0]);
+
+    for (int i = 1; i < num_zoom_levels; i++) {
+        int diff = abs(zoom_percent - zoom_levels[i]);
+        if (diff < min_diff) {
+            min_diff = diff;
+            closest_index = i;
+        }
+    }
+
+    return closest_index;
+}
+
 /**
  * Zoom in
  */
@@ -1524,13 +1550,16 @@ void document_zoom_in(ImageDocument* doc) {
         return;
     }
 
-    doc->zoom_factor *= 1.25;
-    if (doc->zoom_factor > 8.0) {
-        doc->zoom_factor = 8.0; /* Max 800% */
+    int current_index = find_closest_zoom_level(doc->zoom_factor);
+
+    /* Move to next zoom level if not at maximum */
+    if (current_index < num_zoom_levels - 1) {
+        current_index++;
+        doc->zoom_factor = zoom_levels[current_index] / 100.0;
+        doc->zoom_mode = 0; /* Manual zoom */
     }
 
     document_set_zoom(doc, doc->zoom_factor);
-    // printf("Zoom: %.0f%%\n", doc->zoom_factor * 100);
 }
 
 /**
@@ -1541,13 +1570,16 @@ void document_zoom_out(ImageDocument* doc) {
         return;
     }
 
-    doc->zoom_factor /= 1.25;
-    if (doc->zoom_factor < 0.1) {
-        doc->zoom_factor = 0.1; /* Min 10% */
+    int current_index = find_closest_zoom_level(doc->zoom_factor);
+
+    /* Move to previous zoom level if not at minimum */
+    if (current_index > 0) {
+        current_index--;
+        doc->zoom_factor = zoom_levels[current_index] / 100.0;
+        doc->zoom_mode = 0; /* Manual zoom */
     }
 
     document_set_zoom(doc, doc->zoom_factor);
-    // printf("Zoom: %.0f%%\n", doc->zoom_factor * 100);
 }
 
 /**
@@ -1595,8 +1627,88 @@ void document_zoom_fit(ImageDocument* doc) {
     }
 
     doc->zoom_factor = zoom;
+    doc->zoom_mode = 1; /* Fit image mode */
     document_set_zoom(doc, zoom);
-    // printf("Zoom fit: %.0f%% (viewport: %dx%d, canvas: %dx%d)\n", zoom * 100, viewport_width, viewport_height, doc->width, doc->height);
+}
+
+/**
+ * Fit image to viewport width
+ */
+void document_zoom_fit_width(ImageDocument* doc) {
+    if (!doc) {
+        return;
+    }
+
+    if (doc->width <= 0) {
+        return;
+    }
+
+    /* Get the viewport size (visible area) */
+    gint viewport_width = 0;
+
+    if (doc->viewport && gtk_widget_get_visible(doc->viewport)) {
+        /* Get allocated width of viewport (visible area) */
+        viewport_width = gtk_widget_get_allocated_width(doc->viewport);
+    }
+
+    /* If viewport is not available or not yet allocated, use a default size */
+    if (viewport_width <= 0) {
+        viewport_width = 800;
+    }
+
+    /* Calculate zoom factor for width */
+    gdouble zoom = (gdouble)viewport_width / (gdouble)doc->width;
+
+    /* Clamp zoom to reasonable range (1% - 3200%) */
+    if (zoom < 0.01) {
+        zoom = 0.01;
+    } else if (zoom > 32.0) {
+        zoom = 32.0;
+    }
+
+    doc->zoom_factor = zoom;
+    doc->zoom_mode = 2; /* Fit width mode */
+    document_set_zoom(doc, zoom);
+}
+
+/**
+ * Fit image to viewport height
+ */
+void document_zoom_fit_height(ImageDocument* doc) {
+    if (!doc) {
+        return;
+    }
+
+    if (doc->height <= 0) {
+        return;
+    }
+
+    /* Get the viewport size (visible area) */
+    gint viewport_height = 0;
+
+    if (doc->viewport && gtk_widget_get_visible(doc->viewport)) {
+        /* Get allocated height of viewport (visible area) */
+        viewport_height = gtk_widget_get_allocated_height(doc->viewport);
+    }
+
+    /* If viewport is not available or not yet allocated, use a default size */
+    if (viewport_height <= 0) {
+        viewport_height = 600;
+    }
+
+    /* Calculate zoom factor for height */
+    gdouble zoom = (gdouble)viewport_height / (gdouble)doc->height;
+
+    /* Clamp zoom to reasonable range (1% - 3200%) */
+    if (zoom < 0.01) {
+        zoom = 0.01;
+    } else if (zoom > 32.0) {
+        zoom = 32.0;
+    }
+
+    doc->zoom_factor = zoom;
+    doc->zoom_mode = 3; /* Fit height mode */
+    document_set_zoom(doc, zoom);
 }
 
 /**
@@ -1608,8 +1720,8 @@ void document_zoom_reset(ImageDocument* doc) {
     }
 
     doc->zoom_factor = 1.0;
+    doc->zoom_mode = 0; /* Manual zoom */
     document_set_zoom(doc, 1.0);
-    // printf("Zoom reset: 100%%\n");
 }
 
 /**
