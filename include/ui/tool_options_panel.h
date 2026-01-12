@@ -12,6 +12,7 @@ typedef struct {
     GtkWidget* panel;                         /* Main panel container */
     GtkWidget* brush_panel;                   /* Brush tool options panel (from Glade) */
     GtkWidget* eraser_panel;                  /* Eraser tool options panel (from Glade) */
+    GtkWidget* pencil_panel;                  /* Pencil tool options panel (from Glade) */
     GtkWidget* paintbucket_panel;             /* Paint bucket tool options panel (from Glade) */
     GtkWidget* rect_select_panel;             /* Rectangular select tool options panel (from Glade) */
     GtkWidget* title_label;                   /* Title showing tool name (current panel) */

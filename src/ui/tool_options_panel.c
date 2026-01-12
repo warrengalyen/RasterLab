@@ -42,22 +42,26 @@ static void on_tool_size_changed(GtkScale* scale, gpointer user_data) {
             save_tool_options_to_settings(panel, panel->current_tool_type);
         }
 
-        /* Update cursor for brush and eraser tools when size changes */
+        /* Update cursor for brush, eraser, and pencil tools when size changes */
         if (panel && panel->tool_registry) {
             Tool* brush_tool = tool_manager_get(panel->tool_registry, TOOL_BRUSH);
             Tool* eraser_tool = tool_manager_get(panel->tool_registry, TOOL_ERASER);
+            Tool* pencil_tool = tool_manager_get(panel->tool_registry, TOOL_PENCIL);
             Tool* active_tool = tool_manager_get_active(panel->tool_registry);
 
-            /* Update cursors for brush and eraser tools */
+            /* Update cursors for brush, eraser, and pencil tools */
             if (brush_tool) {
                 tool_update_cursor(brush_tool, size);
             }
             if (eraser_tool) {
                 tool_update_cursor(eraser_tool, size);
             }
+            if (pencil_tool) {
+                tool_update_cursor(pencil_tool, size);
+            }
 
-            /* Update cursor on drawing areas if brush/eraser is active */
-            if (active_tool && (active_tool->type == TOOL_BRUSH || active_tool->type == TOOL_ERASER)) {
+            /* Update cursor on drawing areas if brush/eraser/pencil is active */
+            if (active_tool && (active_tool->type == TOOL_BRUSH || active_tool->type == TOOL_ERASER || active_tool->type == TOOL_PENCIL)) {
                 /* Get window to find all documents */
                 GtkWidget* window = gtk_widget_get_toplevel(panel->panel);
                 if (window) {
@@ -210,6 +214,40 @@ static void on_fill_antialiased_toggled(GtkToggleButton* button, gpointer user_d
             tool_options_set_fill_antialiased(opts, active);
             /* Save to settings */
             save_tool_options_to_settings(panel, panel->current_tool_type);
+        }
+    }
+}
+
+/**
+ * Tool options panel callback for pencil antialias checkbox
+ */
+static void on_pencil_antialias_toggled(GtkToggleButton* button, gpointer user_data) {
+    (void)user_data; /* Unused */
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)g_object_get_data(G_OBJECT(button), "tool_options_panel");
+    if (panel && panel->current_tool_type == TOOL_PENCIL) {
+        ToolOptions* opts = tool_options_get_for_tool(TOOL_PENCIL);
+        if (opts) {
+            gboolean active = gtk_toggle_button_get_active(button);
+            opts->pencil_antialias = active;
+            /* Save to settings */
+            save_tool_options_to_settings(panel, TOOL_PENCIL);
+        }
+    }
+}
+
+/**
+ * Tool options panel callback for pencil align to pixel grid checkbox
+ */
+static void on_pencil_align_pixel_grid_toggled(GtkToggleButton* button, gpointer user_data) {
+    (void)user_data; /* Unused */
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)g_object_get_data(G_OBJECT(button), "tool_options_panel");
+    if (panel && panel->current_tool_type == TOOL_PENCIL) {
+        ToolOptions* opts = tool_options_get_for_tool(TOOL_PENCIL);
+        if (opts) {
+            gboolean active = gtk_toggle_button_get_active(button);
+            opts->pencil_align_pixel_grid = active;
+            /* Save to settings */
+            save_tool_options_to_settings(panel, TOOL_PENCIL);
         }
     }
 }
@@ -626,6 +664,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
     tool_opts_panel->panel = NULL;
     tool_opts_panel->brush_panel = NULL;
     tool_opts_panel->eraser_panel = NULL;
+    tool_opts_panel->pencil_panel = NULL;
     tool_opts_panel->paintbucket_panel = NULL;
     tool_opts_panel->rect_select_panel = NULL;
     tool_opts_panel->title_label = NULL;
@@ -727,6 +766,80 @@ ToolOptionsPanel* create_tool_options_panel(void) {
         /* Hide eraser panel initially - will be shown when tool is selected */
         gtk_widget_set_visible(tool_opts_panel->eraser_panel, FALSE);
         gtk_widget_set_no_show_all(tool_opts_panel->eraser_panel, TRUE);
+    }
+
+    /* Load pencil panel from Glade */
+    GtkBuilder* pencil_builder = gtk_builder_new();
+    GError* pencil_error = NULL;
+    GtkWidget* pencil_title = NULL;
+    GtkWidget* pencil_size = NULL;
+    GtkWidget* pencil_opacity = NULL;
+    GtkWidget* pencil_antialias = NULL;
+    GtkWidget* pencil_align_pixel_grid = NULL;
+    ToolOptions* pencil_opts = tool_options_get_for_tool(TOOL_PENCIL);
+
+    if (gtk_builder_add_from_resource(pencil_builder, "/ui/pencil_options.glade", &pencil_error)) {
+        tool_opts_panel->pencil_panel = GTK_WIDGET(gtk_builder_get_object(pencil_builder, "pencil_options_panel"));
+        if (tool_opts_panel->pencil_panel) {
+            gtk_container_add(GTK_CONTAINER(container), tool_opts_panel->pencil_panel);
+
+            /* Get widgets */
+            pencil_title = GTK_WIDGET(gtk_builder_get_object(pencil_builder, "pencil_title_label"));
+            pencil_size = GTK_WIDGET(gtk_builder_get_object(pencil_builder, "pencil_size_scale"));
+            pencil_opacity = GTK_WIDGET(gtk_builder_get_object(pencil_builder, "pencil_opacity_scale"));
+            pencil_antialias = GTK_WIDGET(gtk_builder_get_object(pencil_builder, "pencil_antialias_checkbox"));
+            pencil_align_pixel_grid = GTK_WIDGET(gtk_builder_get_object(pencil_builder, "pencil_align_pixel_grid_checkbox"));
+
+            /* Store references */
+            if (pencil_title) {
+                g_object_set_data(G_OBJECT(tool_opts_panel->pencil_panel), "title_label", pencil_title);
+            }
+            if (pencil_size) {
+                g_object_set_data(G_OBJECT(tool_opts_panel->pencil_panel), "size_scale", pencil_size);
+                if (pencil_opts) {
+                    set_scale_value(pencil_size, pencil_opts->size);
+                    g_object_set_data(G_OBJECT(pencil_size), "tool_options_panel", tool_opts_panel);
+                    g_signal_connect(pencil_size, "value-changed", G_CALLBACK(on_tool_size_changed), NULL);
+                }
+            }
+            if (pencil_opacity) {
+                g_object_set_data(G_OBJECT(tool_opts_panel->pencil_panel), "opacity_scale", pencil_opacity);
+                if (pencil_opts) {
+                    set_scale_value(pencil_opacity, pencil_opts->opacity * 100.0);
+                    g_object_set_data(G_OBJECT(pencil_opacity), "tool_options_panel", tool_opts_panel);
+                    g_signal_connect(pencil_opacity, "value-changed", G_CALLBACK(on_tool_opacity_changed), NULL);
+                }
+            }
+            if (pencil_antialias) {
+                g_object_set_data(G_OBJECT(tool_opts_panel->pencil_panel), "antialias_checkbox", pencil_antialias);
+                if (pencil_opts) {
+                    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(pencil_antialias), pencil_opts->pencil_antialias);
+                    g_object_set_data(G_OBJECT(pencil_antialias), "tool_options_panel", tool_opts_panel);
+                    g_signal_connect(pencil_antialias, "toggled", G_CALLBACK(on_pencil_antialias_toggled), NULL);
+                }
+            }
+            if (pencil_align_pixel_grid) {
+                g_object_set_data(G_OBJECT(tool_opts_panel->pencil_panel), "align_pixel_grid_checkbox", pencil_align_pixel_grid);
+                if (pencil_opts) {
+                    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(pencil_align_pixel_grid), pencil_opts->pencil_align_pixel_grid);
+                    g_object_set_data(G_OBJECT(pencil_align_pixel_grid), "tool_options_panel", tool_opts_panel);
+                    g_signal_connect(pencil_align_pixel_grid, "toggled", G_CALLBACK(on_pencil_align_pixel_grid_toggled), NULL);
+                }
+            }
+
+            /* Hide pencil panel initially */
+            gtk_widget_set_visible(tool_opts_panel->pencil_panel, FALSE);
+            gtk_widget_set_no_show_all(tool_opts_panel->pencil_panel, TRUE);
+        }
+        g_object_unref(pencil_builder);
+    } else {
+        g_warning("Failed to load pencil options panel: %s", pencil_error ? pencil_error->message : "Unknown error");
+        if (pencil_error) {
+            g_error_free(pencil_error);
+        }
+        if (pencil_builder) {
+            g_object_unref(pencil_builder);
+        }
     }
 
     /* Load paint bucket panel from Glade */
@@ -911,6 +1024,8 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
         new_tool_type = TOOL_ERASER;
     } else if (g_strcmp0(tool_name, "Brush") == 0) {
         new_tool_type = TOOL_BRUSH;
+    } else if (g_strcmp0(tool_name, "Pencil") == 0) {
+        new_tool_type = TOOL_PENCIL;
     } else if (g_strcmp0(tool_name, "Paint Bucket") == 0) {
         new_tool_type = TOOL_PAINT_BUCKET;
     } else if (g_strcmp0(tool_name, "Rectangular Select") == 0) {
@@ -926,6 +1041,9 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
     }
     if (panel->eraser_panel) {
         gtk_widget_set_visible(panel->eraser_panel, FALSE);
+    }
+    if (panel->pencil_panel) {
+        gtk_widget_set_visible(panel->pencil_panel, FALSE);
     }
     if (panel->paintbucket_panel) {
         gtk_widget_set_visible(panel->paintbucket_panel, FALSE);
@@ -1130,6 +1248,63 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
                 /* Store panel reference in scale widget for callback */
                 g_object_set_data(G_OBJECT(widget), "tool_options_panel", panel);
                 g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_spacing_changed), NULL);
+            }
+        }
+    } else if (new_tool_type == TOOL_PENCIL && panel->pencil_panel) {
+        /* Show main panel container */
+        if (panel->panel) {
+            gtk_widget_set_visible(panel->panel, TRUE);
+        }
+        /* Show pencil panel */
+        gtk_widget_set_no_show_all(panel->pencil_panel, FALSE);
+        gtk_widget_set_visible(panel->pencil_panel, TRUE);
+        gtk_widget_show_all(panel->pencil_panel);
+        /* Get pencil panel widgets from stored references and initialize them */
+        ToolOptions* opts = tool_options_get_for_tool(TOOL_PENCIL);
+        GtkWidget* widget;
+        widget = GTK_WIDGET(g_object_get_data(G_OBJECT(panel->pencil_panel), "title_label"));
+        if (widget)
+            panel->title_label = widget;
+        widget = GTK_WIDGET(g_object_get_data(G_OBJECT(panel->pencil_panel), "size_scale"));
+        if (widget) {
+            panel->size_scale = widget;
+            if (opts) {
+                /* Disconnect signal before setting value to prevent triggering callback */
+                g_signal_handlers_disconnect_by_func(widget, G_CALLBACK(on_tool_size_changed), NULL);
+                set_scale_value(widget, opts->size);
+                /* Store panel reference in scale widget for cursor updates */
+                g_object_set_data(G_OBJECT(widget), "tool_options_panel", panel);
+                /* Reconnect signal after setting value */
+                g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_size_changed), NULL);
+            }
+        }
+        widget = GTK_WIDGET(g_object_get_data(G_OBJECT(panel->pencil_panel), "opacity_scale"));
+        if (widget) {
+            panel->opacity_scale = widget;
+            if (opts) {
+                g_signal_handlers_disconnect_by_func(widget, G_CALLBACK(on_tool_opacity_changed), NULL);
+                set_scale_value(widget, opts->opacity * 100.0);
+                /* Store panel reference in scale widget for callback */
+                g_object_set_data(G_OBJECT(widget), "tool_options_panel", panel);
+                g_signal_connect(widget, "value-changed", G_CALLBACK(on_tool_opacity_changed), NULL);
+            }
+        }
+        widget = GTK_WIDGET(g_object_get_data(G_OBJECT(panel->pencil_panel), "antialias_checkbox"));
+        if (widget) {
+            if (opts) {
+                g_signal_handlers_disconnect_by_func(widget, G_CALLBACK(on_pencil_antialias_toggled), NULL);
+                gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widget), opts->pencil_antialias);
+                g_object_set_data(G_OBJECT(widget), "tool_options_panel", panel);
+                g_signal_connect(widget, "toggled", G_CALLBACK(on_pencil_antialias_toggled), NULL);
+            }
+        }
+        widget = GTK_WIDGET(g_object_get_data(G_OBJECT(panel->pencil_panel), "align_pixel_grid_checkbox"));
+        if (widget) {
+            if (opts) {
+                g_signal_handlers_disconnect_by_func(widget, G_CALLBACK(on_pencil_align_pixel_grid_toggled), NULL);
+                gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widget), opts->pencil_align_pixel_grid);
+                g_object_set_data(G_OBJECT(widget), "tool_options_panel", panel);
+                g_signal_connect(widget, "toggled", G_CALLBACK(on_pencil_align_pixel_grid_toggled), NULL);
             }
         }
     } else if (new_tool_type == TOOL_PAINT_BUCKET && panel->paintbucket_panel) {

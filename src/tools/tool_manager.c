@@ -5,6 +5,7 @@
 #include "tools/tool_fill.h"
 #include "tools/tool_hand.h"
 #include "tools/tool_move.h"
+#include "tools/tool_pencil.h"
 #include "tools/tool_rect_select.h"
 #include "tools/tool_zoom.h"
 
@@ -57,6 +58,13 @@ gboolean tool_manager_init_defaults(ToolRegistry* registry) {
         return FALSE;
     }
     tool_manager_register(registry, tool, TOOL_MOVE);
+
+    /* Create Pencil tool */
+    tool = tool_pencil_create();
+    if (!tool) {
+        return FALSE;
+    }
+    tool_manager_register(registry, tool, TOOL_PENCIL);
 
     /* Create Brush tool */
     tool = tool_brush_create();
@@ -136,7 +144,7 @@ gboolean tool_manager_activate(ToolRegistry* registry, ToolType type) {
     registry->active_tool = tool;
 
     /* Update cursor for brush/eraser tools based on current size */
-    if (tool->type == TOOL_BRUSH || tool->type == TOOL_ERASER) {
+    if (tool->type == TOOL_BRUSH || tool->type == TOOL_ERASER || tool->type == TOOL_PENCIL) {
         ToolOptions* opts = tool_options_get_for_tool(tool->type);
         if (opts) {
             tool_update_cursor(tool, opts->size);

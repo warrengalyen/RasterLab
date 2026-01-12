@@ -19,6 +19,10 @@ typedef struct {
     gboolean fill_contiguous;  /* Paint bucket fill area: TRUE=contiguous, FALSE=global */
     gboolean fill_antialiased; /* Paint bucket antialiasing: TRUE=smooth edges, FALSE=hard edges */
 
+    /* Pencil tool options */
+    gboolean pencil_antialias;        /* Pencil antialiasing: TRUE=smooth edges, FALSE=hard edges */
+    gboolean pencil_align_pixel_grid; /* Pencil pixel grid alignment: TRUE=snap to grid, FALSE=free */
+
     /* Rectangle select tool options */
     SelectionCombineMode rect_select_combine;  /* How to combine with existing selection */
     SelectionSmoothingMode rect_select_smooth; /* Edge smoothing mode */

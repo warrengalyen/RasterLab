@@ -1580,6 +1580,8 @@ static const char* tool_type_to_name(ToolType tool_type) {
     switch (tool_type) {
         case TOOL_BRUSH:
             return "brush";
+        case TOOL_PENCIL:
+            return "pencil";
         case TOOL_ERASER:
             return "eraser";
         case TOOL_PAINT_BUCKET:
@@ -1694,6 +1696,27 @@ void ui_load_tool_options_from_settings(AppContext* ctx) {
             tool_options_set_fill_antialiased(opts, settings_get_default_tool_fill_antialiased());
         }
 
+        /* Pencil tool specific options */
+        if (tool_type == TOOL_PENCIL) {
+            /* Load pencil antialias (default: false) */
+            const char* pencil_antialias_str = settings_get_tool_option(ctx->settings, tool_name, "pencil_antialias");
+            if (pencil_antialias_str) {
+                gboolean antialias = (g_strcmp0(pencil_antialias_str, "true") == 0 || g_strcmp0(pencil_antialias_str, "1") == 0);
+                opts->pencil_antialias = antialias;
+            } else {
+                opts->pencil_antialias = FALSE;
+            }
+
+            /* Load pencil align to pixel grid (default: true) */
+            const char* pencil_align_pixel_grid_str = settings_get_tool_option(ctx->settings, tool_name, "pencil_align_pixel_grid");
+            if (pencil_align_pixel_grid_str) {
+                gboolean align = (g_strcmp0(pencil_align_pixel_grid_str, "true") == 0 || g_strcmp0(pencil_align_pixel_grid_str, "1") == 0);
+                opts->pencil_align_pixel_grid = align;
+            } else {
+                opts->pencil_align_pixel_grid = TRUE;
+            }
+        }
+
         /* Rectangular select tool specific options */
         if (tool_type == TOOL_RECT_SELECT) {
             /* Load combine mode (0=NEW, 1=ADD, 2=SUBTRACT, 3=INTERSECT) */
@@ -1796,6 +1819,8 @@ static void ui_save_tool_options_to_settings_internal(AppContext* ctx, ToolType 
     gfloat tolerance_val = opts->tolerance;
     gboolean fill_contiguous_val = opts->fill_contiguous;
     gboolean fill_antialiased_val = opts->fill_antialiased;
+    gboolean pencil_antialias_val = opts->pencil_antialias;
+    gboolean pencil_align_pixel_grid_val = opts->pencil_align_pixel_grid;
     SelectionCombineMode rect_select_combine_val = opts->rect_select_combine;
     SelectionSmoothingMode rect_select_smooth_val = opts->rect_select_smooth;
     gfloat rect_select_feather_val = opts->rect_select_feather;
@@ -1848,6 +1873,12 @@ static void ui_save_tool_options_to_settings_internal(AppContext* ctx, ToolType 
         settings_set_tool_option(ctx->settings, tool_name, "tolerance", tolerance_str);
         settings_set_tool_option(ctx->settings, tool_name, "fill_contiguous", fill_contiguous_val ? "true" : "false");
         settings_set_tool_option(ctx->settings, tool_name, "fill_antialiased", fill_antialiased_val ? "true" : "false");
+    }
+
+    /* Pencil tool uses antialias and align_pixel_grid options */
+    if (tool_type == TOOL_PENCIL) {
+        settings_set_tool_option(ctx->settings, tool_name, "pencil_antialias", pencil_antialias_val ? "true" : "false");
+        settings_set_tool_option(ctx->settings, tool_name, "pencil_align_pixel_grid", pencil_align_pixel_grid_val ? "true" : "false");
     }
 
     /* Rectangular select tool uses combine mode, smoothing, feather, and animate options */

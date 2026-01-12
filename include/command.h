@@ -32,6 +32,7 @@ typedef enum {
  */
 typedef enum {
     CMD_NAME_DRAW_BRUSH_STROKE = 0,
+    CMD_NAME_DRAW_PENCIL_STROKE,
     CMD_NAME_ERASE,
     CMD_NAME_FILL,
     CMD_NAME_MOVE_LAYER,

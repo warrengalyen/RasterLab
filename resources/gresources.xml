@@ -4,6 +4,7 @@
     <file preprocess="to-pixdata">icons/tool-hand.png</file>
     <file preprocess="to-pixdata">icons/tool-zoom.png</file>
     <file preprocess="to-pixdata">icons/tool-move.png</file>
+    <file preprocess="to-pixdata">icons/tool-pencil.png</file>
     <file preprocess="to-pixdata">icons/tool-paintbrush.png</file>
     <file preprocess="to-pixdata">icons/tool-eraser.png</file>
     <file preprocess="to-pixdata">icons/tool-paintbucket.png</file>
@@ -45,6 +46,7 @@
     <file>ui/layers_panel.glade</file>
     <file>ui/brush_options.glade</file>
     <file>ui/eraser_options.glade</file>
+    <file>ui/pencil_options.glade</file>
     <file>ui/paintbucket_options.glade</file>
     <file>ui/rect_select_options.glade</file>
     <file>ui/new_layer_dialog.glade</file>

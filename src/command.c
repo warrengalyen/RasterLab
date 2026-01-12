@@ -410,6 +410,7 @@ cairo_surface_t* cairo_surface_snapshot(cairo_surface_t* source) {
 const gchar* command_get_name_string(CommandName name) {
     static const gchar* names[] = {
         "Paintbrush",
+        "Pencil",
         "Eraser",
         "Paintbucket",
         "Move Layer",

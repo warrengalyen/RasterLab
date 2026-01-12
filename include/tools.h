@@ -16,11 +16,12 @@ typedef enum {
     TOOL_HAND = 0,
     TOOL_ZOOM = 1,
     TOOL_MOVE = 2,
-    TOOL_BRUSH = 3,
-    TOOL_ERASER = 4,
-    TOOL_PAINT_BUCKET = 5,
-    TOOL_RECT_SELECT = 6,
-    TOOL_COUNT = 7 /* Total number of tools */
+    TOOL_PENCIL = 3,
+    TOOL_BRUSH = 4,
+    TOOL_ERASER = 5,
+    TOOL_PAINT_BUCKET = 6,
+    TOOL_RECT_SELECT = 7,
+    TOOL_COUNT = 8 /* Total number of tools */
 } ToolType;
 
 /**

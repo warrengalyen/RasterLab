@@ -28,6 +28,10 @@ ToolOptions* tool_options_new(void) {
     opts->fill_contiguous = settings_get_default_tool_fill_contiguous();
     opts->fill_antialiased = settings_get_default_tool_fill_antialiased();
 
+    /* Initialize pencil tool options with defaults */
+    opts->pencil_antialias = FALSE;       /* Default: no antialiasing */
+    opts->pencil_align_pixel_grid = TRUE; /* Default: align to pixel grid */
+
     /* Initialize rectangle select tool options */
     opts->rect_select_combine = SELECTION_COMBINE_NEW;
     opts->rect_select_smooth = SELECTION_SMOOTH_ANTIALIASED;
