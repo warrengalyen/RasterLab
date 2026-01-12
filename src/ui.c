@@ -66,6 +66,7 @@ static void setup_effects_menu(GtkBuilder* builder, AppContext* ctx);
 static void on_statusbar_zoom_out(GtkWidget* widget, gpointer data);
 static void on_statusbar_zoom_in(GtkWidget* widget, gpointer data);
 static void on_statusbar_zoom_changed(GtkComboBox* combo, gpointer data);
+static void on_statusbar_size_unit_changed(GtkComboBox* combo, gpointer data);
 static gboolean zoom_combo_row_separator_func(GtkTreeModel* model, GtkTreeIter* iter, gpointer data);
 
 /**
@@ -82,9 +83,10 @@ AppContext* ui_create_main_window(void) {
     ctx->layer_menu_duplicate = NULL;
     ctx->edit_menu_undo = NULL;
     ctx->edit_menu_redo = NULL;
-    ctx->layers_panel = NULL; /* Initialize layers_panel early */
-    ctx->settings = NULL;     /* Will be set in main.c */
-    ctx->app_dir = NULL;      /* Will be set in main.c */
+    ctx->layers_panel = NULL;        /* Initialize layers_panel early */
+    ctx->settings = NULL;            /* Will be set in main.c */
+    ctx->app_dir = NULL;             /* Will be set in main.c */
+    ctx->size_unit = g_strdup("px"); /* Default size unit is pixels */
 
     /* Create and initialize tool manager */
     ctx->tool_registry = tool_manager_new();
@@ -230,6 +232,7 @@ AppContext* ui_create_main_window(void) {
     GtkWidget* sb_zoom_out_button = GTK_WIDGET(gtk_builder_get_object(builder, "sb_zoom_out_button"));
     GtkWidget* sb_zoom_in_button = GTK_WIDGET(gtk_builder_get_object(builder, "sb_zoom_in_button"));
     GtkWidget* sb_zoom_combobox = GTK_WIDGET(gtk_builder_get_object(builder, "sb_zoom_combobox"));
+    GtkWidget* sb_size_unit_combobox = GTK_WIDGET(gtk_builder_get_object(builder, "sb_size_unit_combobox"));
 
     if (sb_zoom_out_button) {
         g_signal_connect(sb_zoom_out_button, "clicked",
@@ -248,6 +251,11 @@ AppContext* ui_create_main_window(void) {
         /* Connect change signal */
         g_signal_connect(sb_zoom_combobox, "changed",
                          G_CALLBACK(on_statusbar_zoom_changed), ctx);
+    }
+    if (sb_size_unit_combobox) {
+        /* Connect change signal */
+        g_signal_connect(sb_size_unit_combobox, "changed",
+                         G_CALLBACK(on_statusbar_size_unit_changed), ctx);
     }
 
     /* Connect window signals */
@@ -618,6 +626,11 @@ void ui_context_free(AppContext* ctx) {
     /* Free app directory */
     if (ctx->app_dir) {
         g_free(ctx->app_dir);
+    }
+
+    /* Free size unit */
+    if (ctx->size_unit) {
+        g_free(ctx->size_unit);
     }
 
     g_free(ctx);
@@ -1296,6 +1309,67 @@ static gboolean transpose_layer(ImageLayer* layer) {
 }
 
 /**
+ * Convert dimension from pixels to the specified unit
+ * @param pixels Dimension in pixels
+ * @param unit Unit string (%, px, in, cm, mm, pt, pc)
+ * @param zoom_factor Current zoom factor (for % calculation)
+ * @param dpi Resolution in DPI (default: 96)
+ * @return Converted dimension value
+ */
+static gdouble convert_dimension(guint pixels, const gchar* unit, gdouble zoom_factor, gdouble dpi) {
+    if (!unit) {
+        return (gdouble)pixels;
+    }
+
+    if (g_strcmp0(unit, "px") == 0) {
+        return (gdouble)pixels;
+    } else if (g_strcmp0(unit, "%") == 0) {
+        /* Percentage of image size (always 100% for actual dimensions) */
+        return 100.0;
+    } else if (g_strcmp0(unit, "in") == 0) {
+        /* Inches */
+        return (gdouble)pixels / dpi;
+    } else if (g_strcmp0(unit, "cm") == 0) {
+        /* Centimeters (1 inch = 2.54 cm) */
+        return ((gdouble)pixels / dpi) * 2.54;
+    } else if (g_strcmp0(unit, "mm") == 0) {
+        /* Millimeters (1 inch = 25.4 mm) */
+        return ((gdouble)pixels / dpi) * 25.4;
+    } else if (g_strcmp0(unit, "pt") == 0) {
+        /* Points (72 points = 1 inch) */
+        return ((gdouble)pixels / dpi) * 72.0;
+    } else if (g_strcmp0(unit, "pc") == 0) {
+        /* Picas (6 picas = 1 inch) */
+        return ((gdouble)pixels / dpi) * 6.0;
+    }
+
+    /* Default to pixels */
+    return (gdouble)pixels;
+}
+
+/**
+ * Format dimension value with appropriate precision
+ * @param value The dimension value
+ * @param unit Unit string (for determining integer vs decimal formatting)
+ * @return Formatted string (must be freed)
+ */
+static gchar* format_dimension(gdouble value, const gchar* unit) {
+    /* px and pt should always be displayed as integers (no decimals) */
+    if (unit && (g_strcmp0(unit, "px") == 0 || g_strcmp0(unit, "pt") == 0)) {
+        return g_strdup_printf("%d", (int)(value + 0.5)); /* Round to nearest integer */
+    }
+
+    /* Use appropriate precision based on magnitude for other units */
+    if (value >= 100.0) {
+        return g_strdup_printf("%.1f", value);
+    } else if (value >= 10.0) {
+        return g_strdup_printf("%.2f", value);
+    } else {
+        return g_strdup_printf("%.3f", value);
+    }
+}
+
+/**
  * Callback for statusbar zoom out button
  */
 static void on_statusbar_zoom_out(GtkWidget* widget, gpointer data) {
@@ -1371,6 +1445,37 @@ static void on_statusbar_zoom_changed(GtkComboBox* combo, gpointer data) {
 }
 
 /**
+ * Callback for statusbar size unit combobox change
+ */
+static void on_statusbar_size_unit_changed(GtkComboBox* combo, gpointer data) {
+    AppContext* ctx = (AppContext*)data;
+    gchar* text;
+    GtkTreeIter iter;
+
+    if (!gtk_combo_box_get_active_iter(combo, &iter)) {
+        return;
+    }
+
+    /* Get the selected unit from the combo box */
+    GtkTreeModel* model = gtk_combo_box_get_model(combo);
+    gtk_tree_model_get(model, &iter, 0, &text, -1);
+
+    if (!text) {
+        return;
+    }
+
+    /* Update the context's size unit */
+    if (ctx->size_unit) {
+        g_free(ctx->size_unit);
+    }
+    ctx->size_unit = g_strdup(text);
+    g_free(text);
+
+    /* Refresh status bar to show dimensions in new unit */
+    ui_update_status_bar(ctx, NULL);
+}
+
+/**
  * Row separator function for zoom combobox
  */
 static gboolean zoom_combo_row_separator_func(GtkTreeModel* model, GtkTreeIter* iter, gpointer data) {
@@ -1423,8 +1528,17 @@ void ui_update_status_bar(AppContext* ctx, ImageDocument* doc) {
         bitdepth_text = g_strdup("—");
         gtk_combo_box_set_active(GTK_COMBO_BOX(zoom_combobox), -1);
     } else {
-        /* Size label: WIDTH x HEIGHT */
-        size_text = g_strdup_printf("%u × %u", doc->width, doc->height);
+        /* Size label: WIDTH x HEIGHT in selected unit */
+        gdouble dpi = 96.0; /* Standard screen DPI */
+        gdouble width_converted = convert_dimension(doc->width, ctx->size_unit, doc->zoom_factor, dpi);
+        gdouble height_converted = convert_dimension(doc->height, ctx->size_unit, doc->zoom_factor, dpi);
+
+        /* Format dimensions with appropriate precision */
+        gchar* width_str = format_dimension(width_converted, ctx->size_unit);
+        gchar* height_str = format_dimension(height_converted, ctx->size_unit);
+        size_text = g_strdup_printf("%s × %s", width_str, height_str);
+        g_free(width_str);
+        g_free(height_str);
 
         /* Bit depth label: BITDEPTH-bit CHANNELS */
         gchar channels_str[32];

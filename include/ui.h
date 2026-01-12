@@ -31,6 +31,7 @@ typedef struct {
     LayersPanel* layers_panel;            /* Layers panel for layer selection */
     Settings* settings;                   /* Application settings */
     gchar* app_dir;                       /* Application executable directory */
+    gchar* size_unit;                     /* Current size unit for dimensions display (default: "px") */
 } AppContext;
 
 /**
