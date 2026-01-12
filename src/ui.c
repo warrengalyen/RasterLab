@@ -130,14 +130,12 @@ AppContext* ui_create_main_window(void) {
     GtkWidget* main_vbox = GTK_WIDGET(gtk_builder_get_object(builder, "main_vbox"));
     GtkWidget* tool_options_container = GTK_WIDGET(gtk_builder_get_object(builder, "tool_options_container"));
     GtkWidget* main_hbox = GTK_WIDGET(gtk_builder_get_object(builder, "main_hbox"));
-    GtkWidget* center_right_hpaned = GTK_WIDGET(gtk_builder_get_object(builder, "center_right_hpaned"));
     ctx->notebook = GTK_WIDGET(gtk_builder_get_object(builder, "notebook"));
-    GtkWidget* layers_panel_container = GTK_WIDGET(gtk_builder_get_object(builder, "layers_panel_container"));
+    GtkWidget* right_panel_container = GTK_WIDGET(gtk_builder_get_object(builder, "right_panel_container"));
     ctx->status_bar = GTK_WIDGET(gtk_builder_get_object(builder, "status_bar"));
 
     if (!main_vbox || !tool_options_container || !main_hbox ||
-        !center_right_hpaned || !ctx->notebook ||
-        !layers_panel_container || !ctx->status_bar) {
+        !ctx->notebook || !right_panel_container || !ctx->status_bar) {
         g_warning("Failed to get required widgets from Glade");
         g_object_unref(builder);
         g_free(ctx);
@@ -196,7 +194,7 @@ AppContext* ui_create_main_window(void) {
     /* ==== RIGHT PANEL: Layers ==== */
     ctx->layers_panel = create_layers_panel();
     layers_panel_widget = ctx->layers_panel->panel;
-    gtk_container_add(GTK_CONTAINER(layers_panel_container), layers_panel_widget);
+    gtk_container_add(GTK_CONTAINER(right_panel_container), layers_panel_widget);
 
     /* Store layers panel reference for later updates */
     g_object_set_data(G_OBJECT(ctx->window), "layers_panel", ctx->layers_panel);
