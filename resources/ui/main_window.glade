@@ -1531,14 +1531,6 @@
               </object>
             </child>
             <child>
-              <object class="GtkMenuItem" id="view_menu_item">
-                <property name="visible">True</property>
-                <property name="can-focus">False</property>
-                <property name="label" translatable="yes">_View</property>
-                <property name="use-underline">True</property>
-              </object>
-            </child>
-            <child>
               <object class="GtkMenuItem" id="layer_menu_item">
                 <property name="visible">True</property>
                 <property name="can-focus">False</property>
@@ -1559,6 +1551,14 @@
                 <property name="visible">True</property>
                 <property name="can-focus">False</property>
                 <property name="label" translatable="yes">_Effects</property>
+                <property name="use-underline">True</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkMenuItem" id="view_menu_item">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">_View</property>
                 <property name="use-underline">True</property>
               </object>
             </child>
@@ -1899,15 +1899,26 @@
                   </packing>
                 </child>
                 <child>
+                  <object class="GtkProgressBar" id="progress_bar">
+                    <property name="height-request">15</property>
+                    <property name="can-focus">False</property>
+                  </object>
+                  <packing>
+                    <property name="expand">False</property>
+                    <property name="fill">True</property>
+                    <property name="position">1</property>
+                  </packing>
+                </child>
+                <child>
                   <object class="GtkStatusbar" id="status_bar">
                     <property name="visible">True</property>
                     <property name="can-focus">False</property>
-                    <property name="halign">start</property>
+                    <property name="hexpand">True</property>
+                    <property name="spacing">5</property>
                     <child>
                       <object class="GtkBox" id="sb_zoom_box">
                         <property name="visible">True</property>
                         <property name="can-focus">False</property>
-                        <property name="margin-right">5</property>
                         <child>
                           <object class="GtkButton" id="sb_zoom_out_button">
                             <property name="visible">True</property>
@@ -1953,6 +1964,7 @@
                             <property name="can-focus">True</property>
                             <property name="focus-on-click">False</property>
                             <property name="receives-default">True</property>
+                            <property name="margin-right">5</property>
                             <property name="relief">none</property>
                             <child>
                               <object class="GtkImage" id="sb_zoom_in_image">
@@ -1968,6 +1980,17 @@
                             <property name="position">2</property>
                           </packing>
                         </child>
+                        <child>
+                          <object class="GtkSeparator" id="sb_separator">
+                            <property name="visible">True</property>
+                            <property name="can-focus">False</property>
+                          </object>
+                          <packing>
+                            <property name="expand">False</property>
+                            <property name="fill">True</property>
+                            <property name="position">4</property>
+                          </packing>
+                        </child>
                       </object>
                       <packing>
                         <property name="expand">False</property>
@@ -1976,22 +1999,9 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkSeparator" id="sb_separator">
-                        <property name="visible">True</property>
-                        <property name="can-focus">False</property>
-                      </object>
-                      <packing>
-                        <property name="expand">False</property>
-                        <property name="fill">True</property>
-                        <property name="position">1</property>
-                      </packing>
-                    </child>
-                    <child>
                       <object class="GtkBox" id="sb_size_box">
                         <property name="visible">True</property>
                         <property name="can-focus">False</property>
-                        <property name="margin-left">5</property>
-                        <property name="margin-right">5</property>
                         <child>
                           <object class="GtkImage" id="sb_size_image">
                             <property name="visible">True</property>
@@ -2022,6 +2032,7 @@
                           <object class="GtkComboBox" id="sb_size_unit_combobox">
                             <property name="visible">True</property>
                             <property name="can-focus">False</property>
+                            <property name="margin-right">5</property>
                             <property name="model">size_unit_list</property>
                             <property name="active">1</property>
                             <child>
@@ -2037,21 +2048,6 @@
                             <property name="position">2</property>
                           </packing>
                         </child>
-                      </object>
-                      <packing>
-                        <property name="expand">False</property>
-                        <property name="fill">True</property>
-                        <property name="position">2</property>
-                      </packing>
-                    </child>
-                    <child>
-                      <placeholder/>
-                    </child>
-                    <child>
-                      <object class="GtkBox" id="sb_position_box">
-                        <property name="visible">True</property>
-                        <property name="can-focus">False</property>
-                        <property name="margin-right">5</property>
                         <child>
                           <object class="GtkSeparator" id="sb_separator1">
                             <property name="visible">True</property>
@@ -2060,9 +2056,20 @@
                           <packing>
                             <property name="expand">False</property>
                             <property name="fill">True</property>
-                            <property name="position">0</property>
+                            <property name="position">3</property>
                           </packing>
                         </child>
+                      </object>
+                      <packing>
+                        <property name="expand">False</property>
+                        <property name="fill">True</property>
+                        <property name="position">1</property>
+                      </packing>
+                    </child>
+                    <child>
+                      <object class="GtkBox" id="sb_position_box">
+                        <property name="visible">True</property>
+                        <property name="can-focus">False</property>
                         <child>
                           <object class="GtkImage" id="sb_position_image">
                             <property name="visible">True</property>
@@ -2073,14 +2080,26 @@
                           <packing>
                             <property name="expand">False</property>
                             <property name="fill">True</property>
-                            <property name="position">1</property>
+                            <property name="position">0</property>
                           </packing>
                         </child>
                         <child>
                           <object class="GtkLabel" id="sb_label_position">
                             <property name="visible">True</property>
                             <property name="can-focus">False</property>
+                            <property name="margin-right">5</property>
                             <property name="label" translatable="yes">(500, 500)</property>
+                          </object>
+                          <packing>
+                            <property name="expand">False</property>
+                            <property name="fill">True</property>
+                            <property name="position">1</property>
+                          </packing>
+                        </child>
+                        <child>
+                          <object class="GtkSeparator" id="sb_separator2">
+                            <property name="visible">True</property>
+                            <property name="can-focus">False</property>
                           </object>
                           <packing>
                             <property name="expand">False</property>
@@ -2092,44 +2111,29 @@
                       <packing>
                         <property name="expand">False</property>
                         <property name="fill">True</property>
-                        <property name="position">7</property>
+                        <property name="position">2</property>
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkLabel" id="sb_label_bitdepth">
+                      <object class="GtkLabel" id="sb_status_label">
                         <property name="visible">True</property>
                         <property name="can-focus">False</property>
-                        <property name="margin-left">10</property>
-                        <property name="margin-right">10</property>
-                        <property name="label" translatable="yes">8-bit</property>
-                      </object>
-                      <packing>
-                        <property name="expand">False</property>
-                        <property name="fill">True</property>
-                        <property name="position">8</property>
-                      </packing>
-                    </child>
-                    <child>
-                      <object class="GtkLabel" id="sb_label_time">
-                        <property name="visible">True</property>
-                        <property name="can-focus">False</property>
+                        <property name="halign">end</property>
                         <property name="label" translatable="yes">Time taken:</property>
                       </object>
                       <packing>
                         <property name="expand">True</property>
                         <property name="fill">True</property>
-                        <property name="position">9</property>
+                        <property name="pack-type">end</property>
+                        <property name="position">3</property>
                       </packing>
                     </child>
                   </object>
                   <packing>
                     <property name="expand">False</property>
                     <property name="fill">True</property>
-                    <property name="position">1</property>
+                    <property name="position">2</property>
                   </packing>
-                </child>
-                <child>
-                  <placeholder/>
                 </child>
               </object>
               <packing>

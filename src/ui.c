@@ -1613,7 +1613,7 @@ void ui_update_status_bar(AppContext* ctx, ImageDocument* doc) {
  * @param time_seconds Processing time in seconds
  */
 void ui_update_status_bar_time(AppContext* ctx, gdouble time_seconds) {
-    GtkWidget* time_label;
+    GtkWidget* status_label;
     GtkBuilder* builder;
     gchar* time_text;
 
@@ -1628,8 +1628,8 @@ void ui_update_status_bar_time(AppContext* ctx, gdouble time_seconds) {
     }
 
     /* Get time label */
-    time_label = GTK_WIDGET(gtk_builder_get_object(builder, "sb_label_time"));
-    if (!time_label) {
+    status_label = GTK_WIDGET(gtk_builder_get_object(builder, "sb_status_label"));
+    if (!status_label) {
         return;
     }
 
@@ -1643,7 +1643,7 @@ void ui_update_status_bar_time(AppContext* ctx, gdouble time_seconds) {
     }
 
     /* Update label */
-    gtk_label_set_text(GTK_LABEL(time_label), time_text);
+    gtk_label_set_text(GTK_LABEL(status_label), time_text);
     g_free(time_text);
 }
 
