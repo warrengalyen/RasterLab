@@ -108,6 +108,21 @@ void ui_save_document_as(AppContext* ctx);
 void ui_update_status_bar_time(AppContext* ctx, gdouble time_seconds);
 
 /**
+ * Update the cursor position display in the status bar
+ * @param ctx The application context
+ * @param doc The document
+ * @param image_x X coordinate in image space
+ * @param image_y Y coordinate in image space
+ */
+void ui_update_cursor_position(AppContext* ctx, ImageDocument* doc, gint image_x, gint image_y);
+
+/**
+ * Hide the cursor position display in the status bar
+ * @param ctx The application context
+ */
+void ui_hide_cursor_position(AppContext* ctx);
+
+/**
  * Get canvas background color
  * @param ctx The application context
  * @param r Output parameter for red component (0.0-1.0)

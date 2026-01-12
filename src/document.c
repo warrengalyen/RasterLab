@@ -28,6 +28,7 @@ static void on_scrolled_window_adjustment_notify(GObject* object, GParamSpec* ps
 static gboolean on_viewport_button_press(GtkWidget* widget, GdkEventButton* event, gpointer user_data);
 static gboolean on_viewport_button_release(GtkWidget* widget, GdkEventButton* event, gpointer user_data);
 static gboolean on_viewport_motion_notify(GtkWidget* widget, GdkEventMotion* event, gpointer user_data);
+static gboolean on_viewport_leave_notify(GtkWidget* widget, GdkEventCrossing* event, gpointer user_data);
 
 /**
  * Animation timer callback - updates selection marching ants
@@ -123,6 +124,7 @@ static gboolean on_drawing_area_button_press(GtkWidget* widget, GdkEventButton* 
 static gboolean on_drawing_area_button_release(GtkWidget* widget, GdkEventButton* event, gpointer user_data);
 static gboolean on_drawing_area_motion_notify(GtkWidget* widget, GdkEventMotion* event, gpointer user_data);
 static gboolean on_drawing_area_enter_notify(GtkWidget* widget, GdkEventCrossing* event, gpointer user_data);
+static gboolean on_drawing_area_leave_notify(GtkWidget* widget, GdkEventCrossing* event, gpointer user_data);
 
 /**
  * Drawing area draw callback
@@ -433,6 +435,7 @@ static gboolean on_drawing_area_motion_notify(GtkWidget* widget, GdkEventMotion*
     ToolRegistry* tool_registry = NULL;
     Tool* active_tool = NULL;
     MouseEvent tool_event;
+    AppContext* ctx = NULL;
 
     (void)widget; /* Unused */
 
@@ -440,6 +443,17 @@ static gboolean on_drawing_area_motion_notify(GtkWidget* widget, GdkEventMotion*
      * the document is being closed, so ignore the event */
     if (!doc || !doc->drawing_area) {
         return FALSE;
+    }
+
+    /* Convert to image coordinates */
+    widget_to_image_coords(doc, event->x, event->y, &tool_event.x, &tool_event.y);
+    tool_event.button = 0; /* No button pressed during motion */
+    tool_event.state = event->state;
+
+    /* Update cursor position in statusbar */
+    ctx = (AppContext*)g_object_get_data(G_OBJECT(doc->drawing_area), "app_context");
+    if (ctx) {
+        ui_update_cursor_position(ctx, doc, tool_event.x, tool_event.y);
     }
 
     /* Get tool registry from drawing area data */
@@ -453,11 +467,6 @@ static gboolean on_drawing_area_motion_notify(GtkWidget* widget, GdkEventMotion*
     if (!active_tool || !active_tool->mouse_move) {
         return FALSE;
     }
-
-    /* Convert to image coordinates */
-    widget_to_image_coords(doc, event->x, event->y, &tool_event.x, &tool_event.y);
-    tool_event.button = 0; /* No button pressed during motion */
-    tool_event.state = event->state;
 
     /* Call tool handler */
     active_tool->mouse_move(active_tool, doc, &tool_event);
@@ -502,6 +511,42 @@ static gboolean on_drawing_area_enter_notify(GtkWidget* widget, GdkEventCrossing
     window = gtk_widget_get_window(doc->drawing_area);
     if (window) {
         gdk_window_set_cursor(window, active_tool->cursor);
+    }
+
+    return FALSE;
+}
+
+/**
+ * Drawing area leave notify callback - no longer used for hiding position
+ * (position is now hidden when leaving viewport)
+ */
+static gboolean on_drawing_area_leave_notify(GtkWidget* widget, GdkEventCrossing* event, gpointer user_data) {
+    (void)widget;    /* Unused */
+    (void)event;     /* Unused */
+    (void)user_data; /* Unused */
+
+    /* No-op: cursor position tracking is handled at viewport level */
+    return FALSE;
+}
+
+/**
+ * Viewport leave notify callback - hide cursor position
+ */
+static gboolean on_viewport_leave_notify(GtkWidget* widget, GdkEventCrossing* event, gpointer user_data) {
+    ImageDocument* doc = (ImageDocument*)user_data;
+    AppContext* ctx = NULL;
+
+    (void)widget; /* Unused */
+    (void)event;  /* Unused */
+
+    if (!doc || !doc->drawing_area) {
+        return FALSE;
+    }
+
+    /* Hide cursor position in statusbar */
+    ctx = (AppContext*)g_object_get_data(G_OBJECT(doc->drawing_area), "app_context");
+    if (ctx) {
+        ui_hide_cursor_position(ctx);
     }
 
     return FALSE;
@@ -592,19 +637,38 @@ static gboolean on_viewport_button_release(GtkWidget* widget, GdkEventButton* ev
 }
 
 /**
- * Viewport motion notify callback - for hand tool panning
+ * Viewport motion notify callback - for hand tool panning and cursor position tracking
  */
 static gboolean on_viewport_motion_notify(GtkWidget* widget, GdkEventMotion* event, gpointer user_data) {
     ImageDocument* doc = (ImageDocument*)user_data;
     ToolRegistry* tool_registry = NULL;
     Tool* active_tool = NULL;
     MouseEvent tool_event;
-
-    (void)widget; /* Unused */
+    AppContext* ctx = NULL;
+    GtkAllocation drawing_area_alloc;
+    gint image_x, image_y;
+    gdouble widget_x, widget_y;
 
     /* Safety check */
     if (!doc || !doc->drawing_area || !doc->scrolled_window) {
         return FALSE;
+    }
+
+    /* Get drawing area allocation to find its position in viewport */
+    gtk_widget_get_allocation(doc->drawing_area, &drawing_area_alloc);
+
+    /* Convert viewport coordinates to drawing area coordinates
+     * The drawing area is centered in the viewport, so we need to account for its offset */
+    widget_x = event->x - drawing_area_alloc.x;
+    widget_y = event->y - drawing_area_alloc.y;
+
+    /* Convert to image coordinates (can be negative if outside canvas) */
+    widget_to_image_coords(doc, widget_x, widget_y, &image_x, &image_y);
+
+    /* Update cursor position in statusbar */
+    ctx = (AppContext*)g_object_get_data(G_OBJECT(doc->drawing_area), "app_context");
+    if (ctx) {
+        ui_update_cursor_position(ctx, doc, image_x, image_y);
     }
 
     /* Get tool registry from drawing area data */
@@ -962,7 +1026,8 @@ GtkWidget* document_create_drawing_area(ImageDocument* doc) {
                               GDK_BUTTON_PRESS_MASK |
                               GDK_BUTTON_RELEASE_MASK |
                               GDK_POINTER_MOTION_MASK |
-                              GDK_ENTER_NOTIFY_MASK);
+                              GDK_ENTER_NOTIFY_MASK |
+                              GDK_LEAVE_NOTIFY_MASK);
 
     /* Connect draw signal */
     g_signal_connect(drawing_area, "draw", G_CALLBACK(on_drawing_area_draw), doc);
@@ -976,21 +1041,26 @@ GtkWidget* document_create_drawing_area(ImageDocument* doc) {
                      G_CALLBACK(on_drawing_area_motion_notify), doc);
     g_signal_connect(drawing_area, "enter-notify-event",
                      G_CALLBACK(on_drawing_area_enter_notify), doc);
+    g_signal_connect(drawing_area, "leave-notify-event",
+                     G_CALLBACK(on_drawing_area_leave_notify), doc);
 
-    /* Enable mouse events on viewport for hand tool panning */
+    /* Enable mouse events on viewport for hand tool panning and cursor position tracking */
     gtk_widget_set_events(viewport,
                           gtk_widget_get_events(viewport) |
                               GDK_BUTTON_PRESS_MASK |
                               GDK_BUTTON_RELEASE_MASK |
-                              GDK_POINTER_MOTION_MASK);
+                              GDK_POINTER_MOTION_MASK |
+                              GDK_LEAVE_NOTIFY_MASK);
 
-    /* Connect viewport mouse events for hand tool */
+    /* Connect viewport mouse events for hand tool and cursor tracking */
     g_signal_connect(viewport, "button-press-event",
                      G_CALLBACK(on_viewport_button_press), doc);
     g_signal_connect(viewport, "button-release-event",
                      G_CALLBACK(on_viewport_button_release), doc);
     g_signal_connect(viewport, "motion-notify-event",
                      G_CALLBACK(on_viewport_motion_notify), doc);
+    g_signal_connect(viewport, "leave-notify-event",
+                     G_CALLBACK(on_viewport_leave_notify), doc);
 
     /* Store references in document */
     doc->drawing_area = drawing_area;

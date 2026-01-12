@@ -1385,91 +1385,91 @@
     </columns>
     <data>
       <row>
-        <col id="0" translatable="no">3200%</col>
-      </row>
-       <row>
-        <col id="0" translatable="no">2400%</col>
+        <col id="0">3200%</col>
       </row>
       <row>
-        <col id="0" translatable="no">1600%</col>
+        <col id="0">2400%</col>
       </row>
       <row>
-        <col id="0" translatable="no">1200%</col>
+        <col id="0">1600%</col>
       </row>
       <row>
-        <col id="0" translatable="no">800%</col>
+        <col id="0">1200%</col>
       </row>
       <row>
-        <col id="0" translatable="no">700%</col>
+        <col id="0">800%</col>
       </row>
       <row>
-        <col id="0" translatable="no">600%</col>
+        <col id="0">700%</col>
       </row>
       <row>
-        <col id="0" translatable="no">500%</col>
+        <col id="0">600%</col>
       </row>
       <row>
-        <col id="0" translatable="no">400%</col>
+        <col id="0">500%</col>
       </row>
       <row>
-        <col id="0" translatable="no">300%</col>
+        <col id="0">400%</col>
       </row>
       <row>
-        <col id="0" translatable="no">200%</col>
+        <col id="0">300%</col>
       </row>
       <row>
-        <col id="0" translatable="no">150%</col>
+        <col id="0">200%</col>
       </row>
       <row>
-        <col id="0" translatable="no">Separator</col>
+        <col id="0">150%</col>
       </row>
       <row>
-        <col id="0" translatable="no">100%</col>
+        <col id="0">Separator</col>
       </row>
       <row>
-        <col id="0" translatable="no">Separator</col>
+        <col id="0">100%</col>
       </row>
       <row>
-        <col id="0" translatable="no">75%</col>
+        <col id="0">Separator</col>
       </row>
       <row>
-        <col id="0" translatable="no">67%</col>
+        <col id="0">75%</col>
       </row>
       <row>
-        <col id="0" translatable="no">50%</col>
+        <col id="0">67%</col>
       </row>
       <row>
-        <col id="0" translatable="no">33%</col>
+        <col id="0">50%</col>
       </row>
       <row>
-        <col id="0" translatable="no">25%</col>
+        <col id="0">33%</col>
       </row>
       <row>
-        <col id="0" translatable="no">20%</col>
+        <col id="0">25%</col>
       </row>
       <row>
-        <col id="0" translatable="no">16%</col>
+        <col id="0">20%</col>
       </row>
       <row>
-        <col id="0" translatable="no">12%</col>
+        <col id="0">16%</col>
       </row>
       <row>
-        <col id="0" translatable="no">8%</col>
+        <col id="0">12%</col>
       </row>
       <row>
-        <col id="0" translatable="no">4%</col>
+        <col id="0">8%</col>
       </row>
       <row>
-        <col id="0" translatable="no">3%</col>
+        <col id="0">4%</col>
       </row>
       <row>
-        <col id="0" translatable="no">2%</col>
+        <col id="0">3%</col>
       </row>
       <row>
-        <col id="0" translatable="no">1%</col>
+        <col id="0">2%</col>
       </row>
       <row>
-        <col id="0" translatable="no">Separator</col>
+        <col id="0">1%</col>
+      </row>
+      <row>
+        <col id="0">Separator</col>
       </row>
       <row>
         <col id="0" translatable="yes">Fit width</col>
@@ -1907,7 +1907,7 @@
                       <object class="GtkBox" id="sb_zoom_box">
                         <property name="visible">True</property>
                         <property name="can-focus">False</property>
-                        <property name="margin-right">10</property>
+                        <property name="margin-right">5</property>
                         <child>
                           <object class="GtkButton" id="sb_zoom_out_button">
                             <property name="visible">True</property>
@@ -1934,8 +1934,6 @@
                             <property name="visible">True</property>
                             <property name="can-focus">False</property>
                             <property name="model">zoom_list</property>
-                            <property name="active">-1</property>
-                            <property name="has-entry">False</property>
                             <child>
                               <object class="GtkCellRendererText" id="sb_zoom_text"/>
                               <attributes>
@@ -1992,11 +1990,13 @@
                       <object class="GtkBox" id="sb_size_box">
                         <property name="visible">True</property>
                         <property name="can-focus">False</property>
-                        <property name="margin-right">10</property>
+                        <property name="margin-left">5</property>
+                        <property name="margin-right">5</property>
                         <child>
                           <object class="GtkImage" id="sb_size_image">
                             <property name="visible">True</property>
                             <property name="can-focus">False</property>
+                            <property name="margin-right">5</property>
                             <property name="resource">/icons/sb-dimensions.png</property>
                           </object>
                           <packing>
@@ -2024,7 +2024,6 @@
                             <property name="can-focus">False</property>
                             <property name="model">size_unit_list</property>
                             <property name="active">1</property>
-                            <property name="id-column">0</property>
                             <child>
                               <object class="GtkCellRendererText" id="sb_size_unit_text"/>
                               <attributes>
@@ -2049,17 +2048,51 @@
                       <placeholder/>
                     </child>
                     <child>
-                      <placeholder/>
-                    </child>
-                    <child>
-                      <object class="GtkSeparator" id="sb_separator1">
+                      <object class="GtkBox" id="sb_position_box">
                         <property name="visible">True</property>
                         <property name="can-focus">False</property>
+                        <property name="margin-right">5</property>
+                        <child>
+                          <object class="GtkSeparator" id="sb_separator1">
+                            <property name="visible">True</property>
+                            <property name="can-focus">False</property>
+                          </object>
+                          <packing>
+                            <property name="expand">False</property>
+                            <property name="fill">True</property>
+                            <property name="position">0</property>
+                          </packing>
+                        </child>
+                        <child>
+                          <object class="GtkImage" id="sb_position_image">
+                            <property name="visible">True</property>
+                            <property name="can-focus">False</property>
+                            <property name="margin-right">5</property>
+                            <property name="resource">/icons/sb-pointer.png</property>
+                          </object>
+                          <packing>
+                            <property name="expand">False</property>
+                            <property name="fill">True</property>
+                            <property name="position">1</property>
+                          </packing>
+                        </child>
+                        <child>
+                          <object class="GtkLabel" id="sb_label_position">
+                            <property name="visible">True</property>
+                            <property name="can-focus">False</property>
+                            <property name="label" translatable="yes">(500, 500)</property>
+                          </object>
+                          <packing>
+                            <property name="expand">False</property>
+                            <property name="fill">True</property>
+                            <property name="position">2</property>
+                          </packing>
+                        </child>
                       </object>
                       <packing>
                         <property name="expand">False</property>
                         <property name="fill">True</property>
-                        <property name="position">6</property>
+                        <property name="position">7</property>
                       </packing>
                     </child>
                     <child>
@@ -2069,20 +2102,6 @@
                         <property name="margin-left">10</property>
                         <property name="margin-right">10</property>
                         <property name="label" translatable="yes">8-bit</property>
-                      </object>
-                      <packing>
-                        <property name="expand">False</property>
-                        <property name="fill">True</property>
-                        <property name="position">7</property>
-                      </packing>
-                    </child>
-                    <child>
-                      <object class="GtkLabel" id="sb_label_zoom">
-                        <property name="visible">True</property>
-                        <property name="can-focus">False</property>
-                        <property name="margin-left">10</property>
-                        <property name="margin-right">10</property>
-                        <property name="label" translatable="yes">100%</property>
                       </object>
                       <packing>
                         <property name="expand">False</property>

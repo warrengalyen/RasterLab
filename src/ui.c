@@ -1648,6 +1648,108 @@ void ui_update_status_bar_time(AppContext* ctx, gdouble time_seconds) {
 }
 
 /**
+ * Update the cursor position display in the status bar
+ */
+void ui_update_cursor_position(AppContext* ctx, ImageDocument* doc, gint image_x, gint image_y) {
+    GtkWidget* position_label;
+    GtkWidget* position_box;
+    GtkBuilder* builder;
+    gchar* position_text;
+    gdouble x_value, y_value;
+    gdouble dpi = 96.0;
+
+    if (!ctx || !ctx->status_bar || !doc) {
+        return;
+    }
+
+    /* Get builder from window to retrieve status bar widgets */
+    builder = GTK_BUILDER(g_object_get_data(G_OBJECT(ctx->window), "main_builder"));
+    if (!builder) {
+        return;
+    }
+
+    /* Get position label and box */
+    position_label = GTK_WIDGET(gtk_builder_get_object(builder, "sb_label_position"));
+    position_box = GTK_WIDGET(gtk_builder_get_object(builder, "sb_position_box"));
+    if (!position_label || !position_box) {
+        return;
+    }
+
+    /* Convert image coordinates to selected unit */
+    if (g_strcmp0(ctx->size_unit, "px") == 0) {
+        /* Pixels - show as integers */
+        position_text = g_strdup_printf("(%d, %d)", image_x, image_y);
+    } else if (g_strcmp0(ctx->size_unit, "%") == 0) {
+        /* Percentage of image dimensions */
+        x_value = ((gdouble)image_x / (gdouble)doc->width) * 100.0;
+        y_value = ((gdouble)image_y / (gdouble)doc->height) * 100.0;
+        position_text = g_strdup_printf("(%.1f, %.1f)", x_value, y_value);
+    } else if (g_strcmp0(ctx->size_unit, "in") == 0) {
+        /* Inches */
+        x_value = (gdouble)image_x / dpi;
+        y_value = (gdouble)image_y / dpi;
+        position_text = g_strdup_printf("(%.3f, %.3f)", x_value, y_value);
+    } else if (g_strcmp0(ctx->size_unit, "cm") == 0) {
+        /* Centimeters */
+        x_value = ((gdouble)image_x / dpi) * 2.54;
+        y_value = ((gdouble)image_y / dpi) * 2.54;
+        position_text = g_strdup_printf("(%.2f, %.2f)", x_value, y_value);
+    } else if (g_strcmp0(ctx->size_unit, "mm") == 0) {
+        /* Millimeters */
+        x_value = ((gdouble)image_x / dpi) * 25.4;
+        y_value = ((gdouble)image_y / dpi) * 25.4;
+        position_text = g_strdup_printf("(%.1f, %.1f)", x_value, y_value);
+    } else if (g_strcmp0(ctx->size_unit, "pt") == 0) {
+        /* Points - show as integers */
+        x_value = ((gdouble)image_x / dpi) * 72.0;
+        y_value = ((gdouble)image_y / dpi) * 72.0;
+        position_text = g_strdup_printf("(%d, %d)", (gint)x_value, (gint)y_value);
+    } else if (g_strcmp0(ctx->size_unit, "pc") == 0) {
+        /* Picas */
+        x_value = ((gdouble)image_x / dpi) * 6.0;
+        y_value = ((gdouble)image_y / dpi) * 6.0;
+        position_text = g_strdup_printf("(%.2f, %.2f)", x_value, y_value);
+    } else {
+        /* Default to pixels */
+        position_text = g_strdup_printf("(%d, %d)", image_x, image_y);
+    }
+
+    gtk_label_set_text(GTK_LABEL(position_label), position_text);
+
+    /* Show the position box */
+    gtk_widget_show(position_box);
+
+    g_free(position_text);
+}
+
+/**
+ * Hide the cursor position display in the status bar
+ */
+void ui_hide_cursor_position(AppContext* ctx) {
+    GtkWidget* position_box;
+    GtkBuilder* builder;
+
+    if (!ctx || !ctx->status_bar) {
+        return;
+    }
+
+    /* Get builder from window to retrieve status bar widgets */
+    builder = GTK_BUILDER(g_object_get_data(G_OBJECT(ctx->window), "main_builder"));
+    if (!builder) {
+        return;
+    }
+
+    /* Get position box */
+    position_box = GTK_WIDGET(gtk_builder_get_object(builder, "sb_position_box"));
+    if (!position_box) {
+        return;
+    }
+
+    /* Hide the position box */
+    gtk_widget_hide(position_box);
+}
+
+/**
  * Update menu and button sensitivity based on document and layer state
  */
 void ui_update_menu_and_button_states(AppContext* ctx) {
