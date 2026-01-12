@@ -35,6 +35,7 @@
 #include "ui/ui_view_menu.h"
 #include "undo/undo_disk.h"
 #include <glib.h>
+#include <pango/pango.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -67,7 +68,255 @@ static void on_statusbar_zoom_out(GtkWidget* widget, gpointer data);
 static void on_statusbar_zoom_in(GtkWidget* widget, gpointer data);
 static void on_statusbar_zoom_changed(GtkComboBox* combo, gpointer data);
 static void on_statusbar_size_unit_changed(GtkComboBox* combo, gpointer data);
-static gboolean zoom_combo_row_separator_func(GtkTreeModel* model, GtkTreeIter* iter, gpointer data);
+static void on_combo_notify_popup_shown(GObject* obj, GParamSpec* pspec, gpointer user_data);
+static gboolean combo_popup_fix_alignment_idle(gpointer user_data);
+static GtkWidget* find_descendant_tree_view(GtkWidget* widget);
+static GtkTreeModel* unwrap_combo_popup_model(GtkTreeModel* model);
+static void apply_statusbar_combobox_style(GtkWidget* combo);
+static void zoom_combo_cell_data_func(GtkCellLayout* layout,
+                                      GtkCellRenderer* cell,
+                                      GtkTreeModel* model,
+                                      GtkTreeIter* iter,
+                                      gpointer data);
+
+static void apply_statusbar_combobox_style(GtkWidget* combo) {
+    if (!combo) {
+        return;
+    }
+
+    /* Apply once per process: GIMP forces list mode for zoom/unit combos.
+     * This avoids the GTK menu-style popup behavior that can show “top whitespace”
+     * when the popup flips to open upward (insufficient space below). */
+    static gboolean css_installed = FALSE;
+    if (!css_installed) {
+        GtkCssProvider* provider = gtk_css_provider_new();
+        const gchar* css =
+            ".sb-combobox {"
+            "  -GtkComboBox-appears-as-list: 1;"
+            "}"
+            /* Reduce padding to avoid odd vertical spacing */
+            ".sb-combobox button {"
+            "  padding-top: 0;"
+            "  padding-bottom: 0;"
+            "}"
+            /* Darken row separators inside the popup list.
+             * The popup is a separate toplevel; we tag it with sb-combobox-popup at runtime. */
+            "window.sb-combobox-popup separator,"
+            "window.sb-combobox-popup treeview.view separator {"
+            "  background-color: rgba(0, 0, 0, 0.90);"
+            "  min-height: 3px;"
+            "  margin-top: 4px;"
+            "  margin-bottom: 4px;"
+            "}";
+        gtk_css_provider_load_from_data(provider, css, -1, NULL);
+        gtk_style_context_add_provider_for_screen(gdk_screen_get_default(),
+                                                  GTK_STYLE_PROVIDER(provider),
+                                                  GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+        g_object_unref(provider);
+        css_installed = TRUE;
+    }
+
+    GtkStyleContext* ctx = gtk_widget_get_style_context(combo);
+    gtk_style_context_add_class(ctx, "sb-combobox");
+}
+
+/* Render “Separator” rows as a real, dark separator bar (theme-independent). */
+static void zoom_combo_cell_data_func(GtkCellLayout* layout,
+                                      GtkCellRenderer* cell,
+                                      GtkTreeModel* model,
+                                      GtkTreeIter* iter,
+                                      gpointer data) {
+    (void)layout;
+    (void)data;
+
+    gchar* text = NULL;
+    gtk_tree_model_get(model, iter, 0, &text, -1);
+
+    if (text && g_strcmp0(text, "Separator") == 0) {
+        /* Draw a separator line using repeated “⎯”.
+         * Let GTK clip it to the popup width. */
+        static gchar* sep_text = NULL;
+        if (!sep_text) {
+            /* Build ~10 chars of U+23AF (UTF-8) */
+            GString* s = g_string_sized_new(40);
+            for (int i = 0; i < 10; i++) {
+                g_string_append(s, "⎯");
+            }
+            sep_text = g_string_free(s, FALSE);
+        }
+
+        g_object_set(cell,
+                     "markup", NULL,
+                     "text", sep_text,
+                     "foreground", "#2b2b2b",
+                     "foreground-set", TRUE,
+                     "cell-background-set", FALSE,
+                     "ellipsize", PANGO_ELLIPSIZE_NONE,
+                     "height", 10,
+                     "xalign", 0.0,
+                     "yalign", 0.5,
+                     "xpad", 0,
+                     "ypad", 0,
+                     NULL);
+    } else {
+        /* Normal rows */
+        g_object_set(cell,
+                     "markup", NULL,
+                     "text", text ? text : "",
+                     "foreground-set", FALSE,
+                     "cell-background-set", FALSE,
+                     "height", -1,
+                     "xalign", 0.0,
+                     "yalign", 0.5,
+                     "xpad", 0,
+                     "ypad", 0,
+                     NULL);
+    }
+
+    g_free(text);
+}
+
+/* Unwrap GtkTreeModelFilter/Sort layers to the base model */
+static GtkTreeModel* unwrap_combo_popup_model(GtkTreeModel* model) {
+    GtkTreeModel* current = model;
+    while (current) {
+        if (GTK_IS_TREE_MODEL_FILTER(current)) {
+            current = gtk_tree_model_filter_get_model(GTK_TREE_MODEL_FILTER(current));
+            continue;
+        }
+        if (GTK_IS_TREE_MODEL_SORT(current)) {
+            current = gtk_tree_model_sort_get_model(GTK_TREE_MODEL_SORT(current));
+            continue;
+        }
+        break;
+    }
+    return current;
+}
+
+/**
+ * Find first GtkTreeView descendant of a widget.
+ * Used to access the GtkComboBox popup's internal tree view.
+ */
+static GtkWidget* find_descendant_tree_view(GtkWidget* widget) {
+    if (!widget) {
+        return NULL;
+    }
+
+    if (GTK_IS_TREE_VIEW(widget)) {
+        return widget;
+    }
+
+    if (GTK_IS_CONTAINER(widget)) {
+        GList* children = gtk_container_get_children(GTK_CONTAINER(widget));
+        for (GList* l = children; l; l = l->next) {
+            GtkWidget* found = find_descendant_tree_view(GTK_WIDGET(l->data));
+            if (found) {
+                g_list_free(children);
+                return found;
+            }
+        }
+        g_list_free(children);
+    }
+
+    return NULL;
+}
+
+/**
+ * GTK quirk workaround:
+ * When a GtkComboBox popup opens above the widget (not enough space below),
+ * GTK may try to align the active row to the button area, which can produce
+ * visible whitespace above the first row. This forces the popup tree view to
+ * scroll so the active row is aligned to the top, eliminating the whitespace.
+ */
+static gboolean combo_popup_fix_alignment_idle(gpointer user_data) {
+    GtkComboBox* combo = GTK_COMBO_BOX(user_data);
+
+    if (!GTK_IS_COMBO_BOX(combo)) {
+        return G_SOURCE_REMOVE;
+    }
+
+    gboolean popup_shown = FALSE;
+    g_object_get(G_OBJECT(combo), "popup-shown", &popup_shown, NULL);
+    if (!popup_shown) {
+        g_object_unref(combo);
+        return G_SOURCE_REMOVE;
+    }
+
+    /* Find the actual popup window + tree view reliably via toplevels.
+     * Note: GTK often wraps the combo model in filter/sort models for the popup,
+     * so we compare against the unwrapped base model. */
+    GtkTreeModel* combo_model = gtk_combo_box_get_model(combo);
+    GtkTreeModel* combo_base_model = unwrap_combo_popup_model(combo_model);
+    GtkWidget* popup_tree_view = NULL;
+    GtkWidget* popup_window = NULL;
+
+    GList* toplevels = gtk_window_list_toplevels();
+    for (GList* l = toplevels; l; l = l->next) {
+        GtkWidget* w = GTK_WIDGET(l->data);
+        if (!GTK_IS_WINDOW(w) || !gtk_widget_get_visible(w)) {
+            continue;
+        }
+
+        /* ComboBox popups usually use the COMBO type hint */
+        GdkWindowTypeHint hint = gtk_window_get_type_hint(GTK_WINDOW(w));
+        if (hint != GDK_WINDOW_TYPE_HINT_COMBO && hint != GDK_WINDOW_TYPE_HINT_POPUP_MENU) {
+            continue;
+        }
+
+        GtkWidget* tree = find_descendant_tree_view(w);
+        if (!tree || !GTK_IS_TREE_VIEW(tree)) {
+            continue;
+        }
+
+        GtkTreeModel* tree_model = gtk_tree_view_get_model(GTK_TREE_VIEW(tree));
+        GtkTreeModel* tree_base_model = unwrap_combo_popup_model(tree_model);
+        if (tree_base_model && tree_base_model == combo_base_model) {
+            popup_tree_view = tree;
+            popup_window = w;
+            break;
+        }
+    }
+    g_list_free(toplevels);
+
+    /* Tag popup window for CSS separator styling */
+    if (popup_window) {
+        GtkStyleContext* sc = gtk_widget_get_style_context(popup_window);
+        gtk_style_context_add_class(sc, "sb-combobox-popup");
+    }
+
+    if (popup_tree_view) {
+        gint active = gtk_combo_box_get_active(combo);
+        if (active >= 0) {
+            /* Force active row to top: prevents GTK from inserting top whitespace when popup opens above */
+            GtkTreePath* path = gtk_tree_path_new_from_indices(active, -1);
+            gtk_tree_view_scroll_to_cell(GTK_TREE_VIEW(popup_tree_view),
+                                         path, NULL, TRUE, 0.0f, 0.0f);
+            gtk_tree_path_free(path);
+        } else if (GTK_IS_SCROLLABLE(popup_tree_view)) {
+            GtkAdjustment* vadj = gtk_scrollable_get_vadjustment(GTK_SCROLLABLE(popup_tree_view));
+            if (vadj) {
+                gtk_adjustment_set_value(vadj, gtk_adjustment_get_lower(vadj));
+            }
+        }
+    }
+
+    g_object_unref(combo);
+    return G_SOURCE_REMOVE;
+}
+
+static void on_combo_notify_popup_shown(GObject* obj, GParamSpec* pspec, gpointer user_data) {
+    (void)pspec;
+    (void)user_data;
+
+    gboolean popup_shown = FALSE;
+    g_object_get(obj, "popup-shown", &popup_shown, NULL);
+    if (popup_shown) {
+        /* Defer until popup widgets exist and GTK finishes its own scroll positioning.
+         * Run twice: one low-priority idle + a tiny timeout. */
+        g_idle_add_full(G_PRIORITY_LOW, combo_popup_fix_alignment_idle, g_object_ref(obj), NULL);
+        g_timeout_add(1, combo_popup_fix_alignment_idle, g_object_ref(obj));
+    }
+}
 
 /**
  * Create the main application UI
@@ -243,16 +492,42 @@ AppContext* ui_create_main_window(void) {
                          G_CALLBACK(on_statusbar_zoom_in), ctx);
     }
     if (sb_zoom_combobox) {
-        /* Set up separator rendering */
-        gtk_combo_box_set_row_separator_func(GTK_COMBO_BOX(sb_zoom_combobox),
-                                             zoom_combo_row_separator_func,
-                                             NULL, NULL);
+        apply_statusbar_combobox_style(sb_zoom_combobox);
+
+        /* Keep popup width stable (GTK3 API) */
+        gtk_combo_box_set_popup_fixed_width(GTK_COMBO_BOX(sb_zoom_combobox), TRUE);
+        /* Fix popup whitespace when opening above (limited space below) */
+        g_signal_connect(sb_zoom_combobox, "notify::popup-shown",
+                         G_CALLBACK(on_combo_notify_popup_shown), NULL);
+
+        /* Render “Separator” rows ourselves (darker + clearer than theme separators) */
+        {
+            GtkCellLayout* layout = GTK_CELL_LAYOUT(sb_zoom_combobox);
+            GList* cells = gtk_cell_layout_get_cells(layout);
+            if (cells && cells->data) {
+                gtk_cell_layout_set_cell_data_func(layout,
+                                                   GTK_CELL_RENDERER(cells->data),
+                                                   zoom_combo_cell_data_func,
+                                                   NULL, NULL);
+            }
+            if (cells) {
+                g_list_free(cells);
+            }
+        }
 
         /* Connect change signal */
         g_signal_connect(sb_zoom_combobox, "changed",
                          G_CALLBACK(on_statusbar_zoom_changed), ctx);
     }
     if (sb_size_unit_combobox) {
+        apply_statusbar_combobox_style(sb_size_unit_combobox);
+
+        /* Keep popup width stable */
+        gtk_combo_box_set_popup_fixed_width(GTK_COMBO_BOX(sb_size_unit_combobox), TRUE);
+        /* Fix popup whitespace when opening above (limited space below) */
+        g_signal_connect(sb_size_unit_combobox, "notify::popup-shown",
+                         G_CALLBACK(on_combo_notify_popup_shown), NULL);
+
         /* Connect change signal */
         g_signal_connect(sb_size_unit_combobox, "changed",
                          G_CALLBACK(on_statusbar_size_unit_changed), ctx);
@@ -1421,6 +1696,8 @@ static void on_statusbar_zoom_changed(GtkComboBox* combo, gpointer data) {
     /* Skip separators */
     if (g_strcmp0(text, "Separator") == 0) {
         g_free(text);
+        /* Restore previous selection (do nothing) */
+        ui_update_status_bar(ctx, doc);
         return;
     }
 
@@ -1478,18 +1755,6 @@ static void on_statusbar_size_unit_changed(GtkComboBox* combo, gpointer data) {
 /**
  * Row separator function for zoom combobox
  */
-static gboolean zoom_combo_row_separator_func(GtkTreeModel* model, GtkTreeIter* iter, gpointer data) {
-    (void)data; /* Unused */
-    gchar* text;
-    gboolean is_separator;
-
-    gtk_tree_model_get(model, iter, 0, &text, -1);
-    is_separator = (text && g_strcmp0(text, "Separator") == 0);
-    g_free(text);
-
-    return is_separator;
-}
-
 /**
  * Update the status bar with document information
  */
@@ -1576,6 +1841,8 @@ void ui_update_status_bar(AppContext* ctx, ImageDocument* doc) {
         GtkTreeIter iter;
         gboolean valid = gtk_tree_model_get_iter_first(model, &iter);
         gboolean found = FALSE;
+        gint found_index = -1;
+        gint current_index = 0;
         gchar* search_text = NULL;
 
         /* Block the changed signal while we update */
@@ -1600,16 +1867,20 @@ void ui_update_status_bar(AppContext* ctx, ImageDocument* doc) {
             gtk_tree_model_get(model, &iter, 0, &item_text, -1);
 
             if (item_text && g_strcmp0(item_text, search_text) == 0) {
-                gtk_combo_box_set_active_iter(GTK_COMBO_BOX(zoom_combobox), &iter);
+                found_index = current_index;
                 found = TRUE;
             }
 
             g_free(item_text);
             valid = gtk_tree_model_iter_next(model, &iter);
+            current_index++;
         }
 
-        /* If no exact match found, this shouldn't happen with discrete zoom levels */
-        if (!found) {
+        /* Set active using index (not iter) to avoid rendering issues */
+        if (found) {
+            gtk_combo_box_set_active(GTK_COMBO_BOX(zoom_combobox), found_index);
+        } else {
+            /* If no exact match found, this shouldn't happen with discrete zoom levels */
             gtk_combo_box_set_active(GTK_COMBO_BOX(zoom_combobox), -1);
         }
 
