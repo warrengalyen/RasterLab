@@ -70,6 +70,7 @@ static Settings* settings_create_default(void) {
     settings->max_recent_files = DEFAULT_MAX_RECENT_FILES;
     settings->undo_compression_level = DEFAULT_UNDO_COMPRESSION_LEVEL;
     settings->undo_temp_directory = NULL; /* NULL = use system temp directory */
+    settings->show_layer_edges = TRUE;    /* Show layer edges by default */
 
     return settings;
 }
@@ -241,6 +242,16 @@ static void settings_load_undo(Settings* settings, xmlNode* undo_node);
 static void settings_save_undo(xmlTextWriterPtr writer, Settings* settings);
 
 /**
+ * Load view settings from XML (forward declaration)
+ */
+static void settings_load_view(Settings* settings, xmlNode* view_node);
+
+/**
+ * Save view settings to XML (forward declaration)
+ */
+static void settings_save_view(xmlTextWriterPtr writer, Settings* settings);
+
+/**
  * Load recent files from XML
  * Stores RecentFile* entries in Settings->recent_files (includes path and timestamp)
  */
@@ -335,6 +346,8 @@ Settings* settings_load(const char* app_dir) {
             settings_load_recent_files(settings, cur);
         } else if (xmlStrcmp(cur->name, (const xmlChar*)"undo") == 0) {
             settings_load_undo(settings, cur);
+        } else if (xmlStrcmp(cur->name, (const xmlChar*)"view") == 0) {
+            settings_load_view(settings, cur);
         }
     }
 
@@ -389,6 +402,43 @@ static void settings_save_undo(xmlTextWriterPtr writer, Settings* settings) {
     }
 
     xmlTextWriterEndElement(writer); /* undo */
+}
+
+/**
+ * Load view settings from XML
+ */
+static void settings_load_view(Settings* settings, xmlNode* view_node) {
+    if (!settings || !view_node) {
+        return;
+    }
+
+    /* Load show_layer_edges setting */
+    xmlChar* show_edges_attr = xmlGetProp(view_node, (const xmlChar*)"show_layer_edges");
+    if (show_edges_attr) {
+        if (xmlStrcmp(show_edges_attr, (const xmlChar*)"true") == 0) {
+            settings->show_layer_edges = TRUE;
+        } else if (xmlStrcmp(show_edges_attr, (const xmlChar*)"false") == 0) {
+            settings->show_layer_edges = FALSE;
+        }
+        xmlFree(show_edges_attr);
+    }
+}
+
+/**
+ * Save view settings to XML
+ */
+static void settings_save_view(xmlTextWriterPtr writer, Settings* settings) {
+    if (!writer || !settings) {
+        return;
+    }
+
+    xmlTextWriterStartElement(writer, (const xmlChar*)"view");
+
+    /* Save show_layer_edges setting */
+    xmlTextWriterWriteAttribute(writer, (const xmlChar*)"show_layer_edges",
+                                (const xmlChar*)(settings->show_layer_edges ? "true" : "false"));
+
+    xmlTextWriterEndElement(writer); /* view */
 }
 
 /**
@@ -566,6 +616,9 @@ gboolean settings_save(Settings* settings, const char* app_dir) {
 
     /* Write undo settings */
     settings_save_undo(writer, settings);
+
+    /* Write view settings */
+    settings_save_view(writer, settings);
 
     /* Close root element */
     xmlTextWriterEndElement(writer); /* app_settings */
@@ -888,4 +941,24 @@ void settings_set_undo_temp_directory(Settings* settings, const gchar* directory
         g_free(settings->undo_temp_directory);
     }
     settings->undo_temp_directory = directory ? g_strdup(directory) : NULL;
+}
+
+/**
+ * Get show layer edges setting
+ */
+gboolean settings_get_show_layer_edges(Settings* settings) {
+    if (!settings) {
+        return TRUE; /* Default to showing edges */
+    }
+    return settings->show_layer_edges;
+}
+
+/**
+ * Set show layer edges setting
+ */
+void settings_set_show_layer_edges(Settings* settings, gboolean show) {
+    if (!settings) {
+        return;
+    }
+    settings->show_layer_edges = show;
 }

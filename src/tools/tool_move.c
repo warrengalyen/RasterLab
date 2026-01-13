@@ -1,4 +1,5 @@
 #include "tools/tool_move.h"
+#include "app/settings.h"
 #include "command.h"
 #include "commands/command_move.h"
 #include "document.h"
@@ -728,9 +729,16 @@ void tool_move_draw_preview(struct ImageDocument* doc, cairo_t* cr, gdouble zoom
     ToolRegistry* tool_registry;
     Tool* active_tool;
     MoveToolState* state;
+    AppContext* ctx;
 
     if (!doc || !doc->drawing_area || !cr) {
         return;
+    }
+
+    /* Check if layer edges should be shown (from settings) */
+    ctx = (AppContext*)g_object_get_data(G_OBJECT(doc->drawing_area), "app_context");
+    if (ctx && ctx->settings && !settings_get_show_layer_edges(ctx->settings)) {
+        return; /* Setting is disabled, don't draw outline */
     }
 
     tool_registry = (ToolRegistry*)g_object_get_data(G_OBJECT(doc->drawing_area), "tool_registry");

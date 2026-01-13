@@ -1345,6 +1345,22 @@
     <property name="visible">True</property>
     <property name="can-focus">False</property>
     <child>
+      <object class="GtkMenuItem" id="view_menu_zoom_fit">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Fit on Screen</property>
+        <accelerator key="1" signal="activate" modifiers="GDK_CONTROL_MASK"/>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="view_menu_zoom_reset">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Actual Pixel Size</property>
+        <accelerator key="0" signal="activate" modifiers="GDK_CONTROL_MASK"/>
+      </object>
+    </child>
+    <child>
       <object class="GtkMenuItem" id="view_menu_zoom_in">
         <property name="visible">True</property>
         <property name="can-focus">False</property>
@@ -1362,19 +1378,124 @@
       </object>
     </child>
     <child>
-      <object class="GtkMenuItem" id="view_menu_zoom_reset">
+      <object class="GtkSeparatorMenuItem" id="view_menu_separator">
         <property name="visible">True</property>
         <property name="can-focus">False</property>
-        <property name="label" translatable="yes">Actual Pixel Size</property>
-        <accelerator key="0" signal="activate" modifiers="GDK_CONTROL_MASK"/>
       </object>
     </child>
     <child>
-      <object class="GtkMenuItem" id="view_menu_zoom_fit">
+      <object class="GtkMenuItem" id="view_menu_zoom">
         <property name="visible">True</property>
         <property name="can-focus">False</property>
-        <property name="label" translatable="yes">Fit on Screen</property>
-        <accelerator key="1" signal="activate" modifiers="GDK_CONTROL_MASK"/>
+        <property name="label" translatable="yes">Zoom to</property>
+        <property name="use-underline">True</property>
+        <child type="submenu">
+          <object class="GtkMenu">
+            <property name="visible">True</property>
+            <property name="can-focus">False</property>
+            <child>
+              <object class="GtkMenuItem" id="view_menu_zoom_1600">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">16:1 (1600%) </property>
+                <property name="use-underline">True</property>
+                <accelerator key="5" signal="activate" modifiers="GDK_CONTROL_MASK"/>
+              </object>
+            </child>
+            <child>
+              <object class="GtkMenuItem" id="view_menu_zoom_800">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">8:1 (800%) </property>
+                <property name="use-underline">True</property>
+                <accelerator key="4" signal="activate" modifiers="GDK_CONTROL_MASK"/>
+              </object>
+            </child>
+            <child>
+              <object class="GtkMenuItem" id="view_menu_zoom_400">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">4:1 (400%)</property>
+                <property name="use-underline">True</property>
+                <accelerator key="4" signal="activate" modifiers="GDK_CONTROL_MASK"/>
+              </object>
+            </child>
+            <child>
+              <object class="GtkMenuItem" id="view_menu_zoom_200">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">2:1 (200%)</property>
+                <property name="use-underline">True</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkMenuItem" id="view_menu_zoom_100">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">1:1 (100%)</property>
+                <property name="use-underline">True</property>
+                <accelerator key="1" signal="activate" modifiers="GDK_CONTROL_MASK"/>
+              </object>
+            </child>
+            <child>
+              <object class="GtkMenuItem" id="view_menu_zoom_50">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">2:1 (50%)</property>
+                <property name="use-underline">True</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkMenuItem" id="view_menu_zoom_25">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">1:4 (25%)</property>
+                <property name="use-underline">True</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkMenuItem" id="view_menu_zoom_12_5">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">1:8 (12.5%)</property>
+                <property name="use-underline">True</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkMenuItem" id="view_menu_zoom_6_25">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">1:16 (6.25%)</property>
+                <property name="use-underline">True</property>
+                <accelerator key="percent" signal="activate"/>
+              </object>
+            </child>
+          </object>
+        </child>
+      </object>
+    </child>
+    <child>
+      <object class="GtkSeparatorMenuItem" id="view_menu_separator1">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkCheckMenuItem" id="view_menu_show_statusbar">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Show statusbar</property>
+        <property name="use-underline">True</property>
+        <property name="active">True</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkCheckMenuItem" id="view_menu_show_layer_edges">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Show layer edges</property>
+        <property name="use-underline">True</property>
+        <property name="active">True</property>
       </object>
     </child>
   </object>
@@ -1946,12 +2067,8 @@
                             <property name="visible">True</property>
                             <property name="can-focus">False</property>
                             <property name="model">zoom_list</property>
-                            <property name="active">-1</property>
                             <child>
                               <object class="GtkCellRendererText" id="sb_zoom_text">
-                                <property name="ypad">0</property>
-                                <property name="xpad">0</property>
-                                <property name="yalign">0.5</property>
                                 <property name="xalign">0</property>
                               </object>
                               <attributes>
@@ -2126,7 +2243,6 @@
                         <property name="visible">True</property>
                         <property name="can-focus">False</property>
                         <property name="halign">end</property>
-                        <property name="label" translatable="no"></property>
                       </object>
                       <packing>
                         <property name="expand">True</property>

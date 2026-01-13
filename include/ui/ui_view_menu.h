@@ -11,6 +11,7 @@ void on_view_zoom_in(GtkWidget* widget, gpointer data);
 void on_view_zoom_out(GtkWidget* widget, gpointer data);
 void on_view_zoom_reset(GtkWidget* widget, gpointer data);
 void on_view_zoom_fit(GtkWidget* widget, gpointer data);
+void on_view_show_layer_edges(GtkCheckMenuItem* check_menu_item, gpointer data);
 
 /**
  * Setup View menu from Glade builder

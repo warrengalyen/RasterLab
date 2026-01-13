@@ -24,6 +24,9 @@ typedef struct {
     /* Undo/redo disk settings */
     gint undo_compression_level; /* LZ4 compression level (1-9, default 1) */
     gchar* undo_temp_directory;  /* Root directory for undo journal files (NULL = system temp) */
+
+    /* View settings */
+    gboolean show_layer_edges; /* Show outline when moving layers (default TRUE) */
 } Settings;
 
 /**
@@ -147,5 +150,19 @@ const gchar* settings_get_undo_temp_directory(Settings* settings);
  * @param directory Temp directory path (NULL = use system default)
  */
 void settings_set_undo_temp_directory(Settings* settings, const gchar* directory);
+
+/**
+ * Set show layer edges setting
+ * @param settings The settings structure
+ * @param show TRUE to show layer edges when moving, FALSE to hide
+ */
+void settings_set_show_layer_edges(Settings* settings, gboolean show);
+
+/**
+ * Get show layer edges setting
+ * @param settings The settings structure
+ * @return TRUE if layer edges should be shown when moving
+ */
+gboolean settings_get_show_layer_edges(Settings* settings);
 
 #endif /* SETTINGS_H */
