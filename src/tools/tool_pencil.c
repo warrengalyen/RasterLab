@@ -326,62 +326,102 @@ static void pencil_draw_dot(cairo_surface_t* surface, struct ImageDocument* doc,
         fg_color.alpha = 1.0;
     }
 
-    cr = cairo_create(surface);
+    /* Calculate bounding box of dot */
+    gint margin = (gint)(pencil_size / 2.0f) + 2;
+    gint min_x = x - margin;
+    gint min_y = y - margin;
+    gint max_x = x + margin;
+    gint max_y = y + margin;
+
+    /* Clamp to surface bounds */
+    gint surface_width = cairo_image_surface_get_width(surface);
+    gint surface_height = cairo_image_surface_get_height(surface);
+    if (min_x < 0)
+        min_x = 0;
+    if (min_y < 0)
+        min_y = 0;
+    if (max_x > surface_width)
+        max_x = surface_width;
+    if (max_y > surface_height)
+        max_y = surface_height;
+
+    gint dot_width = max_x - min_x;
+    gint dot_height = max_y - min_y;
+
+    /* Check if we need to apply selection mask */
+    gboolean has_selection = (doc && doc->selection_mask && !selection_mask_is_empty(doc->selection_mask));
+    cairo_surface_t* temp_surface = NULL;
+
+    if (has_selection && dot_width > 0 && dot_height > 0) {
+        /* Draw to temporary surface first, then apply mask and composite */
+        temp_surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, dot_width, dot_height);
+        if (temp_surface) {
+            cr = cairo_create(temp_surface);
+            /* Translate to draw in temp surface coordinates */
+            cairo_translate(cr, -min_x, -min_y);
+        } else {
+            /* Fallback to drawing directly if temp surface creation fails */
+            temp_surface = NULL;
+            cr = cairo_create(surface);
+        }
+    } else {
+        /* No selection, draw directly to surface */
+        cr = cairo_create(surface);
+    }
+
     pencil_stamp_at(cr, draw_x, draw_y, pencil_size, &fg_color, pencil_opacity, antialias);
     cairo_destroy(cr);
 
     /* Apply selection mask if present */
-    if (doc && doc->selection_mask && !selection_mask_is_empty(doc->selection_mask)) {
-        /* Calculate bounding box of dot */
-        gint margin = (gint)(pencil_size / 2.0f) + 2;
-        gint min_x = x - margin;
-        gint min_y = y - margin;
-        gint max_x = x + margin;
-        gint max_y = y + margin;
+    if (has_selection && temp_surface && dot_width > 0 && dot_height > 0) {
+        /* Convert to document coordinates for selection mask */
+        gint min_x_doc = min_x + layer_offset_x;
+        gint min_y_doc = min_y + layer_offset_y;
+        gint max_x_doc = max_x + layer_offset_x;
+        gint max_y_doc = max_y + layer_offset_y;
 
-        /* Clamp to surface bounds */
-        gint surface_width = cairo_image_surface_get_width(surface);
-        gint surface_height = cairo_image_surface_get_height(surface);
-        if (min_x < 0)
-            min_x = 0;
-        if (min_y < 0)
-            min_y = 0;
-        if (max_x > surface_width)
-            max_x = surface_width;
-        if (max_y > surface_height)
-            max_y = surface_height;
+        DirtyRect dirty_rect;
+        dirty_rect_set(&dirty_rect, min_x_doc, min_y_doc, max_x_doc - min_x_doc, max_y_doc - min_y_doc);
 
-        if (max_x > min_x && max_y > min_y) {
-            /* Convert to document coordinates for selection mask */
-            gint min_x_doc = min_x + layer_offset_x;
-            gint min_y_doc = min_y + layer_offset_y;
-            gint max_x_doc = max_x + layer_offset_x;
-            gint max_y_doc = max_y + layer_offset_y;
+        /* Get selection mask for this region (in document coordinates) */
+        DirtyRect actual_region;
+        SelectionMask* region_mask = selection_build_combined_mask(
+            doc->selection_mask, &dirty_rect, FEATHER_QUALITY_NORMAL, &actual_region);
 
-            DirtyRect dirty_rect;
-            dirty_rect_set(&dirty_rect, min_x_doc, min_y_doc, max_x_doc - min_x_doc, max_y_doc - min_y_doc);
+        if (region_mask && region_mask->data) {
+            /* Convert actual region to temp surface coordinates */
+            gint mask_x_temp = (actual_region.x - min_x_doc);
+            gint mask_y_temp = (actual_region.y - min_y_doc);
 
-            /* Get selection mask for this region (in document coordinates) */
-            DirtyRect actual_region;
-            SelectionMask* region_mask = selection_build_combined_mask(
-                doc->selection_mask, &dirty_rect, FEATHER_QUALITY_NORMAL, &actual_region);
+            /* Apply mask to temp surface */
+            render_utils_apply_selection_mask(
+                temp_surface,
+                region_mask->data,
+                mask_x_temp, mask_y_temp,
+                region_mask->width, region_mask->height,
+                region_mask->stride);
 
-            if (region_mask && region_mask->data) {
-                /* Convert actual region back to layer coordinates for mask application */
-                gint mask_x_layer = actual_region.x - layer_offset_x;
-                gint mask_y_layer = actual_region.y - layer_offset_y;
-
-                /* Apply mask to surface (coordinates are in layer space) */
-                render_utils_apply_selection_mask(
-                    surface,
-                    region_mask->data,
-                    mask_x_layer, mask_y_layer,
-                    region_mask->width, region_mask->height,
-                    region_mask->stride);
-
-                selection_mask_free(region_mask);
-            }
+            selection_mask_free(region_mask);
         }
+
+        /* Composite masked result onto layer surface */
+        cairo_surface_flush(temp_surface);
+        cairo_t* composite_cr = cairo_create(surface);
+        cairo_set_source_surface(composite_cr, temp_surface, min_x, min_y);
+        cairo_set_operator(composite_cr, CAIRO_OPERATOR_OVER);
+        cairo_paint(composite_cr);
+        cairo_destroy(composite_cr);
+
+        cairo_surface_destroy(temp_surface);
+    } else if (!has_selection && temp_surface) {
+        /* No selection but temp surface was created - composite it */
+        cairo_surface_flush(temp_surface);
+        cairo_t* composite_cr = cairo_create(surface);
+        cairo_set_source_surface(composite_cr, temp_surface, min_x, min_y);
+        cairo_set_operator(composite_cr, CAIRO_OPERATOR_OVER);
+        cairo_paint(composite_cr);
+        cairo_destroy(composite_cr);
+        cairo_surface_destroy(temp_surface);
     }
 
     cairo_surface_mark_dirty(surface);
