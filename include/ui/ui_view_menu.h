@@ -14,6 +14,17 @@ void on_view_zoom_fit(GtkWidget* widget, gpointer data);
 void on_view_show_layer_edges(GtkCheckMenuItem* check_menu_item, gpointer data);
 void on_view_show_statusbar(GtkCheckMenuItem* check_menu_item, gpointer data);
 
+/* Zoom to specific level callbacks */
+void on_view_zoom_1600(GtkWidget* widget, gpointer data);
+void on_view_zoom_800(GtkWidget* widget, gpointer data);
+void on_view_zoom_400(GtkWidget* widget, gpointer data);
+void on_view_zoom_200(GtkWidget* widget, gpointer data);
+void on_view_zoom_100(GtkWidget* widget, gpointer data);
+void on_view_zoom_50(GtkWidget* widget, gpointer data);
+void on_view_zoom_25(GtkWidget* widget, gpointer data);
+void on_view_zoom_12_5(GtkWidget* widget, gpointer data);
+void on_view_zoom_6_25(GtkWidget* widget, gpointer data);
+
 /**
  * Setup View menu from Glade builder
  */

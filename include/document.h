@@ -468,4 +468,11 @@ void document_zoom_fit_height(ImageDocument* doc);
  */
 void document_zoom_reset(ImageDocument* doc);
 
+/**
+ * Set zoom to a specific percentage
+ * @param doc The document to set zoom for
+ * @param zoom_percent Zoom level as percentage (e.g., 100.0 for 100%, 200.0 for 200%)
+ */
+void document_zoom_to(ImageDocument* doc, gdouble zoom_percent);
+
 #endif /* DOCUMENT_H */

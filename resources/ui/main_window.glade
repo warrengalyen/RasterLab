@@ -1399,7 +1399,6 @@
                 <property name="can-focus">False</property>
                 <property name="label" translatable="yes">16:1 (1600%) </property>
                 <property name="use-underline">True</property>
-                <accelerator key="5" signal="activate" modifiers="GDK_CONTROL_MASK"/>
               </object>
             </child>
             <child>
@@ -1408,7 +1407,6 @@
                 <property name="can-focus">False</property>
                 <property name="label" translatable="yes">8:1 (800%) </property>
                 <property name="use-underline">True</property>
-                <accelerator key="4" signal="activate" modifiers="GDK_CONTROL_MASK"/>
               </object>
             </child>
             <child>
@@ -1417,7 +1415,6 @@
                 <property name="can-focus">False</property>
                 <property name="label" translatable="yes">4:1 (400%)</property>
                 <property name="use-underline">True</property>
-                <accelerator key="4" signal="activate" modifiers="GDK_CONTROL_MASK"/>
               </object>
             </child>
             <child>
@@ -1434,7 +1431,6 @@
                 <property name="can-focus">False</property>
                 <property name="label" translatable="yes">1:1 (100%)</property>
                 <property name="use-underline">True</property>
-                <accelerator key="1" signal="activate" modifiers="GDK_CONTROL_MASK"/>
               </object>
             </child>
             <child>
@@ -1467,7 +1463,6 @@
                 <property name="can-focus">False</property>
                 <property name="label" translatable="yes">1:16 (6.25%)</property>
                 <property name="use-underline">True</property>
-                <accelerator key="percent" signal="activate"/>
               </object>
             </child>
           </object>
@@ -1576,6 +1571,9 @@
       </row>
       <row>
         <col id="0">8%</col>
+      </row>
+      <row>
+        <col id="0">6%</col>
       </row>
       <row>
         <col id="0">4%</col>

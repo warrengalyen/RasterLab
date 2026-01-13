@@ -1830,6 +1830,29 @@ void document_zoom_reset(ImageDocument* doc) {
 }
 
 /**
+ * Set zoom to a specific percentage
+ */
+void document_zoom_to(ImageDocument* doc, gdouble zoom_percent) {
+    if (!doc) {
+        return;
+    }
+
+    /* Convert percentage to zoom factor (e.g., 100.0 -> 1.0, 200.0 -> 2.0) */
+    gdouble zoom = zoom_percent / 100.0;
+
+    /* Clamp to reasonable range */
+    if (zoom < 0.03125) {
+        zoom = 0.03125; /* 3.125% minimum */
+    } else if (zoom > 32.0) {
+        zoom = 32.0; /* 3200% maximum */
+    }
+
+    doc->zoom_factor = zoom;
+    doc->zoom_mode = 0; /* Manual zoom */
+    document_set_zoom(doc, zoom);
+}
+
+/**
  * Resize the canvas
  */
 gboolean document_resize_canvas(ImageDocument* doc, guint new_width, guint new_height,

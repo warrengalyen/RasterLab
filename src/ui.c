@@ -35,6 +35,7 @@
 #include "ui/ui_view_menu.h"
 #include "undo/undo_disk.h"
 #include <glib.h>
+#include <math.h>
 #include <pango/pango.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1862,13 +1863,35 @@ void ui_update_status_bar(AppContext* ctx, ImageDocument* doc) {
         }
 
         /* Search for matching item in combobox */
-        while (valid && !found) {
+        gint nearest_index = -1;
+        gdouble nearest_diff = G_MAXDOUBLE;
+        gdouble target_zoom = doc->zoom_factor * 100.0;
+
+        valid = gtk_tree_model_get_iter_first(model, &iter);
+        current_index = 0;
+
+        while (valid) {
             gchar* item_text;
             gtk_tree_model_get(model, &iter, 0, &item_text, -1);
 
-            if (item_text && g_strcmp0(item_text, search_text) == 0) {
-                found_index = current_index;
-                found = TRUE;
+            if (item_text) {
+                /* Check for exact match */
+                if (g_strcmp0(item_text, search_text) == 0) {
+                    found_index = current_index;
+                    found = TRUE;
+                }
+
+                /* Also track nearest zoom level for manual zoom */
+                if (doc->zoom_mode == 0 && g_str_has_suffix(item_text, "%")) {
+                    /* Parse percentage value */
+                    gdouble item_zoom = g_strtod(item_text, NULL);
+                    gdouble diff = fabs(item_zoom - target_zoom);
+
+                    if (diff < nearest_diff) {
+                        nearest_diff = diff;
+                        nearest_index = current_index;
+                    }
+                }
             }
 
             g_free(item_text);
@@ -1879,8 +1902,11 @@ void ui_update_status_bar(AppContext* ctx, ImageDocument* doc) {
         /* Set active using index (not iter) to avoid rendering issues */
         if (found) {
             gtk_combo_box_set_active(GTK_COMBO_BOX(zoom_combobox), found_index);
+        } else if (nearest_index >= 0) {
+            /* For manual zoom with no exact match, use nearest zoom level */
+            gtk_combo_box_set_active(GTK_COMBO_BOX(zoom_combobox), nearest_index);
         } else {
-            /* If no exact match found, this shouldn't happen with discrete zoom levels */
+            /* No match found at all (shouldn't happen) */
             gtk_combo_box_set_active(GTK_COMBO_BOX(zoom_combobox), -1);
         }
 
