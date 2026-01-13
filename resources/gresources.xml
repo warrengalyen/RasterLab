@@ -53,6 +53,7 @@
     <file>ui/pencil_options.glade</file>
     <file>ui/paintbucket_options.glade</file>
     <file>ui/rect_select_options.glade</file>
+    <file>ui/move_options.glade</file>
     <file>ui/new_layer_dialog.glade</file>
     <file>ui/canvas_size_dialog.glade</file>
     <file>ui/jpeg_options_dialog.glade</file>

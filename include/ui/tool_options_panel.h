@@ -15,6 +15,7 @@ typedef struct {
     GtkWidget* pencil_panel;                  /* Pencil tool options panel (from Glade) */
     GtkWidget* paintbucket_panel;             /* Paint bucket tool options panel (from Glade) */
     GtkWidget* rect_select_panel;             /* Rectangular select tool options panel (from Glade) */
+    GtkWidget* move_panel;                    /* Move tool options panel (from Glade) */
     GtkWidget* title_label;                   /* Title showing tool name (current panel) */
     GtkWidget* size_scale;                    /* Size slider (current panel) */
     GtkWidget* opacity_scale;                 /* Opacity slider (current panel) */
@@ -32,6 +33,7 @@ typedef struct {
     GtkWidget* rect_combine_intersect_button; /* Combine mode INTERSECT toggle button (rect select only) */
     GtkWidget* rect_smooth_combo;             /* Smoothing mode combo (rect select only) */
     GtkWidget* rect_feather_scale;            /* Feather radius slider (rect select only) */
+    GtkWidget* move_auto_select_checkbox;     /* Auto-select layer checkbox (move tool only) */
     ToolType current_tool_type;               /* Currently displayed tool type */
     ToolRegistry* tool_registry;              /* Tool registry for cursor updates */
 } ToolOptionsPanel;

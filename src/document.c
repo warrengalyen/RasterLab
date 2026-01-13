@@ -13,6 +13,7 @@
 #include "tool_manager.h"
 #include "tool_options.h"
 #include "tools.h"
+#include "tools/tool_move.h"
 #include "tools/tool_rect_select.h"
 #include "ui.h"
 #include "ui/layers_panel.h"
@@ -309,6 +310,36 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
     }
 
     return FALSE;
+}
+
+/**
+ * Viewport draw callback - draws overlays on top of everything (including outside canvas)
+ */
+static gboolean on_viewport_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
+    ImageDocument* doc = (ImageDocument*)user_data;
+    GtkAllocation drawing_area_alloc;
+
+    (void)widget; /* Unused */
+
+    if (!doc || !doc->drawing_area) {
+        return FALSE;
+    }
+
+    /* Get drawing area allocation to find its position in viewport */
+    gtk_widget_get_allocation(doc->drawing_area, &drawing_area_alloc);
+
+    /* Save cairo state */
+    cairo_save(cr);
+
+    /* Translate to drawing area position within viewport */
+    cairo_translate(cr, drawing_area_alloc.x, drawing_area_alloc.y);
+
+    /* Draw move tool outline overlay (in drawing area coordinates) */
+    tool_move_draw_preview(doc, cr, doc->zoom_factor);
+
+    cairo_restore(cr);
+
+    return FALSE; /* Let other handlers run */
 }
 
 /**
@@ -1061,6 +1092,10 @@ GtkWidget* document_create_drawing_area(ImageDocument* doc) {
                      G_CALLBACK(on_viewport_motion_notify), doc);
     g_signal_connect(viewport, "leave-notify-event",
                      G_CALLBACK(on_viewport_leave_notify), doc);
+
+    /* Connect viewport draw signal for overlays (move tool outline, etc.) that extend beyond canvas */
+    g_signal_connect_after(viewport, "draw",
+                           G_CALLBACK(on_viewport_draw), doc);
 
     /* Store references in document */
     doc->drawing_area = drawing_area;

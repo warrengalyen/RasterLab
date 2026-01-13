@@ -7,6 +7,8 @@
 #include "render/layer.h"
 #include "selection/selection_mask.h"
 #include "selection/selection_render.h"
+#include "tool_manager.h"
+#include "tool_options.h"
 #include "ui.h"
 #include "ui/layers_panel.h"
 #include <cairo.h>
@@ -350,11 +352,70 @@ typedef struct {
 } MoveToolState;
 
 /**
+ * Find the topmost visible layer at a specific document coordinate
+ * Returns the layer that has a visible pixel at the given position
+ */
+static struct ImageLayer* find_layer_at_point(struct ImageDocument* doc, gint doc_x, gint doc_y) {
+    GList* iter;
+    struct ImageLayer* layer;
+    guchar* data;
+    gint stride;
+    gint layer_x, layer_y;
+    guchar* pixel;
+    guchar alpha;
+
+    if (!doc || !doc->layers) {
+        return NULL;
+    }
+
+    /* Iterate through layers from top to bottom */
+    for (iter = g_list_last(doc->layers); iter; iter = iter->prev) {
+        layer = (struct ImageLayer*)iter->data;
+
+        if (!layer || !layer->visible || layer->opacity <= 0.0 || !layer->surface) {
+            continue;
+        }
+
+        /* Check if point is within layer bounds */
+        if (doc_x < layer->offset_x || doc_y < layer->offset_y ||
+            doc_x >= layer->offset_x + (gint)layer->width ||
+            doc_y >= layer->offset_y + (gint)layer->height) {
+            continue;
+        }
+
+        /* Convert to layer-local coordinates */
+        layer_x = doc_x - layer->offset_x;
+        layer_y = doc_y - layer->offset_y;
+
+        /* Get pixel data */
+        cairo_surface_flush(layer->surface);
+        data = cairo_image_surface_get_data(layer->surface);
+        stride = cairo_image_surface_get_stride(layer->surface);
+
+        if (!data) {
+            continue;
+        }
+
+        /* Check alpha at this pixel (Cairo uses BGRA format) */
+        pixel = data + layer_y * stride + layer_x * 4;
+        alpha = pixel[3]; /* Alpha channel */
+
+        /* If pixel is visible (alpha > threshold), return this layer */
+        if (alpha > 5) { /* Small threshold to handle anti-aliasing */
+            return layer;
+        }
+    }
+
+    return NULL;
+}
+
+/**
  * Move tool: mouse down - start dragging
  */
 static void move_tool_mouse_down(Tool* tool, struct ImageDocument* doc, MouseEvent* event) {
     MoveToolState* state;
     struct ImageLayer* active_layer;
+    ToolOptions* opts;
 
     if (!tool || !doc || !doc->layers) {
         return;
@@ -366,10 +427,44 @@ static void move_tool_mouse_down(Tool* tool, struct ImageDocument* doc, MouseEve
     }
     state = (MoveToolState*)tool->user_data;
 
-    /* Get the selected layer (from layers panel) */
-    active_layer = document_get_selected_layer(doc);
+    /* Get tool options to check auto-select mode */
+    opts = tool_options_get_for_tool(TOOL_MOVE);
+
+    /* Determine which layer to operate on */
+    if (opts && opts->move_auto_select_layer) {
+        /* Auto-select: find layer under cursor based on pixel visibility */
+        active_layer = find_layer_at_point(doc, event->x, event->y);
+        if (!active_layer) {
+            /* No visible layer at cursor, fall back to selected layer */
+            active_layer = document_get_selected_layer(doc);
+        } else {
+            /* Update document's selected layer to match auto-detected layer */
+            document_set_selected_layer(doc, active_layer);
+
+            /* Update layers panel if available */
+            if (tool->app_context) {
+                LayersPanel* layers_panel = NULL;
+                if (doc->drawing_area && GTK_IS_WIDGET(doc->drawing_area)) {
+                    GtkWidget* widget = doc->drawing_area;
+                    while (widget && !GTK_IS_WINDOW(widget)) {
+                        widget = gtk_widget_get_parent(widget);
+                    }
+                    if (widget && GTK_IS_WINDOW(widget)) {
+                        layers_panel = (LayersPanel*)g_object_get_data(
+                            G_OBJECT(widget), "layers_panel");
+                    }
+                }
+                if (layers_panel) {
+                    layers_panel_select_layer(layers_panel, doc, active_layer);
+                }
+            }
+        }
+    } else {
+        /* Use currently selected layer */
+        active_layer = document_get_selected_layer(doc);
+    }
+
     if (!active_layer) {
-        // printf("Move tool: no selected layer\n");
         return;
     }
 
@@ -438,6 +533,11 @@ static void move_tool_mouse_down(Tool* tool, struct ImageDocument* doc, MouseEve
     state->last_offset_x = active_layer->offset_x;
     state->last_offset_y = active_layer->offset_y;
     state->active_layer = active_layer;
+
+    /* Trigger viewport redraw to show the outline overlay */
+    if (doc->viewport) {
+        gtk_widget_queue_draw(doc->viewport);
+    }
 
     // printf("Move tool: started dragging layer at (%d, %d)\n", event->x, event->y);
 }
@@ -513,6 +613,11 @@ static void move_tool_mouse_move(Tool* tool, struct ImageDocument* doc, MouseEve
     /* Only invalidate the union of old and new regions */
     if (!dirty_rect_is_empty(&union_rect)) {
         document_invalidate_region(doc, &union_rect);
+    }
+
+    /* Also trigger viewport redraw to update the outline overlay */
+    if (doc->viewport) {
+        gtk_widget_queue_draw(doc->viewport);
     }
 
     // printf("Move tool: moved to offset (%d, %d)\n",
@@ -609,7 +714,77 @@ static void move_tool_mouse_up(Tool* tool, struct ImageDocument* doc, MouseEvent
     state->original_layer = NULL;
     state->extracted_layer = NULL;
 
-    // printf("Move tool: finished dragging\n");
+    /* Clear the outline overlay by redrawing viewport */
+    if (doc->viewport) {
+        gtk_widget_queue_draw(doc->viewport);
+    }
+}
+
+/**
+ * Draw move tool preview - shows outline of layer being moved
+ * Draws on top of viewport so entire layer bounds are visible even if partially off-canvas
+ */
+void tool_move_draw_preview(struct ImageDocument* doc, cairo_t* cr, gdouble zoom) {
+    ToolRegistry* tool_registry;
+    Tool* active_tool;
+    MoveToolState* state;
+
+    if (!doc || !doc->drawing_area || !cr) {
+        return;
+    }
+
+    tool_registry = (ToolRegistry*)g_object_get_data(G_OBJECT(doc->drawing_area), "tool_registry");
+    if (!tool_registry) {
+        return;
+    }
+
+    active_tool = tool_manager_get_active(tool_registry);
+    if (!active_tool || active_tool->type != TOOL_MOVE || !active_tool->user_data) {
+        return;
+    }
+
+    state = (MoveToolState*)active_tool->user_data;
+
+    /* Only draw outline when dragging */
+    if (!state->is_dragging || !state->active_layer) {
+        return;
+    }
+
+    /* Save Cairo state */
+    cairo_save(cr);
+
+    /* Draw outline around entire layer bounds (including parts outside canvas/viewport) */
+    gint layer_x = state->active_layer->offset_x;
+    gint layer_y = state->active_layer->offset_y;
+    gint layer_w = state->active_layer->width;
+    gint layer_h = state->active_layer->height;
+
+    /* Apply zoom transform */
+    if (zoom != 1.0) {
+        cairo_scale(cr, zoom, zoom);
+    }
+
+    /* Disable antialiasing for crisp, solid lines at full opacity */
+    cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
+
+    /* Use CAIRO_OPERATOR_OVER to composite on top */
+    cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+
+    /* Draw outline: white line with black stroke for maximum visibility */
+    /* Rectangle shows exact layer bounds (x, y, width, height) */
+    cairo_rectangle(cr, layer_x, layer_y, layer_w, layer_h);
+
+    /* Draw black outer stroke (3px wide) using RGB (no alpha channel) */
+    cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
+    cairo_set_line_width(cr, 3.0 / zoom);
+    cairo_stroke_preserve(cr);
+
+    /* Draw white inner stroke (1px wide) using RGB (no alpha channel) */
+    cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+    cairo_set_line_width(cr, 1.0 / zoom);
+    cairo_stroke(cr);
+
+    cairo_restore(cr);
 }
 
 /**
@@ -618,8 +793,8 @@ static void move_tool_mouse_up(Tool* tool, struct ImageDocument* doc, MouseEvent
 Tool* tool_move_create(void) {
     Tool* tool;
 
-    /* Move tool doesn't have size/opacity/hardness options */
-    tool = tool_new("Move", TOOL_MOVE, GDK_FLEUR, TOOL_OPT_NONE);
+    /* Move tool has auto-select option */
+    tool = tool_new("Move", TOOL_MOVE, GDK_FLEUR, TOOL_OPT_AUTO_SELECT);
     if (!tool) {
         return NULL;
     }

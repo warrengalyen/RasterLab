@@ -292,6 +292,23 @@ static void on_pencil_align_pixel_grid_toggled(GtkToggleButton* button, gpointer
 }
 
 /**
+ * Tool options panel callback for move tool auto select layer checkbox
+ */
+static void on_move_auto_select_toggled(GtkToggleButton* button, gpointer user_data) {
+    (void)user_data; /* Unused */
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)g_object_get_data(G_OBJECT(button), "tool_options_panel");
+    if (panel && panel->current_tool_type == TOOL_MOVE) {
+        ToolOptions* opts = tool_options_get_for_tool(TOOL_MOVE);
+        if (opts) {
+            gboolean active = gtk_toggle_button_get_active(button);
+            tool_options_set_move_auto_select(opts, active);
+            /* Save to settings */
+            save_tool_options_to_settings(panel, TOOL_MOVE);
+        }
+    }
+}
+
+/**
  * Set scale widget value
  */
 static void set_scale_value(GtkWidget* scale, gdouble value) {
@@ -721,6 +738,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
     tool_opts_panel->pencil_panel = NULL;
     tool_opts_panel->paintbucket_panel = NULL;
     tool_opts_panel->rect_select_panel = NULL;
+    tool_opts_panel->move_panel = NULL;
     tool_opts_panel->title_label = NULL;
     tool_opts_panel->size_scale = NULL;
     tool_opts_panel->opacity_scale = NULL;
@@ -737,6 +755,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
     tool_opts_panel->rect_combine_intersect_button = NULL;
     tool_opts_panel->rect_smooth_combo = NULL;
     tool_opts_panel->rect_feather_scale = NULL;
+    tool_opts_panel->move_auto_select_checkbox = NULL;
     tool_opts_panel->current_tool_type = TOOL_MOVE; /* Start with no tool selected */
 
     /* Create container to hold the current panel */
@@ -1068,6 +1087,53 @@ ToolOptionsPanel* create_tool_options_panel(void) {
         }
     }
 
+    /* Load move panel from Glade */
+    GtkBuilder* move_builder = gtk_builder_new();
+    GError* move_error = NULL;
+    GtkWidget* move_title = NULL;
+    GtkWidget* move_auto_select = NULL;
+    ToolOptions* move_opts = tool_options_get_for_tool(TOOL_MOVE);
+
+    if (gtk_builder_add_from_resource(move_builder, "/ui/move_options.glade", &move_error)) {
+        tool_opts_panel->move_panel = GTK_WIDGET(gtk_builder_get_object(move_builder, "move_options_panel"));
+        if (tool_opts_panel->move_panel) {
+            gtk_container_add(GTK_CONTAINER(container), tool_opts_panel->move_panel);
+
+            /* Get widgets */
+            move_title = GTK_WIDGET(gtk_builder_get_object(move_builder, "move_title_label"));
+            move_auto_select = GTK_WIDGET(gtk_builder_get_object(move_builder, "move_auto_select_checkbox"));
+
+            /* Store references */
+            if (move_title) {
+                g_object_set_data(G_OBJECT(tool_opts_panel->move_panel), "title_label", move_title);
+            }
+            if (move_auto_select) {
+                g_object_set_data(G_OBJECT(tool_opts_panel->move_panel), "auto_select_checkbox", move_auto_select);
+                tool_opts_panel->move_auto_select_checkbox = move_auto_select;
+                if (move_opts) {
+                    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(move_auto_select),
+                                                 tool_options_get_move_auto_select(move_opts));
+                    g_object_set_data(G_OBJECT(move_auto_select), "tool_options_panel", tool_opts_panel);
+                    g_signal_connect(move_auto_select, "toggled",
+                                     G_CALLBACK(on_move_auto_select_toggled), NULL);
+                }
+            }
+
+            /* Hide move panel initially */
+            gtk_widget_set_visible(tool_opts_panel->move_panel, FALSE);
+            gtk_widget_set_no_show_all(tool_opts_panel->move_panel, TRUE);
+        }
+        g_object_unref(move_builder);
+    } else {
+        g_warning("Failed to load move options panel: %s", move_error ? move_error->message : "Unknown error");
+        if (move_error) {
+            g_error_free(move_error);
+        }
+        if (move_builder) {
+            g_object_unref(move_builder);
+        }
+    }
+
     /* Hide the container initially - will be shown when a tool with options is selected */
     gtk_widget_set_visible(container, FALSE);
 
@@ -1083,7 +1149,7 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
     }
 
     /* Determine tool type from name */
-    ToolType new_tool_type = TOOL_MOVE; /* Default to no options panel */
+    ToolType new_tool_type = TOOL_COUNT; /* Default to invalid (no options) */
     if (g_strcmp0(tool_name, "Eraser") == 0) {
         new_tool_type = TOOL_ERASER;
     } else if (g_strcmp0(tool_name, "Brush") == 0) {
@@ -1094,6 +1160,12 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
         new_tool_type = TOOL_PAINT_BUCKET;
     } else if (g_strcmp0(tool_name, "Rectangular Select") == 0) {
         new_tool_type = TOOL_RECT_SELECT;
+    } else if (g_strcmp0(tool_name, "Move") == 0) {
+        new_tool_type = TOOL_MOVE;
+    } else if (g_strcmp0(tool_name, "Hand") == 0) {
+        new_tool_type = TOOL_HAND;
+    } else if (g_strcmp0(tool_name, "Zoom") == 0) {
+        new_tool_type = TOOL_ZOOM;
     }
 
     /* Update current tool type */
@@ -1114,6 +1186,9 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
     }
     if (panel->rect_select_panel) {
         gtk_widget_set_visible(panel->rect_select_panel, FALSE);
+    }
+    if (panel->move_panel) {
+        gtk_widget_set_visible(panel->move_panel, FALSE);
     }
 
     /* For rect select tool, show the options panel */
@@ -1437,11 +1512,66 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
                 g_signal_connect(widget, "toggled", G_CALLBACK(on_fill_antialiased_toggled), NULL);
             }
         }
+    } else if (new_tool_type == TOOL_MOVE && panel->move_panel) {
+        /* Show main panel container */
+        if (panel->panel) {
+            gtk_widget_set_visible(panel->panel, TRUE);
+        }
+        /* Show move panel */
+        gtk_widget_set_no_show_all(panel->move_panel, FALSE);
+        gtk_widget_set_visible(panel->move_panel, TRUE);
+        gtk_widget_show_all(panel->move_panel);
+
+        /* Get move panel widgets and initialize them */
+        GtkWidget* widget;
+        ToolOptions* opts = tool_options_get_for_tool(TOOL_MOVE);
+
+        widget = GTK_WIDGET(g_object_get_data(G_OBJECT(panel->move_panel), "title_label"));
+        if (widget)
+            panel->title_label = widget;
+
+        widget = GTK_WIDGET(g_object_get_data(G_OBJECT(panel->move_panel), "auto_select_checkbox"));
+        if (widget) {
+            if (opts) {
+                g_signal_handlers_disconnect_by_func(widget, G_CALLBACK(on_move_auto_select_toggled), NULL);
+                gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widget),
+                                             tool_options_get_move_auto_select(opts));
+                g_object_set_data(G_OBJECT(widget), "tool_options_panel", panel);
+                g_signal_connect(widget, "toggled", G_CALLBACK(on_move_auto_select_toggled), NULL);
+            }
+        }
     } else {
-        /* For tools without options (Move, etc.), hide main panel container */
+        /* For tools without options (Hand, Zoom, etc.), hide main panel container */
         if (panel->panel) {
             gtk_widget_set_visible(panel->panel, FALSE);
         }
+
+        /* Explicitly hide all option panels */
+        if (panel->brush_panel) {
+            gtk_widget_set_no_show_all(panel->brush_panel, TRUE);
+            gtk_widget_hide(panel->brush_panel);
+        }
+        if (panel->eraser_panel) {
+            gtk_widget_set_no_show_all(panel->eraser_panel, TRUE);
+            gtk_widget_hide(panel->eraser_panel);
+        }
+        if (panel->pencil_panel) {
+            gtk_widget_set_no_show_all(panel->pencil_panel, TRUE);
+            gtk_widget_hide(panel->pencil_panel);
+        }
+        if (panel->paintbucket_panel) {
+            gtk_widget_set_no_show_all(panel->paintbucket_panel, TRUE);
+            gtk_widget_hide(panel->paintbucket_panel);
+        }
+        if (panel->rect_select_panel) {
+            gtk_widget_set_no_show_all(panel->rect_select_panel, TRUE);
+            gtk_widget_hide(panel->rect_select_panel);
+        }
+        if (panel->move_panel) {
+            gtk_widget_set_no_show_all(panel->move_panel, TRUE);
+            gtk_widget_hide(panel->move_panel);
+        }
+
         /* Clear widget references */
         panel->title_label = NULL;
         panel->size_scale = NULL;

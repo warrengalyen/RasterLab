@@ -38,6 +38,9 @@ ToolOptions* tool_options_new(void) {
     opts->rect_select_feather = 0.0f;
     opts->rect_select_animate = TRUE;
 
+    /* Initialize move tool options */
+    opts->move_auto_select_layer = TRUE; /* Default: auto-select enabled */
+
     return opts;
 }
 
@@ -230,6 +233,26 @@ gboolean tool_options_get_rect_select_animate(ToolOptions* opts) {
         return TRUE; /* Default to animated */
     }
     return opts->rect_select_animate;
+}
+
+/**
+ * Set move tool auto select layer
+ */
+void tool_options_set_move_auto_select(ToolOptions* opts, gboolean auto_select) {
+    if (!opts) {
+        return;
+    }
+    opts->move_auto_select_layer = auto_select ? TRUE : FALSE;
+}
+
+/**
+ * Get move tool auto select layer
+ */
+gboolean tool_options_get_move_auto_select(ToolOptions* opts) {
+    if (!opts) {
+        return TRUE; /* Default to auto-select enabled */
+    }
+    return opts->move_auto_select_layer;
 }
 
 /**

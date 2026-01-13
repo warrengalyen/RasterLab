@@ -38,6 +38,7 @@ enum {
     TOOL_OPT_SPACING = (1 << 4),          /* Tool supports spacing parameter */
     TOOL_OPT_SELECTION_MODE = (1 << 5),   /* Tool supports selection combine modes */
     TOOL_OPT_SELECTION_SMOOTH = (1 << 6), /* Tool supports selection smoothing modes */
+    TOOL_OPT_AUTO_SELECT = (1 << 7),      /* Tool supports auto select layer */
 };
 
 /**

@@ -28,6 +28,9 @@ typedef struct {
     SelectionSmoothingMode rect_select_smooth; /* Edge smoothing mode */
     gfloat rect_select_feather;                /* Feather radius in pixels */
     gboolean rect_select_animate;              /* Animate marching ants */
+
+    /* Move tool options */
+    gboolean move_auto_select_layer; /* Auto-select layer under cursor based on visibility */
 } ToolOptions;
 
 /**
@@ -166,5 +169,19 @@ void tool_options_set_rect_select_animate(ToolOptions* opts, gboolean animate);
  * @return TRUE if animation enabled, FALSE otherwise
  */
 gboolean tool_options_get_rect_select_animate(ToolOptions* opts);
+
+/**
+ * Set move tool auto select layer
+ * @param opts The tool options
+ * @param auto_select TRUE to enable auto-select, FALSE to use selected layer
+ */
+void tool_options_set_move_auto_select(ToolOptions* opts, gboolean auto_select);
+
+/**
+ * Get move tool auto select layer
+ * @param opts The tool options
+ * @return TRUE if auto-select enabled, FALSE otherwise
+ */
+gboolean tool_options_get_move_auto_select(ToolOptions* opts);
 
 #endif /* TOOL_OPTIONS_H */
