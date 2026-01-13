@@ -855,6 +855,7 @@ Command* tile_undo_transaction_commit(TileUndoTransaction* transaction) {
     }
 
     /* Process each delta: capture "after" snapshot and add to command */
+    GList* deltas_to_remove = NULL; /* Track deltas to remove from hash table */
     for (GList* l = all_deltas; l; l = l->next) {
         delta = (TileUndoDelta*)l->data;
         if (delta) {
@@ -866,19 +867,66 @@ Command* tile_undo_transaction_commit(TileUndoTransaction* transaction) {
                                                 transaction->layer->width,
                                                 transaction->layer->height);
 
-            if (delta->after) {
-                /* Add to deltas array */
+            if (delta->after && delta->before) {
+                /* Check if the tile actually changed by comparing before and after */
+                gint before_w = cairo_image_surface_get_width(delta->before);
+                gint before_h = cairo_image_surface_get_height(delta->before);
+                gint after_w = cairo_image_surface_get_width(delta->after);
+                gint after_h = cairo_image_surface_get_height(delta->after);
+
+                gboolean tiles_identical = FALSE;
+                if (before_w == after_w && before_h == after_h) {
+                    /* Compare pixel data */
+                    cairo_surface_flush(delta->before);
+                    cairo_surface_flush(delta->after);
+                    uint8_t* before_data = cairo_image_surface_get_data(delta->before);
+                    uint8_t* after_data = cairo_image_surface_get_data(delta->after);
+                    gint stride = cairo_image_surface_get_stride(delta->before);
+                    size_t data_size = stride * before_h;
+
+                    tiles_identical = (memcmp(before_data, after_data, data_size) == 0);
+                }
+
+                if (!tiles_identical) {
+                    /* Tile actually changed, add to deltas array */
+                    g_ptr_array_add(data->tile_deltas, delta);
+                } else {
+                    /* Tile didn't change (e.g., drawing outside selection), discard */
+                    cairo_surface_destroy(delta->before);
+                    cairo_surface_destroy(delta->after);
+                    /* Create key for removal from hash table */
+                    guint tile_key = (guint)((delta->tile_x << 16) | (delta->tile_y & 0xFFFF));
+                    gpointer key = GUINT_TO_POINTER(tile_key);
+                    deltas_to_remove = g_list_prepend(deltas_to_remove, key);
+                    g_free(delta);
+                }
+            } else if (delta->after) {
+                /* No before snapshot (shouldn't happen), but keep the delta anyway */
                 g_ptr_array_add(data->tile_deltas, delta);
             } else {
                 /* Failed to capture after snapshot, free this delta */
                 if (delta->before) {
                     cairo_surface_destroy(delta->before);
                 }
+                /* Create key for removal from hash table */
+                guint tile_key = (guint)((delta->tile_x << 16) | (delta->tile_y & 0xFFFF));
+                gpointer key = GUINT_TO_POINTER(tile_key);
+                deltas_to_remove = g_list_prepend(deltas_to_remove, key);
                 g_free(delta);
             }
         }
     }
     g_list_free(all_deltas);
+
+    /* Remove freed deltas from hash table to prevent double-free
+     * Use g_hash_table_steal() instead of g_hash_table_remove() because we've
+     * already manually freed the delta - we don't want the hash table's destroy
+     * function to try to free it again */
+    for (GList* l = deltas_to_remove; l; l = l->next) {
+        gpointer key = l->data;
+        g_hash_table_steal(transaction->modified_tiles, key);
+    }
+    g_list_free(deltas_to_remove);
 
     /* If no valid deltas were captured, free and return NULL */
     if (data->tile_deltas->len == 0) {
