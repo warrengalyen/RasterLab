@@ -71,6 +71,7 @@ static Settings* settings_create_default(void) {
     settings->undo_compression_level = DEFAULT_UNDO_COMPRESSION_LEVEL;
     settings->undo_temp_directory = NULL; /* NULL = use system temp directory */
     settings->show_layer_edges = TRUE;    /* Show layer edges by default */
+    settings->show_statusbar = TRUE;      /* Show status bar by default */
 
     return settings;
 }
@@ -412,15 +413,36 @@ static void settings_load_view(Settings* settings, xmlNode* view_node) {
         return;
     }
 
-    /* Load show_layer_edges setting */
-    xmlChar* show_edges_attr = xmlGetProp(view_node, (const xmlChar*)"show_layer_edges");
-    if (show_edges_attr) {
-        if (xmlStrcmp(show_edges_attr, (const xmlChar*)"true") == 0) {
-            settings->show_layer_edges = TRUE;
-        } else if (xmlStrcmp(show_edges_attr, (const xmlChar*)"false") == 0) {
-            settings->show_layer_edges = FALSE;
+    /* Iterate through child nodes */
+    for (xmlNode* cur = view_node->children; cur; cur = cur->next) {
+        if (cur->type != XML_ELEMENT_NODE) {
+            continue;
         }
-        xmlFree(show_edges_attr);
+
+        /* Load show_layer_edges setting */
+        if (xmlStrcmp(cur->name, (const xmlChar*)"show_layer_edges") == 0) {
+            xmlChar* value_attr = xmlGetProp(cur, (const xmlChar*)"value");
+            if (value_attr) {
+                if (xmlStrcmp(value_attr, (const xmlChar*)"true") == 0) {
+                    settings->show_layer_edges = TRUE;
+                } else if (xmlStrcmp(value_attr, (const xmlChar*)"false") == 0) {
+                    settings->show_layer_edges = FALSE;
+                }
+                xmlFree(value_attr);
+            }
+        }
+        /* Load show_statusbar setting */
+        else if (xmlStrcmp(cur->name, (const xmlChar*)"show_statusbar") == 0) {
+            xmlChar* value_attr = xmlGetProp(cur, (const xmlChar*)"value");
+            if (value_attr) {
+                if (xmlStrcmp(value_attr, (const xmlChar*)"true") == 0) {
+                    settings->show_statusbar = TRUE;
+                } else if (xmlStrcmp(value_attr, (const xmlChar*)"false") == 0) {
+                    settings->show_statusbar = FALSE;
+                }
+                xmlFree(value_attr);
+            }
+        }
     }
 }
 
@@ -435,8 +457,16 @@ static void settings_save_view(xmlTextWriterPtr writer, Settings* settings) {
     xmlTextWriterStartElement(writer, (const xmlChar*)"view");
 
     /* Save show_layer_edges setting */
-    xmlTextWriterWriteAttribute(writer, (const xmlChar*)"show_layer_edges",
+    xmlTextWriterStartElement(writer, (const xmlChar*)"show_layer_edges");
+    xmlTextWriterWriteAttribute(writer, (const xmlChar*)"value",
                                 (const xmlChar*)(settings->show_layer_edges ? "true" : "false"));
+    xmlTextWriterEndElement(writer); /* show_layer_edges */
+
+    /* Save show_statusbar setting */
+    xmlTextWriterStartElement(writer, (const xmlChar*)"show_statusbar");
+    xmlTextWriterWriteAttribute(writer, (const xmlChar*)"value",
+                                (const xmlChar*)(settings->show_statusbar ? "true" : "false"));
+    xmlTextWriterEndElement(writer); /* show_statusbar */
 
     xmlTextWriterEndElement(writer); /* view */
 }
@@ -961,4 +991,24 @@ void settings_set_show_layer_edges(Settings* settings, gboolean show) {
         return;
     }
     settings->show_layer_edges = show;
+}
+
+/**
+ * Get show status bar setting
+ */
+gboolean settings_get_show_statusbar(Settings* settings) {
+    if (!settings) {
+        return TRUE; /* Default to showing status bar */
+    }
+    return settings->show_statusbar;
+}
+
+/**
+ * Set show status bar setting
+ */
+void settings_set_show_statusbar(Settings* settings, gboolean show) {
+    if (!settings) {
+        return;
+    }
+    settings->show_statusbar = show;
 }

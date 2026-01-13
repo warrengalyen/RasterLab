@@ -27,6 +27,7 @@ typedef struct {
 
     /* View settings */
     gboolean show_layer_edges; /* Show outline when moving layers (default TRUE) */
+    gboolean show_statusbar;   /* Show status bar (default TRUE) */
 } Settings;
 
 /**
@@ -164,5 +165,19 @@ void settings_set_show_layer_edges(Settings* settings, gboolean show);
  * @return TRUE if layer edges should be shown when moving
  */
 gboolean settings_get_show_layer_edges(Settings* settings);
+
+/**
+ * Set show status bar setting
+ * @param settings The settings structure
+ * @param show TRUE to show status bar, FALSE to hide
+ */
+void settings_set_show_statusbar(Settings* settings, gboolean show);
+
+/**
+ * Get show status bar setting
+ * @param settings The settings structure
+ * @return TRUE if status bar should be shown
+ */
+gboolean settings_get_show_statusbar(Settings* settings);
 
 #endif /* SETTINGS_H */

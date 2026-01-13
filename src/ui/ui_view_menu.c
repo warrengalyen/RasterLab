@@ -92,6 +92,32 @@ void on_view_show_layer_edges(GtkCheckMenuItem* check_menu_item, gpointer data) 
 }
 
 /**
+ * View > Show Statusbar callback
+ */
+void on_view_show_statusbar(GtkCheckMenuItem* check_menu_item, gpointer data) {
+    AppContext* ctx = (AppContext*)data;
+
+    if (!ctx || !ctx->settings) {
+        return;
+    }
+
+    /* Get the new state from the menu item */
+    gboolean active = gtk_check_menu_item_get_active(check_menu_item);
+
+    /* Update the setting */
+    settings_set_show_statusbar(ctx->settings, active);
+
+    /* Show/hide status bar (it's part of the main window) */
+    if (ctx->status_bar) {
+        if (active) {
+            gtk_widget_show(ctx->status_bar);
+        } else {
+            gtk_widget_hide(ctx->status_bar);
+        }
+    }
+}
+
+/**
  * Setup View menu from Glade builder
  */
 void ui_view_menu_setup(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* accel_group) {
@@ -110,6 +136,7 @@ void ui_view_menu_setup(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* acc
     GtkWidget* view_menu_zoom_reset = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_reset"));
     GtkWidget* view_menu_zoom_fit = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_fit"));
     GtkWidget* view_menu_show_layer_edges = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_show_layer_edges"));
+    GtkWidget* view_menu_show_statusbar = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_show_statusbar"));
 
     if (view_menu_zoom_in) {
         g_signal_connect(view_menu_zoom_in, "activate", G_CALLBACK(on_view_zoom_in), ctx);
@@ -130,6 +157,24 @@ void ui_view_menu_setup(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* acc
         if (ctx->settings) {
             gboolean show_edges = settings_get_show_layer_edges(ctx->settings);
             gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(view_menu_show_layer_edges), show_edges);
+        }
+    }
+    if (view_menu_show_statusbar) {
+        g_signal_connect(view_menu_show_statusbar, "toggled", G_CALLBACK(on_view_show_statusbar), ctx);
+
+        /* Initialize menu item state from settings and apply initial visibility */
+        if (ctx->settings) {
+            gboolean show_statusbar = settings_get_show_statusbar(ctx->settings);
+            gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(view_menu_show_statusbar), show_statusbar);
+
+            /* Apply initial state to status bar */
+            if (ctx->status_bar) {
+                if (show_statusbar) {
+                    gtk_widget_show(ctx->status_bar);
+                } else {
+                    gtk_widget_hide(ctx->status_bar);
+                }
+            }
         }
     }
 }
