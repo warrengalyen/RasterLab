@@ -380,7 +380,7 @@ AppContext* ui_create_main_window(void) {
         g_free(ctx);
         return NULL;
     }
-    gtk_window_set_icon_name(GTK_WINDOW(ctx->window), "image-editor");
+    gtk_window_set_icon_name(GTK_WINDOW(ctx->window), "rasterlab-icon");
 
     /* Get main containers */
     GtkWidget* main_vbox = GTK_WIDGET(gtk_builder_get_object(builder, "main_vbox"));

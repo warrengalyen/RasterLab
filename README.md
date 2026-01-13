@@ -1,32 +1,6 @@
-# Image Editor
+# RasterLab
 
 A full-featured image editor written in C.
-
-## Building
-
-### Create and enter build directory
-
-```bash
-mkdir build && cd build
-```
-
-### Configure with CMake
-
-```bash
-cmake ..
-```
-
-### Build the project
-
-```bash
-make
-```
-
-### Run the application
-
-```bash
-./image-editor
-```
 
 ## Features
 
