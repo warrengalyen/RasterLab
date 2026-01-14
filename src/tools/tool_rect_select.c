@@ -150,28 +150,17 @@ static void rect_select_tool_mouse_down(Tool* tool, struct ImageDocument* doc, M
     /* Check if clicking on existing editable selection */
     if (state->is_editing) {
         /* Check if clicking on a handle or inside selection for move/resize */
-        /* Handle is 12 screen pixels, so half_handle = 6 screen pixels = 6/zoom image pixels */
-        gdouble half_handle = 6.0 / doc->zoom_factor;
-        gdouble corners[4][2] = {
-            {state->selection_x, state->selection_y},                                          /* top-left */
-            {state->selection_x + state->selection_w, state->selection_y},                     /* top-right */
-            {state->selection_x, state->selection_y + state->selection_h},                     /* bottom-left */
-            {state->selection_x + state->selection_w, state->selection_y + state->selection_h} /* bottom-right */
-        };
-
-        /* Check if clicking on a handle - use rectangular hit test since handles are square */
-        for (gint i = 0; i < 4; i++) {
-            gdouble dx = event->x - corners[i][0];
-            gdouble dy = event->y - corners[i][1];
-            /* Rectangular hit test: check if point is within handle square bounds */
-            if (fabs(dx) <= half_handle && fabs(dy) <= half_handle) {
-                /* Clicking on handle - start resize */
-                state->dragging_handle = i;
-                state->is_dragging = TRUE;
-                state->anchor_x = event->x;
-                state->anchor_y = event->y;
-                return;
-            }
+        gint handle = selection_detect_handle_at_point(event->x, event->y,
+                                                       state->selection_x, state->selection_y,
+                                                       state->selection_w, state->selection_h,
+                                                       doc->zoom_factor);
+        if (handle >= 0) {
+            /* Clicking on handle - start resize */
+            state->dragging_handle = handle;
+            state->is_dragging = TRUE;
+            state->anchor_x = event->x;
+            state->anchor_y = event->y;
+            return;
         }
 
         /* Check if clicking inside selection - move it */
@@ -236,46 +225,6 @@ static void rect_select_tool_mouse_down(Tool* tool, struct ImageDocument* doc, M
 }
 
 /**
- * Helper to set cursor based on handle
- */
-static void set_cursor_for_handle(GdkWindow* window, gint handle, GdkCursor* default_cursor) {
-    if (!window)
-        return;
-
-    GdkDisplay* display = gdk_window_get_display(window);
-    GdkCursor* cursor = NULL;
-
-    if (handle == -1) {
-        /* Move cursor */
-        cursor = gdk_cursor_new_from_name(display, "move");
-        if (!cursor) {
-            cursor = gdk_cursor_new_for_display(display, GDK_FLEUR);
-        }
-    } else if (handle == 0) {
-        /* Top-left: NW-SE diagonal */
-        cursor = gdk_cursor_new_from_name(display, "nwse-resize");
-    } else if (handle == 1) {
-        /* Top-right: NE-SW diagonal */
-        cursor = gdk_cursor_new_from_name(display, "nesw-resize");
-    } else if (handle == 2) {
-        /* Bottom-left: NE-SW diagonal */
-        cursor = gdk_cursor_new_from_name(display, "nesw-resize");
-    } else if (handle == 3) {
-        /* Bottom-right: NW-SE diagonal */
-        cursor = gdk_cursor_new_from_name(display, "nwse-resize");
-    } else {
-        /* Default cursor */
-        gdk_window_set_cursor(window, default_cursor);
-        return;
-    }
-
-    if (cursor) {
-        gdk_window_set_cursor(window, cursor);
-        g_object_unref(cursor);
-    }
-}
-
-/**
  * Rectangular Selection Tool: mouse move - update selection preview
  */
 static void rect_select_tool_mouse_move(Tool* tool, struct ImageDocument* doc, MouseEvent* event) {
@@ -291,7 +240,7 @@ static void rect_select_tool_mouse_move(Tool* tool, struct ImageDocument* doc, M
     /* Handle resize/move during edit drag */
     if (state->dragging_handle >= -1 && state->is_dragging) {
         /* Update cursor while dragging */
-        set_cursor_for_handle(window, state->dragging_handle, tool->cursor);
+        selection_set_cursor_for_handle(window, state->dragging_handle, tool->cursor);
 
         if (state->dragging_handle == -1) {
             /* Move mode - translate selection */
@@ -383,29 +332,14 @@ static void rect_select_tool_mouse_move(Tool* tool, struct ImageDocument* doc, M
 
     /* When not dragging but in edit mode, update cursor based on hover */
     if (!state->is_dragging && state->is_editing) {
-        /* Handle is 12 screen pixels, so half_handle = 6 screen pixels = 6/zoom image pixels */
-        gdouble half_handle = 6.0 / doc->zoom_factor;
-        gdouble corners[4][2] = {
-            {state->selection_x, state->selection_y},                                          /* top-left */
-            {state->selection_x + state->selection_w, state->selection_y},                     /* top-right */
-            {state->selection_x, state->selection_y + state->selection_h},                     /* bottom-left */
-            {state->selection_x + state->selection_w, state->selection_y + state->selection_h} /* bottom-right */
-        };
-
-        /* Check if hovering over a handle - use rectangular hit test since handles are square */
-        gint hovered_handle = -2;
-        for (gint i = 0; i < 4; i++) {
-            gdouble dx = event->x - corners[i][0];
-            gdouble dy = event->y - corners[i][1];
-            /* Rectangular hit test: check if point is within handle square bounds */
-            if (fabs(dx) <= half_handle && fabs(dy) <= half_handle) {
-                hovered_handle = i;
-                break;
-            }
-        }
+        /* Check if hovering over a handle */
+        gint hovered_handle = selection_detect_handle_at_point(event->x, event->y,
+                                                               state->selection_x, state->selection_y,
+                                                               state->selection_w, state->selection_h,
+                                                               doc->zoom_factor);
 
         /* Check if hovering inside selection for move */
-        if (hovered_handle == -2 &&
+        if (hovered_handle < 0 &&
             event->x >= state->selection_x && event->x < state->selection_x + state->selection_w &&
             event->y >= state->selection_y && event->y < state->selection_y + state->selection_h) {
             hovered_handle = -1;
@@ -416,7 +350,7 @@ static void rect_select_tool_mouse_move(Tool* tool, struct ImageDocument* doc, M
 
         /* Update cursor based on hover */
         if (hovered_handle >= -1) {
-            set_cursor_for_handle(window, hovered_handle, tool->cursor);
+            selection_set_cursor_for_handle(window, hovered_handle, tool->cursor);
         } else {
             /* Default cursor outside selection */
             gdk_window_set_cursor(window, tool->cursor);

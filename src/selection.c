@@ -1,4 +1,5 @@
 #include "selection.h"
+#include <gdk/gdk.h>
 #include <math.h>
 
 /**
@@ -129,5 +130,87 @@ void selection_draw_marching_ants_ellipse(cairo_t* cr, gdouble x, gdouble y,
 
         prev_px = px;
         prev_py = py;
+    }
+}
+
+/**
+ * Detect which handle (if any) is at the given point
+ * Used by rectangular and elliptical selection tools for handle detection
+ * @param x Point X coordinate in image space
+ * @param y Point Y coordinate in image space
+ * @param sel_x Selection bounding rectangle X
+ * @param sel_y Selection bounding rectangle Y
+ * @param sel_w Selection bounding rectangle width
+ * @param sel_h Selection bounding rectangle height
+ * @param zoom_factor Document zoom factor
+ * @return Handle index (0-3 for corners, -1 if no handle detected)
+ */
+gint selection_detect_handle_at_point(gdouble x, gdouble y,
+                                      gdouble sel_x, gdouble sel_y,
+                                      gdouble sel_w, gdouble sel_h,
+                                      gdouble zoom_factor) {
+    /* Handle is 12 screen pixels, so half_handle = 6 screen pixels = 6/zoom image pixels */
+    gdouble half_handle = 6.0 / zoom_factor;
+    gdouble corners[4][2] = {
+        {sel_x, sel_y},                /* top-left */
+        {sel_x + sel_w, sel_y},        /* top-right */
+        {sel_x, sel_y + sel_h},        /* bottom-left */
+        {sel_x + sel_w, sel_y + sel_h} /* bottom-right */
+    };
+
+    /* Check if clicking on a handle - use rectangular hit test since handles are square */
+    for (gint i = 0; i < 4; i++) {
+        gdouble dx = x - corners[i][0];
+        gdouble dy = y - corners[i][1];
+        /* Rectangular hit test: check if point is within handle square bounds */
+        if (fabs(dx) <= half_handle && fabs(dy) <= half_handle) {
+            return i;
+        }
+    }
+
+    return -1; /* No handle detected */
+}
+
+/**
+ * Set cursor based on selection handle type
+ * Used by rectangular and elliptical selection tools
+ * @param window GdkWindow to set cursor on
+ * @param handle Handle index (-1 = move, 0-3 = corner handles)
+ * @param default_cursor Default cursor to use if handle is invalid
+ */
+void selection_set_cursor_for_handle(GdkWindow* window, gint handle, GdkCursor* default_cursor) {
+    if (!window)
+        return;
+
+    GdkDisplay* display = gdk_window_get_display(window);
+    GdkCursor* cursor = NULL;
+
+    if (handle == -1) {
+        /* Move cursor */
+        cursor = gdk_cursor_new_from_name(display, "move");
+        if (!cursor) {
+            cursor = gdk_cursor_new_for_display(display, GDK_FLEUR);
+        }
+    } else if (handle == 0) {
+        /* Top-left: NW-SE diagonal */
+        cursor = gdk_cursor_new_from_name(display, "nwse-resize");
+    } else if (handle == 1) {
+        /* Top-right: NE-SW diagonal */
+        cursor = gdk_cursor_new_from_name(display, "nesw-resize");
+    } else if (handle == 2) {
+        /* Bottom-left: NE-SW diagonal */
+        cursor = gdk_cursor_new_from_name(display, "nesw-resize");
+    } else if (handle == 3) {
+        /* Bottom-right: NW-SE diagonal */
+        cursor = gdk_cursor_new_from_name(display, "nwse-resize");
+    } else {
+        /* Default cursor */
+        gdk_window_set_cursor(window, default_cursor);
+        return;
+    }
+
+    if (cursor) {
+        gdk_window_set_cursor(window, cursor);
+        g_object_unref(cursor);
     }
 }
