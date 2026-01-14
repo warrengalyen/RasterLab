@@ -731,7 +731,7 @@ static gboolean on_viewport_motion_notify(GtkWidget* widget, GdkEventMotion* eve
 /**
  * Create a new image document
  */
-ImageDocument* document_new(const gchar* filename, gboolean create_worker_pool) {
+ImageDocument* document_new(const gchar* filename, gboolean create_worker_pool, guint undo_levels) {
     ImageDocument* doc = (ImageDocument*)g_malloc(sizeof(ImageDocument));
 
     doc->filename = g_strdup(filename);
@@ -775,9 +775,9 @@ ImageDocument* document_new(const gchar* filename, gboolean create_worker_pool) 
         doc->tile_worker_pool = NULL;
     }
 
-    /* Initialize undo/redo stacks (max 50 undo steps) */
-    doc->undo_stack = command_stack_new(50);
-    doc->redo_stack = command_stack_new(50);
+    /* Initialize undo/redo stacks with configurable undo levels (0 = unlimited) */
+    doc->undo_stack = command_stack_new(undo_levels > 0 ? undo_levels : 0);
+    doc->redo_stack = command_stack_new(undo_levels > 0 ? undo_levels : 0);
     doc->undo_journal = NULL; /* Will be created when settings are available */
 
     return doc;

@@ -24,6 +24,7 @@ typedef struct {
     /* Undo/redo disk settings */
     gint undo_compression_level; /* LZ4 compression level (1-9, default 1) */
     gchar* undo_temp_directory;  /* Root directory for undo journal files (NULL = system temp) */
+    gint undo_levels;            /* Number of undo levels to maintain (default 10) */
 
     /* View settings */
     gboolean show_layer_edges; /* Show outline when moving layers (default TRUE) */
@@ -151,6 +152,20 @@ const gchar* settings_get_undo_temp_directory(Settings* settings);
  * @param directory Temp directory path (NULL = use system default)
  */
 void settings_set_undo_temp_directory(Settings* settings, const gchar* directory);
+
+/**
+ * Get undo levels
+ * @param settings The settings structure
+ * @return Number of undo levels (default 10)
+ */
+gint settings_get_undo_levels(Settings* settings);
+
+/**
+ * Set undo levels
+ * @param settings The settings structure
+ * @param levels Number of undo levels (clamped to 1-100)
+ */
+void settings_set_undo_levels(Settings* settings, gint levels);
 
 /**
  * Set show layer edges setting

@@ -526,7 +526,7 @@ ImageDocument* autosave_load_document(const gchar* autosave_path) {
     }
 
     /* Create document with worker pool for on-screen rendering */
-    ImageDocument* doc = document_new(filename, TRUE);
+    ImageDocument* doc = document_new(filename, TRUE, 10); /* Default 10 undo levels */
     g_free(filename);
 
     if (!doc) {

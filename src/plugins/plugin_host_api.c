@@ -17,7 +17,7 @@
  * Create a new document (wrapper for document_new)
  */
 static ImageDocument* host_document_create(uint32_t width, uint32_t height, bool has_alpha) {
-    ImageDocument* doc = document_new("Untitled", TRUE);
+    ImageDocument* doc = document_new("Untitled", TRUE, 10); /* Default 10 undo levels */
     if (!doc) {
         return NULL;
     }

@@ -159,9 +159,10 @@ typedef struct ImageDocument {
  * Create a new image document
  * @param filename The filename for the document
  * @param create_worker_pool If TRUE, create tile worker pool for on-screen rendering
+ * @param undo_levels Maximum number of undo levels (0 = unlimited)
  * @return Newly allocated ImageDocument
  */
-ImageDocument* document_new(const gchar* filename, gboolean create_worker_pool);
+ImageDocument* document_new(const gchar* filename, gboolean create_worker_pool, guint undo_levels);
 
 /**
  * Free an image document

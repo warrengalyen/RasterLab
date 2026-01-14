@@ -23,6 +23,7 @@
 #define DEFAULT_CANVAS_BG_B (160.0 / 255.0)
 #define DEFAULT_MAX_RECENT_FILES 10
 #define DEFAULT_UNDO_COMPRESSION_LEVEL 1 /* LZ4 fast compression */
+#define DEFAULT_UNDO_LEVELS 10           /* Number of undo levels */
 
 /* Default tool option values */
 #define DEFAULT_TOOL_SIZE 5.0f              /* 5px brush size */
@@ -70,8 +71,9 @@ static Settings* settings_create_default(void) {
     settings->max_recent_files = DEFAULT_MAX_RECENT_FILES;
     settings->undo_compression_level = DEFAULT_UNDO_COMPRESSION_LEVEL;
     settings->undo_temp_directory = NULL; /* NULL = use system temp directory */
-    settings->show_layer_edges = TRUE;    /* Show layer edges by default */
-    settings->show_statusbar = TRUE;      /* Show status bar by default */
+    settings->undo_levels = DEFAULT_UNDO_LEVELS;
+    settings->show_layer_edges = TRUE; /* Show layer edges by default */
+    settings->show_statusbar = TRUE;   /* Show status bar by default */
 
     return settings;
 }
@@ -243,6 +245,16 @@ static void settings_load_undo(Settings* settings, xmlNode* undo_node);
 static void settings_save_undo(xmlTextWriterPtr writer, Settings* settings);
 
 /**
+ * Load performance settings from XML (forward declaration)
+ */
+static void settings_load_performance(Settings* settings, xmlNode* performance_node);
+
+/**
+ * Save performance settings to XML (forward declaration)
+ */
+static void settings_save_performance(xmlTextWriterPtr writer, Settings* settings);
+
+/**
  * Load view settings from XML (forward declaration)
  */
 static void settings_load_view(Settings* settings, xmlNode* view_node);
@@ -345,7 +357,10 @@ Settings* settings_load(const char* app_dir) {
             settings_load_tools(settings, cur);
         } else if (xmlStrcmp(cur->name, (const xmlChar*)"recent_files") == 0) {
             settings_load_recent_files(settings, cur);
+        } else if (xmlStrcmp(cur->name, (const xmlChar*)"performance") == 0) {
+            settings_load_performance(settings, cur);
         } else if (xmlStrcmp(cur->name, (const xmlChar*)"undo") == 0) {
+            /* Legacy format: undo as direct child - load it directly */
             settings_load_undo(settings, cur);
         } else if (xmlStrcmp(cur->name, (const xmlChar*)"view") == 0) {
             settings_load_view(settings, cur);
@@ -380,6 +395,14 @@ static void settings_load_undo(Settings* settings, xmlNode* undo_node) {
         settings_set_undo_temp_directory(settings, (const char*)temp_dir_attr);
         xmlFree(temp_dir_attr);
     }
+
+    /* Load undo levels */
+    xmlChar* levels_attr = xmlGetProp(undo_node, (const xmlChar*)"levels");
+    if (levels_attr) {
+        gint levels = (gint)strtol((const char*)levels_attr, NULL, 10);
+        settings_set_undo_levels(settings, levels);
+        xmlFree(levels_attr);
+    }
 }
 
 /**
@@ -402,7 +425,49 @@ static void settings_save_undo(xmlTextWriterPtr writer, Settings* settings) {
         xmlTextWriterWriteAttribute(writer, (const xmlChar*)"temp_directory", (const xmlChar*)settings->undo_temp_directory);
     }
 
+    /* Save undo levels */
+    gchar levels_str[16];
+    g_snprintf(levels_str, sizeof(levels_str), "%d", settings->undo_levels);
+    xmlTextWriterWriteAttribute(writer, (const xmlChar*)"levels", (const xmlChar*)levels_str);
+
     xmlTextWriterEndElement(writer); /* undo */
+}
+
+/**
+ * Load performance settings from XML
+ */
+static void settings_load_performance(Settings* settings, xmlNode* performance_node) {
+    if (!settings || !performance_node) {
+        return;
+    }
+
+    /* Iterate through child nodes */
+    for (xmlNode* cur = performance_node->children; cur; cur = cur->next) {
+        if (cur->type != XML_ELEMENT_NODE) {
+            continue;
+        }
+
+        /* Load undo settings */
+        if (xmlStrcmp(cur->name, (const xmlChar*)"undo") == 0) {
+            settings_load_undo(settings, cur);
+        }
+    }
+}
+
+/**
+ * Save performance settings to XML
+ */
+static void settings_save_performance(xmlTextWriterPtr writer, Settings* settings) {
+    if (!writer || !settings) {
+        return;
+    }
+
+    xmlTextWriterStartElement(writer, (const xmlChar*)"performance");
+
+    /* Save undo settings */
+    settings_save_undo(writer, settings);
+
+    xmlTextWriterEndElement(writer); /* performance */
 }
 
 /**
@@ -644,8 +709,8 @@ gboolean settings_save(Settings* settings, const char* app_dir) {
     /* Write recent files */
     settings_save_recent_files(writer, settings);
 
-    /* Write undo settings */
-    settings_save_undo(writer, settings);
+    /* Write performance settings (includes undo) */
+    settings_save_performance(writer, settings);
 
     /* Write view settings */
     settings_save_view(writer, settings);
@@ -971,6 +1036,32 @@ void settings_set_undo_temp_directory(Settings* settings, const gchar* directory
         g_free(settings->undo_temp_directory);
     }
     settings->undo_temp_directory = directory ? g_strdup(directory) : NULL;
+}
+
+/**
+ * Get undo levels
+ */
+gint settings_get_undo_levels(Settings* settings) {
+    if (!settings) {
+        return DEFAULT_UNDO_LEVELS;
+    }
+    return settings->undo_levels;
+}
+
+/**
+ * Set undo levels
+ */
+void settings_set_undo_levels(Settings* settings, gint levels) {
+    if (!settings) {
+        return;
+    }
+    /* Clamp to valid range (1-100) */
+    if (levels < 1) {
+        levels = 1;
+    } else if (levels > 100) {
+        levels = 100;
+    }
+    settings->undo_levels = levels;
 }
 
 /**

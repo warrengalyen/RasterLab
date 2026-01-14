@@ -596,8 +596,14 @@ ImageDocument* ui_create_document_tab(AppContext* ctx, const gchar* filename) {
     GtkWidget* close_button;
     gint page_num;
 
+    /* Get undo levels from settings */
+    guint undo_levels = 10; /* Default */
+    if (ctx && ctx->settings) {
+        undo_levels = (guint)settings_get_undo_levels(ctx->settings);
+    }
+
     /* Create the document with worker pool for on-screen rendering */
-    doc = document_new(filename, TRUE);
+    doc = document_new(filename, TRUE, undo_levels);
 
     /* Create disk-backed undo journal if settings are available */
     if (ctx && ctx->settings && doc) {
@@ -606,6 +612,10 @@ ImageDocument* ui_create_document_tab(AppContext* ctx, const gchar* filename) {
         doc->undo_journal = undo_journal_create((struct ImageDocument*)doc, temp_dir, compression_level);
         if (!doc->undo_journal) {
             g_warning("Failed to create undo journal, falling back to in-memory undo");
+        }
+        /* Set max_entries on journal to match undo_levels */
+        if (doc->undo_journal && undo_levels > 0) {
+            doc->undo_journal->max_entries = undo_levels;
         }
     }
 
