@@ -200,6 +200,15 @@ set(SOURCES
 # Add the generated gresources file
 list(APPEND SOURCES ${GRESOURCE_FILE})
 
+# Add Windows resource file for application icon
+if(WIN32)
+    enable_language(RC)
+    
+    set(RESOURCE_FILE ${CMAKE_SOURCE_DIR}/resources/rasterlab.rc)
+    
+    list(APPEND SOURCES ${RESOURCE_FILE})
+endif()
+
 # Create the executable
 add_executable(rasterlab ${SOURCES})
 

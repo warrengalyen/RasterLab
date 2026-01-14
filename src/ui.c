@@ -380,7 +380,32 @@ AppContext* ui_create_main_window(void) {
         g_free(ctx);
         return NULL;
     }
-    gtk_window_set_icon_name(GTK_WINDOW(ctx->window), "rasterlab-icon");
+
+    /* Set application icon */
+    {
+        GError* error = NULL;
+        GBytes* icon_bytes = g_resources_lookup_data("/app-icon", G_RESOURCE_LOOKUP_FLAGS_NONE, &error);
+        if (icon_bytes) {
+            GInputStream* icon_stream = g_memory_input_stream_new_from_data(
+                g_bytes_get_data(icon_bytes, NULL),
+                g_bytes_get_size(icon_bytes),
+                NULL);
+            GdkPixbuf* icon_pixbuf = gdk_pixbuf_new_from_stream(icon_stream, NULL, &error);
+            g_object_unref(icon_stream);
+            g_bytes_unref(icon_bytes);
+
+            if (icon_pixbuf) {
+                gtk_window_set_icon(GTK_WINDOW(ctx->window), icon_pixbuf);
+                g_object_unref(icon_pixbuf);
+            } else if (error) {
+                g_warning("Failed to create pixbuf from app-icon: %s", error->message);
+                g_error_free(error);
+            }
+        } else if (error) {
+            g_warning("Failed to load app-icon resource: %s", error->message);
+            g_error_free(error);
+        }
+    }
 
     /* Get main containers */
     GtkWidget* main_vbox = GTK_WIDGET(gtk_builder_get_object(builder, "main_vbox"));
