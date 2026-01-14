@@ -2667,6 +2667,57 @@ void ui_load_tool_options_from_settings(AppContext* ctx) {
                 tool_options_set_rect_select_animate(opts, TRUE);
             }
         }
+
+        /* Elliptical select tool specific options */
+        if (tool_type == TOOL_ELLIPSE_SELECT) {
+            /* Load combine mode (0=NEW, 1=ADD, 2=SUBTRACT, 3=INTERSECT) */
+            const char* combine_str = settings_get_tool_option(ctx->settings, tool_name, "ellipse_select_combine");
+            if (combine_str) {
+                gint combine_val = (gint)g_ascii_strtoll(combine_str, NULL, 10);
+                if (combine_val >= 0 && combine_val < 4) {
+                    tool_options_set_ellipse_select_combine(opts, (SelectionCombineMode)combine_val);
+                } else {
+                    tool_options_set_ellipse_select_combine(opts, SELECTION_COMBINE_NEW);
+                }
+            } else {
+                tool_options_set_ellipse_select_combine(opts, SELECTION_COMBINE_NEW);
+            }
+
+            /* Load smoothing mode (0=NONE, 1=ANTIALIASED, 2=FEATHERED) */
+            const char* smooth_str = settings_get_tool_option(ctx->settings, tool_name, "ellipse_select_smooth");
+            if (smooth_str) {
+                gint smooth_val = (gint)g_ascii_strtoll(smooth_str, NULL, 10);
+                if (smooth_val >= 0 && smooth_val < 3) {
+                    tool_options_set_ellipse_select_smooth(opts, (SelectionSmoothingMode)smooth_val);
+                } else {
+                    tool_options_set_ellipse_select_smooth(opts, SELECTION_SMOOTH_ANTIALIASED);
+                }
+            } else {
+                tool_options_set_ellipse_select_smooth(opts, SELECTION_SMOOTH_ANTIALIASED);
+            }
+
+            /* Load feather radius */
+            const char* feather_str = settings_get_tool_option(ctx->settings, tool_name, "ellipse_select_feather");
+            if (feather_str) {
+                gfloat feather_val = (gfloat)g_ascii_strtod(feather_str, NULL);
+                if (feather_val >= 0.0f && feather_val <= 200.0f) {
+                    tool_options_set_ellipse_select_feather(opts, feather_val);
+                } else {
+                    tool_options_set_ellipse_select_feather(opts, 0.0f);
+                }
+            } else {
+                tool_options_set_ellipse_select_feather(opts, 0.0f);
+            }
+
+            /* Load animation toggle */
+            const char* animate_str = settings_get_tool_option(ctx->settings, tool_name, "ellipse_select_animate");
+            if (animate_str) {
+                gboolean animate = (g_strcmp0(animate_str, "true") == 0 || g_strcmp0(animate_str, "1") == 0);
+                tool_options_set_ellipse_select_animate(opts, animate);
+            } else {
+                tool_options_set_ellipse_select_animate(opts, TRUE);
+            }
+        }
     }
 }
 
@@ -2725,6 +2776,10 @@ static void ui_save_tool_options_to_settings_internal(AppContext* ctx, ToolType 
     SelectionSmoothingMode rect_select_smooth_val = opts->rect_select_smooth;
     gfloat rect_select_feather_val = opts->rect_select_feather;
     gboolean rect_select_animate_val = opts->rect_select_animate;
+    SelectionCombineMode ellipse_select_combine_val = opts->ellipse_select_combine;
+    SelectionSmoothingMode ellipse_select_smooth_val = opts->ellipse_select_smooth;
+    gfloat ellipse_select_feather_val = opts->ellipse_select_feather;
+    gboolean ellipse_select_animate_val = opts->ellipse_select_animate;
 
     /* Save only the options that this tool supports */
     /* Check tool_options_flags to determine which options to save */
@@ -2801,9 +2856,24 @@ static void ui_save_tool_options_to_settings_internal(AppContext* ctx, ToolType 
         settings_set_tool_option(ctx->settings, tool_name, "rect_select_animate", rect_select_animate_val ? "true" : "false");
     }
 
-    /* Save settings immediately if requested */
-    if (save_immediately && ctx->app_dir) {
-        settings_save(ctx->settings, ctx->app_dir);
+    /* Elliptical select tool uses combine mode, smoothing, feather, and animate options */
+    if (tool_type == TOOL_ELLIPSE_SELECT) {
+        gchar combine_str[16];
+        gint combine_val = (gint)ellipse_select_combine_val;
+        g_snprintf(combine_str, sizeof(combine_str), "%d", combine_val);
+        settings_set_tool_option(ctx->settings, tool_name, "ellipse_select_combine", combine_str);
+
+        gchar smooth_str[16];
+        gint smooth_val = (gint)ellipse_select_smooth_val;
+        g_snprintf(smooth_str, sizeof(smooth_str), "%d", smooth_val);
+        settings_set_tool_option(ctx->settings, tool_name, "ellipse_select_smooth", smooth_str);
+
+        gchar feather_str[32];
+        gfloat safe_feather = (ellipse_select_feather_val >= 0.0f && ellipse_select_feather_val <= 200.0f) ? ellipse_select_feather_val : 0.0f;
+        g_snprintf(feather_str, sizeof(feather_str), "%.2f", safe_feather);
+        settings_set_tool_option(ctx->settings, tool_name, "ellipse_select_feather", feather_str);
+
+        settings_set_tool_option(ctx->settings, tool_name, "ellipse_select_animate", ellipse_select_animate_val ? "true" : "false");
     }
 
     /* Save settings immediately if requested */

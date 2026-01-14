@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="50" height="50" viewBox="0 0 50 50">
+  <defs>
+    <!-- Mask to hide dashes under handles -->
+    <mask id="handleMask">
+      <!-- White background allows everything through -->
+      <rect width="50" height="50" fill="white"/>
+      <!-- Black rectangles block the areas under handles -->
+      <rect x="21" y="1" width="8" height="8" fill="black"/>
+      <rect x="41" y="21" width="8" height="8" fill="black"/>
+      <rect x="21" y="41" width="8" height="8" fill="black"/>
+      <rect x="1" y="21" width="8" height="8" fill="black"/>
+    </mask>
+  </defs>
+  
+  <!-- Dashed ellipse border with mask applied -->
+  <ellipse cx="25" cy="25" rx="20" ry="20" 
+           stroke="#000" stroke-width="2" fill="none"
+           stroke-dasharray="6 4"
+           mask="url(#handleMask)"/>
+  
+  <!-- Handles positioned at cardinal points, overlapping the ellipse -->
+  <!-- Top -->
+  <rect x="21" y="1" width="8" height="8" stroke="#000" stroke-width="2" fill="none"/>
+  <!-- Right -->
+  <rect x="41" y="21" width="8" height="8" stroke="#000" stroke-width="2" fill="none"/>
+  <!-- Bottom -->
+  <rect x="21" y="41" width="8" height="8" stroke="#000" stroke-width="2" fill="none"/>
+  <!-- Left -->
+  <rect x="1" y="21" width="8" height="8" stroke="#000" stroke-width="2" fill="none"/>
+</svg>

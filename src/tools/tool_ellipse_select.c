@@ -1,4 +1,4 @@
-#include "tools/tool_rect_select.h"
+#include "tools/tool_ellipse_select.h"
 #include "command.h"
 #include "document.h"
 #include "selection.h"
@@ -20,15 +20,15 @@
 typedef struct {
     Tool* tool;
     ImageDocument* doc;
-} RectSelectTimerData;
+} EllipseSelectTimerData;
 
 /* Forward declaration */
-static gboolean on_rect_select_tool_animation_timer(gpointer user_data);
+static gboolean on_ellipse_select_tool_animation_timer(gpointer user_data);
 
 /**
  * Create a cursor from resource
  */
-static GdkCursor* create_rect_select_cursor(void) {
+static GdkCursor* create_ellipse_select_cursor(void) {
     GdkDisplay* display;
     GdkPixbuf* pixbuf;
     GdkCursor* cursor;
@@ -42,12 +42,12 @@ static GdkCursor* create_rect_select_cursor(void) {
     }
 
     /* Load cursor file from resource as bytes */
-    bytes = g_resources_lookup_data("/cursors/rect_select_cursor.cur",
+    bytes = g_resources_lookup_data("/cursors/elliptical_select_cursor.cur",
                                     G_RESOURCE_LOOKUP_FLAGS_NONE,
                                     &error);
     if (!bytes) {
         if (error) {
-            g_warning("Failed to load rect select cursor resource: %s", error->message);
+            g_warning("Failed to load ellipse select cursor resource: %s", error->message);
             g_error_free(error);
         }
         return gdk_cursor_new_for_display(display, GDK_CROSSHAIR);
@@ -64,7 +64,7 @@ static GdkCursor* create_rect_select_cursor(void) {
 
     if (!pixbuf) {
         if (error) {
-            g_warning("Failed to parse rect select cursor: %s", error->message);
+            g_warning("Failed to parse ellipse select cursor: %s", error->message);
             g_error_free(error);
         }
         return gdk_cursor_new_for_display(display, GDK_CROSSHAIR);
@@ -86,11 +86,33 @@ static GdkCursor* create_rect_select_cursor(void) {
 }
 
 /**
- * Animation timer callback for rect select tool marching ants
+ * Check if a point is inside an ellipse (with tolerance for handles)
+ */
+static gboolean point_in_ellipse(gint px, gint py, gint ex, gint ey, gint ew, gint eh) {
+    if (ew <= 0 || eh <= 0)
+        return FALSE;
+
+    /* Calculate center */
+    gdouble cx = ex + ew / 2.0;
+    gdouble cy = ey + eh / 2.0;
+
+    /* Calculate radii */
+    gdouble rx = ew / 2.0;
+    gdouble ry = eh / 2.0;
+
+    /* Check if point is inside ellipse: (x-cx)^2/rx^2 + (y-cy)^2/ry^2 <= 1 */
+    gdouble dx = (px - cx) / rx;
+    gdouble dy = (py - cy) / ry;
+
+    return (dx * dx + dy * dy) <= 1.0;
+}
+
+/**
+ * Animation timer callback for ellipse select tool marching ants
  * This function is independent of which tool is currently active
  */
-static gboolean on_rect_select_tool_animation_timer(gpointer user_data) {
-    RectSelectTimerData* timer_data = (RectSelectTimerData*)user_data;
+static gboolean on_ellipse_select_tool_animation_timer(gpointer user_data) {
+    EllipseSelectTimerData* timer_data = (EllipseSelectTimerData*)user_data;
 
     if (!timer_data || !timer_data->tool || !timer_data->doc) {
         g_free(timer_data);
@@ -105,7 +127,7 @@ static gboolean on_rect_select_tool_animation_timer(gpointer user_data) {
         return FALSE;
     }
 
-    RectSelectToolState* state = (RectSelectToolState*)tool->user_data;
+    EllipseSelectToolState* state = (EllipseSelectToolState*)tool->user_data;
 
     /* Only animate if editing */
     if (!state->is_editing) {
@@ -124,18 +146,18 @@ static gboolean on_rect_select_tool_animation_timer(gpointer user_data) {
 }
 
 /**
- * Animation timer callback for rect select tool marching ants (public API)
+ * Animation timer callback for ellipse select tool marching ants (public API)
  */
-gboolean tool_rect_select_animation_timer(gpointer user_data) {
+gboolean tool_ellipse_select_animation_timer(gpointer user_data) {
     /* This public function is kept for API compatibility but delegates to the static version */
-    return on_rect_select_tool_animation_timer(user_data);
+    return on_ellipse_select_tool_animation_timer(user_data);
 }
 
 /**
- * Rectangular Selection Tool: mouse down - start selection drag
+ * Elliptical Selection Tool: mouse down - start selection drag
  */
-static void rect_select_tool_mouse_down(Tool* tool, struct ImageDocument* doc, MouseEvent* event) {
-    RectSelectToolState* state;
+static void ellipse_select_tool_mouse_down(Tool* tool, struct ImageDocument* doc, MouseEvent* event) {
+    EllipseSelectToolState* state;
 
     if (!tool || !doc) {
         return;
@@ -143,9 +165,9 @@ static void rect_select_tool_mouse_down(Tool* tool, struct ImageDocument* doc, M
 
     /* Get or create tool state */
     if (!tool->user_data) {
-        tool->user_data = g_malloc0(sizeof(RectSelectToolState));
+        tool->user_data = g_malloc0(sizeof(EllipseSelectToolState));
     }
-    state = (RectSelectToolState*)tool->user_data;
+    state = (EllipseSelectToolState*)tool->user_data;
 
     /* Check if clicking on existing editable selection */
     if (state->is_editing) {
@@ -174,9 +196,9 @@ static void rect_select_tool_mouse_down(Tool* tool, struct ImageDocument* doc, M
             }
         }
 
-        /* Check if clicking inside selection - move it */
-        if (event->x >= state->selection_x && event->x < state->selection_x + state->selection_w &&
-            event->y >= state->selection_y && event->y < state->selection_y + state->selection_h) {
+        /* Check if clicking inside ellipse - move it */
+        if (point_in_ellipse(event->x, event->y, state->selection_x, state->selection_y,
+                             state->selection_w, state->selection_h)) {
             /* Clicking inside - start move */
             state->dragging_handle = -1; /* -1 means move mode */
             state->is_dragging = TRUE;
@@ -187,7 +209,7 @@ static void rect_select_tool_mouse_down(Tool* tool, struct ImageDocument* doc, M
 
         /* Clicking outside - finalize and start new selection */
         /* Finalize the current selection through the undo system */
-        tool_rect_select_finalize(tool, doc);
+        tool_ellipse_select_finalize(tool, doc);
 
         /* Reset state for new selection */
         state->is_editing = FALSE;
@@ -210,12 +232,12 @@ static void rect_select_tool_mouse_down(Tool* tool, struct ImageDocument* doc, M
     state->has_been_finalized = FALSE; /* Reset flag for new selection */
 
     /* Get current tool options for selection */
-    ToolOptions* opts = tool_options_get_for_tool(TOOL_RECT_SELECT);
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_ELLIPSE_SELECT);
     if (opts) {
         /* Read selection options from tool options panel */
-        state->combine_mode = tool_options_get_rect_select_combine(opts);
-        state->smooth_mode = tool_options_get_rect_select_smooth(opts);
-        state->feather_radius = (gint)tool_options_get_rect_select_feather(opts);
+        state->combine_mode = tool_options_get_ellipse_select_combine(opts);
+        state->smooth_mode = tool_options_get_ellipse_select_smooth(opts);
+        state->feather_radius = (gint)tool_options_get_ellipse_select_feather(opts);
     } else {
         state->combine_mode = SELECTION_COMBINE_NEW;
         state->smooth_mode = SELECTION_SMOOTH_NONE;
@@ -276,16 +298,16 @@ static void set_cursor_for_handle(GdkWindow* window, gint handle, GdkCursor* def
 }
 
 /**
- * Rectangular Selection Tool: mouse move - update selection preview
+ * Elliptical Selection Tool: mouse move - update selection preview
  */
-static void rect_select_tool_mouse_move(Tool* tool, struct ImageDocument* doc, MouseEvent* event) {
-    RectSelectToolState* state;
+static void ellipse_select_tool_mouse_move(Tool* tool, struct ImageDocument* doc, MouseEvent* event) {
+    EllipseSelectToolState* state;
 
     if (!tool || !doc || !tool->user_data) {
         return;
     }
 
-    state = (RectSelectToolState*)tool->user_data;
+    state = (EllipseSelectToolState*)tool->user_data;
     GdkWindow* window = gtk_widget_get_window(doc->drawing_area);
 
     /* Handle resize/move during edit drag */
@@ -404,10 +426,10 @@ static void rect_select_tool_mouse_move(Tool* tool, struct ImageDocument* doc, M
             }
         }
 
-        /* Check if hovering inside selection for move */
+        /* Check if hovering inside ellipse for move */
         if (hovered_handle == -2 &&
-            event->x >= state->selection_x && event->x < state->selection_x + state->selection_w &&
-            event->y >= state->selection_y && event->y < state->selection_y + state->selection_h) {
+            point_in_ellipse(event->x, event->y, state->selection_x, state->selection_y,
+                             state->selection_w, state->selection_h)) {
             hovered_handle = -1;
         }
 
@@ -485,16 +507,16 @@ static void rect_select_tool_mouse_move(Tool* tool, struct ImageDocument* doc, M
 }
 
 /**
- * Rectangular Selection Tool: mouse up - finalize selection drag
+ * Elliptical Selection Tool: mouse up - finalize selection drag
  */
-static void rect_select_tool_mouse_up(Tool* tool, struct ImageDocument* doc, MouseEvent* event) {
-    RectSelectToolState* state;
+static void ellipse_select_tool_mouse_up(Tool* tool, struct ImageDocument* doc, MouseEvent* event) {
+    EllipseSelectToolState* state;
 
     if (!tool || !doc || !tool->user_data) {
         return;
     }
 
-    state = (RectSelectToolState*)tool->user_data;
+    state = (EllipseSelectToolState*)tool->user_data;
 
     (void)event; /* Unused */
 
@@ -542,7 +564,7 @@ static void rect_select_tool_mouse_up(Tool* tool, struct ImageDocument* doc, Mou
         height = doc->height - y;
     }
 
-    /* Only proceed if rectangle has non-zero area */
+    /* Only proceed if ellipse has non-zero area */
     if (width > 0 && height > 0) {
         /* Store selection bounds for editing */
         state->selection_x = x;
@@ -555,16 +577,16 @@ static void rect_select_tool_mouse_up(Tool* tool, struct ImageDocument* doc, Mou
         state->animation_phase = 0; /* Start animation */
 
         /* Start animation timer if not already running and animation is enabled */
-        ToolOptions* opts = tool_options_get_for_tool(TOOL_RECT_SELECT);
-        gboolean should_animate = opts ? tool_options_get_rect_select_animate(opts) : TRUE;
+        ToolOptions* opts = tool_options_get_for_tool(TOOL_ELLIPSE_SELECT);
+        gboolean should_animate = opts ? tool_options_get_ellipse_select_animate(opts) : TRUE;
 
         if (state->animation_timer_id == 0 && should_animate) {
             /* Create timer data structure - will be freed when timer stops */
-            RectSelectTimerData* timer_data = g_malloc(sizeof(RectSelectTimerData));
+            EllipseSelectTimerData* timer_data = g_malloc(sizeof(EllipseSelectTimerData));
             timer_data->tool = tool;
             timer_data->doc = doc;
             state->animation_timer_id = g_timeout_add(ANT_DASH_SPEED_SLOW,
-                                                      on_rect_select_tool_animation_timer,
+                                                      on_ellipse_select_tool_animation_timer,
                                                       (gpointer)timer_data);
         }
     }
@@ -578,12 +600,12 @@ static void rect_select_tool_mouse_up(Tool* tool, struct ImageDocument* doc, Mou
 /**
  * Finalize the current preview selection to the document selection mask
  */
-void tool_rect_select_finalize(Tool* tool, ImageDocument* doc) {
+void tool_ellipse_select_finalize(Tool* tool, ImageDocument* doc) {
     if (!tool || !tool->user_data || !doc) {
         return;
     }
 
-    RectSelectToolState* state = (RectSelectToolState*)tool->user_data;
+    EllipseSelectToolState* state = (EllipseSelectToolState*)tool->user_data;
 
     /* If there's an active selection in edit mode, finalize it to the mask */
     if (state->is_editing && state->selection_w > 0 && state->selection_h > 0 && doc->selection_mask) {
@@ -599,12 +621,12 @@ void tool_rect_select_finalize(Tool* tool, ImageDocument* doc) {
         SelectionUndoTransaction* transaction = selection_undo_transaction_begin(
             doc->selection_mask,
             doc,
-            "Rectangle Select");
+            "Ellipse Select");
 
         if (transaction) {
             /* Register the affected region */
-            /* For INTERSECT/SUBTRACT modes, the affected region is larger than just the new rectangle
-               We need to register the bounding box of the current selection + new rectangle */
+            /* For INTERSECT/SUBTRACT modes, the affected region is larger than just the new ellipse
+               We need to register the bounding box of the current selection + new ellipse */
             gint region_x = state->selection_x;
             gint region_y = state->selection_y;
             gint region_w = state->selection_w;
@@ -646,8 +668,8 @@ void tool_rect_select_finalize(Tool* tool, ImageDocument* doc) {
                 region_h);
         }
 
-        /* Fill rectangle into mask with current smoothing settings */
-        selection_mask_fill_rect(
+        /* Fill ellipse into mask with current smoothing settings */
+        selection_mask_fill_ellipse(
             doc->selection_mask,
             state->selection_x,
             state->selection_y,
@@ -658,7 +680,7 @@ void tool_rect_select_finalize(Tool* tool, ImageDocument* doc) {
             state->feather_radius,
             FALSE); /* FALSE = create Selection objects (for tool operations) */
 
-        /* Note: Feathering parameters are already set per-selection in selection_mask_fill_rect */
+        /* Note: Feathering parameters are already set per-selection in selection_mask_fill_ellipse */
         /* No need to commit global feathering - per-selection system handles it */
 
         /* Commit undo transaction */
@@ -687,14 +709,14 @@ void tool_rect_select_finalize(Tool* tool, ImageDocument* doc) {
 }
 
 /**
- * Reset rect select tool state (called when tool is deactivated)
+ * Reset ellipse select tool state (called when tool is deactivated)
  */
-void tool_rect_select_reset(Tool* tool) {
+void tool_ellipse_select_reset(Tool* tool) {
     if (!tool || !tool->user_data) {
         return;
     }
 
-    RectSelectToolState* state = (RectSelectToolState*)tool->user_data;
+    EllipseSelectToolState* state = (EllipseSelectToolState*)tool->user_data;
 
     /* Reset edit/drag state to prevent preview from rendering */
     state->is_dragging = FALSE;
@@ -712,11 +734,11 @@ void tool_rect_select_reset(Tool* tool) {
 }
 
 /**
- * Create the Rectangular Selection Tool
+ * Create the Elliptical Selection Tool
  */
-Tool* tool_rect_select_create(void) {
-    Tool* tool = tool_new("Rectangular Select",
-                          TOOL_RECT_SELECT,
+Tool* tool_ellipse_select_create(void) {
+    Tool* tool = tool_new("Elliptical Select",
+                          TOOL_ELLIPSE_SELECT,
                           GDK_CROSSHAIR,
                           TOOL_OPT_SELECTION_MODE | TOOL_OPT_SELECTION_SMOOTH);
 
@@ -724,23 +746,23 @@ Tool* tool_rect_select_create(void) {
         return NULL;
     }
 
-    tool->mouse_down = rect_select_tool_mouse_down;
-    tool->mouse_move = rect_select_tool_mouse_move;
-    tool->mouse_up = rect_select_tool_mouse_up;
+    tool->mouse_down = ellipse_select_tool_mouse_down;
+    tool->mouse_move = ellipse_select_tool_mouse_move;
+    tool->mouse_up = ellipse_select_tool_mouse_up;
 
-    /* Replace cursor with custom rect select cursor */
+    /* Replace cursor with custom ellipse select cursor */
     if (tool->cursor) {
         g_object_unref(tool->cursor);
     }
-    tool->cursor = create_rect_select_cursor();
+    tool->cursor = create_ellipse_select_cursor();
 
     return tool;
 }
 
 /**
- * Draw rectangular selection preview during drag
+ * Draw elliptical selection preview during drag
  */
-void tool_rect_select_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom) {
+void tool_ellipse_select_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom) {
     if (!doc || !doc->drawing_area || !cr) {
         return;
     }
@@ -752,11 +774,11 @@ void tool_rect_select_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom
         }
 
         Tool* active_tool = tool_manager_get_active(tool_registry);
-        if (!active_tool || active_tool->type != TOOL_RECT_SELECT || !active_tool->user_data) {
+        if (!active_tool || active_tool->type != TOOL_ELLIPSE_SELECT || !active_tool->user_data) {
             return;
         }
 
-        RectSelectToolState* state = (RectSelectToolState*)active_tool->user_data;
+        EllipseSelectToolState* state = (EllipseSelectToolState*)active_tool->user_data;
 
         /* Draw if dragging OR editing */
         gboolean should_draw = state->is_dragging || state->is_editing;
@@ -764,7 +786,7 @@ void tool_rect_select_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom
             return;
         }
 
-        /* Determine rectangle to draw */
+        /* Determine ellipse bounds to draw */
         gint rect_x, rect_y, rect_w, rect_h;
 
         /* Check if this is a new selection drag (dragging_handle == -2)
@@ -800,16 +822,16 @@ void tool_rect_select_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom
         /* Save Cairo state to draw preview in zoomed space */
         cairo_save(cr);
 
-        /* Apply zoom transform for preview rectangle */
+        /* Apply zoom transform for preview ellipse */
         if (zoom != 1.0) {
             cairo_scale(cr, zoom, zoom);
         }
 
         /* Update smoothing mode and feather radius from current tool options (allows real-time updates) */
-        ToolOptions* current_opts = tool_options_get_for_tool(TOOL_RECT_SELECT);
+        ToolOptions* current_opts = tool_options_get_for_tool(TOOL_ELLIPSE_SELECT);
         if (current_opts) {
-            state->smooth_mode = current_opts->rect_select_smooth;
-            state->feather_radius = current_opts->rect_select_feather;
+            state->smooth_mode = current_opts->ellipse_select_smooth;
+            state->feather_radius = current_opts->ellipse_select_feather;
         }
 
         /* Determine if we should show feathered outline
@@ -828,12 +850,25 @@ void tool_rect_select_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom
                                                    state->smooth_mode,
                                                    (float)state->feather_radius);
             if (preview_sel) {
-                /* Allocate and fill the selection's mask */
+                /* Allocate and fill the selection's mask with ellipse */
                 int stride = preview_mask->stride;
                 preview_sel->mask = g_malloc0(stride * doc->height);
-                for (int row = rect_y; row < rect_y + rect_h && row < doc->height; row++) {
-                    for (int col = rect_x; col < rect_x + rect_w && col < doc->width; col++) {
-                        preview_sel->mask[row * stride + col] = 255;
+
+                /* Fill ellipse pixels */
+                gdouble cx = rect_x + rect_w / 2.0;
+                gdouble cy = rect_y + rect_h / 2.0;
+                gdouble rx = rect_w / 2.0;
+                gdouble ry = rect_h / 2.0;
+
+                for (int row = rect_y; row < rect_y + rect_h && row < (int)doc->height; row++) {
+                    for (int col = rect_x; col < rect_x + rect_w && col < (int)doc->width; col++) {
+                        if (row >= 0 && col >= 0) {
+                            gdouble dx = (col + 0.5 - cx) / rx;
+                            gdouble dy = (row + 0.5 - cy) / ry;
+                            if (dx * dx + dy * dy <= 1.0) {
+                                preview_sel->mask[row * stride + col] = 255;
+                            }
+                        }
                     }
                 }
 
@@ -845,16 +880,16 @@ void tool_rect_select_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom
                 selection_mask_get_surface(preview_mask);
 
                 /* Compute and render feathered outline with animation phase if enabled */
-                int animation_phase = (current_opts && current_opts->rect_select_animate) ? state->animation_phase : 0;
+                int animation_phase = (current_opts && current_opts->ellipse_select_animate) ? state->animation_phase : 0;
                 selection_mask_render_outline(cr, preview_mask, animation_phase, zoom);
             }
 
             selection_mask_free(preview_mask);
         } else {
             /* Draw hard outline (no feathering) - faster for active dragging */
-            int animation_phase = (state->is_editing && current_opts && current_opts->rect_select_animate) ? state->animation_phase : 0;
+            int animation_phase = (state->is_editing && current_opts && current_opts->ellipse_select_animate) ? state->animation_phase : 0;
             gdouble animation_offset = (gdouble)animation_phase;
-            selection_draw_marching_ants(cr, rect_x, rect_y, rect_w, rect_h, 0.0, animation_offset);
+            selection_draw_marching_ants_ellipse(cr, rect_x, rect_y, rect_w, rect_h, 0.0, animation_offset);
         }
 
         /* Draw corner resize handles only in edit mode */

@@ -21,7 +21,8 @@ typedef enum {
     TOOL_ERASER = 5,
     TOOL_PAINT_BUCKET = 6,
     TOOL_RECT_SELECT = 7,
-    TOOL_COUNT = 8 /* Total number of tools */
+    TOOL_ELLIPSE_SELECT = 8,
+    TOOL_COUNT = 9 /* Total number of tools */
 } ToolType;
 
 /**

@@ -1,6 +1,7 @@
 #include "tool_manager.h"
 #include "tool_options.h"
 #include "tools/tool_brush.h"
+#include "tools/tool_ellipse_select.h"
 #include "tools/tool_eraser.h"
 #include "tools/tool_fill.h"
 #include "tools/tool_hand.h"
@@ -94,6 +95,13 @@ gboolean tool_manager_init_defaults(ToolRegistry* registry) {
     }
     tool_manager_register(registry, tool, TOOL_RECT_SELECT);
 
+    /* Create Elliptical Selection tool */
+    tool = tool_ellipse_select_create();
+    if (!tool) {
+        return FALSE;
+    }
+    tool_manager_register(registry, tool, TOOL_ELLIPSE_SELECT);
+
     /* Activate Hand tool by default */
     tool_manager_activate(registry, TOOL_HAND);
 
@@ -139,6 +147,14 @@ gboolean tool_manager_activate(ToolRegistry* registry, ToolType type) {
         tool_rect_select_finalize(prev_tool, registry->current_doc);
         /* Reset tool state to clear preview */
         tool_rect_select_reset(prev_tool);
+    }
+
+    /* Finalize ellipse select if switching away from it */
+    if (prev_tool && prev_tool->type == TOOL_ELLIPSE_SELECT && registry->current_doc) {
+        /* Finalize any preview selection in edit mode to the mask */
+        tool_ellipse_select_finalize(prev_tool, registry->current_doc);
+        /* Reset tool state to clear preview */
+        tool_ellipse_select_reset(prev_tool);
     }
 
     registry->active_tool = tool;

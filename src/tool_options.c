@@ -38,6 +38,12 @@ ToolOptions* tool_options_new(void) {
     opts->rect_select_feather = 0.0f;
     opts->rect_select_animate = TRUE;
 
+    /* Initialize ellipse select tool options */
+    opts->ellipse_select_combine = SELECTION_COMBINE_NEW;
+    opts->ellipse_select_smooth = SELECTION_SMOOTH_ANTIALIASED;
+    opts->ellipse_select_feather = 0.0f;
+    opts->ellipse_select_animate = TRUE;
+
     /* Initialize move tool options */
     opts->move_auto_select_layer = TRUE; /* Default: auto-select enabled */
 
@@ -233,6 +239,86 @@ gboolean tool_options_get_rect_select_animate(ToolOptions* opts) {
         return TRUE; /* Default to animated */
     }
     return opts->rect_select_animate;
+}
+
+/**
+ * Set ellipse select combine mode
+ */
+void tool_options_set_ellipse_select_combine(ToolOptions* opts, SelectionCombineMode combine) {
+    if (!opts) {
+        return;
+    }
+    opts->ellipse_select_combine = combine;
+}
+
+/**
+ * Get ellipse select combine mode
+ */
+SelectionCombineMode tool_options_get_ellipse_select_combine(ToolOptions* opts) {
+    if (!opts) {
+        return SELECTION_COMBINE_NEW;
+    }
+    return opts->ellipse_select_combine;
+}
+
+/**
+ * Set ellipse select smoothing mode
+ */
+void tool_options_set_ellipse_select_smooth(ToolOptions* opts, SelectionSmoothingMode smooth) {
+    if (!opts) {
+        return;
+    }
+    opts->ellipse_select_smooth = smooth;
+}
+
+/**
+ * Get ellipse select smoothing mode
+ */
+SelectionSmoothingMode tool_options_get_ellipse_select_smooth(ToolOptions* opts) {
+    if (!opts) {
+        return SELECTION_SMOOTH_NONE;
+    }
+    return opts->ellipse_select_smooth;
+}
+
+/**
+ * Set ellipse select feather radius
+ */
+void tool_options_set_ellipse_select_feather(ToolOptions* opts, gfloat feather) {
+    if (!opts) {
+        return;
+    }
+    opts->ellipse_select_feather = (feather < 0.0f) ? 0.0f : feather;
+}
+
+/**
+ * Get ellipse select feather radius
+ */
+gfloat tool_options_get_ellipse_select_feather(ToolOptions* opts) {
+    if (!opts) {
+        return 0.0f;
+    }
+    return opts->ellipse_select_feather;
+}
+
+/**
+ * Set ellipse select animation
+ */
+void tool_options_set_ellipse_select_animate(ToolOptions* opts, gboolean animate) {
+    if (!opts) {
+        return;
+    }
+    opts->ellipse_select_animate = animate ? TRUE : FALSE;
+}
+
+/**
+ * Get ellipse select animation
+ */
+gboolean tool_options_get_ellipse_select_animate(ToolOptions* opts) {
+    if (!opts) {
+        return TRUE; /* Default to animated */
+    }
+    return opts->ellipse_select_animate;
 }
 
 /**

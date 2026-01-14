@@ -265,6 +265,7 @@ GtkWidget* tools_panel_initialize_from_builder(GtkBuilder* builder, ToolRegistry
         "tool_button_eraser",
         "tool_button_fill",
         "tool_button_rect_select",
+        "tool_button_elliptical_select",
     };
 
     const ToolType tool_types[] = {
@@ -276,6 +277,7 @@ GtkWidget* tools_panel_initialize_from_builder(GtkBuilder* builder, ToolRegistry
         TOOL_ERASER,
         TOOL_PAINT_BUCKET,
         TOOL_RECT_SELECT,
+        TOOL_ELLIPSE_SELECT,
     };
 
     /* Set up tool buttons with callbacks */
@@ -308,6 +310,7 @@ GtkWidget* tools_panel_initialize_from_builder(GtkBuilder* builder, ToolRegistry
                 "/icons/tool-eraser.png",
                 "/icons/tool-paintbucket.png",
                 "/icons/tool-rect-select.png",
+                "/icons/tool-elliptical-select.png",
             };
             if (i < TOOL_COUNT) {
                 GError* error = NULL;

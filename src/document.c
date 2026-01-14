@@ -13,6 +13,7 @@
 #include "tool_manager.h"
 #include "tool_options.h"
 #include "tools.h"
+#include "tools/tool_ellipse_select.h"
 #include "tools/tool_move.h"
 #include "tools/tool_rect_select.h"
 #include "ui.h"
@@ -294,6 +295,9 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
 
     /* Draw rect select tool preview during drag */
     tool_rect_select_draw_preview(doc, cr, zoom);
+
+    /* Draw ellipse select tool preview during drag */
+    tool_ellipse_select_draw_preview(doc, cr, zoom);
 
     /* Render selection overlays after all content is drawn */
     if (doc->selection_mask && !selection_mask_is_empty(doc->selection_mask)) {
@@ -887,7 +891,7 @@ static gboolean on_drawing_area_key_press(GtkWidget* widget, GdkEventKey* event,
     }
 
     Tool* active_tool = tool_manager_get_active(tool_registry);
-    if (!active_tool || active_tool->type != TOOL_RECT_SELECT) {
+    if (!active_tool || (active_tool->type != TOOL_RECT_SELECT && active_tool->type != TOOL_ELLIPSE_SELECT)) {
         return FALSE;
     }
 
@@ -918,9 +922,16 @@ static gboolean on_drawing_area_key_press(GtkWidget* widget, GdkEventKey* event,
     }
 
     /* Temporarily change the tool options mode */
-    ToolOptions* opts = tool_options_get_for_tool(TOOL_RECT_SELECT);
-    if (opts) {
-        opts->rect_select_combine = temp_mode;
+    if (active_tool->type == TOOL_RECT_SELECT) {
+        ToolOptions* opts = tool_options_get_for_tool(TOOL_RECT_SELECT);
+        if (opts) {
+            opts->rect_select_combine = temp_mode;
+        }
+    } else if (active_tool->type == TOOL_ELLIPSE_SELECT) {
+        ToolOptions* opts = tool_options_get_for_tool(TOOL_ELLIPSE_SELECT);
+        if (opts) {
+            opts->ellipse_select_combine = temp_mode;
+        }
     }
 
     /* Update UI buttons to show the temporary mode */
@@ -948,7 +959,7 @@ static gboolean on_drawing_area_key_release(GtkWidget* widget, GdkEventKey* even
     }
 
     Tool* active_tool = tool_manager_get_active(tool_registry);
-    if (!active_tool || active_tool->type != TOOL_RECT_SELECT) {
+    if (!active_tool || (active_tool->type != TOOL_RECT_SELECT && active_tool->type != TOOL_ELLIPSE_SELECT)) {
         return FALSE;
     }
 
@@ -979,9 +990,16 @@ static gboolean on_drawing_area_key_release(GtkWidget* widget, GdkEventKey* even
     }
 
     /* Restore the original or new combine mode */
-    ToolOptions* opts = tool_options_get_for_tool(TOOL_RECT_SELECT);
-    if (opts) {
-        opts->rect_select_combine = temp_mode;
+    if (active_tool->type == TOOL_RECT_SELECT) {
+        ToolOptions* opts = tool_options_get_for_tool(TOOL_RECT_SELECT);
+        if (opts) {
+            opts->rect_select_combine = temp_mode;
+        }
+    } else if (active_tool->type == TOOL_ELLIPSE_SELECT) {
+        ToolOptions* opts = tool_options_get_for_tool(TOOL_ELLIPSE_SELECT);
+        if (opts) {
+            opts->ellipse_select_combine = temp_mode;
+        }
     }
 
     /* Update UI buttons to show the new mode */

@@ -4,6 +4,7 @@
 #include "tool_manager.h"
 #include "tool_options.h"
 #include "tools.h"
+#include "tools/tool_ellipse_select.h"
 #include "tools/tool_rect_select.h"
 #include "ui.h"
 #include "ui/widgets/vertical_spin_button.h"
@@ -723,6 +724,251 @@ static void on_rect_select_animate_toggled(GtkToggleButton* button, gpointer use
     }
 }
 
+/**
+ * Signal handler for ellipse select combine mode button group changes
+ */
+static void on_ellipse_select_combine_button_toggled(GtkToggleButton* button, gpointer user_data) {
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+
+    /* Only act on button activation, not deactivation */
+    if (!gtk_toggle_button_get_active(button)) {
+        return;
+    }
+
+    SelectionCombineMode mode = SELECTION_COMBINE_NEW;
+
+    /* Determine which button was clicked */
+    if (button == GTK_TOGGLE_BUTTON(panel->ellipse_combine_new_button)) {
+        mode = SELECTION_COMBINE_NEW;
+    } else if (button == GTK_TOGGLE_BUTTON(panel->ellipse_combine_add_button)) {
+        mode = SELECTION_COMBINE_ADD;
+    } else if (button == GTK_TOGGLE_BUTTON(panel->ellipse_combine_subtract_button)) {
+        mode = SELECTION_COMBINE_SUBTRACT;
+    } else if (button == GTK_TOGGLE_BUTTON(panel->ellipse_combine_intersect_button)) {
+        mode = SELECTION_COMBINE_INTERSECT;
+    }
+
+    /* Block signals to avoid recursive calls while updating button states */
+    g_signal_handlers_block_by_func(panel->ellipse_combine_new_button,
+                                    G_CALLBACK(on_ellipse_select_combine_button_toggled), panel);
+    if (panel->ellipse_combine_add_button) {
+        g_signal_handlers_block_by_func(panel->ellipse_combine_add_button,
+                                        G_CALLBACK(on_ellipse_select_combine_button_toggled), panel);
+    }
+    if (panel->ellipse_combine_subtract_button) {
+        g_signal_handlers_block_by_func(panel->ellipse_combine_subtract_button,
+                                        G_CALLBACK(on_ellipse_select_combine_button_toggled), panel);
+    }
+    if (panel->ellipse_combine_intersect_button) {
+        g_signal_handlers_block_by_func(panel->ellipse_combine_intersect_button,
+                                        G_CALLBACK(on_ellipse_select_combine_button_toggled), panel);
+    }
+
+    /* Deactivate all other buttons and activate the clicked one */
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->ellipse_combine_new_button),
+                                 (mode == SELECTION_COMBINE_NEW));
+    if (panel->ellipse_combine_add_button) {
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->ellipse_combine_add_button),
+                                     (mode == SELECTION_COMBINE_ADD));
+    }
+    if (panel->ellipse_combine_subtract_button) {
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->ellipse_combine_subtract_button),
+                                     (mode == SELECTION_COMBINE_SUBTRACT));
+    }
+    if (panel->ellipse_combine_intersect_button) {
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->ellipse_combine_intersect_button),
+                                     (mode == SELECTION_COMBINE_INTERSECT));
+    }
+
+    /* Unblock signals */
+    g_signal_handlers_unblock_by_func(panel->ellipse_combine_new_button,
+                                      G_CALLBACK(on_ellipse_select_combine_button_toggled), panel);
+    if (panel->ellipse_combine_add_button) {
+        g_signal_handlers_unblock_by_func(panel->ellipse_combine_add_button,
+                                          G_CALLBACK(on_ellipse_select_combine_button_toggled), panel);
+    }
+    if (panel->ellipse_combine_subtract_button) {
+        g_signal_handlers_unblock_by_func(panel->ellipse_combine_subtract_button,
+                                          G_CALLBACK(on_ellipse_select_combine_button_toggled), panel);
+    }
+    if (panel->ellipse_combine_intersect_button) {
+        g_signal_handlers_unblock_by_func(panel->ellipse_combine_intersect_button,
+                                          G_CALLBACK(on_ellipse_select_combine_button_toggled), panel);
+    }
+
+    /* Update tool options with the new mode */
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_ELLIPSE_SELECT);
+    if (!opts) {
+        return;
+    }
+
+    tool_options_set_ellipse_select_combine(opts, mode);
+}
+
+/**
+ * Update the ellipse combine mode button group UI to reflect the current mode
+ */
+static void update_ellipse_combine_mode_buttons(ToolOptionsPanel* panel, SelectionCombineMode mode) {
+    if (!panel || !panel->ellipse_combine_new_button) {
+        return;
+    }
+
+    /* Disconnect signals to avoid triggering callbacks during state update */
+    g_signal_handlers_block_by_func(panel->ellipse_combine_new_button,
+                                    G_CALLBACK(on_ellipse_select_combine_button_toggled), panel);
+    if (panel->ellipse_combine_add_button) {
+        g_signal_handlers_block_by_func(panel->ellipse_combine_add_button,
+                                        G_CALLBACK(on_ellipse_select_combine_button_toggled), panel);
+    }
+    if (panel->ellipse_combine_subtract_button) {
+        g_signal_handlers_block_by_func(panel->ellipse_combine_subtract_button,
+                                        G_CALLBACK(on_ellipse_select_combine_button_toggled), panel);
+    }
+    if (panel->ellipse_combine_intersect_button) {
+        g_signal_handlers_block_by_func(panel->ellipse_combine_intersect_button,
+                                        G_CALLBACK(on_ellipse_select_combine_button_toggled), panel);
+    }
+
+    /* Update button states */
+    gboolean new_active = (mode == SELECTION_COMBINE_NEW);
+    gboolean add_active = (mode == SELECTION_COMBINE_ADD);
+    gboolean subtract_active = (mode == SELECTION_COMBINE_SUBTRACT);
+    gboolean intersect_active = (mode == SELECTION_COMBINE_INTERSECT);
+
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->ellipse_combine_new_button), new_active);
+    if (panel->ellipse_combine_add_button) {
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->ellipse_combine_add_button), add_active);
+    }
+    if (panel->ellipse_combine_subtract_button) {
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->ellipse_combine_subtract_button), subtract_active);
+    }
+    if (panel->ellipse_combine_intersect_button) {
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->ellipse_combine_intersect_button), intersect_active);
+    }
+
+    /* Force redraw of all buttons so visual state updates */
+    gtk_widget_queue_draw(panel->ellipse_combine_new_button);
+    if (panel->ellipse_combine_add_button) {
+        gtk_widget_queue_draw(panel->ellipse_combine_add_button);
+    }
+    if (panel->ellipse_combine_subtract_button) {
+        gtk_widget_queue_draw(panel->ellipse_combine_subtract_button);
+    }
+    if (panel->ellipse_combine_intersect_button) {
+        gtk_widget_queue_draw(panel->ellipse_combine_intersect_button);
+    }
+
+    /* Unblock signals now that state is updated */
+    g_signal_handlers_unblock_by_func(panel->ellipse_combine_new_button,
+                                      G_CALLBACK(on_ellipse_select_combine_button_toggled), panel);
+    if (panel->ellipse_combine_add_button) {
+        g_signal_handlers_unblock_by_func(panel->ellipse_combine_add_button,
+                                          G_CALLBACK(on_ellipse_select_combine_button_toggled), panel);
+    }
+    if (panel->ellipse_combine_subtract_button) {
+        g_signal_handlers_unblock_by_func(panel->ellipse_combine_subtract_button,
+                                          G_CALLBACK(on_ellipse_select_combine_button_toggled), panel);
+    }
+    if (panel->ellipse_combine_intersect_button) {
+        g_signal_handlers_unblock_by_func(panel->ellipse_combine_intersect_button,
+                                          G_CALLBACK(on_ellipse_select_combine_button_toggled), panel);
+    }
+}
+
+/**
+ * Signal handler for ellipse select smoothing mode changes
+ */
+static void on_ellipse_select_smooth_changed(GtkComboBox* combo_box, gpointer user_data) {
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+
+    gint active = gtk_combo_box_get_active(combo_box);
+    if (active < 0 || active >= 3) {
+        return;
+    }
+
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_ELLIPSE_SELECT);
+    if (!opts) {
+        return;
+    }
+
+    tool_options_set_ellipse_select_smooth(opts, (SelectionSmoothingMode)active);
+
+    /* Trigger canvas redraw to update preview with new smoothing mode */
+    if (panel && panel->panel) {
+        GtkWidget* window = gtk_widget_get_toplevel(panel->panel);
+        if (window) {
+            AppContext* ctx = (AppContext*)g_object_get_data(G_OBJECT(window), "app_context");
+            if (ctx) {
+                ImageDocument* doc = ui_get_active_document(ctx);
+                if (doc && doc->drawing_area) {
+                    gtk_widget_queue_draw(doc->drawing_area);
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Signal handler for ellipse select feather radius changes
+ */
+static void on_ellipse_select_feather_changed(GtkRange* range, gpointer user_data) {
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+
+    gdouble value = gtk_range_get_value(range);
+    gint feather_radius = (gint)value;
+
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_ELLIPSE_SELECT);
+    if (!opts) {
+        return;
+    }
+
+    tool_options_set_ellipse_select_feather(opts, (gfloat)feather_radius);
+
+    /* Trigger canvas redraw to update preview with new feather radius */
+    if (panel && panel->panel) {
+        GtkWidget* window = gtk_widget_get_toplevel(panel->panel);
+        if (window) {
+            AppContext* ctx = (AppContext*)g_object_get_data(G_OBJECT(window), "app_context");
+            if (ctx) {
+                ImageDocument* doc = ui_get_active_document(ctx);
+                if (doc && doc->drawing_area) {
+                    gtk_widget_queue_draw(doc->drawing_area);
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Signal handler for ellipse select animation checkbox
+ */
+static void on_ellipse_select_animate_toggled(GtkToggleButton* button, gpointer user_data) {
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+
+    gboolean active = gtk_toggle_button_get_active(button);
+
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_ELLIPSE_SELECT);
+    if (!opts) {
+        return;
+    }
+
+    tool_options_set_ellipse_select_animate(opts, active);
+
+    /* Trigger redraw to update preview */
+    if (panel && panel->panel) {
+        GtkWidget* window = gtk_widget_get_toplevel(panel->panel);
+        if (window) {
+            AppContext* ctx = (AppContext*)g_object_get_data(G_OBJECT(window), "app_context");
+            if (ctx) {
+                ImageDocument* doc = ui_get_active_document(ctx);
+                if (doc && doc->drawing_area) {
+                    gtk_widget_queue_draw(doc->drawing_area);
+                }
+            }
+        }
+    }
+}
+
 ToolOptionsPanel* create_tool_options_panel(void) {
     ToolOptionsPanel* tool_opts_panel = (ToolOptionsPanel*)g_malloc(sizeof(ToolOptionsPanel));
 
@@ -738,6 +984,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
     tool_opts_panel->pencil_panel = NULL;
     tool_opts_panel->paintbucket_panel = NULL;
     tool_opts_panel->rect_select_panel = NULL;
+    tool_opts_panel->ellipse_select_panel = NULL;
     tool_opts_panel->move_panel = NULL;
     tool_opts_panel->title_label = NULL;
     tool_opts_panel->size_scale = NULL;
@@ -755,6 +1002,13 @@ ToolOptionsPanel* create_tool_options_panel(void) {
     tool_opts_panel->rect_combine_intersect_button = NULL;
     tool_opts_panel->rect_smooth_combo = NULL;
     tool_opts_panel->rect_feather_scale = NULL;
+    tool_opts_panel->ellipse_animate_checkbox = NULL;
+    tool_opts_panel->ellipse_combine_new_button = NULL;
+    tool_opts_panel->ellipse_combine_add_button = NULL;
+    tool_opts_panel->ellipse_combine_subtract_button = NULL;
+    tool_opts_panel->ellipse_combine_intersect_button = NULL;
+    tool_opts_panel->ellipse_smooth_combo = NULL;
+    tool_opts_panel->ellipse_feather_scale = NULL;
     tool_opts_panel->move_auto_select_checkbox = NULL;
     tool_opts_panel->current_tool_type = TOOL_MOVE; /* Start with no tool selected */
 
@@ -1087,6 +1341,95 @@ ToolOptionsPanel* create_tool_options_panel(void) {
         }
     }
 
+    /* Load elliptical select panel from Glade */
+    GtkBuilder* ellipse_select_builder = gtk_builder_new();
+    GError* ellipse_select_error = NULL;
+    GtkWidget* ellipse_select_title = NULL;
+    GtkWidget* ellipse_select_animate = NULL;
+    GtkWidget* ellipse_select_smooth = NULL;
+    GtkWidget* ellipse_select_feather = NULL;
+
+    if (gtk_builder_add_from_resource(ellipse_select_builder, "/ui/elliptical_select_options.glade", &ellipse_select_error)) {
+        tool_opts_panel->ellipse_select_panel = GTK_WIDGET(gtk_builder_get_object(ellipse_select_builder, "elliptical_select_options_panel"));
+        if (tool_opts_panel->ellipse_select_panel) {
+            gtk_container_add(GTK_CONTAINER(container), tool_opts_panel->ellipse_select_panel);
+
+            /* Get widgets */
+            ellipse_select_title = GTK_WIDGET(gtk_builder_get_object(ellipse_select_builder, "elliptical_select_title_label"));
+            ellipse_select_animate = GTK_WIDGET(gtk_builder_get_object(ellipse_select_builder, "elliptical_select_animate_checkbox"));
+            tool_opts_panel->ellipse_combine_new_button = GTK_WIDGET(gtk_builder_get_object(ellipse_select_builder, "elliptical_select_combine_new_button"));
+            tool_opts_panel->ellipse_combine_add_button = GTK_WIDGET(gtk_builder_get_object(ellipse_select_builder, "elliptical_select_combine_add_button"));
+            tool_opts_panel->ellipse_combine_subtract_button = GTK_WIDGET(gtk_builder_get_object(ellipse_select_builder, "elliptical_select_combine_subtract_button"));
+            tool_opts_panel->ellipse_combine_intersect_button = GTK_WIDGET(gtk_builder_get_object(ellipse_select_builder, "elliptical_select_combine_intersect_button"));
+            ellipse_select_smooth = GTK_WIDGET(gtk_builder_get_object(ellipse_select_builder, "elliptical_select_smooth_combo"));
+            ellipse_select_feather = GTK_WIDGET(gtk_builder_get_object(ellipse_select_builder, "elliptical_select_feather_scale"));
+
+            /* Set up combine mode toggle buttons */
+            if (tool_opts_panel->ellipse_combine_new_button) {
+                gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(tool_opts_panel->ellipse_combine_new_button), TRUE);
+                g_signal_connect(tool_opts_panel->ellipse_combine_new_button, "toggled",
+                                 G_CALLBACK(on_ellipse_select_combine_button_toggled), tool_opts_panel);
+            }
+            if (tool_opts_panel->ellipse_combine_add_button) {
+                g_signal_connect(tool_opts_panel->ellipse_combine_add_button, "toggled",
+                                 G_CALLBACK(on_ellipse_select_combine_button_toggled), tool_opts_panel);
+            }
+            if (tool_opts_panel->ellipse_combine_subtract_button) {
+                g_signal_connect(tool_opts_panel->ellipse_combine_subtract_button, "toggled",
+                                 G_CALLBACK(on_ellipse_select_combine_button_toggled), tool_opts_panel);
+            }
+            if (tool_opts_panel->ellipse_combine_intersect_button) {
+                g_signal_connect(tool_opts_panel->ellipse_combine_intersect_button, "toggled",
+                                 G_CALLBACK(on_ellipse_select_combine_button_toggled), tool_opts_panel);
+            }
+
+            if (ellipse_select_smooth) {
+                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(ellipse_select_smooth), "None");
+                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(ellipse_select_smooth), "Antialiased");
+                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(ellipse_select_smooth), "Feathered");
+                gtk_combo_box_set_active(GTK_COMBO_BOX(ellipse_select_smooth), 1);
+                g_object_set_data(G_OBJECT(tool_opts_panel->ellipse_select_panel), "smooth_combo", ellipse_select_smooth);
+                tool_opts_panel->ellipse_smooth_combo = ellipse_select_smooth;
+
+                g_signal_connect(ellipse_select_smooth, "changed",
+                                 G_CALLBACK(on_ellipse_select_smooth_changed), tool_opts_panel);
+            }
+
+            if (ellipse_select_feather) {
+                g_object_set_data(G_OBJECT(tool_opts_panel->ellipse_select_panel), "feather_scale", ellipse_select_feather);
+                tool_opts_panel->ellipse_feather_scale = ellipse_select_feather;
+
+                g_signal_connect(ellipse_select_feather, "value-changed",
+                                 G_CALLBACK(on_ellipse_select_feather_changed), tool_opts_panel);
+            }
+
+            if (ellipse_select_animate) {
+                g_object_set_data(G_OBJECT(tool_opts_panel->ellipse_select_panel), "animate_checkbox", ellipse_select_animate);
+                tool_opts_panel->ellipse_animate_checkbox = ellipse_select_animate;
+                gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(ellipse_select_animate), TRUE);
+
+                g_signal_connect(ellipse_select_animate, "toggled",
+                                 G_CALLBACK(on_ellipse_select_animate_toggled), tool_opts_panel);
+            }
+
+            /* Hide ellipse select panel initially */
+            gtk_widget_set_visible(tool_opts_panel->ellipse_select_panel, FALSE);
+            gtk_widget_set_no_show_all(tool_opts_panel->ellipse_select_panel, TRUE);
+
+            /* Add vertical spin button to feather scale widget */
+            add_spin_button_to_scale(ellipse_select_builder, "elliptical_select_feather_scale", "elliptical_select_feather_control_box");
+        }
+        g_object_unref(ellipse_select_builder);
+    } else {
+        g_warning("Failed to load elliptical select options panel: %s", ellipse_select_error ? ellipse_select_error->message : "Unknown error");
+        if (ellipse_select_error) {
+            g_error_free(ellipse_select_error);
+        }
+        if (ellipse_select_builder) {
+            g_object_unref(ellipse_select_builder);
+        }
+    }
+
     /* Load move panel from Glade */
     GtkBuilder* move_builder = gtk_builder_new();
     GError* move_error = NULL;
@@ -1160,6 +1503,8 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
         new_tool_type = TOOL_PAINT_BUCKET;
     } else if (g_strcmp0(tool_name, "Rectangular Select") == 0) {
         new_tool_type = TOOL_RECT_SELECT;
+    } else if (g_strcmp0(tool_name, "Elliptical Select") == 0) {
+        new_tool_type = TOOL_ELLIPSE_SELECT;
     } else if (g_strcmp0(tool_name, "Move") == 0) {
         new_tool_type = TOOL_MOVE;
     } else if (g_strcmp0(tool_name, "Hand") == 0) {
@@ -1187,8 +1532,61 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
     if (panel->rect_select_panel) {
         gtk_widget_set_visible(panel->rect_select_panel, FALSE);
     }
+    if (panel->ellipse_select_panel) {
+        gtk_widget_set_visible(panel->ellipse_select_panel, FALSE);
+    }
     if (panel->move_panel) {
         gtk_widget_set_visible(panel->move_panel, FALSE);
+    }
+
+    /* For ellipse select tool, show the options panel */
+    if (new_tool_type == TOOL_ELLIPSE_SELECT && panel->ellipse_select_panel) {
+        /* Show main panel container */
+        if (panel->panel) {
+            gtk_widget_set_visible(panel->panel, TRUE);
+        }
+        /* Show ellipse select panel */
+        gtk_widget_set_no_show_all(panel->ellipse_select_panel, FALSE);
+        gtk_widget_set_visible(panel->ellipse_select_panel, TRUE);
+        gtk_widget_show_all(panel->ellipse_select_panel);
+
+        /* Update all ellipse select tool options to match current settings */
+        ToolOptions* opts = tool_options_get_for_tool(TOOL_ELLIPSE_SELECT);
+        if (opts) {
+            /* Update combine mode buttons */
+            update_ellipse_combine_mode_buttons(panel, (SelectionCombineMode)opts->ellipse_select_combine);
+
+            /* Update smoothing mode combo */
+            if (panel->ellipse_smooth_combo) {
+                g_signal_handlers_block_by_func(panel->ellipse_smooth_combo,
+                                                G_CALLBACK(on_ellipse_select_smooth_changed), panel);
+                gtk_combo_box_set_active(GTK_COMBO_BOX(panel->ellipse_smooth_combo),
+                                         (gint)opts->ellipse_select_smooth);
+                g_signal_handlers_unblock_by_func(panel->ellipse_smooth_combo,
+                                                  G_CALLBACK(on_ellipse_select_smooth_changed), panel);
+            }
+
+            /* Update feather radius slider */
+            if (panel->ellipse_feather_scale) {
+                g_signal_handlers_block_by_func(panel->ellipse_feather_scale,
+                                                G_CALLBACK(on_ellipse_select_feather_changed), panel);
+                gtk_range_set_value(GTK_RANGE(panel->ellipse_feather_scale), opts->ellipse_select_feather);
+                g_signal_handlers_unblock_by_func(panel->ellipse_feather_scale,
+                                                  G_CALLBACK(on_ellipse_select_feather_changed), panel);
+            }
+
+            /* Update animation checkbox */
+            if (panel->ellipse_animate_checkbox) {
+                g_signal_handlers_block_by_func(panel->ellipse_animate_checkbox,
+                                                G_CALLBACK(on_ellipse_select_animate_toggled), panel);
+                gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->ellipse_animate_checkbox),
+                                             opts->ellipse_select_animate);
+                g_signal_handlers_unblock_by_func(panel->ellipse_animate_checkbox,
+                                                  G_CALLBACK(on_ellipse_select_animate_toggled), panel);
+            }
+        }
+
+        return;
     }
 
     /* For rect select tool, show the options panel */
@@ -1566,6 +1964,10 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
         if (panel->rect_select_panel) {
             gtk_widget_set_no_show_all(panel->rect_select_panel, TRUE);
             gtk_widget_hide(panel->rect_select_panel);
+        }
+        if (panel->ellipse_select_panel) {
+            gtk_widget_set_no_show_all(panel->ellipse_select_panel, TRUE);
+            gtk_widget_hide(panel->ellipse_select_panel);
         }
         if (panel->move_panel) {
             gtk_widget_set_no_show_all(panel->move_panel, TRUE);

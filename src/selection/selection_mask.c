@@ -372,6 +372,252 @@ void selection_mask_fill_rect(
 }
 
 /**
+ * Fill elliptical region - creates a new Selection object with per-selection feathering
+ */
+void selection_mask_fill_ellipse(
+    SelectionMask* mask,
+    int x, int y, int width, int height,
+    SelectionCombineMode combine,
+    SelectionSmoothingMode smoothing,
+    float feather_radius,
+    gboolean direct_modify) {
+    if (!mask || !mask->base_mask)
+        return;
+    if (width <= 0 || height <= 0)
+        return;
+
+    /* Clamp bounding rectangle to bounds */
+    int x1 = (x < 0) ? 0 : x;
+    int y1 = (y < 0) ? 0 : y;
+    int x2 = (x + width > mask->width) ? mask->width : (x + width);
+    int y2 = (y + height > mask->height) ? mask->height : (y + height);
+    int clamped_width = x2 - x1;
+    int clamped_height = y2 - y1;
+
+    if (clamped_width <= 0 || clamped_height <= 0)
+        return;
+
+    /* Calculate ellipse center and radii from original (unclamped) bounds */
+    double cx = x + width / 2.0;
+    double cy = y + height / 2.0;
+    double rx = width / 2.0;
+    double ry = height / 2.0;
+
+    if (direct_modify) {
+        /* Direct modification path: modify base_mask directly without creating Selection objects */
+        gboolean should_create_selection = (mask->selections == NULL || mask->selections->data == NULL);
+
+        /* Calculate antialiasing transition width in normalized space */
+        double aa_width = (rx > 0 && ry > 0) ? (1.0 / fmin(rx, ry)) : 0.0;
+
+        if (should_create_selection) {
+            /* Create a Selection object when mask is empty (for proper selection tracking) */
+            Selection* sel = selection_new(x1, y1, clamped_width, clamped_height,
+                                           SELECTION_COMBINE_NEW,
+                                           smoothing,
+                                           feather_radius);
+            if (sel) {
+                /* Allocate mask for this selection */
+                int stride = calculate_stride(mask->width);
+                sel->mask = g_malloc0(stride * mask->height);
+
+                /* Fill ellipse region in selection's mask */
+                for (int row = y1; row < y2; row++) {
+                    for (int col = x1; col < x2; col++) {
+                        /* Check if point is inside ellipse: (x-cx)^2/rx^2 + (y-cy)^2/ry^2 <= 1 */
+                        double dx = (col + 0.5 - cx) / rx;
+                        double dy = (row + 0.5 - cy) / ry;
+                        double dist_sq = dx * dx + dy * dy;
+
+                        if (smoothing == SELECTION_SMOOTH_ANTIALIASED && aa_width > 0) {
+                            double dist = sqrt(dist_sq);
+                            if (dist <= 1.0 - aa_width) {
+                                sel->mask[row * stride + col] = 255;
+                            } else if (dist >= 1.0 + aa_width) {
+                                sel->mask[row * stride + col] = 0;
+                            } else {
+                                double t = (dist - (1.0 - aa_width)) / (2.0 * aa_width);
+                                double alpha = 1.0 - smoothstep((float)t);
+                                sel->mask[row * stride + col] = (uint8_t)(alpha * 255.0 + 0.5);
+                            }
+                        } else {
+                            if (dist_sq <= 1.0) {
+                                sel->mask[row * stride + col] = 255;
+                            }
+                        }
+                    }
+                }
+
+                /* Add selection to list */
+                selection_mask_add_selection(mask, sel);
+                selection_unref(sel);
+
+                if (!mask->data && mask->base_mask) {
+                    mask->data = mask->base_mask;
+                }
+
+                selection_mask_mark_dirty(mask, x1, y1, clamped_width, clamped_height);
+            }
+        } else {
+            /* Direct modify path: modify base_mask directly */
+            int stride = mask->stride;
+            uint8_t* base_mask = mask->base_mask;
+
+            /* Fill ellipse region in base_mask */
+            for (int row = y1; row < y2; row++) {
+                uint8_t* row_ptr = base_mask + row * stride;
+                for (int col = x1; col < x2; col++) {
+                    double dx = (col + 0.5 - cx) / rx;
+                    double dy = (row + 0.5 - cy) / ry;
+                    double dist_sq = dx * dx + dy * dy;
+
+                    if (smoothing == SELECTION_SMOOTH_ANTIALIASED && aa_width > 0) {
+                        double dist = sqrt(dist_sq);
+                        if (dist <= 1.0 - aa_width) {
+                            row_ptr[col] = 255;
+                        } else if (dist >= 1.0 + aa_width) {
+                            row_ptr[col] = 0;
+                        } else {
+                            double t = (dist - (1.0 - aa_width)) / (2.0 * aa_width);
+                            double alpha = 1.0 - smoothstep((float)t);
+                            row_ptr[col] = (uint8_t)(alpha * 255.0 + 0.5);
+                        }
+                    } else {
+                        if (dist_sq <= 1.0) {
+                            row_ptr[col] = 255;
+                        }
+                    }
+                }
+            }
+
+            /* Clear existing selections list */
+            if (mask->selections) {
+                GList* iter;
+                for (iter = mask->selections; iter != NULL; iter = iter->next) {
+                    Selection* sel = (Selection*)iter->data;
+                    if (sel) {
+                        selection_unref(sel);
+                    }
+                }
+                g_list_free(mask->selections);
+                mask->selections = NULL;
+            }
+
+            /* Create a new Selection object to represent the full selection */
+            Selection* sel = selection_new(x1, y1, clamped_width, clamped_height,
+                                           SELECTION_COMBINE_NEW,
+                                           smoothing,
+                                           feather_radius);
+            if (sel) {
+                int sel_stride = calculate_stride(mask->width);
+                sel->mask = g_malloc0(sel_stride * mask->height);
+
+                for (int row = y1; row < y2; row++) {
+                    for (int col = x1; col < x2; col++) {
+                        double dx = (col + 0.5 - cx) / rx;
+                        double dy = (row + 0.5 - cy) / ry;
+                        double dist_sq = dx * dx + dy * dy;
+
+                        if (smoothing == SELECTION_SMOOTH_ANTIALIASED && aa_width > 0) {
+                            double dist = sqrt(dist_sq);
+                            if (dist <= 1.0 - aa_width) {
+                                sel->mask[row * sel_stride + col] = 255;
+                            } else if (dist >= 1.0 + aa_width) {
+                                sel->mask[row * sel_stride + col] = 0;
+                            } else {
+                                double t = (dist - (1.0 - aa_width)) / (2.0 * aa_width);
+                                double alpha = 1.0 - smoothstep((float)t);
+                                sel->mask[row * sel_stride + col] = (uint8_t)(alpha * 255.0 + 0.5);
+                            }
+                        } else {
+                            if (dist_sq <= 1.0) {
+                                sel->mask[row * sel_stride + col] = 255;
+                            }
+                        }
+                    }
+                }
+
+                selection_mask_add_selection(mask, sel);
+                selection_unref(sel);
+            }
+
+            mask->data = mask->base_mask;
+            selection_mask_mark_dirty(mask, x1, y1, clamped_width, clamped_height);
+            mask->feather_dirty = TRUE;
+        }
+    } else {
+        /* Normal path: create Selection objects (for tool-based operations) */
+        /* For NEW combine mode, clear all existing selections */
+        if (combine == SELECTION_COMBINE_NEW) {
+            if (mask->selections) {
+                GList* iter;
+                for (iter = mask->selections; iter != NULL; iter = iter->next) {
+                    Selection* sel = (Selection*)iter->data;
+                    if (sel) {
+                        selection_unref(sel);
+                    }
+                }
+                g_list_free(mask->selections);
+                mask->selections = NULL;
+            }
+        }
+
+        /* Create new Selection object with per-selection feathering parameters */
+        Selection* sel = selection_new(x1, y1, clamped_width, clamped_height,
+                                       combine, smoothing, feather_radius);
+        if (!sel) {
+            return;
+        }
+
+        /* Allocate mask for this selection (full mask size, but only ellipse region is filled) */
+        int stride = calculate_stride(mask->width);
+        sel->mask = g_malloc0(stride * mask->height);
+
+        /* Calculate antialiasing transition width in normalized space */
+        /* Use approximately 1 pixel transition at the edge */
+        double aa_width = (rx > 0 && ry > 0) ? (1.0 / fmin(rx, ry)) : 0.0;
+
+        /* Fill ellipse region in selection's mask */
+        for (int row = y1; row < y2; row++) {
+            for (int col = x1; col < x2; col++) {
+                double dx = (col + 0.5 - cx) / rx;
+                double dy = (row + 0.5 - cy) / ry;
+                double dist_sq = dx * dx + dy * dy;
+
+                if (smoothing == SELECTION_SMOOTH_ANTIALIASED && aa_width > 0) {
+                    /* Antialiased edge: compute smooth transition at boundary */
+                    double dist = sqrt(dist_sq);
+                    if (dist <= 1.0 - aa_width) {
+                        /* Fully inside */
+                        sel->mask[row * stride + col] = 255;
+                    } else if (dist >= 1.0 + aa_width) {
+                        /* Fully outside */
+                        sel->mask[row * stride + col] = 0;
+                    } else {
+                        /* In transition zone - apply smoothstep for smooth edge */
+                        double t = (dist - (1.0 - aa_width)) / (2.0 * aa_width);
+                        double alpha = 1.0 - smoothstep((float)t);
+                        sel->mask[row * stride + col] = (uint8_t)(alpha * 255.0 + 0.5);
+                    }
+                } else {
+                    /* Hard edge (SELECTION_SMOOTH_NONE or SELECTION_SMOOTH_FEATHERED) */
+                    if (dist_sq <= 1.0) {
+                        sel->mask[row * stride + col] = 255;
+                    }
+                }
+            }
+        }
+
+        /* Add selection to list */
+        selection_mask_add_selection(mask, sel);
+        selection_unref(sel);
+
+        /* Mark affected region as dirty */
+        selection_mask_mark_dirty(mask, x1, y1, clamped_width, clamped_height);
+    }
+}
+
+/**
  * Apply one mask to another (operates on base_mask only)
  * Never modifies feathering parameters - only base_mask
  */

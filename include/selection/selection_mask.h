@@ -113,6 +113,27 @@ void selection_mask_fill_rect(
     gboolean direct_modify);
 
 /**
+ * Fill elliptical region in mask with optional smoothing
+ * @param mask Target mask to modify
+ * @param x Left coordinate of bounding rectangle
+ * @param y Top coordinate of bounding rectangle
+ * @param width Bounding rectangle width
+ * @param height Bounding rectangle height
+ * @param combine How to combine with existing mask
+ * @param smoothing Edge smoothing mode
+ * @param feather_radius Feather radius for SMOOTH_FEATHERED (pixels)
+ * @param direct_modify If TRUE, directly modify base_mask without creating Selection objects
+ *                      (useful for programmatic operations like Select All that shouldn't trigger tool commands)
+ */
+void selection_mask_fill_ellipse(
+    SelectionMask* mask,
+    int x, int y, int width, int height,
+    SelectionCombineMode combine,
+    SelectionSmoothingMode smoothing,
+    float feather_radius,
+    gboolean direct_modify);
+
+/**
  * Apply one mask to another using combine mode
  * @param dest Destination mask (modified in place)
  * @param src Source mask to apply

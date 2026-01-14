@@ -29,6 +29,12 @@ typedef struct {
     gfloat rect_select_feather;                /* Feather radius in pixels */
     gboolean rect_select_animate;              /* Animate marching ants */
 
+    /* Ellipse select tool options */
+    SelectionCombineMode ellipse_select_combine;  /* How to combine with existing selection */
+    SelectionSmoothingMode ellipse_select_smooth; /* Edge smoothing mode */
+    gfloat ellipse_select_feather;                /* Feather radius in pixels */
+    gboolean ellipse_select_animate;              /* Animate marching ants */
+
     /* Move tool options */
     gboolean move_auto_select_layer; /* Auto-select layer under cursor based on visibility */
 } ToolOptions;
@@ -169,6 +175,62 @@ void tool_options_set_rect_select_animate(ToolOptions* opts, gboolean animate);
  * @return TRUE if animation enabled, FALSE otherwise
  */
 gboolean tool_options_get_rect_select_animate(ToolOptions* opts);
+
+/**
+ * Set ellipse select combine mode
+ * @param opts The tool options
+ * @param combine The combine mode (NEW, ADD, SUBTRACT, INTERSECT)
+ */
+void tool_options_set_ellipse_select_combine(ToolOptions* opts, SelectionCombineMode combine);
+
+/**
+ * Get ellipse select combine mode
+ * @param opts The tool options
+ * @return The current combine mode
+ */
+SelectionCombineMode tool_options_get_ellipse_select_combine(ToolOptions* opts);
+
+/**
+ * Set ellipse select smoothing mode
+ * @param opts The tool options
+ * @param smooth The smoothing mode (NONE, ANTIALIASED, FEATHERED)
+ */
+void tool_options_set_ellipse_select_smooth(ToolOptions* opts, SelectionSmoothingMode smooth);
+
+/**
+ * Get ellipse select smoothing mode
+ * @param opts The tool options
+ * @return The current smoothing mode
+ */
+SelectionSmoothingMode tool_options_get_ellipse_select_smooth(ToolOptions* opts);
+
+/**
+ * Set ellipse select feather radius
+ * @param opts The tool options
+ * @param feather Feather radius in pixels
+ */
+void tool_options_set_ellipse_select_feather(ToolOptions* opts, gfloat feather);
+
+/**
+ * Get ellipse select feather radius
+ * @param opts The tool options
+ * @return The current feather radius
+ */
+gfloat tool_options_get_ellipse_select_feather(ToolOptions* opts);
+
+/**
+ * Set ellipse select animation
+ * @param opts The tool options
+ * @param animate TRUE to enable marching ants animation, FALSE to disable
+ */
+void tool_options_set_ellipse_select_animate(ToolOptions* opts, gboolean animate);
+
+/**
+ * Get ellipse select animation
+ * @param opts The tool options
+ * @return TRUE if animation enabled, FALSE otherwise
+ */
+gboolean tool_options_get_ellipse_select_animate(ToolOptions* opts);
 
 /**
  * Set move tool auto select layer

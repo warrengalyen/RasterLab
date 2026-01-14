@@ -76,6 +76,7 @@ set(SOURCES
     tools/tool_paintbucket.c
     tools/tool_pencil.c
     tools/tool_rect_select.c
+    tools/tool_ellipse_select.c
     tools/tool_zoom.c
     ui.c
     ui/dialogs/beeps_dialog.c

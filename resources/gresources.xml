@@ -9,6 +9,7 @@
     <file preprocess="to-pixdata">icons/tool-eraser.png</file>
     <file preprocess="to-pixdata">icons/tool-paintbucket.png</file>
     <file preprocess="to-pixdata">icons/tool-rect-select.png</file>
+    <file preprocess="to-pixdata">icons/tool-elliptical-select.png</file>
     <file preprocess="to-pixdata">icons/chevron.png</file>
     <file preprocess="xml-stripblanks">icons/layer-add.svg</file>
     <file preprocess="xml-stripblanks">icons/layer-delete.svg</file>
@@ -45,6 +46,7 @@
     <file compressed="true" alias="app-icon">icons/rasterlab-icon.ico</file>
     <file>cursors/zoom_cursor.cur</file>
     <file>cursors/rect_select_cursor.cur</file>
+    <file>cursors/elliptical_select_cursor.cur</file>
     <file>cursors/paintbucket_cursor.cur</file>
     <file>cursors/hand_up_cursor.cur</file>
     <file>cursors/hand_down_cursor.cur</file>
@@ -54,6 +56,7 @@
     <file>ui/pencil_options.glade</file>
     <file>ui/paintbucket_options.glade</file>
     <file>ui/rect_select_options.glade</file>
+    <file>ui/elliptical_select_options.glade</file>
     <file>ui/move_options.glade</file>
     <file>ui/new_layer_dialog.glade</file>
     <file>ui/canvas_size_dialog.glade</file>

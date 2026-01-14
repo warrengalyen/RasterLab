@@ -1909,6 +1909,29 @@
                   </packing>
                 </child>
                 <child>
+                  <object class="GtkToggleButton" id="tool_button_elliptical_select">
+                    <property name="width-request">32</property>
+                    <property name="height-request">32</property>
+                    <property name="visible">True</property>
+                    <property name="can-focus">True</property>
+                    <property name="receives-default">False</property>
+                    <property name="relief">none</property>
+                    <child>
+                      <object class="GtkImage" id="ellipse_select_icon">
+                        <property name="visible">True</property>
+                        <property name="can-focus">False</property>
+                        <property name="pixel-size">24</property>
+                        <property name="resource">/icons/tool-elliptical-select.png</property>
+                      </object>
+                    </child>
+                  </object>
+                  <packing>
+                    <property name="expand">False</property>
+                    <property name="fill">True</property>
+                    <property name="position">9</property>
+                  </packing>
+                </child>
+                <child>
                   <object class="GtkSeparator" id="tool_separator1">
                     <property name="visible">True</property>
                     <property name="can-focus">False</property>
@@ -1916,7 +1939,7 @@
                   <packing>
                     <property name="expand">False</property>
                     <property name="fill">True</property>
-                    <property name="position">9</property>
+                    <property name="position">10</property>
                   </packing>
                 </child>
                 <child>
@@ -1979,7 +2002,7 @@
                   <packing>
                     <property name="expand">False</property>
                     <property name="fill">True</property>
-                    <property name="position">10</property>
+                    <property name="position">11</property>
                   </packing>
                 </child>
                 <child>
@@ -1990,7 +2013,7 @@
                   <packing>
                     <property name="expand">True</property>
                     <property name="fill">True</property>
-                    <property name="position">11</property>
+                    <property name="position">12</property>
                   </packing>
                 </child>
               </object>
