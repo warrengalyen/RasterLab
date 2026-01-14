@@ -26,6 +26,9 @@ typedef struct {
     gchar* undo_temp_directory;  /* Root directory for undo journal files (NULL = system temp) */
     gint undo_levels;            /* Number of undo levels to maintain (default 10) */
 
+    /* Performance settings */
+    gint worker_threads; /* Number of worker threads for tile compositing (default 4, min 1, max CPU count) */
+
     /* View settings */
     gboolean show_layer_edges; /* Show outline when moving layers (default TRUE) */
     gboolean show_statusbar;   /* Show status bar (default TRUE) */
@@ -166,6 +169,20 @@ gint settings_get_undo_levels(Settings* settings);
  * @param levels Number of undo levels (clamped to 1-100)
  */
 void settings_set_undo_levels(Settings* settings, gint levels);
+
+/**
+ * Get worker threads count
+ * @param settings The settings structure
+ * @return Number of worker threads (default 4)
+ */
+gint settings_get_worker_threads(Settings* settings);
+
+/**
+ * Set worker threads count
+ * @param settings The settings structure
+ * @param threads Number of worker threads (clamped to 1-CPU count)
+ */
+void settings_set_worker_threads(Settings* settings, gint threads);
 
 /**
  * Set show layer edges setting

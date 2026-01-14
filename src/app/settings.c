@@ -24,6 +24,7 @@
 #define DEFAULT_MAX_RECENT_FILES 10
 #define DEFAULT_UNDO_COMPRESSION_LEVEL 1 /* LZ4 fast compression */
 #define DEFAULT_UNDO_LEVELS 10           /* Number of undo levels */
+#define DEFAULT_WORKER_THREADS 4         /* Number of worker threads */
 
 /* Default tool option values */
 #define DEFAULT_TOOL_SIZE 5.0f              /* 5px brush size */
@@ -72,6 +73,7 @@ static Settings* settings_create_default(void) {
     settings->undo_compression_level = DEFAULT_UNDO_COMPRESSION_LEVEL;
     settings->undo_temp_directory = NULL; /* NULL = use system temp directory */
     settings->undo_levels = DEFAULT_UNDO_LEVELS;
+    settings->worker_threads = DEFAULT_WORKER_THREADS;
     settings->show_layer_edges = TRUE; /* Show layer edges by default */
     settings->show_statusbar = TRUE;   /* Show status bar by default */
 
@@ -441,6 +443,14 @@ static void settings_load_performance(Settings* settings, xmlNode* performance_n
         return;
     }
 
+    /* Load worker_threads attribute if present */
+    xmlChar* threads_attr = xmlGetProp(performance_node, (const xmlChar*)"worker_threads");
+    if (threads_attr) {
+        gint threads = (gint)strtol((const char*)threads_attr, NULL, 10);
+        settings_set_worker_threads(settings, threads);
+        xmlFree(threads_attr);
+    }
+
     /* Iterate through child nodes */
     for (xmlNode* cur = performance_node->children; cur; cur = cur->next) {
         if (cur->type != XML_ELEMENT_NODE) {
@@ -463,6 +473,11 @@ static void settings_save_performance(xmlTextWriterPtr writer, Settings* setting
     }
 
     xmlTextWriterStartElement(writer, (const xmlChar*)"performance");
+
+    /* Save worker threads as attribute */
+    gchar threads_str[16];
+    g_snprintf(threads_str, sizeof(threads_str), "%d", settings->worker_threads);
+    xmlTextWriterWriteAttribute(writer, (const xmlChar*)"worker_threads", (const xmlChar*)threads_str);
 
     /* Save undo settings */
     settings_save_undo(writer, settings);
@@ -1062,6 +1077,33 @@ void settings_set_undo_levels(Settings* settings, gint levels) {
         levels = 100;
     }
     settings->undo_levels = levels;
+}
+
+/**
+ * Get worker threads count
+ */
+gint settings_get_worker_threads(Settings* settings) {
+    if (!settings) {
+        return DEFAULT_WORKER_THREADS;
+    }
+    return settings->worker_threads;
+}
+
+/**
+ * Set worker threads count
+ */
+void settings_set_worker_threads(Settings* settings, gint threads) {
+    if (!settings) {
+        return;
+    }
+    /* Clamp to valid range */
+    gint cpu_count = (gint)g_get_num_processors();
+    if (threads < 1) {
+        threads = 1;
+    } else if (threads > cpu_count) {
+        threads = cpu_count;
+    }
+    settings->worker_threads = threads;
 }
 
 /**

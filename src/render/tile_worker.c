@@ -166,15 +166,23 @@ static void tile_worker_thread_func(gpointer data, gpointer user_data) {
  */
 TileWorkerPool* tile_worker_pool_create(guint num_workers) {
     TileWorkerPool* pool;
+    gint cpu_count;
 
     pool = (TileWorkerPool*)g_malloc0(sizeof(TileWorkerPool));
     if (!pool) {
         return NULL;
     }
 
-    /* Default to 4 workers max to keep resource usage reasonable */
-    if (num_workers == 0 || num_workers > 4) {
-        num_workers = 4;
+    /* Get CPU count and clamp to valid range */
+    cpu_count = (gint)g_get_num_processors();
+    if (num_workers == 0) {
+        num_workers = 4; /* Default to 4 workers */
+    }
+    if (num_workers < 1) {
+        num_workers = 1;
+    }
+    if (num_workers > (guint)cpu_count) {
+        num_workers = (guint)cpu_count;
     }
 
     pool->num_workers = num_workers;

@@ -596,14 +596,26 @@ ImageDocument* ui_create_document_tab(AppContext* ctx, const gchar* filename) {
     GtkWidget* close_button;
     gint page_num;
 
-    /* Get undo levels from settings */
-    guint undo_levels = 10; /* Default */
+    /* Get undo levels and worker threads from settings */
+    guint undo_levels = 10;   /* Default */
+    guint worker_threads = 4; /* Default */
     if (ctx && ctx->settings) {
         undo_levels = (guint)settings_get_undo_levels(ctx->settings);
+        worker_threads = (guint)settings_get_worker_threads(ctx->settings);
     }
 
     /* Create the document with worker pool for on-screen rendering */
     doc = document_new(filename, TRUE, undo_levels);
+
+    /* Set worker thread count on tile worker pool if available */
+    if (doc && doc->tile_worker_pool) {
+        /* Recreate worker pool with configured thread count */
+        tile_worker_pool_destroy(doc->tile_worker_pool);
+        doc->tile_worker_pool = tile_worker_pool_create(worker_threads);
+        if (!doc->tile_worker_pool) {
+            g_warning("Failed to create tile worker pool with %u threads", worker_threads);
+        }
+    }
 
     /* Create disk-backed undo journal if settings are available */
     if (ctx && ctx->settings && doc) {
