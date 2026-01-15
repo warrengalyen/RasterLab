@@ -419,6 +419,7 @@ gboolean document_save_as_jpeg(ImageDocument* doc, const gchar* filename, gint q
  * @return TRUE on success, FALSE on failure
  */
 gboolean document_save_as(ImageDocument* doc, const gchar* filename, const SaveOptions* opts);
+gboolean document_save_as_with_error(ImageDocument* doc, const gchar* filename, const SaveOptions* opts, PluginError* error_out);
 
 /**
  * Mark document as saved (clear dirty flag)

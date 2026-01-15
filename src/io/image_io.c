@@ -29,22 +29,65 @@ static gboolean read_file_header(const char* filename, uint8_t* header, size_t h
 }
 
 /**
- * Load image using plugin system
+ * Get user-friendly error message from plugin error code
  */
-gboolean image_io_load(ImageDocument* doc, const char* filename) {
+const char* image_io_get_error_message(PluginError error, const char* filename) {
+    static char error_buffer[512];
+
+    switch (error) {
+        case PLUGIN_ERROR_NONE:
+            return "File loaded successfully";
+        case PLUGIN_ERROR_INVALID_PARAMETERS:
+            return "Invalid parameters provided";
+        case PLUGIN_ERROR_FILE_NOT_FOUND:
+            if (filename) {
+                g_snprintf(error_buffer, sizeof(error_buffer), "File not found: %s", filename);
+                return error_buffer;
+            }
+            return "File not found";
+        case PLUGIN_ERROR_FILE_READ_ERROR:
+            return "Failed to read file. The file may be locked or inaccessible.";
+        case PLUGIN_ERROR_FILE_WRITE_ERROR:
+            return "Failed to write file. The file may be locked or the disk may be full.";
+        case PLUGIN_ERROR_UNSUPPORTED_FORMAT:
+            return "Unsupported file format. The file format is not recognized or not supported.";
+        case PLUGIN_ERROR_CORRUPT_FILE:
+            return "File is corrupted or incomplete. The file may be damaged.";
+        case PLUGIN_ERROR_OUT_OF_MEMORY:
+            return "Out of memory. The file is too large to load.";
+        case PLUGIN_ERROR_UNSUPPORTED_FEATURE:
+            return "Unsupported feature. The file uses features that are not supported.";
+        case PLUGIN_ERROR_UNKNOWN:
+        default:
+            return "An unknown error occurred while loading the file.";
+    }
+}
+
+/**
+ * Load image using plugin system
+ * Returns TRUE on success, FALSE on failure.
+ * If error_out is provided, it will be set to the plugin error code.
+ */
+gboolean image_io_load(ImageDocument* doc, const char* filename, PluginError* error_out) {
     FormatHandler* handler;
     uint8_t header[64];
     size_t header_size = 0;
-    PluginError error;
+    PluginError error = PLUGIN_ERROR_NONE;
 
     if (!doc || !filename) {
         g_warning("Invalid parameters for image_io_load");
+        if (error_out) {
+            *error_out = PLUGIN_ERROR_INVALID_PARAMETERS;
+        }
         return FALSE;
     }
 
     /* Read file header for format detection */
     if (!read_file_header(filename, header, sizeof(header), &header_size)) {
         g_warning("Failed to read file header: %s", filename);
+        if (error_out) {
+            *error_out = PLUGIN_ERROR_FILE_READ_ERROR;
+        }
         return FALSE;
     }
 
@@ -52,6 +95,9 @@ gboolean image_io_load(ImageDocument* doc, const char* filename) {
     handler = format_registry_find_loader(filename, header, header_size);
     if (!handler) {
         g_warning("No plugin found to load file: %s", filename);
+        if (error_out) {
+            *error_out = PLUGIN_ERROR_UNSUPPORTED_FORMAT;
+        }
         return FALSE;
     }
 
@@ -60,6 +106,9 @@ gboolean image_io_load(ImageDocument* doc, const char* filename) {
 
     if (error != PLUGIN_ERROR_NONE) {
         g_warning("Plugin failed to load file %s: error %d", filename, error);
+        if (error_out) {
+            *error_out = error;
+        }
         return FALSE;
     }
 
@@ -73,22 +122,30 @@ gboolean image_io_load(ImageDocument* doc, const char* filename) {
     g_free(doc->filename);
     doc->filename = basename;
 
+    if (error_out) {
+        *error_out = PLUGIN_ERROR_NONE;
+    }
     return TRUE;
 }
 
 /**
  * Save image using plugin system
+ * Returns TRUE on success, FALSE on failure.
+ * If error_out is provided, it will be set to the plugin error code.
  */
-gboolean image_io_save(ImageDocument* doc, const char* filename, const SaveOptions* opts) {
+gboolean image_io_save(ImageDocument* doc, const char* filename, const SaveOptions* opts, PluginError* error_out) {
     FormatHandler* handler;
     SaveOptions default_opts;
     SaveOptions* actual_opts = NULL;
-    PluginError error;
+    PluginError error = PLUGIN_ERROR_NONE;
     size_t plugin_options_size = 0;
     void* plugin_data = NULL;
 
     if (!doc || !filename) {
         g_warning("Invalid parameters for image_io_save");
+        if (error_out) {
+            *error_out = PLUGIN_ERROR_INVALID_PARAMETERS;
+        }
         return FALSE;
     }
 
@@ -96,6 +153,9 @@ gboolean image_io_save(ImageDocument* doc, const char* filename, const SaveOptio
     handler = format_registry_find_saver(filename);
     if (!handler) {
         g_warning("No plugin found to save file: %s", filename);
+        if (error_out) {
+            *error_out = PLUGIN_ERROR_UNSUPPORTED_FORMAT;
+        }
         return FALSE;
     }
 
@@ -103,6 +163,9 @@ gboolean image_io_save(ImageDocument* doc, const char* filename, const SaveOptio
     actual_opts = g_malloc(sizeof(SaveOptions));
     if (!actual_opts) {
         g_warning("Failed to allocate memory for save options");
+        if (error_out) {
+            *error_out = PLUGIN_ERROR_OUT_OF_MEMORY;
+        }
         return FALSE;
     }
 
@@ -168,6 +231,9 @@ gboolean image_io_save(ImageDocument* doc, const char* filename, const SaveOptio
             g_free(plugin_data);
         }
         g_free(actual_opts);
+        if (error_out) {
+            *error_out = PLUGIN_ERROR_UNSUPPORTED_FEATURE;
+        }
         return FALSE;
     }
     error = handler->plugin->callbacks.save(doc, filename, actual_opts);
@@ -182,6 +248,9 @@ gboolean image_io_save(ImageDocument* doc, const char* filename, const SaveOptio
 
     if (error != PLUGIN_ERROR_NONE) {
         g_warning("Plugin failed to save file %s: error %d", filename, error);
+        if (error_out) {
+            *error_out = error;
+        }
         return FALSE;
     }
 
@@ -192,5 +261,8 @@ gboolean image_io_save(ImageDocument* doc, const char* filename, const SaveOptio
     doc->file_path = g_strdup(filename);
     doc->modified = FALSE;
 
+    if (error_out) {
+        *error_out = PLUGIN_ERROR_NONE;
+    }
     return TRUE;
 }

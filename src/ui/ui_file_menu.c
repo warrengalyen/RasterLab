@@ -85,19 +85,52 @@ void on_recent_file_activate(GtkMenuItem* menu_item, gpointer user_data) {
 
     if (doc) {
         /* Load the image into the document using plugin system */
-        if (!document_load_image_from_file(doc, file_path)) {
+        PluginError load_error = PLUGIN_ERROR_NONE;
+        gboolean load_result = image_io_load(doc, file_path, &load_error);
+
+        if (!load_result) {
+            /* Get user-friendly error message */
+            const char* error_message = image_io_get_error_message(load_error, file_path);
+
             /* Show error dialog */
             GtkWidget* dialog = gtk_message_dialog_new(
                 GTK_WINDOW(ctx->window),
                 GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
                 GTK_MESSAGE_ERROR,
                 GTK_BUTTONS_OK,
-                "Failed to load image: %s\n\nThe file may be corrupted or in an unsupported format.",
+                "Failed to load image: %s\n\n%s",
+                file_path, error_message);
+
+            gtk_dialog_run(GTK_DIALOG(dialog));
+            gtk_widget_destroy(dialog);
+
+            /* Close the document tab since load failed */
+            ui_close_document_tab(ctx, doc);
+            g_free(basename);
+            return;
+        }
+
+        /* Continue with document initialization */
+        if (!document_load_image_from_file(doc, file_path)) {
+            /* This should not happen if image_io_load succeeded, but handle it anyway */
+            GtkWidget* dialog = gtk_message_dialog_new(
+                GTK_WINDOW(ctx->window),
+                GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+                GTK_MESSAGE_ERROR,
+                GTK_BUTTONS_OK,
+                "Failed to initialize document for: %s",
                 file_path);
 
             gtk_dialog_run(GTK_DIALOG(dialog));
             gtk_widget_destroy(dialog);
-        } else {
+
+            /* Close the document tab since initialization failed */
+            ui_close_document_tab(ctx, doc);
+            g_free(basename);
+            return;
+        }
+
+        {
             /* Update status bar with success message */
             ui_update_status_bar_message(ctx, "Image successfully loaded");
 
@@ -347,9 +380,56 @@ void on_file_open_response(GtkDialog* dialog, gint response_id, gpointer user_da
 
             if (doc) {
                 /* Load the image into the document */
+                PluginError load_error = PLUGIN_ERROR_NONE;
+                gboolean load_result = image_io_load(doc, file_path, &load_error);
+
+                if (!load_result) {
+                    /* Get user-friendly error message */
+                    const char* error_message = image_io_get_error_message(load_error, file_path);
+
+                    /* Show error dialog */
+                    GtkWidget* error_dialog = gtk_message_dialog_new(
+                        GTK_WINDOW(ctx->window),
+                        GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+                        GTK_MESSAGE_ERROR,
+                        GTK_BUTTONS_OK,
+                        "Failed to load image: %s\n\n%s",
+                        file_path, error_message);
+
+                    gtk_dialog_run(GTK_DIALOG(error_dialog));
+                    gtk_widget_destroy(error_dialog);
+
+                    /* Close the document tab since load failed */
+                    ui_close_document_tab(ctx, doc);
+                    g_free(basename);
+                    g_free(file_path);
+                    gtk_widget_destroy(GTK_WIDGET(dialog));
+                    return;
+                }
+
+                /* Continue with document initialization */
                 if (!document_load_image_from_file(doc, file_path)) {
-                    g_warning("Failed to load image: %s", file_path);
-                } else {
+                    /* This should not happen if image_io_load succeeded, but handle it anyway */
+                    GtkWidget* error_dialog = gtk_message_dialog_new(
+                        GTK_WINDOW(ctx->window),
+                        GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+                        GTK_MESSAGE_ERROR,
+                        GTK_BUTTONS_OK,
+                        "Failed to initialize document for: %s",
+                        file_path);
+
+                    gtk_dialog_run(GTK_DIALOG(error_dialog));
+                    gtk_widget_destroy(error_dialog);
+
+                    /* Close the document tab since initialization failed */
+                    ui_close_document_tab(ctx, doc);
+                    g_free(basename);
+                    g_free(file_path);
+                    gtk_widget_destroy(GTK_WIDGET(dialog));
+                    return;
+                }
+
+                {
                     /* Update status bar with success message */
                     ui_update_status_bar_message(ctx, "Image successfully loaded");
 
@@ -540,7 +620,8 @@ void on_file_save(GtkWidget* widget, gpointer data) {
         default_opts.plugin_data = NULL;
     }
 
-    if (document_save_as(doc, doc->file_path, &default_opts)) {
+    PluginError save_error = PLUGIN_ERROR_NONE;
+    if (document_save_as_with_error(doc, doc->file_path, &default_opts, &save_error)) {
         /* Mark document as saved */
         document_mark_saved(doc);
 
@@ -551,7 +632,20 @@ void on_file_save(GtkWidget* widget, gpointer data) {
         /* Update menu states */
         ui_update_menu_and_button_states(ctx);
     } else {
-        g_warning("Failed to save document to %s", doc->file_path);
+        /* Get user-friendly error message */
+        const char* error_message = image_io_get_error_message(save_error, doc->file_path);
+
+        /* Show error dialog */
+        GtkWidget* error_dialog = gtk_message_dialog_new(
+            GTK_WINDOW(ctx->window),
+            GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+            GTK_MESSAGE_ERROR,
+            GTK_BUTTONS_OK,
+            "Failed to save image: %s\n\n%s",
+            doc->file_path, error_message);
+
+        gtk_dialog_run(GTK_DIALOG(error_dialog));
+        gtk_widget_destroy(error_dialog);
     }
 
     /* Clean up plugin data */
@@ -607,7 +701,8 @@ void on_file_save_as_response(GtkDialog* dialog, gint response_id, gpointer user
 
                 if (dialog_result) {
                     /* User clicked OK, proceed with save */
-                    if (document_save_as(doc, file_path, &opts)) {
+                    PluginError save_error = PLUGIN_ERROR_NONE;
+                    if (document_save_as_with_error(doc, file_path, &opts, &save_error)) {
                         /* Update document filename and path */
                         if (doc->file_path) {
                             g_free(doc->file_path);
@@ -633,7 +728,20 @@ void on_file_save_as_response(GtkDialog* dialog, gint response_id, gpointer user
                         /* Update menu states */
                         ui_update_menu_and_button_states(ctx);
                     } else {
-                        g_warning("Failed to save document");
+                        /* Get user-friendly error message */
+                        const char* error_message = image_io_get_error_message(save_error, file_path);
+
+                        /* Show error dialog */
+                        GtkWidget* error_dialog = gtk_message_dialog_new(
+                            GTK_WINDOW(ctx->window),
+                            GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+                            GTK_MESSAGE_ERROR,
+                            GTK_BUTTONS_OK,
+                            "Failed to save image: %s\n\n%s",
+                            file_path, error_message);
+
+                        gtk_dialog_run(GTK_DIALOG(error_dialog));
+                        gtk_widget_destroy(error_dialog);
                     }
                 }
                 /* If dialog_result is FALSE, user cancelled, so don't save */

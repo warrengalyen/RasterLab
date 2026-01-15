@@ -1253,7 +1253,7 @@ gboolean document_load_image_from_file(ImageDocument* doc, const gchar* file_pat
     doc->layers = NULL;
 
     /* Load image using plugin system */
-    result = image_io_load(doc, file_path);
+    result = image_io_load(doc, file_path, NULL);
 
     if (!result) {
         return FALSE;
@@ -1592,9 +1592,16 @@ gboolean document_save_as_jpeg(ImageDocument* doc, const gchar* filename, gint q
  * @param opts Save options (can be NULL to use defaults)
  */
 gboolean document_save_as(ImageDocument* doc, const gchar* filename, const SaveOptions* opts) {
+    return document_save_as_with_error(doc, filename, opts, NULL);
+}
+
+gboolean document_save_as_with_error(ImageDocument* doc, const gchar* filename, const SaveOptions* opts, PluginError* error_out) {
     SaveOptions default_opts;
 
     if (!doc || !filename) {
+        if (error_out) {
+            *error_out = PLUGIN_ERROR_INVALID_PARAMETERS;
+        }
         return FALSE;
     }
 
@@ -1602,7 +1609,7 @@ gboolean document_save_as(ImageDocument* doc, const gchar* filename, const SaveO
     if (opts) {
         /* Use plugin system to save with provided options */
         /* Note: plugin_data should already be allocated and initialized by caller */
-        return image_io_save(doc, filename, opts);
+        return image_io_save(doc, filename, opts, error_out);
     }
 
     /* Set default save options */
@@ -1614,7 +1621,7 @@ gboolean document_save_as(ImageDocument* doc, const gchar* filename, const SaveO
     default_opts.plugin_data = NULL;
 
     /* Use plugin system to save */
-    return image_io_save(doc, filename, &default_opts);
+    return image_io_save(doc, filename, &default_opts, error_out);
 }
 
 /**

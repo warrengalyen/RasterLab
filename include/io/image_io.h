@@ -13,18 +13,28 @@ extern "C" {
  * Load an image file using the plugin system
  * @param doc Document to load image into
  * @param filename Path to the image file
+ * @param error_out Optional pointer to receive the plugin error code (can be NULL)
  * @return TRUE on success, FALSE on failure
  */
-gboolean image_io_load(ImageDocument* doc, const char* filename);
+gboolean image_io_load(ImageDocument* doc, const char* filename, PluginError* error_out);
+
+/**
+ * Get user-friendly error message from plugin error code
+ * @param error The plugin error code
+ * @param filename Optional filename for context in error messages
+ * @return User-friendly error message string (static, do not free)
+ */
+const char* image_io_get_error_message(PluginError error, const char* filename);
 
 /**
  * Save an image file using the plugin system
  * @param doc Document to save
  * @param filename Path to save the file
  * @param opts Save options (can be NULL for defaults)
+ * @param error_out Optional pointer to receive the plugin error code (can be NULL)
  * @return TRUE on success, FALSE on failure
  */
-gboolean image_io_save(ImageDocument* doc, const char* filename, const SaveOptions* opts);
+gboolean image_io_save(ImageDocument* doc, const char* filename, const SaveOptions* opts, PluginError* error_out);
 
 #ifdef __cplusplus
 }
