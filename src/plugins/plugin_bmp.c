@@ -65,8 +65,11 @@ typedef struct {
     /* Palette size (2-256, used when restrict_palette_size is true) */
     int32_t palette_size;
 
+    /* For 16-bpp color: use legacy 15-bit encoding (RGB555) instead of RGB565 */
+    bool use_legacy_15bit;
+
     /* Reserved for future use */
-    uint32_t reserved[2];
+    uint32_t reserved[1];
 } BMPSaveOptions;
 
 /* BMP file signature */
@@ -428,12 +431,24 @@ static PluginError load_bmp(ImageDocument* doc, const char* filename) {
                     break;
                 }
                 case 16: {
-                    /* RGB565 format */
+                    /* Try to detect RGB565 vs RGB555 format */
+                    /* RGB565: bits 11-15 for R, bits 5-10 for G, bits 0-4 for B */
+                    /* RGB555: bits 10-14 for R, bits 5-9 for G, bits 0-4 for B */
                     const uint16_t* pixel = (const uint16_t*)(src_row + x * 2);
                     uint16_t pixel_val = *pixel;
-                    r = ((pixel_val >> 11) & 0x1F) << 3;
-                    g = ((pixel_val >> 5) & 0x3F) << 2;
-                    b = (pixel_val & 0x1F) << 3;
+
+                    /* Check if bit 15 is set - if so, likely RGB565, otherwise try RGB555 */
+                    if (pixel_val & 0x8000) {
+                        /* RGB565 format */
+                        r = ((pixel_val >> 11) & 0x1F) << 3;
+                        g = ((pixel_val >> 5) & 0x3F) << 2;
+                        b = (pixel_val & 0x1F) << 3;
+                    } else {
+                        /* RGB555 format (legacy 15-bit) */
+                        r = ((pixel_val >> 10) & 0x1F) << 3;
+                        g = ((pixel_val >> 5) & 0x1F) << 3;
+                        b = (pixel_val & 0x1F) << 3;
+                    }
                     break;
                 }
                 case 8: {
@@ -751,6 +766,7 @@ static PluginError save_bmp(ImageDocument* doc, const char* filename, const Save
     bool use_rle = false;
     bool restrict_palette = false;
     int32_t palette_size_opt = 256;
+    bool use_legacy_15bit = false;
 
     if (!doc || !filename) {
         return PLUGIN_ERROR_INVALID_PARAMETERS;
@@ -766,6 +782,7 @@ static PluginError save_bmp(ImageDocument* doc, const char* filename, const Save
         use_rle = bmp_opts->use_rle_compression;
         restrict_palette = bmp_opts->restrict_palette_size;
         palette_size_opt = bmp_opts->palette_size;
+        use_legacy_15bit = bmp_opts->use_legacy_15bit;
         if (palette_size_opt < 2)
             palette_size_opt = 2;
         if (palette_size_opt > 256)
@@ -1003,12 +1020,21 @@ static PluginError save_bmp(ImageDocument* doc, const char* filename, const Save
                     dst_row[x * 3 + 1] = g;
                     dst_row[x * 3 + 2] = r;
                 } else if (bit_count == 16) {
-                    /* RGB565 format */
-                    uint16_t r5 = (r >> 3) & 0x1F;
-                    uint16_t g6 = (g >> 2) & 0x3F;
-                    uint16_t b5 = (b >> 3) & 0x1F;
-                    uint16_t pixel_val = (r5 << 11) | (g6 << 5) | b5;
-                    *((uint16_t*)(dst_row + x * 2)) = pixel_val;
+                    if (use_legacy_15bit) {
+                        /* RGB555 format (legacy 15-bit encoding) */
+                        uint16_t r5 = (r >> 3) & 0x1F;
+                        uint16_t g5 = (g >> 3) & 0x1F;
+                        uint16_t b5 = (b >> 3) & 0x1F;
+                        uint16_t pixel_val = (r5 << 10) | (g5 << 5) | b5;
+                        *((uint16_t*)(dst_row + x * 2)) = pixel_val;
+                    } else {
+                        /* RGB565 format */
+                        uint16_t r5 = (r >> 3) & 0x1F;
+                        uint16_t g6 = (g >> 2) & 0x3F;
+                        uint16_t b5 = (b >> 3) & 0x1F;
+                        uint16_t pixel_val = (r5 << 11) | (g6 << 5) | b5;
+                        *((uint16_t*)(dst_row + x * 2)) = pixel_val;
+                    }
                 }
             }
         }
@@ -1207,6 +1233,7 @@ static void init_bmp_save_options(void* plugin_data) {
         opts->use_rle_compression = false;
         opts->restrict_palette_size = false;
         opts->palette_size = 256;
+        opts->use_legacy_15bit = false;
         memset(opts->reserved, 0, sizeof(opts->reserved));
     }
 }
