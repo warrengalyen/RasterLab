@@ -1,5 +1,6 @@
 #include "ui/dialogs/save_options_dialog.h"
 #include "plugins/format_registry.h"
+#include "ui/dialogs/formats/bmp_options_dialog.h"
 #include "ui/dialogs/formats/jpeg_options_dialog.h"
 #include "ui/dialogs/formats/png_options_dialog.h"
 #include <glib.h>
@@ -31,6 +32,9 @@ gboolean save_options_dialog_show(GtkWindow* parent, const char* filename, SaveO
     ext++; /* Skip the dot */
 
     /* Check format and show appropriate dialog */
+    if (g_ascii_strcasecmp(ext, "bmp") == 0) {
+        return bmp_options_dialog_show(parent, opts);
+    }
     if (g_ascii_strcasecmp(ext, "jpg") == 0 || g_ascii_strcasecmp(ext, "jpeg") == 0) {
         return jpeg_options_dialog_show(parent, opts);
     }

@@ -628,6 +628,7 @@ void on_file_save(GtkWidget* widget, gpointer data) {
         /* Update window title and status bar */
         ui_update_window_title(ctx, NULL);
         ui_update_status_bar(ctx, NULL);
+        ui_update_status_bar_message(ctx, "Image successfully saved");
 
         /* Update menu states */
         ui_update_menu_and_button_states(ctx);
@@ -723,6 +724,7 @@ void on_file_save_as_response(GtkDialog* dialog, gint response_id, gpointer user
                         /* Update window title to reflect new filename */
                         ui_update_window_title(ctx, NULL);
                         ui_update_status_bar(ctx, NULL);
+                        ui_update_status_bar_message(ctx, "Image successfully saved");
                         ui_update_recent_files_menu(ctx);
 
                         /* Update menu states */

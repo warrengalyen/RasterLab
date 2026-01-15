@@ -668,6 +668,70 @@ static bool quantize_to_palette(const guchar* src_data, int src_stride,
 }
 
 /**
+ * Quantize image to grayscale palette
+ * For grayscale BMP files, creates a palette where R=G=B for each entry
+ */
+static bool quantize_to_grayscale_palette(const guchar* src_data, int src_stride,
+                                          uint32_t width, uint32_t height,
+                                          RGBQUAD* palette, uint32_t palette_size,
+                                          uint8_t* dst_data, uint32_t dst_row_size) {
+    /* Create grayscale palette - simple ramp from black to white */
+    for (uint32_t i = 0; i < palette_size; i++) {
+        uint8_t gray_value;
+        if (palette_size == 1) {
+            gray_value = 128; /* Mid-gray for single color */
+        } else {
+            /* Linear ramp: 0 to 255 */
+            gray_value = (uint8_t)((i * 255) / (palette_size - 1));
+        }
+        palette[i].red = gray_value;
+        palette[i].green = gray_value;
+        palette[i].blue = gray_value;
+        palette[i].reserved = 0;
+    }
+
+    /* Convert image to grayscale and map to palette */
+    for (uint32_t y = 0; y < height; y++) {
+        const guchar* src_row = src_data + y * src_stride;
+        uint8_t* dst_row = dst_data + y * dst_row_size;
+
+        for (uint32_t x = 0; x < width; x++) {
+            uint32_t* pixel = (uint32_t*)(src_row + x * 4);
+            uint8_t a = (*pixel >> 24) & 0xFF;
+            uint8_t r = (*pixel >> 16) & 0xFF;
+            uint8_t g = (*pixel >> 8) & 0xFF;
+            uint8_t b = *pixel & 0xFF;
+
+            /* Unpremultiply if needed */
+            if (a != 0 && a != 255) {
+                r = (r * 255 + a / 2) / a;
+                g = (g * 255 + a / 2) / a;
+                b = (b * 255 + a / 2) / a;
+            }
+
+            /* Convert to grayscale using luminance formula (ITU-R BT.601) */
+            uint8_t gray = (uint8_t)(0.299 * r + 0.587 * g + 0.114 * b + 0.5);
+
+            /* Map to palette index */
+            uint8_t palette_idx;
+            if (palette_size == 1) {
+                palette_idx = 0;
+            } else if (palette_size == 2) {
+                /* For 1-bpp, use simple threshold: < 128 = 0 (black), >= 128 = 1 (white) */
+                palette_idx = (gray >= 128) ? 1 : 0;
+            } else {
+                /* Map gray value (0-255) to palette index (0 to palette_size-1) */
+                palette_idx = (uint8_t)((gray * (palette_size - 1)) / 255);
+            }
+
+            dst_row[x] = palette_idx;
+        }
+    }
+
+    return true;
+}
+
+/**
  * Compress 8-bit image data using RLE8 compression
  */
 static uint32_t compress_rle8(const uint8_t* src_data, uint32_t src_row_size,
@@ -911,9 +975,17 @@ static PluginError save_bmp(ImageDocument* doc, const char* filename, const Save
             return PLUGIN_ERROR_OUT_OF_MEMORY;
         }
 
-        /* Quantize to palette */
-        if (!quantize_to_palette(surface_data, surface_stride, width, height,
-                                 palette, palette_size, image_data, indexed_row_size)) {
+        /* Quantize to palette - use grayscale quantization for grayscale mode */
+        bool quantize_result;
+        if (color_model == BMP_COLOR_MODEL_GRAYSCALE) {
+            quantize_result = quantize_to_grayscale_palette(surface_data, surface_stride, width, height,
+                                                            palette, palette_size, image_data, indexed_row_size);
+        } else {
+            quantize_result = quantize_to_palette(surface_data, surface_stride, width, height,
+                                                  palette, palette_size, image_data, indexed_row_size);
+        }
+
+        if (!quantize_result) {
             g_free(image_data);
             g_free(palette);
             cairo_surface_destroy(composite);
@@ -939,6 +1011,9 @@ static PluginError save_bmp(ImageDocument* doc, const char* filename, const Save
                 if (bit_count == 4) {
                     for (uint32_t x = 0; x < width; x++) {
                         uint8_t idx = src_row[x];
+                        /* Clamp index to valid range (0-15) */
+                        if (idx > 15)
+                            idx = 15;
                         if (x % 2 == 0) {
                             dst_row[x / 2] = (idx & 0x0F) << 4;
                         } else {
@@ -948,9 +1023,12 @@ static PluginError save_bmp(ImageDocument* doc, const char* filename, const Save
                 } else if (bit_count == 1) {
                     for (uint32_t x = 0; x < width; x++) {
                         uint8_t idx = src_row[x];
+                        /* Clamp index to valid range (0-1) and convert to bit */
                         uint32_t byte_idx = x / 8;
                         uint32_t bit_pos = 7 - (x % 8);
-                        if (idx & 1) {
+                        if (idx > 1)
+                            idx = (idx > 128) ? 1 : 0; /* Threshold if out of range */
+                        if (idx != 0) {
                             dst_row[byte_idx] |= (1 << bit_pos);
                         }
                     }
@@ -1091,18 +1169,23 @@ static PluginError save_bmp(ImageDocument* doc, const char* filename, const Save
     /* Initialize info header */
     memset(&info_header, 0, sizeof(BITMAPINFOHEADER));
     info_header.size = 40;
+    /* Width is always positive in BMP format */
+    info_header.width = (int32_t)width;
+    /* Height sign indicates row order: positive = bottom-up, negative = top-down */
     /* For RLE compression, always use top-down (negative height) */
     if (compression != 0) {
-        info_header.width = (int32_t)width;
         info_header.height = -(int32_t)height; /* Top-down for RLE */
     } else {
-        info_header.width = flip_row_order ? (int32_t)width : -(int32_t)width;
-        info_header.height = flip_row_order ? (int32_t)height : -(int32_t)height;
+        /* flip_row_order = false means bottom-up (positive height, default BMP),
+           flip_row_order = true means top-down (negative height) */
+        info_header.height = flip_row_order ? -(int32_t)height : (int32_t)height;
     }
     info_header.planes = 1;
     info_header.bit_count = bit_count;
     info_header.compression = compression;
-    info_header.size_image = compression ? image_data_size : 0;
+    /* For uncompressed images, size_image can be 0 (calculated from dimensions),
+       but it's safer to set it explicitly for indexed color bitmaps */
+    info_header.size_image = compression ? image_data_size : (bit_count <= 8 ? image_data_size : 0);
     info_header.clr_used = (bit_count <= 8) ? palette_size : 0;
     info_header.clr_important = 0;
 
@@ -1177,7 +1260,18 @@ static PluginError save_bmp(ImageDocument* doc, const char* filename, const Save
             return PLUGIN_ERROR_FILE_WRITE_ERROR;
         }
     } else if (flip_row_order) {
-        /* Bottom-up: write rows in reverse order */
+        /* Top-down: write rows in normal order (row 0 = top row first) */
+        if (fwrite(image_data, 1, image_data_size, outfile) != image_data_size) {
+            fclose(outfile);
+            g_free(image_data);
+            if (palette) {
+                g_free(palette);
+            }
+            cairo_surface_destroy(composite);
+            return PLUGIN_ERROR_FILE_WRITE_ERROR;
+        }
+    } else {
+        /* Bottom-up: write rows in reverse order (row height-1 = bottom row first) */
         for (int32_t y = height - 1; y >= 0; y--) {
             const uint8_t* row = image_data + y * row_size;
             if (fwrite(row, 1, row_size, outfile) != row_size) {
@@ -1190,27 +1284,16 @@ static PluginError save_bmp(ImageDocument* doc, const char* filename, const Save
                 return PLUGIN_ERROR_FILE_WRITE_ERROR;
             }
         }
-    } else {
-        /* Top-down: write rows in normal order */
-        if (fwrite(image_data, 1, image_data_size, outfile) != image_data_size) {
-            fclose(outfile);
-            g_free(image_data);
-            if (palette) {
-                g_free(palette);
-            }
-            cairo_surface_destroy(composite);
-            return PLUGIN_ERROR_FILE_WRITE_ERROR;
+
+        fclose(outfile);
+        g_free(image_data);
+        if (palette) {
+            g_free(palette);
         }
-    }
+        cairo_surface_destroy(composite);
 
-    fclose(outfile);
-    g_free(image_data);
-    if (palette) {
-        g_free(palette);
+        return PLUGIN_ERROR_NONE;
     }
-    cairo_surface_destroy(composite);
-
-    return PLUGIN_ERROR_NONE;
 }
 
 /**
@@ -1226,7 +1309,7 @@ static size_t get_bmp_save_options_size(void) {
 static void init_bmp_save_options(void* plugin_data) {
     BMPSaveOptions* opts = (BMPSaveOptions*)plugin_data;
     if (opts) {
-        opts->flip_row_order = true;
+        opts->flip_row_order = false;
         opts->color_model = BMP_COLOR_MODEL_AUTO;
         opts->color_depth = BMP_COLOR_DEPTH_24BPP;
         opts->grayscale_depth = BMP_GRAYSCALE_DEPTH_8BPP;

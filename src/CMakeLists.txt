@@ -87,6 +87,7 @@ set(SOURCES
     ui/dialogs/color_chooser_dialog.c
     ui/dialogs/convolution_dialog.c
     ui/dialogs/curves_dialog.c
+    ui/dialogs/formats/bmp_options_dialog.c
     ui/dialogs/formats/jpeg_options_dialog.c
     ui/dialogs/formats/png_options_dialog.c
     ui/dialogs/gamma_dialog.c
