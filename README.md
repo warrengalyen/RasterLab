@@ -6,7 +6,7 @@ A full-featured image editor written in C.
 
 ### File Operations
 
-- Open and save images (PNG, JPEG)
+- Open and save images (PNG, JPEG, BMP)
 - Multi-document support with tabbed interface
 - Autosave functionality
 - Recent files tracking

@@ -1,5 +1,6 @@
 #include "image_format_plugin.h"
 #include "plugins/format_registry.h"
+#include "plugins/plugin_bmp.h"
 #include "plugins/plugin_host_api.h"
 #include "plugins/plugin_jpeg.h"
 #include "plugins/plugin_loader.h"
@@ -7,13 +8,14 @@
 #include <glib.h>
 
 /**
- * Register built-in plugins (PNG, JPEG)
+ * Register built-in plugins (PNG, JPEG, BMP)
  * These are compiled directly into the application
  */
 void builtin_plugins_register(void) {
     ImageFormatHostAPI* host_api = plugin_host_api_get();
     ImageFormatPlugin png_plugin;
     ImageFormatPlugin jpeg_plugin;
+    ImageFormatPlugin bmp_plugin;
 
     /* Register PNG plugin (using libpng) */
 #ifdef HAVE_LIBPNG
@@ -46,4 +48,16 @@ void builtin_plugins_register(void) {
 #else
     g_message("JPEG plugin not available (HAVE_LIBJPEG not defined)");
 #endif
+
+    /* Register BMP plugin */
+    g_message("Registering built-in BMP plugin");
+    if (plugin_init_bmp(host_api, &bmp_plugin)) {
+        if (format_registry_register_builtin(&bmp_plugin)) {
+            g_message("Successfully registered BMP plugin");
+        } else {
+            g_message("Failed to register BMP plugin with format registry");
+        }
+    } else {
+        g_message("Failed to initialize BMP plugin");
+    }
 }

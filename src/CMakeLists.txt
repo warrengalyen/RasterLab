@@ -50,6 +50,7 @@ set(SOURCES
     plugins/builtin_plugins.c
     plugins/format_registry.c
     plugins/plugin_host_api.c
+    plugins/plugin_bmp.c
     plugins/plugin_jpeg.c
     plugins/plugin_loader.c
     plugins/plugin_png.c
