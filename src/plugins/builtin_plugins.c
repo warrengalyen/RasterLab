@@ -4,6 +4,7 @@
 #include "plugins/plugin_host_api.h"
 #include "plugins/plugin_jpeg.h"
 #include "plugins/plugin_loader.h"
+#include "plugins/plugin_netpbm.h"
 #include "plugins/plugin_png.h"
 #include <glib.h>
 
@@ -16,6 +17,7 @@ void builtin_plugins_register(void) {
     ImageFormatPlugin png_plugin;
     ImageFormatPlugin jpeg_plugin;
     ImageFormatPlugin bmp_plugin;
+    ImageFormatPlugin netpbm_plugin;
 
     /* Register PNG plugin (using libpng) */
 #ifdef HAVE_LIBPNG
@@ -59,5 +61,17 @@ void builtin_plugins_register(void) {
         }
     } else {
         g_message("Failed to initialize BMP plugin");
+    }
+
+    /* Register Netpbm plugin */
+    g_message("Registering built-in Netpbm plugin");
+    if (plugin_init_netpbm(host_api, &netpbm_plugin)) {
+        if (format_registry_register_builtin(&netpbm_plugin)) {
+            g_message("Successfully registered Netpbm plugin");
+        } else {
+            g_message("Failed to register Netpbm plugin with format registry");
+        }
+    } else {
+        g_message("Failed to initialize Netpbm plugin");
     }
 }

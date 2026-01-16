@@ -53,6 +53,7 @@ set(SOURCES
     plugins/plugin_bmp.c
     plugins/plugin_jpeg.c
     plugins/plugin_loader.c
+    plugins/plugin_netpbm.c
     plugins/plugin_png.c
     render/compositor.c
     render/dirty.c
