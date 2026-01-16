@@ -71,23 +71,11 @@ static bool can_load_tga(const char* filename, const uint8_t* header, size_t hea
 
 /**
  * Check if plugin can save to TGA format
+ * This plugin is read-only, so always return false
  */
 static bool can_save_tga(const char* filename) {
-    if (!filename) {
-        return false;
-    }
-
-    const char* ext = strrchr(filename, '.');
-    if (!ext) {
-        return false;
-    }
-
-    /* Check for .tga extension (case-insensitive) */
-    if (g_ascii_strcasecmp(ext, ".tga") == 0) {
-        return true;
-    }
-
-    return false;
+    (void)filename; /* Unused */
+    return false;   /* Read-only plugin, saving not supported */
 }
 
 /**
@@ -528,16 +516,6 @@ static PluginError load_tga(ImageDocument* doc, const char* filename) {
 }
 
 /**
- * Save TGA image (not implemented - read-only plugin)
- */
-static PluginError save_tga(ImageDocument* doc, const char* filename, const SaveOptions* opts) {
-    (void)doc;
-    (void)filename;
-    (void)opts;
-    return PLUGIN_ERROR_UNSUPPORTED_FORMAT;
-}
-
-/**
  * Initialize TGA plugin
  */
 bool plugin_init_tga(const ImageFormatHostAPI* host, ImageFormatPlugin* out_plugin) {
@@ -558,8 +536,8 @@ bool plugin_init_tga(const ImageFormatHostAPI* host, ImageFormatPlugin* out_plug
 
     out_plugin->callbacks.can_load = can_load_tga;
     out_plugin->callbacks.load = load_tga;
-    out_plugin->callbacks.can_save = can_save_tga;
-    out_plugin->callbacks.save = save_tga;
+    out_plugin->callbacks.can_save = can_save_tga; /* Read-only plugin, saving not supported */
+    out_plugin->callbacks.save = NULL;
 
     return true;
 }

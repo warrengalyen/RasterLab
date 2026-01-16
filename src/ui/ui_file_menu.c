@@ -834,6 +834,12 @@ void on_file_save_as(GtkWidget* widget, gpointer data) {
                 continue;
             }
 
+            /* Skip if plugin doesn't support saving */
+            if (!handler->plugin || !handler->plugin->callbacks.save ||
+                !handler->plugin->callbacks.can_save) {
+                continue;
+            }
+
             /* Skip if we've already added a filter for this format name */
             if (g_hash_table_contains(seen_formats, handler->format_info.name)) {
                 continue;

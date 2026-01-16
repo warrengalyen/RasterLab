@@ -39,25 +39,11 @@ static bool can_load_netpbm(const char* filename, const uint8_t* header, size_t 
 
 /**
  * Check if plugin can save to Netpbm format
+ * This plugin is read-only, so always return false
  */
 static bool can_save_netpbm(const char* filename) {
-    if (!filename) {
-        return false;
-    }
-
-    const char* ext = strrchr(filename, '.');
-    if (!ext) {
-        return false;
-    }
-
-    /* Check for .ppm, .pgm, .pbm extensions (case-insensitive) */
-    if (g_ascii_strcasecmp(ext, ".ppm") == 0 ||
-        g_ascii_strcasecmp(ext, ".pgm") == 0 ||
-        g_ascii_strcasecmp(ext, ".pbm") == 0) {
-        return true;
-    }
-
-    return false;
+    (void)filename; /* Unused */
+    return false;   /* Read-only plugin, saving not supported */
 }
 
 /**
@@ -432,16 +418,6 @@ static PluginError load_netpbm(ImageDocument* doc, const char* filename) {
 }
 
 /**
- * Save Netpbm image (not implemented - read-only plugin)
- */
-static PluginError save_netpbm(ImageDocument* doc, const char* filename, const SaveOptions* opts) {
-    (void)doc;
-    (void)filename;
-    (void)opts;
-    return PLUGIN_ERROR_UNSUPPORTED_FORMAT;
-}
-
-/**
  * Initialize Netpbm plugin
  */
 bool plugin_init_netpbm(const ImageFormatHostAPI* host, ImageFormatPlugin* out_plugin) {
@@ -462,8 +438,8 @@ bool plugin_init_netpbm(const ImageFormatHostAPI* host, ImageFormatPlugin* out_p
 
     out_plugin->callbacks.can_load = can_load_netpbm;
     out_plugin->callbacks.load = load_netpbm;
-    out_plugin->callbacks.can_save = can_save_netpbm;
-    out_plugin->callbacks.save = save_netpbm;
+    out_plugin->callbacks.can_save = can_save_netpbm; /* Read-only plugin, saving not supported */
+    out_plugin->callbacks.save = NULL;
 
     return true;
 }
