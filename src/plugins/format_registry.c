@@ -132,9 +132,14 @@ gboolean format_registry_register(PluginHandle* plugin_handle, ImageFormatPlugin
     }
 
     /* Validate plugin callbacks */
-    if (!plugin->callbacks.can_load || !plugin->callbacks.load ||
-        !plugin->callbacks.can_save || !plugin->callbacks.save) {
-        g_warning("Plugin missing required callbacks");
+    if (!plugin->callbacks.can_load || !plugin->callbacks.load) {
+        g_warning("Plugin missing required load callbacks");
+        return FALSE;
+    }
+
+    /* can_save is required for all plugins, but save can be NULL (for read-only plugins) */
+    if (!plugin->callbacks.can_save) {
+        g_warning("Plugin missing required can_save callback");
         return FALSE;
     }
 
@@ -188,9 +193,14 @@ gboolean format_registry_register_builtin(ImageFormatPlugin* plugin) {
     }
 
     /* Validate plugin callbacks */
-    if (!plugin->callbacks.can_load || !plugin->callbacks.load ||
-        !plugin->callbacks.can_save || !plugin->callbacks.save) {
-        g_warning("Plugin missing required callbacks");
+    if (!plugin->callbacks.can_load || !plugin->callbacks.load) {
+        g_warning("Plugin missing required load callbacks");
+        return FALSE;
+    }
+
+    /* can_save is required for all plugins, but save can be NULL (for read-only plugins) */
+    if (!plugin->callbacks.can_save) {
+        g_warning("Plugin doesn't support saving");
         return FALSE;
     }
 

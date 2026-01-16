@@ -5,6 +5,7 @@
 #include "plugins/plugin_jpeg.h"
 #include "plugins/plugin_loader.h"
 #include "plugins/plugin_netpbm.h"
+#include "plugins/plugin_pcx.h"
 #include "plugins/plugin_png.h"
 #include "plugins/plugin_tga.h"
 #include <glib.h>
@@ -19,6 +20,7 @@ void builtin_plugins_register(void) {
     ImageFormatPlugin jpeg_plugin;
     ImageFormatPlugin bmp_plugin;
     ImageFormatPlugin netpbm_plugin;
+    ImageFormatPlugin pcx_plugin;
     ImageFormatPlugin tga_plugin;
 
     /* Register PNG plugin (using libpng) */
@@ -75,6 +77,18 @@ void builtin_plugins_register(void) {
         }
     } else {
         g_message("Failed to initialize Netpbm plugin");
+    }
+
+    /* Register PCX plugin */
+    g_message("Registering built-in PCX plugin");
+    if (plugin_init_pcx(host_api, &pcx_plugin)) {
+        if (format_registry_register_builtin(&pcx_plugin)) {
+            g_message("Successfully registered PCX plugin");
+        } else {
+            g_message("Failed to register PCX plugin with format registry");
+        }
+    } else {
+        g_message("Failed to initialize PCX plugin");
     }
 
     /* Register TGA plugin */
