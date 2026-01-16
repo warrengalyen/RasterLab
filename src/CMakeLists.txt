@@ -54,6 +54,7 @@ set(SOURCES
     plugins/plugin_jpeg.c
     plugins/plugin_loader.c
     plugins/plugin_netpbm.c
+    plugins/plugin_pcx.c
     plugins/plugin_png.c
     plugins/plugin_tga.c
     render/compositor.c
