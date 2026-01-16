@@ -6,6 +6,7 @@
 #include "plugins/plugin_loader.h"
 #include "plugins/plugin_netpbm.h"
 #include "plugins/plugin_png.h"
+#include "plugins/plugin_tga.h"
 #include <glib.h>
 
 /**
@@ -18,6 +19,7 @@ void builtin_plugins_register(void) {
     ImageFormatPlugin jpeg_plugin;
     ImageFormatPlugin bmp_plugin;
     ImageFormatPlugin netpbm_plugin;
+    ImageFormatPlugin tga_plugin;
 
     /* Register PNG plugin (using libpng) */
 #ifdef HAVE_LIBPNG
@@ -73,5 +75,17 @@ void builtin_plugins_register(void) {
         }
     } else {
         g_message("Failed to initialize Netpbm plugin");
+    }
+
+    /* Register TGA plugin */
+    g_message("Registering built-in TGA plugin");
+    if (plugin_init_tga(host_api, &tga_plugin)) {
+        if (format_registry_register_builtin(&tga_plugin)) {
+            g_message("Successfully registered TGA plugin");
+        } else {
+            g_message("Failed to register TGA plugin with format registry");
+        }
+    } else {
+        g_message("Failed to initialize TGA plugin");
     }
 }

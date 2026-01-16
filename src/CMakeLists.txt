@@ -55,6 +55,7 @@ set(SOURCES
     plugins/plugin_loader.c
     plugins/plugin_netpbm.c
     plugins/plugin_png.c
+    plugins/plugin_tga.c
     render/compositor.c
     render/dirty.c
     render/layer.c
