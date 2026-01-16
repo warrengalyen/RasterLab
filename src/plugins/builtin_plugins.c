@@ -8,6 +8,7 @@
 #include "plugins/plugin_pcx.h"
 #include "plugins/plugin_png.h"
 #include "plugins/plugin_tga.h"
+#include "plugins/plugin_xpm.h"
 #include <glib.h>
 
 /**
@@ -22,6 +23,7 @@ void builtin_plugins_register(void) {
     ImageFormatPlugin netpbm_plugin;
     ImageFormatPlugin pcx_plugin;
     ImageFormatPlugin tga_plugin;
+    ImageFormatPlugin xpm_plugin;
 
     /* Register PNG plugin (using libpng) */
 #ifdef HAVE_LIBPNG
@@ -101,5 +103,17 @@ void builtin_plugins_register(void) {
         }
     } else {
         g_message("Failed to initialize TGA plugin");
+    }
+
+    /* Register XPM plugin */
+    g_message("Registering built-in XPM plugin");
+    if (plugin_init_xpm(host_api, &xpm_plugin)) {
+        if (format_registry_register_builtin(&xpm_plugin)) {
+            g_message("Successfully registered XPM plugin");
+        } else {
+            g_message("Failed to register XPM plugin with format registry");
+        }
+    } else {
+        g_message("Failed to initialize XPM plugin");
     }
 }

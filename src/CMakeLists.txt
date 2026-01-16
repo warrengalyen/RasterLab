@@ -57,6 +57,7 @@ set(SOURCES
     plugins/plugin_pcx.c
     plugins/plugin_png.c
     plugins/plugin_tga.c
+    plugins/plugin_xpm.c
     render/compositor.c
     render/dirty.c
     render/layer.c
