@@ -336,7 +336,6 @@ static PluginError load_cut(ImageDocument* doc, const char* filename) {
     palette = g_malloc(768); /* 256 entries * 3 bytes (RGB) */
     if (palette) {
         has_palette = read_pal_palette(filename, palette);
-        g_warning("CUT palette read: %d\n", has_palette);
     }
 
     /* If no palette file, create a grayscale palette */

@@ -2,6 +2,7 @@
 #include "plugins/format_registry.h"
 #include "plugins/plugin_bmp.h"
 #include "plugins/plugin_cut.h"
+#include "plugins/plugin_deep.h"
 #include "plugins/plugin_host_api.h"
 #include "plugins/plugin_jpeg.h"
 #include "plugins/plugin_loader.h"
@@ -28,6 +29,7 @@ void builtin_plugins_register(void) {
     ImageFormatPlugin xpm_plugin;
     ImageFormatPlugin cut_plugin;
     ImageFormatPlugin ras_plugin;
+    ImageFormatPlugin deep_plugin;
 
     /* Register PNG plugin (using libpng) */
 #ifdef HAVE_LIBPNG
@@ -143,5 +145,17 @@ void builtin_plugins_register(void) {
         }
     } else {
         g_message("Failed to initialize RAS plugin");
+    }
+
+    /* Register DEEP plugin */
+    g_message("Registering built-in DEEP plugin");
+    if (plugin_init_deep(host_api, &deep_plugin)) {
+        if (format_registry_register_builtin(&deep_plugin)) {
+            g_message("Successfully registered DEEP plugin");
+        } else {
+            g_message("Failed to register DEEP plugin with format registry");
+        }
+    } else {
+        g_message("Failed to initialize DEEP plugin");
     }
 }

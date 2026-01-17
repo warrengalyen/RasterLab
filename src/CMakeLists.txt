@@ -60,6 +60,7 @@ set(SOURCES
     plugins/plugin_tga.c
     plugins/plugin_xpm.c
     plugins/plugin_cut.c
+    plugins/plugin_deep.c
     render/compositor.c
     render/dirty.c
     render/layer.c
