@@ -61,6 +61,7 @@ set(SOURCES
     plugins/plugin_xpm.c
     plugins/plugin_cut.c
     plugins/plugin_deep.c
+    plugins/plugin_webp.c
     render/compositor.c
     render/dirty.c
     render/layer.c
@@ -355,6 +356,76 @@ if(LIBPNG_FOUND)
     target_compile_definitions(rasterlab PRIVATE HAVE_LIBPNG=1)
 else()
     target_compile_definitions(rasterlab PRIVATE HAVE_LIBPNG=0)
+endif()
+
+# Link libwebp if available
+if(LIBWEBP_FOUND)
+    if(LIBWEBP_TARGET AND TARGET ${LIBWEBP_TARGET})
+        # Link against the CMake target (when building from source via ExternalProject)
+        # Explicitly set include directories to use installed headers (not system headers)
+        get_target_property(WEBP_INCLUDE_DIRS ${LIBWEBP_TARGET} INTERFACE_INCLUDE_DIRECTORIES)
+        if(WEBP_INCLUDE_DIRS)
+            # Add as SYSTEM include so it's treated as a system header (won't generate warnings)
+            # but use BEFORE to ensure it comes before other system includes
+            target_include_directories(rasterlab PRIVATE BEFORE SYSTEM ${WEBP_INCLUDE_DIRS})
+            message(STATUS "Using libwebp include directories (BEFORE SYSTEM): ${WEBP_INCLUDE_DIRS}")
+        endif()
+        target_link_libraries(rasterlab ${LIBWEBP_TARGET} webpdemux)
+        message(STATUS "Linking against libwebp target: ${LIBWEBP_TARGET} and webpdemux")
+        
+        # Add dependency to ensure libwebp is built before the application
+        if(TARGET libwebp_external)
+            add_dependencies(rasterlab libwebp_external)
+        endif()
+        
+        message(STATUS "libwebp shared library will be copied to: ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
+    elseif(LIBWEBP_LIBRARIES)
+        # Link against pkg-config found library (system libwebp)
+        target_link_libraries(rasterlab ${LIBWEBP_LIBRARIES})
+        target_compile_options(rasterlab PRIVATE ${LIBWEBP_CFLAGS_OTHER})
+        message(STATUS "Linking against system libwebp: ${LIBWEBP_LIBRARIES}")
+        # Also link webpdemux if available
+        if(LIBWEBPDEMUX_FOUND AND LIBWEBPDEMUX_LIBRARIES)
+            target_link_libraries(rasterlab ${LIBWEBPDEMUX_LIBRARIES})
+            target_compile_options(rasterlab PRIVATE ${LIBWEBPDEMUX_CFLAGS_OTHER})
+            message(STATUS "Linking against system libwebpdemux: ${LIBWEBPDEMUX_LIBRARIES}")
+        endif()
+    else()
+        # Try to find and link webp library directly
+        find_library(WEBP_LIB
+            NAMES webp libwebp
+            PATHS "${CMAKE_SOURCE_DIR}/lib/libwebp/.libs"
+                  "${CMAKE_SOURCE_DIR}/lib/libwebp/build"
+                  /usr/lib
+                  /usr/local/lib
+                  /opt/local/lib
+        )
+        if(WEBP_LIB)
+            target_link_libraries(rasterlab ${WEBP_LIB})
+            # Also try to find webpdemux
+            find_library(WEBPDEMUX_LIB
+                NAMES webpdemux libwebpdemux
+                PATHS "${CMAKE_SOURCE_DIR}/lib/libwebp/.libs"
+                      "${CMAKE_SOURCE_DIR}/lib/libwebp/build"
+                      /usr/lib
+                      /usr/local/lib
+                      /opt/local/lib
+            )
+            if(WEBPDEMUX_LIB)
+                target_link_libraries(rasterlab ${WEBPDEMUX_LIB})
+                message(STATUS "Linking against libwebp: ${WEBP_LIB} and ${WEBPDEMUX_LIB}")
+            else()
+                target_link_libraries(rasterlab ${WEBP_LIB})
+                message(STATUS "Linking against libwebp: ${WEBP_LIB}")
+                message(WARNING "libwebpdemux not found. Animated WebP support may not work.")
+            endif()
+        else()
+            message(WARNING "libwebp library not found, but headers were found. WebP plugin may not work.")
+        endif()
+    endif()
+    target_compile_definitions(rasterlab PRIVATE HAVE_LIBWEBP=1)
+else()
+    target_compile_definitions(rasterlab PRIVATE HAVE_LIBWEBP=0)
 endif()
 
 # Add compile flags from pkg-config

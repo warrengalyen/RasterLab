@@ -11,8 +11,10 @@
 #include "plugins/plugin_png.h"
 #include "plugins/plugin_ras.h"
 #include "plugins/plugin_tga.h"
+#include "plugins/plugin_webp.h"
 #include "plugins/plugin_xpm.h"
 #include <glib.h>
+
 
 /**
  * Register built-in plugins (PNG, JPEG, BMP)
@@ -30,6 +32,7 @@ void builtin_plugins_register(void) {
     ImageFormatPlugin cut_plugin;
     ImageFormatPlugin ras_plugin;
     ImageFormatPlugin deep_plugin;
+    ImageFormatPlugin webp_plugin;
 
     /* Register PNG plugin (using libpng) */
 #ifdef HAVE_LIBPNG
@@ -158,4 +161,20 @@ void builtin_plugins_register(void) {
     } else {
         g_message("Failed to initialize DEEP plugin");
     }
+
+    /* Register WebP plugin (using libwebp) */
+#ifdef HAVE_LIBWEBP
+    g_message("Registering built-in WebP plugin");
+    if (plugin_init_webp(host_api, &webp_plugin)) {
+        if (format_registry_register_builtin(&webp_plugin)) {
+            g_message("Successfully registered WebP plugin");
+        } else {
+            g_message("Failed to register WebP plugin with format registry");
+        }
+    } else {
+        g_message("Failed to initialize WebP plugin (libwebp may not be available)");
+    }
+#else
+    g_message("WebP plugin not available (HAVE_LIBWEBP not defined)");
+#endif
 }

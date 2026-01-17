@@ -482,6 +482,194 @@ else()
     set(HAVE_LIBPNG 0)
 endif()
 
+# Check if libwebp submodule exists
+set(LIBWEBP_FOUND FALSE)
+set(LIBWEBP_LIBRARIES "")
+set(LIBWEBP_TARGET "")
+
+if(EXISTS "${CMAKE_SOURCE_DIR}/lib/libwebp/CMakeLists.txt")
+    message(STATUS "libwebp submodule found, building from source")
+    
+    # Set up paths for ExternalProject
+    set(LIBWEBP_BUILD_DIR "${CMAKE_BINARY_DIR}/libwebp_build")
+    set(LIBWEBP_INSTALL_DIR "${CMAKE_BINARY_DIR}/libwebp_install")
+    
+    # Determine library name based on platform
+    if(WIN32)
+        # On Windows, libwebp outputs libwebp.dll
+        set(LIBWEBP_DLL_NAME "libwebp.dll")
+        set(LIBWEBP_DLL_PATH "${LIBWEBP_INSTALL_DIR}/bin/${LIBWEBP_DLL_NAME}")
+        
+        # libwebpdemux outputs libwebpdemux.dll
+        set(LIBWEBPDEMUX_DLL_NAME "libwebpdemux.dll")
+        set(LIBWEBPDEMUX_DLL_PATH "${LIBWEBP_INSTALL_DIR}/bin/${LIBWEBPDEMUX_DLL_NAME}")
+        
+        # For MinGW, the import library is libwebp.dll.a
+        if(MINGW)
+            set(LIBWEBP_IMPLIB_NAME "libwebp.dll.a")
+            set(LIBWEBPDEMUX_IMPLIB_NAME "libwebpdemux.dll.a")
+        else()
+            set(LIBWEBP_IMPLIB_NAME "webp.lib")
+            set(LIBWEBPDEMUX_IMPLIB_NAME "webpdemux.lib")
+        endif()
+        set(LIBWEBP_IMPLIB_PATH "${LIBWEBP_INSTALL_DIR}/lib/${LIBWEBP_IMPLIB_NAME}")
+        set(LIBWEBPDEMUX_IMPLIB_PATH "${LIBWEBP_INSTALL_DIR}/lib/${LIBWEBPDEMUX_IMPLIB_NAME}")
+    else()
+        # On Unix-like systems, shared library is in lib/
+        set(LIBWEBP_LIB_NAME "libwebp${CMAKE_SHARED_LIBRARY_SUFFIX}")
+        set(LIBWEBP_LIB_PATH "${LIBWEBP_INSTALL_DIR}/lib/${LIBWEBP_LIB_NAME}")
+        set(LIBWEBPDEMUX_LIB_NAME "libwebpdemux${CMAKE_SHARED_LIBRARY_SUFFIX}")
+        set(LIBWEBPDEMUX_LIB_PATH "${LIBWEBP_INSTALL_DIR}/lib/${LIBWEBPDEMUX_LIB_NAME}")
+    endif()
+    
+    # Configure CMake arguments for libwebp
+    # Only build shared library, not static
+    set(LIBWEBP_CMAKE_ARGS
+        -DCMAKE_INSTALL_PREFIX=${LIBWEBP_INSTALL_DIR}
+        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+        -DBUILD_SHARED_LIBS=ON
+        -DWEBP_BUILD_ANIM_UTILS=OFF
+        -DWEBP_BUILD_CWEBP=OFF
+        -DWEBP_BUILD_DWEBP=OFF
+        -DWEBP_BUILD_GIF2WEBP=OFF
+        -DWEBP_BUILD_IMG2WEBP=OFF
+        -DWEBP_BUILD_VWEBP=OFF
+        -DWEBP_BUILD_WEBPINFO=OFF
+        -DWEBP_BUILD_WEBPMUX=OFF
+        -DWEBP_BUILD_EXTRAS=OFF
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+    )
+    
+    # Pass architecture-specific settings
+    if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+        # 64-bit
+        list(APPEND LIBWEBP_CMAKE_ARGS -DCMAKE_SYSTEM_PROCESSOR=${CMAKE_SYSTEM_PROCESSOR})
+    else()
+        # 32-bit
+        list(APPEND LIBWEBP_CMAKE_ARGS -DCMAKE_SYSTEM_PROCESSOR=${CMAKE_SYSTEM_PROCESSOR})
+    endif()
+    
+    # Add ExternalProject to build libwebp
+    ExternalProject_Add(
+        libwebp_external
+        SOURCE_DIR "${CMAKE_SOURCE_DIR}/lib/libwebp"
+        BINARY_DIR "${LIBWEBP_BUILD_DIR}"
+        INSTALL_DIR "${LIBWEBP_INSTALL_DIR}"
+        CMAKE_ARGS ${LIBWEBP_CMAKE_ARGS}
+        BUILD_ALWAYS FALSE
+    )
+    
+    # Set include directory - use source directory for headers during configure
+    # The installed headers will be available at build time
+    # libwebp headers are in src/webp/ subdirectory, so we point to src/
+    if(EXISTS "${CMAKE_SOURCE_DIR}/lib/libwebp/src")
+        set(LIBWEBP_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/lib/libwebp/src")
+    else()
+        # Fallback to source directory root
+        set(LIBWEBP_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/lib/libwebp")
+    endif()
+    
+    include_directories(${LIBWEBP_INCLUDE_DIRS})
+    
+    # Create imported target for linking
+    add_library(webp SHARED IMPORTED GLOBAL)
+    add_library(webpdemux SHARED IMPORTED GLOBAL)
+    
+    # Set properties
+    if(WIN32)
+        # On Windows, set the DLL location and import library
+        set_target_properties(webp PROPERTIES
+            INTERFACE_INCLUDE_DIRECTORIES "${LIBWEBP_INCLUDE_DIRS}"
+            IMPORTED_LOCATION "${LIBWEBP_DLL_PATH}"
+            IMPORTED_IMPLIB "${LIBWEBP_IMPLIB_PATH}"
+        )
+        
+        set_target_properties(webpdemux PROPERTIES
+            INTERFACE_INCLUDE_DIRECTORIES "${LIBWEBP_INCLUDE_DIRS}"
+            IMPORTED_LOCATION "${LIBWEBPDEMUX_DLL_PATH}"
+            IMPORTED_IMPLIB "${LIBWEBPDEMUX_IMPLIB_PATH}"
+        )
+        
+        # Copy DLLs to bin directory at build time
+        add_custom_command(TARGET libwebp_external POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${LIBWEBP_DLL_PATH}"
+                "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${LIBWEBPDEMUX_DLL_PATH}"
+                "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/"
+            COMMENT "Copying libwebp DLLs to bin directory"
+        )
+    else()
+        # On Unix-like systems, set the shared library location
+        set_target_properties(webp PROPERTIES
+            INTERFACE_INCLUDE_DIRECTORIES "${LIBWEBP_INCLUDE_DIRS}"
+            IMPORTED_LOCATION "${LIBWEBP_LIB_PATH}"
+        )
+        
+        set_target_properties(webpdemux PROPERTIES
+            INTERFACE_INCLUDE_DIRECTORIES "${LIBWEBP_INCLUDE_DIRS}"
+            IMPORTED_LOCATION "${LIBWEBPDEMUX_LIB_PATH}"
+        )
+        
+        # Copy shared libraries to bin directory at build time
+        add_custom_command(TARGET libwebp_external POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${LIBWEBP_LIB_PATH}"
+                "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${LIBWEBPDEMUX_LIB_PATH}"
+                "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/"
+            COMMENT "Copying libwebp shared libraries to bin directory"
+        )
+    endif()
+    
+    # Set dependency: webpdemux depends on webp
+    set_target_properties(webpdemux PROPERTIES
+        INTERFACE_LINK_LIBRARIES webp
+    )
+    
+    set(LIBWEBP_FOUND TRUE)
+    set(LIBWEBP_TARGET webp)
+    
+    message(STATUS "Building libwebp from source as shared library")
+    message(STATUS "libwebp include dirs: ${LIBWEBP_INCLUDE_DIRS}")
+    if(WIN32)
+        message(STATUS "libwebp DLL path: ${LIBWEBP_DLL_PATH}")
+        message(STATUS "libwebp import library path: ${LIBWEBP_IMPLIB_PATH}")
+    else()
+        message(STATUS "libwebp library path: ${LIBWEBP_LIB_PATH}")
+    endif()
+else()
+    # Fallback to system libwebp via pkg-config
+    message(STATUS "libwebp submodule not found, trying system libwebp")
+    pkg_check_modules(LIBWEBP libwebp)
+    pkg_check_modules(LIBWEBPDEMUX libwebpdemux)
+    
+    if(LIBWEBP_FOUND)
+        include_directories(${LIBWEBP_INCLUDE_DIRS})
+        message(STATUS "Using system libwebp: ${LIBWEBP_INCLUDE_DIRS}")
+        if(LIBWEBPDEMUX_FOUND)
+            message(STATUS "Using system libwebpdemux: ${LIBWEBPDEMUX_LIBRARIES}")
+        else()
+            message(WARNING "libwebpdemux not found. Animated WebP support may not work.")
+        endif()
+    else()
+        message(WARNING "libwebp not found. WebP plugin will not be available.")
+        message(WARNING "To add libwebp as submodule, run:")
+        message(WARNING "  git submodule add https://github.com/webmproject/libwebp.git lib/libwebp")
+        message(WARNING "  git submodule update --init --recursive")
+    endif()
+endif()
+
+if(LIBWEBP_FOUND)
+    set(HAVE_LIBWEBP 1)
+else()
+    set(HAVE_LIBWEBP 0)
+endif()
+
 # Find GTK3, GdkPixbuf, libxml2, and LZ4 using pkg-config
 # NOTE: This is done AFTER zlib/libpng configuration to ensure our libpng headers
 # are set up before GTK3's pkg-config adds system libpng headers to CFLAGS

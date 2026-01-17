@@ -7,3 +7,6 @@
 [submodule "lib/zlib"]
 	path = lib/zlib
 	url = https://github.com/madler/zlib.git
+[submodule "lib/libwebp"]
+	path = lib/libwebp
+	url = https://github.com/webmproject/libwebp
