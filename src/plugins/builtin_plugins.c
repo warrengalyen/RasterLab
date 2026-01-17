@@ -8,10 +8,10 @@
 #include "plugins/plugin_netpbm.h"
 #include "plugins/plugin_pcx.h"
 #include "plugins/plugin_png.h"
+#include "plugins/plugin_ras.h"
 #include "plugins/plugin_tga.h"
 #include "plugins/plugin_xpm.h"
 #include <glib.h>
-
 
 /**
  * Register built-in plugins (PNG, JPEG, BMP)
@@ -27,6 +27,7 @@ void builtin_plugins_register(void) {
     ImageFormatPlugin tga_plugin;
     ImageFormatPlugin xpm_plugin;
     ImageFormatPlugin cut_plugin;
+    ImageFormatPlugin ras_plugin;
 
     /* Register PNG plugin (using libpng) */
 #ifdef HAVE_LIBPNG
@@ -130,5 +131,17 @@ void builtin_plugins_register(void) {
         }
     } else {
         g_message("Failed to initialize CUT plugin");
+    }
+
+    /* Register RAS plugin */
+    g_message("Registering built-in RAS plugin");
+    if (plugin_init_ras(host_api, &ras_plugin)) {
+        if (format_registry_register_builtin(&ras_plugin)) {
+            g_message("Successfully registered RAS plugin");
+        } else {
+            g_message("Failed to register RAS plugin with format registry");
+        }
+    } else {
+        g_message("Failed to initialize RAS plugin");
     }
 }
