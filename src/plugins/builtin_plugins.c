@@ -1,6 +1,7 @@
 #include "image_format_plugin.h"
 #include "plugins/format_registry.h"
 #include "plugins/plugin_bmp.h"
+#include "plugins/plugin_cut.h"
 #include "plugins/plugin_host_api.h"
 #include "plugins/plugin_jpeg.h"
 #include "plugins/plugin_loader.h"
@@ -10,6 +11,7 @@
 #include "plugins/plugin_tga.h"
 #include "plugins/plugin_xpm.h"
 #include <glib.h>
+
 
 /**
  * Register built-in plugins (PNG, JPEG, BMP)
@@ -24,6 +26,7 @@ void builtin_plugins_register(void) {
     ImageFormatPlugin pcx_plugin;
     ImageFormatPlugin tga_plugin;
     ImageFormatPlugin xpm_plugin;
+    ImageFormatPlugin cut_plugin;
 
     /* Register PNG plugin (using libpng) */
 #ifdef HAVE_LIBPNG
@@ -115,5 +118,17 @@ void builtin_plugins_register(void) {
         }
     } else {
         g_message("Failed to initialize XPM plugin");
+    }
+
+    /* Register CUT plugin */
+    g_message("Registering built-in CUT plugin");
+    if (plugin_init_cut(host_api, &cut_plugin)) {
+        if (format_registry_register_builtin(&cut_plugin)) {
+            g_message("Successfully registered CUT plugin");
+        } else {
+            g_message("Failed to register CUT plugin with format registry");
+        }
+    } else {
+        g_message("Failed to initialize CUT plugin");
     }
 }
