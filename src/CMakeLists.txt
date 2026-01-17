@@ -98,6 +98,7 @@ set(SOURCES
     ui/dialogs/formats/bmp_options_dialog.c
     ui/dialogs/formats/jpeg_options_dialog.c
     ui/dialogs/formats/png_options_dialog.c
+    ui/dialogs/formats/webp_options_dialog.c
     ui/dialogs/gamma_dialog.c
     ui/dialogs/new_layer_dialog.c
     ui/dialogs/palettize_dialog.c

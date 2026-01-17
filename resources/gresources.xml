@@ -63,6 +63,7 @@
     <file>ui/bmp_options_dialog.glade</file>
     <file>ui/jpeg_options_dialog.glade</file>
     <file>ui/png_options_dialog.glade</file>
+    <file>ui/webp_options_dialog.glade</file>
     <file>ui/main_window.glade</file>
   </gresource>
 </gresources>

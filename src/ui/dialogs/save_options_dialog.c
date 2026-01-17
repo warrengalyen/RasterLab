@@ -3,6 +3,7 @@
 #include "ui/dialogs/formats/bmp_options_dialog.h"
 #include "ui/dialogs/formats/jpeg_options_dialog.h"
 #include "ui/dialogs/formats/png_options_dialog.h"
+#include "ui/dialogs/formats/webp_options_dialog.h"
 #include <glib.h>
 #include <gtk/gtk.h>
 #include <string.h>
@@ -40,6 +41,9 @@ gboolean save_options_dialog_show(GtkWindow* parent, const char* filename, SaveO
     }
     if (g_ascii_strcasecmp(ext, "png") == 0) {
         return png_options_dialog_show(parent, opts);
+    }
+    if (g_ascii_strcasecmp(ext, "webp") == 0) {
+        return webp_options_dialog_show(parent, opts);
     }
 
     /* No dialog for this format */

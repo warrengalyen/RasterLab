@@ -655,7 +655,7 @@ static void init_webp_save_options(void* plugin_data) {
     WebPSaveOptions* opts = (WebPSaveOptions*)plugin_data;
     if (opts) {
         opts->image_hint = WEBP_HINT_DEFAULT;
-        opts->quality = 75;                                   /* Default quality */
+        opts->quality = 100;                                  /* Default quality */
         opts->compression_method = WEBP_COMPRESSION_BALANCED; /* Default balanced */
         memset(opts->reserved, 0, sizeof(opts->reserved));
     }

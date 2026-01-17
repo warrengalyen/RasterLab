@@ -216,9 +216,9 @@ gboolean format_registry_register_builtin(ImageFormatPlugin* plugin) {
     /* Add to registry */
     format_handlers = g_list_append(format_handlers, handler);
 
-    g_message("Successfully registered built-in plugin: %s (extensions: %s)",
-              plugin->format_info.name,
-              plugin->format_info.extensions ? plugin->format_info.extensions : "none");
+    // g_message("Successfully registered built-in plugin: %s (extensions: %s)",
+    //           plugin->format_info.name,
+    //           plugin->format_info.extensions ? plugin->format_info.extensions : "none");
 
     return TRUE;
 }
