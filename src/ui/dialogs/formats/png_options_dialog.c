@@ -65,6 +65,10 @@ static void update_widget_visibility(GtkWidget* color_format_combo,
                                      GtkWidget* transparency_cutoff_box,
                                      GtkWidget* transparent_color_box,
                                      GtkWidget* compositing_color_box) {
+    if (!color_format_combo || !transparency_format_combo) {
+        return; /* Can't update visibility without required combos */
+    }
+
     gint color_format_active = gtk_combo_box_get_active(GTK_COMBO_BOX(color_format_combo));
     gint transparency_format_active = gtk_combo_box_get_active(GTK_COMBO_BOX(transparency_format_combo));
     gint depth_active = depth_combo ? gtk_combo_box_get_active(GTK_COMBO_BOX(depth_combo)) : PNG_DEPTH_STANDARD;
@@ -89,9 +93,14 @@ static void update_widget_visibility(GtkWidget* color_format_combo,
         gtk_widget_set_visible(depth_box, (color_format == PNG_COLOR_FORMAT_COLOR || color_format == PNG_COLOR_FORMAT_GRAYSCALE));
     }
 
-    /* Palette size: visible when color_format = grayscale AND depth = standard */
+    /* Palette size: visible when:
+     * 1. color_format = color AND depth = indexed, OR
+     * 2. color_format = grayscale AND depth = standard
+     */
     if (palette_size_box) {
-        gtk_widget_set_visible(palette_size_box, (color_format == PNG_COLOR_FORMAT_GRAYSCALE && depth == PNG_DEPTH_STANDARD));
+        gtk_widget_set_visible(palette_size_box,
+                               ((color_format == PNG_COLOR_FORMAT_COLOR && depth == PNG_DEPTH_INDEXED) ||
+                                (color_format == PNG_COLOR_FORMAT_GRAYSCALE && depth == PNG_DEPTH_STANDARD)));
     }
 
     /* Transparency cut-off: visible when transparency_format = binary cut-off */
@@ -115,19 +124,42 @@ static void update_widget_visibility(GtkWidget* color_format_combo,
 /* Callback when color format changes */
 static void on_color_format_changed(GtkComboBox* combo, gpointer user_data) {
     GtkWidget** widgets = (GtkWidget**)user_data;
-    update_widget_visibility(GTK_WIDGET(combo), widgets[0], widgets[1], widgets[2], widgets[3], widgets[4], widgets[5], widgets[6]);
+    GtkWidget* depth_combo = widgets[2];
+    gint color_format_active = gtk_combo_box_get_active(combo);
+
+    /* Update depth combo box label: change "indexed" to "monochrome" when grayscale is selected */
+    if (depth_combo) {
+        GtkTreeModel* model = gtk_combo_box_get_model(GTK_COMBO_BOX(depth_combo));
+        if (model && GTK_IS_LIST_STORE(model)) {
+            GtkListStore* list_store = GTK_LIST_STORE(model);
+            GtkTreeIter iter;
+            const gchar* label_text;
+
+            /* Get the third row (index 2 = indexed/monochrome) */
+            if (gtk_tree_model_get_iter_from_string(model, &iter, "2")) {
+                if (color_format_active == PNG_COLOR_FORMAT_GRAYSCALE) {
+                    label_text = "monochrome";
+                } else {
+                    label_text = "indexed";
+                }
+                gtk_list_store_set(list_store, &iter, 0, label_text, -1);
+            }
+        }
+    }
+
+    update_widget_visibility(GTK_WIDGET(combo), widgets[1], widgets[2], widgets[3], widgets[4], widgets[5], widgets[6], widgets[7]);
 }
 
 /* Callback when transparency format changes */
 static void on_transparency_format_changed(GtkComboBox* combo, gpointer user_data) {
     GtkWidget** widgets = (GtkWidget**)user_data;
-    update_widget_visibility(widgets[0], GTK_WIDGET(combo), widgets[1], widgets[2], widgets[3], widgets[4], widgets[5], widgets[6]);
+    update_widget_visibility(widgets[0], GTK_WIDGET(combo), widgets[2], widgets[3], widgets[4], widgets[5], widgets[6], widgets[7]);
 }
 
 /* Callback when depth changes */
 static void on_depth_changed(GtkComboBox* combo, gpointer user_data) {
     GtkWidget** widgets = (GtkWidget**)user_data;
-    update_widget_visibility(widgets[0], widgets[1], GTK_WIDGET(combo), widgets[2], widgets[3], widgets[4], widgets[5], widgets[6]);
+    update_widget_visibility(widgets[0], widgets[1], GTK_WIDGET(combo), widgets[3], widgets[4], widgets[5], widgets[6], widgets[7]);
 }
 
 /**
@@ -251,14 +283,16 @@ gboolean png_options_dialog_show(GtkWindow* parent, SaveOptions* opts) {
     gtk_spin_button_set_adjustment(GTK_SPIN_BUTTON(compression_level_spin), compression_level_adjustment);
 
     /* Set up visibility update callbacks BEFORE setting any values */
-    GtkWidget* visibility_widgets[7] = {
-        GTK_WIDGET(transparency_format_combo), /* widgets[0] */
-        color_format_depth_combo,              /* widgets[1] */
-        color_format_depth_box,                /* widgets[2] */
-        color_format_palette_size_box,         /* widgets[3] */
-        transparency_format_cutoff_box,        /* widgets[4] */
-        transparent_color_box,                 /* widgets[5] */
-        compositing_color_box                  /* widgets[6] */
+    /* Note: Array order matches update_widget_visibility parameter order */
+    GtkWidget* visibility_widgets[8] = {
+        color_format_combo,                    /* widgets[0] - for color_format_combo parameter */
+        GTK_WIDGET(transparency_format_combo), /* widgets[1] - for transparency_format_combo parameter */
+        color_format_depth_combo,              /* widgets[2] - for depth_combo parameter */
+        color_format_depth_box,                /* widgets[3] - for depth_box parameter */
+        color_format_palette_size_box,         /* widgets[4] - for palette_size_box parameter */
+        transparency_format_cutoff_box,        /* widgets[5] - for transparency_format_cutoff_box parameter */
+        transparent_color_box,                 /* widgets[6] - for transparent_color_box parameter */
+        compositing_color_box                  /* widgets[7] - for compositing_color_box parameter */
     };
 
     if (color_format_combo && transparency_format_combo) {
@@ -378,6 +412,27 @@ gboolean png_options_dialog_show(GtkWindow* parent, SaveOptions* opts) {
         g_signal_handlers_unblock_by_func(color_format_depth_combo, G_CALLBACK(on_depth_changed), visibility_widgets);
     }
 
+    /* Update depth combo label based on initial color format selection */
+    if (color_format_combo && color_format_depth_combo) {
+        gint color_format_active = gtk_combo_box_get_active(GTK_COMBO_BOX(color_format_combo));
+        GtkTreeModel* model = gtk_combo_box_get_model(GTK_COMBO_BOX(color_format_depth_combo));
+        if (model && GTK_IS_LIST_STORE(model)) {
+            GtkListStore* list_store = GTK_LIST_STORE(model);
+            GtkTreeIter iter;
+            const gchar* label_text;
+
+            /* Get the third row (index 2 = indexed/monochrome) */
+            if (gtk_tree_model_get_iter_from_string(model, &iter, "2")) {
+                if (color_format_active == PNG_COLOR_FORMAT_GRAYSCALE) {
+                    label_text = "monochrome";
+                } else {
+                    label_text = "indexed";
+                }
+                gtk_list_store_set(list_store, &iter, 0, label_text, -1);
+            }
+        }
+    }
+
     /* Connect OK and Cancel buttons */
     GtkWidget* ok_button = GTK_WIDGET(gtk_builder_get_object(builder, "png_options_ok_button"));
     GtkWidget* cancel_button = GTK_WIDGET(gtk_builder_get_object(builder, "png_options_cancel_button"));
@@ -396,10 +451,10 @@ gboolean png_options_dialog_show(GtkWindow* parent, SaveOptions* opts) {
 
     /* Explicitly update visibility after dialog is shown and widgets are realized */
     if (color_format_combo && transparency_format_combo) {
-        update_widget_visibility(color_format_combo, transparency_format_combo,
-                                 color_format_depth_combo, color_format_depth_box,
-                                 color_format_palette_size_box, transparency_format_cutoff_box,
-                                 transparent_color_box, compositing_color_box);
+        update_widget_visibility(visibility_widgets[0], visibility_widgets[1],
+                                 visibility_widgets[2], visibility_widgets[3],
+                                 visibility_widgets[4], visibility_widgets[5],
+                                 visibility_widgets[6], visibility_widgets[7]);
     }
 
     /* Show dialog */
