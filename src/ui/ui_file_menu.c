@@ -656,137 +656,101 @@ void on_file_save(GtkWidget* widget, gpointer data) {
 }
 
 /**
- * File > Save As response callback
+ * Process save as result after native file chooser dialog
  */
-void on_file_save_as_response(GtkDialog* dialog, gint response_id, gpointer user_data) {
-    AppContext* ctx = (AppContext*)user_data;
+static void process_save_as_result(GtkNativeDialog* native_dialog, AppContext* ctx) {
+    GtkFileChooser* chooser = GTK_FILE_CHOOSER(native_dialog);
+    gchar* file_path = gtk_file_chooser_get_filename(chooser);
 
-    if (response_id == GTK_RESPONSE_ACCEPT) {
-        gchar* file_path = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));
+    if (file_path) {
+        ImageDocument* doc = ui_get_active_document(ctx);
 
-        /* Close file chooser dialog first */
-        gtk_widget_destroy(GTK_WIDGET(dialog));
+        if (doc) {
+            SaveOptions opts;
+            FormatHandler* handler;
+            void* plugin_data = NULL;
+            size_t plugin_options_size = 0;
+            gboolean dialog_result;
 
-        if (file_path) {
-            ImageDocument* doc = ui_get_active_document(ctx);
+            /* Initialize save options */
+            memset(&opts, 0, sizeof(SaveOptions));
+            opts.quality = -1;
+            opts.compression_level = -1;
+            opts.preserve_alpha = doc->has_alpha ? true : false;
+            opts.flatten_layers = FALSE;
 
-            if (doc) {
-                SaveOptions opts;
-                FormatHandler* handler;
-                void* plugin_data = NULL;
-                size_t plugin_options_size = 0;
-                gboolean dialog_result;
-
-                /* Initialize save options */
-                memset(&opts, 0, sizeof(SaveOptions));
-                opts.quality = -1;
-                opts.compression_level = -1;
-                opts.preserve_alpha = doc->has_alpha ? true : false;
-                opts.flatten_layers = FALSE;
-
-                /* Find handler to determine if we need plugin-specific options */
-                handler = format_registry_find_saver(file_path);
-                if (handler && handler->plugin && handler->plugin->callbacks.get_save_options_size) {
-                    plugin_options_size = handler->plugin->callbacks.get_save_options_size();
-                    if (plugin_options_size > 0) {
-                        plugin_data = g_malloc0(plugin_options_size);
-                        if (plugin_data && handler->plugin->callbacks.init_save_options) {
-                            handler->plugin->callbacks.init_save_options(plugin_data);
-                        }
-                        opts.plugin_data = plugin_data;
+            /* Find handler to determine if we need plugin-specific options */
+            handler = format_registry_find_saver(file_path);
+            if (handler && handler->plugin && handler->plugin->callbacks.get_save_options_size) {
+                plugin_options_size = handler->plugin->callbacks.get_save_options_size();
+                if (plugin_options_size > 0) {
+                    plugin_data = g_malloc0(plugin_options_size);
+                    if (plugin_data && handler->plugin->callbacks.init_save_options) {
+                        handler->plugin->callbacks.init_save_options(plugin_data);
                     }
-                }
-
-                /* Show save options dialog if needed (after file chooser is closed) */
-                dialog_result = save_options_dialog_show(GTK_WINDOW(ctx->window), file_path, &opts, doc);
-
-                if (dialog_result) {
-                    /* User clicked OK, proceed with save */
-                    PluginError save_error = PLUGIN_ERROR_NONE;
-                    if (document_save_as_with_error(doc, file_path, &opts, &save_error)) {
-                        /* Update document filename and path */
-                        if (doc->file_path) {
-                            g_free(doc->file_path);
-                        }
-                        if (doc->filename) {
-                            g_free(doc->filename);
-                        }
-                        doc->file_path = g_strdup(file_path);
-                        doc->filename = g_path_get_basename(file_path);
-
-                        /* Mark document as saved */
-                        document_mark_saved(doc);
-
-                        /* Add to recent files */
-                        recent_files_add(file_path);
-                        recent_files_save(); /* This syncs to settings if connected */
-
-                        /* Update window title to reflect new filename */
-                        ui_update_window_title(ctx, NULL);
-                        ui_update_status_bar(ctx, NULL);
-                        ui_update_status_bar_message(ctx, "Image successfully saved");
-                        ui_update_recent_files_menu(ctx);
-
-                        /* Update menu states */
-                        ui_update_menu_and_button_states(ctx);
-                    } else {
-                        /* Get user-friendly error message */
-                        const char* error_message = image_io_get_error_message(save_error, file_path);
-
-                        /* Show error dialog */
-                        GtkWidget* error_dialog = gtk_message_dialog_new(
-                            GTK_WINDOW(ctx->window),
-                            GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
-                            GTK_MESSAGE_ERROR,
-                            GTK_BUTTONS_OK,
-                            "Failed to save image: %s\n\n%s",
-                            file_path, error_message);
-
-                        gtk_dialog_run(GTK_DIALOG(error_dialog));
-                        gtk_widget_destroy(error_dialog);
-                    }
-                }
-                /* If dialog_result is FALSE, user cancelled, so don't save */
-
-                /* Clean up plugin data */
-                if (plugin_data) {
-                    g_free(plugin_data);
+                    opts.plugin_data = plugin_data;
                 }
             }
 
-            g_free(file_path);
+            /* Show save options dialog if needed (after file chooser is closed) */
+            dialog_result = save_options_dialog_show(GTK_WINDOW(ctx->window), file_path, &opts, doc);
+
+            if (dialog_result) {
+                /* User clicked OK, proceed with save */
+                PluginError save_error = PLUGIN_ERROR_NONE;
+                if (document_save_as_with_error(doc, file_path, &opts, &save_error)) {
+                    /* Update document filename and path */
+                    if (doc->file_path) {
+                        g_free(doc->file_path);
+                    }
+                    if (doc->filename) {
+                        g_free(doc->filename);
+                    }
+                    doc->file_path = g_strdup(file_path);
+                    doc->filename = g_path_get_basename(file_path);
+
+                    /* Mark document as saved */
+                    document_mark_saved(doc);
+
+                    /* Add to recent files */
+                    recent_files_add(file_path);
+                    recent_files_save(); /* This syncs to settings if connected */
+
+                    /* Update window title to reflect new filename */
+                    ui_update_window_title(ctx, NULL);
+                    ui_update_status_bar(ctx, NULL);
+                    ui_update_status_bar_message(ctx, "Image successfully saved");
+                    ui_update_recent_files_menu(ctx);
+
+                    /* Update menu states */
+                    ui_update_menu_and_button_states(ctx);
+                } else {
+                    /* Get user-friendly error message */
+                    const char* error_message = image_io_get_error_message(save_error, file_path);
+
+                    /* Show error dialog */
+                    GtkWidget* error_dialog = gtk_message_dialog_new(
+                        GTK_WINDOW(ctx->window),
+                        GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+                        GTK_MESSAGE_ERROR,
+                        GTK_BUTTONS_OK,
+                        "Failed to save image: %s\n\n%s",
+                        file_path, error_message);
+
+                    gtk_dialog_run(GTK_DIALOG(error_dialog));
+                    gtk_widget_destroy(error_dialog);
+                }
+            }
+            /* If dialog_result is FALSE, user cancelled, so don't save */
+
+            /* Clean up plugin data */
+            if (plugin_data) {
+                g_free(plugin_data);
+            }
         }
-    } else {
-        /* User cancelled file chooser, just close it */
-        gtk_widget_destroy(GTK_WIDGET(dialog));
+
+        g_free(file_path);
     }
-}
-
-/**
- * Idle callback to set default filter after dialog is shown
- */
-static gboolean set_default_filter_idle(gpointer user_data) {
-    GtkWidget* dialog = GTK_WIDGET(user_data);
-
-    /* Check if dialog still exists */
-    if (!dialog || !GTK_IS_WIDGET(dialog)) {
-        return FALSE;
-    }
-
-    GtkFileChooser* chooser = GTK_FILE_CHOOSER(dialog);
-    GtkFileFilter* filter = (GtkFileFilter*)g_object_get_data(G_OBJECT(dialog), "default_filter");
-
-    if (chooser && filter && GTK_IS_FILE_CHOOSER(chooser)) {
-        gtk_file_chooser_set_filter(chooser, filter);
-    }
-
-    /* Clean up: unref the filter and remove from object data */
-    if (filter) {
-        g_object_unref(filter);
-        g_object_set_data(G_OBJECT(dialog), "default_filter", NULL);
-    }
-
-    return FALSE; /* Remove from idle queue */
 }
 
 /**
@@ -797,26 +761,26 @@ void on_file_save_as(GtkWidget* widget, gpointer data) {
 
     AppContext* ctx = (AppContext*)data;
     ImageDocument* doc = ui_get_active_document(ctx);
-    GtkWidget* dialog;
+    GtkFileChooserNative* native_dialog;
     GtkFileFilter* filter;
     GList* handlers;
     GHashTable* seen_formats;
+    gint response;
 
     if (!doc) {
         g_warning("No document open");
         return;
     }
 
-    /* Create file chooser dialog */
-    dialog = gtk_file_chooser_dialog_new(
+    /* Create native file chooser dialog */
+    native_dialog = gtk_file_chooser_native_new(
         "Save Image As",
         GTK_WINDOW(ctx->window),
         GTK_FILE_CHOOSER_ACTION_SAVE,
-        "_Cancel", GTK_RESPONSE_CANCEL,
-        "_Save", GTK_RESPONSE_ACCEPT,
-        NULL);
+        "_Save",
+        "_Cancel");
 
-    gtk_file_chooser_set_do_overwrite_confirmation(GTK_FILE_CHOOSER(dialog), TRUE);
+    gtk_file_chooser_set_do_overwrite_confirmation(GTK_FILE_CHOOSER(native_dialog), TRUE);
 
     /* Get all registered format handlers from plugin system */
     handlers = format_registry_get_all_handlers();
@@ -862,7 +826,7 @@ void on_file_save_as(GtkWidget* widget, gpointer data) {
             }
             g_strfreev(exts);
 
-            gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
+            gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(native_dialog), filter);
 
             /* Track first filter */
             if (!first_filter) {
@@ -884,44 +848,38 @@ void on_file_save_as(GtkWidget* widget, gpointer data) {
         filter = gtk_file_filter_new();
         gtk_file_filter_set_name(filter, "All Files");
         gtk_file_filter_add_pattern(filter, "*");
-        gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
+        gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(native_dialog), filter);
         first_filter = filter;
     }
 
     /* Determine default filter (prefer PNG, otherwise use first filter) */
     GtkFileFilter* default_filter = png_filter ? png_filter : first_filter;
 
-    /* Store default filter for idle callback */
+    /* Set default filter */
     if (default_filter) {
-        g_object_ref(default_filter); /* Keep filter alive */
-        g_object_set_data(G_OBJECT(dialog), "default_filter", default_filter);
+        gtk_file_chooser_set_filter(GTK_FILE_CHOOSER(native_dialog), default_filter);
     }
 
     /* Set current filename if document has a path */
     if (doc->file_path) {
-        gtk_file_chooser_set_filename(GTK_FILE_CHOOSER(dialog), doc->file_path);
+        gtk_file_chooser_set_filename(GTK_FILE_CHOOSER(native_dialog), doc->file_path);
     } else if (doc->filename) {
         /* Suggest a filename based on document name */
         gchar* suggested = g_strdup_printf("%s.png", doc->filename);
-        gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(dialog), suggested);
+        gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(native_dialog), suggested);
         g_free(suggested);
     }
 
-    /* Try to set filter immediately */
-    if (default_filter) {
-        gtk_file_chooser_set_filter(GTK_FILE_CHOOSER(dialog), default_filter);
+    /* Show dialog and get response */
+    response = gtk_native_dialog_run(GTK_NATIVE_DIALOG(native_dialog));
+
+    if (response == GTK_RESPONSE_ACCEPT) {
+        /* User clicked Save */
+        process_save_as_result(GTK_NATIVE_DIALOG(native_dialog), ctx);
     }
 
-    /* Connect response signal */
-    g_signal_connect(dialog, "response", G_CALLBACK(on_file_save_as_response), ctx);
-
-    /* Show dialog */
-    gtk_widget_show(dialog);
-
-    /* Also set filter in idle callback to ensure it's set after dialog is fully shown */
-    if (default_filter) {
-        g_idle_add(set_default_filter_idle, dialog);
-    }
+    /* Clean up native dialog */
+    g_object_unref(native_dialog);
 }
 
 /**
