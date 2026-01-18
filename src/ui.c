@@ -896,6 +896,52 @@ ImageDocument* ui_get_active_document(AppContext* ctx) {
 }
 
 /**
+ * Update the tab label for a document
+ */
+void ui_update_document_tab_label(AppContext* ctx, ImageDocument* doc) {
+    GtkWidget* tab_label = NULL;
+    GtkWidget* tab_hbox;
+    gint page_num;
+
+    if (!ctx || !doc || !doc->scrolled_window) {
+        return;
+    }
+
+    /* Find the page number for this document */
+    page_num = gtk_notebook_page_num(GTK_NOTEBOOK(ctx->notebook), doc->scrolled_window);
+    if (page_num < 0) {
+        return;
+    }
+
+    /* Get the tab label widget (tab_hbox) for this page */
+    tab_hbox = gtk_notebook_get_tab_label(GTK_NOTEBOOK(ctx->notebook), doc->scrolled_window);
+    if (!tab_hbox || !GTK_IS_CONTAINER(tab_hbox)) {
+        return;
+    }
+
+    /* Find the close button (second child) to get the stored tab_label */
+    GList* children = gtk_container_get_children(GTK_CONTAINER(tab_hbox));
+    if (children) {
+        if (children->next) {
+            GtkWidget* close_button = GTK_WIDGET(children->next->data);
+            tab_label = (GtkWidget*)g_object_get_data(G_OBJECT(close_button), "tab_label");
+        }
+
+        if (!tab_label && children) {
+            tab_label = GTK_WIDGET(children->data);
+        }
+
+        if (tab_label && GTK_IS_LABEL(tab_label)) {
+            /* Update the label text */
+            const gchar* filename = doc->filename ? doc->filename : "Untitled";
+            gtk_label_set_text(GTK_LABEL(tab_label), filename);
+        }
+
+        g_list_free(children);
+    }
+}
+
+/**
  * Update the window title based on active document
  */
 void ui_update_window_title(AppContext* ctx, ImageDocument* doc) {

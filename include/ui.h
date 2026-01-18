@@ -63,6 +63,13 @@ void ui_close_document_tab(AppContext* ctx, ImageDocument* doc);
 ImageDocument* ui_get_active_document(AppContext* ctx);
 
 /**
+ * Update the tab label for a document
+ * @param ctx The application context
+ * @param doc The document whose tab label should be updated
+ */
+void ui_update_document_tab_label(AppContext* ctx, ImageDocument* doc);
+
+/**
  * Update the window title based on active document
  * @param ctx The application context
  * @param doc Optional document to use for title. If NULL, fetches active document.

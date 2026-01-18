@@ -716,6 +716,9 @@ static void process_save_as_result(GtkNativeDialog* native_dialog, AppContext* c
                     recent_files_add(file_path);
                     recent_files_save(); /* This syncs to settings if connected */
 
+                    /* Update tab label to reflect new filename */
+                    ui_update_document_tab_label(ctx, doc);
+
                     /* Update window title to reflect new filename */
                     ui_update_window_title(ctx, NULL);
                     ui_update_status_bar(ctx, NULL);
