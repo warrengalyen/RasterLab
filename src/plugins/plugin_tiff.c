@@ -57,6 +57,14 @@ typedef enum {
 } TIFFTransparencyFormat;
 
 /**
+ * TIFF page format options
+ */
+typedef enum {
+    TIFF_PAGE_FORMAT_SINGLE_PAGE = 0,
+    TIFF_PAGE_FORMAT_MULTIPAGE = 1
+} TIFFPageFormat;
+
+/**
  * TIFF-specific save options
  */
 typedef struct {
@@ -85,8 +93,11 @@ typedef struct {
     uint8_t compositing_color_g;
     uint8_t compositing_color_b;
 
+    /* Page format: single page (composited image) or multipage (one page per layer) */
+    TIFFPageFormat page_format;
+
     /* Reserved for future use */
-    uint32_t reserved[3];
+    uint32_t reserved[2];
 } TIFFSaveOptions;
 
 /* TIFF file signature (II for Intel byte order, MM for Motorola) */
@@ -134,94 +145,25 @@ static void tiff_warning_handler(const char* module, const char* fmt, va_list ap
 }
 
 /**
- * Load TIFF image using libtiff
+ * Load a single page from TIFF file into a layer
+ * Helper function for load_tiff
  */
-static PluginError load_tiff(ImageDocument* doc, const char* filename) {
-    TIFF* tif;
-    ImageLayer* base_layer = NULL;
+static PluginError load_tiff_page(TIFF* tif, ImageDocument* doc, ImageLayer* layer,
+                                  uint32_t page_width, uint32_t page_height) {
     cairo_surface_t* temp_surface;
     guchar* surface_data;
     int surface_stride;
-    uint32_t width, height;
-    uint16_t photometric, samples_per_pixel, bits_per_sample, planar_config;
-    uint16_t *red = NULL, *green = NULL, *blue = NULL;
     uint32_t* raster = NULL;
     guchar* image_data = NULL;
 
-    if (!doc || !filename) {
-        g_warning("TIFF plugin: Invalid parameters");
+    if (!tif || !doc || !layer) {
         return PLUGIN_ERROR_INVALID_PARAMETERS;
     }
 
-    /* Set error handlers */
-    TIFFSetErrorHandler(tiff_error_handler);
-    TIFFSetWarningHandler(tiff_warning_handler);
-
-    /* Open TIFF file */
-    /* Note: TIFFOpen automatically reads the first directory, so we don't need to call TIFFReadDirectory */
-    tif = TIFFOpen(filename, "r");
-    if (!tif) {
-        g_warning("TIFF plugin: Failed to open file: %s", filename);
-        return PLUGIN_ERROR_FILE_NOT_FOUND;
-    }
-
-    /* Get image dimensions */
-    if (!TIFFGetField(tif, TIFFTAG_IMAGEWIDTH, &width) ||
-        !TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &height)) {
-        g_warning("TIFF plugin: Failed to get image dimensions");
-        TIFFClose(tif);
-        return PLUGIN_ERROR_FILE_READ_ERROR;
-    }
-
-    if (width == 0 || height == 0) {
-        g_warning("TIFF plugin: Invalid dimensions: %ux%u", width, height);
-        TIFFClose(tif);
-        return PLUGIN_ERROR_UNSUPPORTED_FORMAT;
-    }
-
-    /* Get image properties */
-    if (!TIFFGetField(tif, TIFFTAG_PHOTOMETRIC, &photometric)) {
-        photometric = PHOTOMETRIC_RGB;
-    }
-    if (!TIFFGetField(tif, TIFFTAG_SAMPLESPERPIXEL, &samples_per_pixel)) {
-        samples_per_pixel = 1;
-    }
-    if (!TIFFGetField(tif, TIFFTAG_BITSPERSAMPLE, &bits_per_sample)) {
-        bits_per_sample = 8;
-    }
-    if (!TIFFGetField(tif, TIFFTAG_PLANARCONFIG, &planar_config)) {
-        planar_config = PLANARCONFIG_CONTIG;
-    }
-
-    /* Set document metadata */
-    doc->width = width;
-    doc->height = height;
-    doc->channels = samples_per_pixel;
-    doc->bit_depth = bits_per_sample;
-    doc->has_alpha = (samples_per_pixel == 4 || samples_per_pixel == 2);
-
-    /* Free old layers */
-    for (GList* iter = doc->layers; iter; iter = iter->next) {
-        layer_free((ImageLayer*)iter->data);
-    }
-    g_list_free(doc->layers);
-    doc->layers = NULL;
-
-    /* Create base layer */
-    base_layer = layer_new("Background", doc->width, doc->height, TRUE,
-                           LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL, doc);
-    if (!base_layer) {
-        g_warning("TIFF plugin: layer_new returned NULL");
-        TIFFClose(tif);
-        return PLUGIN_ERROR_OUT_OF_MEMORY;
-    }
-
     /* Get surface data */
-    temp_surface = base_layer->surface;
+    temp_surface = layer->surface;
     if (!temp_surface) {
-        g_warning("TIFF plugin: base_layer->surface is NULL");
-        TIFFClose(tif);
-        layer_free(base_layer);
+        g_warning("TIFF plugin: layer->surface is NULL");
         return PLUGIN_ERROR_OUT_OF_MEMORY;
     }
 
@@ -231,72 +173,77 @@ static PluginError load_tiff(ImageDocument* doc, const char* filename) {
 
     if (!surface_data) {
         g_warning("TIFF plugin: cairo_image_surface_get_data returned NULL");
-        TIFFClose(tif);
-        layer_free(base_layer);
         return PLUGIN_ERROR_OUT_OF_MEMORY;
     }
 
     /* Read image using TIFFReadRGBAImage which handles most formats (8-bit and 16-bit) */
     /* TIFFReadRGBAImage always returns 32-bit RGBA values regardless of input bit depth */
-    uint32_t npixels = width * height;
+    uint32_t npixels = page_width * page_height;
     raster = (uint32_t*)_TIFFmalloc(npixels * sizeof(uint32_t));
     if (!raster) {
         g_warning("TIFF plugin: Failed to allocate raster");
-        TIFFClose(tif);
-        layer_free(base_layer);
         return PLUGIN_ERROR_OUT_OF_MEMORY;
     }
 
     /* Read image - TIFFReadRGBAImage handles 8-bit and 16-bit automatically */
-    if (!TIFFReadRGBAImage(tif, width, height, raster, 0)) {
+    if (!TIFFReadRGBAImage(tif, page_width, page_height, raster, 0)) {
         g_warning("TIFF plugin: Failed to read RGBA image");
         _TIFFfree(raster);
-        TIFFClose(tif);
-        layer_free(base_layer);
         return PLUGIN_ERROR_FILE_READ_ERROR;
     }
 
     /* Allocate image data buffer */
-    image_data = g_malloc(width * height * 4);
+    image_data = g_malloc(page_width * page_height * 4);
     if (!image_data) {
         g_warning("TIFF plugin: Failed to allocate image data");
         _TIFFfree(raster);
-        TIFFClose(tif);
-        layer_free(base_layer);
         return PLUGIN_ERROR_OUT_OF_MEMORY;
     }
 
     /* Convert from TIFF RGBA (ABGR in memory) to our RGBA format */
     /* TIFFReadRGBAImage returns pixels in bottom-to-top order, so we flip vertically */
-    for (uint32_t y = 0; y < height; y++) {
-        for (uint32_t x = 0; x < width; x++) {
-            uint32_t pixel = raster[(height - 1 - y) * width + x]; /* Flip vertically */
+    for (uint32_t y = 0; y < page_height; y++) {
+        for (uint32_t x = 0; x < page_width; x++) {
+            uint32_t pixel = raster[(page_height - 1 - y) * page_width + x]; /* Flip vertically */
             guchar r = TIFFGetR(pixel);
             guchar g = TIFFGetG(pixel);
             guchar b = TIFFGetB(pixel);
             guchar a = TIFFGetA(pixel);
 
-            image_data[(y * width + x) * 4 + 0] = r;
-            image_data[(y * width + x) * 4 + 1] = g;
-            image_data[(y * width + x) * 4 + 2] = b;
-            image_data[(y * width + x) * 4 + 3] = a;
+            image_data[(y * page_width + x) * 4 + 0] = r;
+            image_data[(y * page_width + x) * 4 + 1] = g;
+            image_data[(y * page_width + x) * 4 + 2] = b;
+            image_data[(y * page_width + x) * 4 + 3] = a;
         }
     }
 
     _TIFFfree(raster);
 
-    if (!image_data) {
-        TIFFClose(tif);
-        layer_free(base_layer);
-        return PLUGIN_ERROR_OUT_OF_MEMORY;
+    /* Handle pages that are smaller than canvas - center them or place at origin */
+    uint32_t offset_x = 0;
+    uint32_t offset_y = 0;
+    if (page_width < doc->width) {
+        offset_x = (doc->width - page_width) / 2;
+    }
+    if (page_height < doc->height) {
+        offset_y = (doc->height - page_height) / 2;
     }
 
     /* Convert RGBA (straight alpha) to Cairo's ARGB32 (BGRA in memory, premultiplied alpha) */
-    for (uint32_t y = 0; y < height; y++) {
-        guchar* src_row = image_data + y * width * 4;
-        guchar* dst_row = surface_data + y * surface_stride;
+    /* Clear layer first */
+    cairo_t* cr = cairo_create(temp_surface);
+    if (cr) {
+        cairo_set_operator(cr, CAIRO_OPERATOR_CLEAR);
+        cairo_paint(cr);
+        cairo_destroy(cr);
+    }
 
-        for (uint32_t x = 0; x < width; x++) {
+    /* Copy page data to layer surface at offset */
+    for (uint32_t y = 0; y < page_height && (offset_y + y) < doc->height; y++) {
+        guchar* src_row = image_data + y * page_width * 4;
+        guchar* dst_row = surface_data + (offset_y + y) * surface_stride;
+
+        for (uint32_t x = 0; x < page_width && (offset_x + x) < doc->width; x++) {
             guchar r = src_row[x * 4 + 0];
             guchar g = src_row[x * 4 + 1];
             guchar b = src_row[x * 4 + 2];
@@ -312,10 +259,10 @@ static PluginError load_tiff(ImageDocument* doc, const char* filename) {
             }
 
             /* Cairo ARGB32: BGRA in memory (little-endian) */
-            dst_row[x * 4 + 0] = b;
-            dst_row[x * 4 + 1] = g;
-            dst_row[x * 4 + 2] = r;
-            dst_row[x * 4 + 3] = a;
+            dst_row[(offset_x + x) * 4 + 0] = b;
+            dst_row[(offset_x + x) * 4 + 1] = g;
+            dst_row[(offset_x + x) * 4 + 2] = r;
+            dst_row[(offset_x + x) * 4 + 3] = a;
         }
     }
 
@@ -323,10 +270,135 @@ static PluginError load_tiff(ImageDocument* doc, const char* filename) {
 
     /* Cleanup */
     g_free(image_data);
+
+    return PLUGIN_ERROR_NONE;
+}
+
+/**
+ * Load TIFF image using libtiff
+ */
+static PluginError load_tiff(ImageDocument* doc, const char* filename) {
+    TIFF* tif;
+    ImageLayer* layer = NULL;
+    uint32_t width, height;
+    uint16_t photometric, samples_per_pixel, bits_per_sample, planar_config;
+    guint page_num = 0;
+    gchar layer_name[64];
+    PluginError error = PLUGIN_ERROR_NONE;
+
+    if (!doc || !filename) {
+        g_warning("TIFF plugin: Invalid parameters");
+        return PLUGIN_ERROR_INVALID_PARAMETERS;
+    }
+
+    /* Set error handlers */
+    TIFFSetErrorHandler(tiff_error_handler);
+    TIFFSetWarningHandler(tiff_warning_handler);
+
+    /* Open TIFF file */
+    /* Note: TIFFOpen automatically reads the first directory */
+    tif = TIFFOpen(filename, "r");
+    if (!tif) {
+        g_warning("TIFF plugin: Failed to open file: %s", filename);
+        return PLUGIN_ERROR_FILE_NOT_FOUND;
+    }
+
+    /* Get first page dimensions to set document canvas size */
+    if (!TIFFGetField(tif, TIFFTAG_IMAGEWIDTH, &width) ||
+        !TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &height)) {
+        g_warning("TIFF plugin: Failed to get image dimensions");
+        TIFFClose(tif);
+        return PLUGIN_ERROR_FILE_READ_ERROR;
+    }
+
+    if (width == 0 || height == 0) {
+        g_warning("TIFF plugin: Invalid dimensions: %ux%u", width, height);
+        TIFFClose(tif);
+        return PLUGIN_ERROR_UNSUPPORTED_FORMAT;
+    }
+
+    /* Get image properties from first page */
+    if (!TIFFGetField(tif, TIFFTAG_PHOTOMETRIC, &photometric)) {
+        photometric = PHOTOMETRIC_RGB;
+    }
+    if (!TIFFGetField(tif, TIFFTAG_SAMPLESPERPIXEL, &samples_per_pixel)) {
+        samples_per_pixel = 1;
+    }
+    if (!TIFFGetField(tif, TIFFTAG_BITSPERSAMPLE, &bits_per_sample)) {
+        bits_per_sample = 8;
+    }
+    if (!TIFFGetField(tif, TIFFTAG_PLANARCONFIG, &planar_config)) {
+        planar_config = PLANARCONFIG_CONTIG;
+    }
+
+    /* Set document metadata based on first page */
+    doc->width = width;
+    doc->height = height;
+    doc->channels = samples_per_pixel;
+    doc->bit_depth = bits_per_sample;
+    doc->has_alpha = (samples_per_pixel == 4 || samples_per_pixel == 2);
+
+    /* Free old layers */
+    for (GList* iter = doc->layers; iter; iter = iter->next) {
+        layer_free((ImageLayer*)iter->data);
+    }
+    g_list_free(doc->layers);
+    doc->layers = NULL;
+
+    /* Load all pages - loop through directories */
+    do {
+        uint32_t page_width, page_height;
+
+        /* Get current page dimensions */
+        if (!TIFFGetField(tif, TIFFTAG_IMAGEWIDTH, &page_width) ||
+            !TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &page_height)) {
+            g_warning("TIFF plugin: Failed to get page %u dimensions", page_num + 1);
+            continue;
+        }
+
+        if (page_width == 0 || page_height == 0) {
+            g_warning("TIFF plugin: Invalid page %u dimensions: %ux%u", page_num + 1, page_width, page_height);
+            continue;
+        }
+
+        /* Create layer name */
+        if (page_num == 0) {
+            g_snprintf(layer_name, sizeof(layer_name), "Page 1");
+        } else {
+            g_snprintf(layer_name, sizeof(layer_name), "Page %u", page_num + 1);
+        }
+
+        /* Create layer with document canvas dimensions (pages may be smaller) */
+        layer = layer_new(layer_name, doc->width, doc->height, TRUE,
+                          LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL, doc);
+        if (!layer) {
+            g_warning("TIFF plugin: Failed to create layer for page %u", page_num + 1);
+            continue;
+        }
+
+        /* Load page into layer */
+        error = load_tiff_page(tif, doc, layer, page_width, page_height);
+        if (error != PLUGIN_ERROR_NONE) {
+            g_warning("TIFF plugin: Failed to load page %u", page_num + 1);
+            layer_free(layer);
+            continue;
+        }
+
+        /* Add layer to document */
+        doc->layers = g_list_append(doc->layers, layer);
+        layer = NULL; /* Don't free it, it's in the list now */
+
+        page_num++;
+    } while (TIFFReadDirectory(tif)); /* Read next directory */
+
+    /* Cleanup */
     TIFFClose(tif);
 
-    /* Add layer to document */
-    doc->layers = g_list_append(doc->layers, base_layer);
+    /* Check if we loaded any pages */
+    if (doc->layers == NULL) {
+        g_warning("TIFF plugin: Failed to load any pages from TIFF file");
+        return PLUGIN_ERROR_FILE_READ_ERROR;
+    }
 
     return PLUGIN_ERROR_NONE;
 }
@@ -350,53 +422,34 @@ static bool is_image_grayscale(guchar* surface_data, int surface_stride, guint w
 }
 
 /**
- * Save TIFF image using libtiff
+ * Write a single page to TIFF file
+ * Helper function for save_tiff
  */
-static PluginError save_tiff(ImageDocument* doc, const char* filename, const SaveOptions* opts) {
-    TIFF* tif;
-    cairo_surface_t* composite;
+static PluginError write_tiff_page(TIFF* tif, cairo_surface_t* surface, guint width, guint height,
+                                   TIFFSaveOptions* tiff_opts, TIFFColorCompression color_compression,
+                                   TIFFMonochromeCompression mono_compression, TIFFColorFormat color_format,
+                                   TIFFTransparencyFormat transparency_format) {
     guchar* surface_data;
     int surface_stride;
-    TIFFSaveOptions* tiff_opts = NULL;
-    TIFFColorCompression color_compression = TIFF_COLOR_COMPRESSION_AUTO;
-    TIFFMonochromeCompression mono_compression = TIFF_MONO_COMPRESSION_AUTO;
-    TIFFColorFormat color_format = TIFF_COLOR_FORMAT_AUTO;
-    TIFFTransparencyFormat transparency_format = TIFF_TRANSPARENCY_AUTO;
     bool is_grayscale = false;
     bool has_alpha = false;
 
-    if (!doc || !filename) {
+    if (!tif || !surface) {
         return PLUGIN_ERROR_INVALID_PARAMETERS;
     }
 
-    /* Get TIFF-specific options if provided */
-    if (opts && opts->plugin_data) {
-        tiff_opts = (TIFFSaveOptions*)opts->plugin_data;
-        color_compression = tiff_opts->color_compression;
-        mono_compression = tiff_opts->monochrome_compression;
-        color_format = tiff_opts->color_format;
-        transparency_format = tiff_opts->transparency_format;
-    }
-
-    /* Get composite surface */
-    composite = document_export_composite_surface(doc);
-    if (!composite) {
-        return PLUGIN_ERROR_FILE_WRITE_ERROR;
-    }
-
-    cairo_surface_flush(composite);
-    surface_data = cairo_image_surface_get_data(composite);
-    surface_stride = cairo_image_surface_get_stride(composite);
+    cairo_surface_flush(surface);
+    surface_data = cairo_image_surface_get_data(surface);
+    surface_stride = cairo_image_surface_get_stride(surface);
 
     if (!surface_data) {
-        cairo_surface_destroy(composite);
         return PLUGIN_ERROR_FILE_WRITE_ERROR;
     }
 
-    /* Check composite surface for transparency */
-    for (guint y = 0; y < doc->height && !has_alpha; y++) {
+    /* Check surface for transparency */
+    for (guint y = 0; y < height && !has_alpha; y++) {
         guchar* row = surface_data + y * surface_stride;
-        for (guint x = 0; x < doc->width; x++) {
+        for (guint x = 0; x < width; x++) {
             guchar a = row[x * 4 + 3];
             if (a < 255) {
                 has_alpha = true;
@@ -407,7 +460,7 @@ static PluginError save_tiff(ImageDocument* doc, const char* filename, const Sav
 
     /* Determine color format */
     if (color_format == TIFF_COLOR_FORMAT_AUTO) {
-        is_grayscale = is_image_grayscale(surface_data, surface_stride, doc->width, doc->height);
+        is_grayscale = is_image_grayscale(surface_data, surface_stride, width, height);
     } else if (color_format == TIFF_COLOR_FORMAT_GRAYSCALE) {
         is_grayscale = true;
     } else {
@@ -419,16 +472,9 @@ static PluginError save_tiff(ImageDocument* doc, const char* filename, const Sav
         transparency_format = has_alpha ? TIFF_TRANSPARENCY_FULL : TIFF_TRANSPARENCY_NONE;
     }
 
-    /* Open output file */
-    tif = TIFFOpen(filename, "w");
-    if (!tif) {
-        cairo_surface_destroy(composite);
-        return PLUGIN_ERROR_FILE_WRITE_ERROR;
-    }
-
     /* Set basic TIFF tags */
-    TIFFSetField(tif, TIFFTAG_IMAGEWIDTH, doc->width);
-    TIFFSetField(tif, TIFFTAG_IMAGELENGTH, doc->height);
+    TIFFSetField(tif, TIFFTAG_IMAGEWIDTH, width);
+    TIFFSetField(tif, TIFFTAG_IMAGELENGTH, height);
     TIFFSetField(tif, TIFFTAG_BITSPERSAMPLE, 8);
     TIFFSetField(tif, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT);
     TIFFSetField(tif, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
@@ -498,19 +544,17 @@ static PluginError save_tiff(ImageDocument* doc, const char* filename, const Sav
 
     /* Allocate scanline buffer */
     uint32_t bytes_per_pixel = is_grayscale ? (use_alpha ? 2 : 1) : (use_alpha ? 4 : 3);
-    tdata_t scanline = _TIFFmalloc(doc->width * bytes_per_pixel);
+    tdata_t scanline = _TIFFmalloc(width * bytes_per_pixel);
     if (!scanline) {
-        TIFFClose(tif);
-        cairo_surface_destroy(composite);
         return PLUGIN_ERROR_OUT_OF_MEMORY;
     }
 
     /* Write scanlines */
-    for (guint y = 0; y < doc->height; y++) {
+    for (guint y = 0; y < height; y++) {
         guchar* src_row = surface_data + y * surface_stride;
         guchar* dst_row = (guchar*)scanline;
 
-        for (guint x = 0; x < doc->width; x++) {
+        for (guint x = 0; x < width; x++) {
             guchar b = src_row[x * 4 + 0];
             guchar g = src_row[x * 4 + 1];
             guchar r = src_row[x * 4 + 2];
@@ -592,18 +636,102 @@ static PluginError save_tiff(ImageDocument* doc, const char* filename, const Sav
 
         if (TIFFWriteScanline(tif, scanline, y, 0) < 0) {
             _TIFFfree(scanline);
-            TIFFClose(tif);
-            cairo_surface_destroy(composite);
             return PLUGIN_ERROR_FILE_WRITE_ERROR;
         }
     }
 
     /* Cleanup */
     _TIFFfree(scanline);
-    TIFFClose(tif);
-    cairo_surface_destroy(composite);
-
     return PLUGIN_ERROR_NONE;
+}
+
+/**
+ * Save TIFF image using libtiff
+ */
+static PluginError save_tiff(ImageDocument* doc, const char* filename, const SaveOptions* opts) {
+    TIFF* tif;
+    cairo_surface_t* composite;
+    TIFFSaveOptions* tiff_opts = NULL;
+    TIFFColorCompression color_compression = TIFF_COLOR_COMPRESSION_AUTO;
+    TIFFMonochromeCompression mono_compression = TIFF_MONO_COMPRESSION_AUTO;
+    TIFFColorFormat color_format = TIFF_COLOR_FORMAT_AUTO;
+    TIFFTransparencyFormat transparency_format = TIFF_TRANSPARENCY_AUTO;
+    TIFFPageFormat page_format = TIFF_PAGE_FORMAT_SINGLE_PAGE;
+    PluginError error = PLUGIN_ERROR_NONE;
+    guint layer_count = 0;
+
+    if (!doc || !filename) {
+        return PLUGIN_ERROR_INVALID_PARAMETERS;
+    }
+
+    /* Get TIFF-specific options if provided */
+    if (opts && opts->plugin_data) {
+        tiff_opts = (TIFFSaveOptions*)opts->plugin_data;
+        color_compression = tiff_opts->color_compression;
+        mono_compression = tiff_opts->monochrome_compression;
+        color_format = tiff_opts->color_format;
+        transparency_format = tiff_opts->transparency_format;
+        page_format = tiff_opts->page_format;
+    }
+
+    /* Open output file */
+    tif = TIFFOpen(filename, "w");
+    if (!tif) {
+        return PLUGIN_ERROR_FILE_WRITE_ERROR;
+    }
+
+    /* Determine if we're saving single page or multipage */
+    if (page_format == TIFF_PAGE_FORMAT_SINGLE_PAGE) {
+        /* Single page mode: save composited image */
+        composite = document_export_composite_surface(doc);
+        if (!composite) {
+            TIFFClose(tif);
+            return PLUGIN_ERROR_FILE_WRITE_ERROR;
+        }
+
+        error = write_tiff_page(tif, composite, doc->width, doc->height, tiff_opts,
+                                color_compression, mono_compression, color_format, transparency_format);
+        cairo_surface_destroy(composite);
+    } else {
+        /* Multipage mode: save one page per layer */
+        layer_count = document_get_layer_count(doc);
+        if (layer_count == 0) {
+            TIFFClose(tif);
+            return PLUGIN_ERROR_INVALID_PARAMETERS;
+        }
+
+        for (guint i = 0; i < layer_count; i++) {
+            ImageLayer* layer = document_get_layer(doc, i);
+            if (!layer || !layer->surface) {
+                continue; /* Skip invalid layers */
+            }
+
+            /* Ensure layer cache is up to date */
+            if (!layer_ensure_cache(layer)) {
+                continue; /* Skip layers that can't be cached */
+            }
+
+            /* Write this layer as a page */
+            error = write_tiff_page(tif, layer->cache_surface, layer->width, layer->height, tiff_opts,
+                                    color_compression, mono_compression, color_format, transparency_format);
+            if (error != PLUGIN_ERROR_NONE) {
+                break; /* Stop on error */
+            }
+
+            /* Write directory and prepare for next page (except for last page) */
+            if (i < layer_count - 1) {
+                if (!TIFFWriteDirectory(tif)) {
+                    error = PLUGIN_ERROR_FILE_WRITE_ERROR;
+                    break;
+                }
+            }
+        }
+    }
+
+    /* Close file (writes final directory) */
+    TIFFClose(tif);
+
+    return error;
 }
 #else
 /**
@@ -668,6 +796,7 @@ static void init_tiff_save_options(void* plugin_data) {
         opts->compositing_color_r = 255;
         opts->compositing_color_g = 255;
         opts->compositing_color_b = 255;
+        opts->page_format = TIFF_PAGE_FORMAT_SINGLE_PAGE; /* Default: single page */
         memset(opts->reserved, 0, sizeof(opts->reserved));
     }
 }

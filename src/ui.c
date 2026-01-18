@@ -912,9 +912,9 @@ void ui_update_window_title(AppContext* ctx, ImageDocument* doc) {
     if (active_doc) {
         const gchar* filename = document_get_filename(active_doc);
         const gchar* modified = active_doc->modified ? "*" : "";
-        title = g_strdup_printf("Image Editor - %s%s", filename, modified);
+        title = g_strdup_printf("RasterLab - %s%s", filename, modified);
     } else {
-        title = g_strdup("Image Editor");
+        title = g_strdup("RasterLab");
     }
 
     gtk_window_set_title(GTK_WINDOW(ctx->window), title);

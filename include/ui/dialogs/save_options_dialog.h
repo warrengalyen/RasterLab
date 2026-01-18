@@ -14,9 +14,10 @@ extern "C" {
  * @param parent Parent window (can be NULL)
  * @param filename Filename being saved (used to determine format)
  * @param opts SaveOptions structure to populate (must be pre-allocated with plugin_data if needed)
+ * @param doc Document being saved (can be NULL, used for layer count checks)
  * @return TRUE if user clicked OK, FALSE if cancelled
  */
-gboolean save_options_dialog_show(GtkWindow* parent, const char* filename, SaveOptions* opts);
+gboolean save_options_dialog_show(GtkWindow* parent, const char* filename, SaveOptions* opts, ImageDocument* doc);
 
 #ifdef __cplusplus
 }

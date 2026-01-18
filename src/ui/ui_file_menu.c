@@ -698,7 +698,7 @@ void on_file_save_as_response(GtkDialog* dialog, gint response_id, gpointer user
                 }
 
                 /* Show save options dialog if needed (after file chooser is closed) */
-                dialog_result = save_options_dialog_show(GTK_WINDOW(ctx->window), file_path, &opts);
+                dialog_result = save_options_dialog_show(GTK_WINDOW(ctx->window), file_path, &opts, doc);
 
                 if (dialog_result) {
                     /* User clicked OK, proceed with save */
