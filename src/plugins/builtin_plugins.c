@@ -11,10 +11,10 @@
 #include "plugins/plugin_png.h"
 #include "plugins/plugin_ras.h"
 #include "plugins/plugin_tga.h"
+#include "plugins/plugin_tiff.h"
 #include "plugins/plugin_webp.h"
 #include "plugins/plugin_xpm.h"
 #include <glib.h>
-
 
 /**
  * Register built-in plugins (PNG, JPEG, BMP)
@@ -33,6 +33,7 @@ void builtin_plugins_register(void) {
     ImageFormatPlugin ras_plugin;
     ImageFormatPlugin deep_plugin;
     ImageFormatPlugin webp_plugin;
+    ImageFormatPlugin tiff_plugin;
 
     /* Register PNG plugin (using libpng) */
 #ifdef HAVE_LIBPNG
@@ -176,5 +177,21 @@ void builtin_plugins_register(void) {
     }
 #else
     g_message("WebP plugin not available (HAVE_LIBWEBP not defined)");
+#endif
+
+    /* Register TIFF plugin (using libtiff) */
+#ifdef HAVE_LIBTIFF
+    g_message("Registering built-in TIFF plugin");
+    if (plugin_init_tiff(host_api, &tiff_plugin)) {
+        if (format_registry_register_builtin(&tiff_plugin)) {
+            g_message("Successfully registered TIFF plugin");
+        } else {
+            g_message("Failed to register TIFF plugin with format registry");
+        }
+    } else {
+        g_message("Failed to initialize TIFF plugin (libtiff may not be available)");
+    }
+#else
+    g_message("TIFF plugin not available (HAVE_LIBTIFF not defined)");
 #endif
 }

@@ -58,6 +58,7 @@ set(SOURCES
     plugins/plugin_png.c
     plugins/plugin_ras.c
     plugins/plugin_tga.c
+    plugins/plugin_tiff.c
     plugins/plugin_xpm.c
     plugins/plugin_cut.c
     plugins/plugin_deep.c
@@ -427,6 +428,112 @@ if(LIBWEBP_FOUND)
     target_compile_definitions(rasterlab PRIVATE HAVE_LIBWEBP=1)
 else()
     target_compile_definitions(rasterlab PRIVATE HAVE_LIBWEBP=0)
+endif()
+
+# Link libtiff if available
+if(LIBTIFF_FOUND)
+    if(LIBTIFF_TARGET AND TARGET ${LIBTIFF_TARGET})
+        # Link against the CMake target (when building from source via ExternalProject)
+        # Explicitly set include directories to use installed headers (not system headers)
+        get_target_property(TIFF_INCLUDE_DIRS ${LIBTIFF_TARGET} INTERFACE_INCLUDE_DIRECTORIES)
+        if(TIFF_INCLUDE_DIRS)
+            # Add as SYSTEM include so it's treated as a system header (won't generate warnings)
+            # but use BEFORE to ensure it comes before other system includes
+            target_include_directories(rasterlab PRIVATE BEFORE SYSTEM ${TIFF_INCLUDE_DIRS})
+            message(STATUS "Using libtiff include directories (BEFORE SYSTEM): ${TIFF_INCLUDE_DIRS}")
+        endif()
+        target_link_libraries(rasterlab ${LIBTIFF_TARGET})
+        message(STATUS "Linking against libtiff target: ${LIBTIFF_TARGET}")
+        
+        # Link zlib if we're building it from source (libtiff depends on it)
+        if(ZLIB_TARGET AND TARGET ${ZLIB_TARGET})
+            target_link_libraries(rasterlab ${ZLIB_TARGET})
+            message(STATUS "Linking against zlib target for libtiff: ${ZLIB_TARGET}")
+            # Add dependency to ensure zlib is built before the application
+            if(TARGET zlib_external)
+                add_dependencies(rasterlab zlib_external)
+            endif()
+        elseif(ZLIB_FOUND AND ZLIB_LIBRARIES)
+            # Link system zlib
+            target_link_libraries(rasterlab ${ZLIB_LIBRARIES})
+            target_compile_options(rasterlab PRIVATE ${ZLIB_CFLAGS_OTHER})
+            message(STATUS "Linking against system zlib for libtiff: ${ZLIB_LIBRARIES}")
+        elseif(ZLIB_LIBRARIES)
+            target_link_libraries(rasterlab ${ZLIB_LIBRARIES})
+            message(STATUS "Linking against zlib for libtiff: ${ZLIB_LIBRARIES}")
+        endif()
+        
+        # Link jpeg if we're building it from source (libtiff may depend on it)
+        if(LIBJPEG_TARGET AND TARGET ${LIBJPEG_TARGET})
+            target_link_libraries(rasterlab ${LIBJPEG_TARGET})
+            message(STATUS "Linking against libjpeg target for libtiff: ${LIBJPEG_TARGET}")
+            # Add dependency to ensure libjpeg is built before the application
+            if(TARGET libjpeg_external)
+                add_dependencies(rasterlab libjpeg_external)
+            endif()
+        elseif(LIBJPEG_FOUND AND LIBJPEG_LIBRARIES)
+            # Link system libjpeg
+            target_link_libraries(rasterlab ${LIBJPEG_LIBRARIES})
+            target_compile_options(rasterlab PRIVATE ${LIBJPEG_CFLAGS_OTHER})
+            message(STATUS "Linking against system libjpeg for libtiff: ${LIBJPEG_LIBRARIES}")
+        elseif(LIBJPEG_LIBRARIES)
+            target_link_libraries(rasterlab ${LIBJPEG_LIBRARIES})
+            message(STATUS "Linking against libjpeg for libtiff: ${LIBJPEG_LIBRARIES}")
+        endif()
+        
+        # Add dependency to ensure libtiff is built before the application
+        if(TARGET libtiff_external)
+            add_dependencies(rasterlab libtiff_external)
+        endif()
+        
+        message(STATUS "libtiff shared library will be copied to: ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
+    elseif(LIBTIFF_LIBRARIES)
+        # Link against pkg-config found library (system libtiff)
+        target_link_libraries(rasterlab ${LIBTIFF_LIBRARIES})
+        target_compile_options(rasterlab PRIVATE ${LIBTIFF_CFLAGS_OTHER})
+        message(STATUS "Linking against system libtiff: ${LIBTIFF_LIBRARIES}")
+        # System libtiff usually links zlib and jpeg automatically, but ensure they're available
+        if(ZLIB_FOUND AND ZLIB_LIBRARIES)
+            target_link_libraries(rasterlab ${ZLIB_LIBRARIES})
+        elseif(ZLIB_LIBRARIES)
+            target_link_libraries(rasterlab ${ZLIB_LIBRARIES})
+        endif()
+        if(LIBJPEG_FOUND AND LIBJPEG_LIBRARIES)
+            target_link_libraries(rasterlab ${LIBJPEG_LIBRARIES})
+        elseif(LIBJPEG_LIBRARIES)
+            target_link_libraries(rasterlab ${LIBJPEG_LIBRARIES})
+        endif()
+    else()
+        # Try to find and link tiff library directly
+        find_library(TIFF_LIB
+            NAMES tiff libtiff
+            PATHS "${CMAKE_SOURCE_DIR}/lib/libtiff/.libs"
+                  "${CMAKE_SOURCE_DIR}/lib/libtiff/build"
+                  /usr/lib
+                  /usr/local/lib
+                  /opt/local/lib
+        )
+        if(TIFF_LIB)
+            target_link_libraries(rasterlab ${TIFF_LIB})
+            message(STATUS "Linking against libtiff: ${TIFF_LIB}")
+            # Also link zlib and jpeg if available
+            if(ZLIB_FOUND AND ZLIB_LIBRARIES)
+                target_link_libraries(rasterlab ${ZLIB_LIBRARIES})
+            elseif(ZLIB_LIBRARIES)
+                target_link_libraries(rasterlab ${ZLIB_LIBRARIES})
+            endif()
+            if(LIBJPEG_FOUND AND LIBJPEG_LIBRARIES)
+                target_link_libraries(rasterlab ${LIBJPEG_LIBRARIES})
+            elseif(LIBJPEG_LIBRARIES)
+                target_link_libraries(rasterlab ${LIBJPEG_LIBRARIES})
+            endif()
+        else()
+            message(WARNING "libtiff library not found, but headers were found. TIFF plugin may not work.")
+        endif()
+    endif()
+    target_compile_definitions(rasterlab PRIVATE HAVE_LIBTIFF=1)
+else()
+    target_compile_definitions(rasterlab PRIVATE HAVE_LIBTIFF=0)
 endif()
 
 # Add compile flags from pkg-config

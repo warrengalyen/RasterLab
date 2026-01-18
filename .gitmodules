@@ -10,3 +10,6 @@
 [submodule "lib/libwebp"]
 	path = lib/libwebp
 	url = https://github.com/webmproject/libwebp
+[submodule "lib/libtiff"]
+	path = lib/libtiff
+	url = https://gitlab.com/libtiff/libtiff.git

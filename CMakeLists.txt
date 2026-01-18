@@ -670,6 +670,213 @@ else()
     set(HAVE_LIBWEBP 0)
 endif()
 
+# Check if libtiff submodule exists
+set(LIBTIFF_FOUND FALSE)
+set(LIBTIFF_LIBRARIES "")
+set(LIBTIFF_TARGET "")
+
+if(EXISTS "${CMAKE_SOURCE_DIR}/lib/libtiff/CMakeLists.txt")
+    message(STATUS "libtiff submodule found, building from source")
+    
+    # Set up paths for ExternalProject
+    set(LIBTIFF_BUILD_DIR "${CMAKE_BINARY_DIR}/libtiff_build")
+    set(LIBTIFF_INSTALL_DIR "${CMAKE_BINARY_DIR}/libtiff_install")
+    
+    # Determine library name based on platform
+    if(WIN32)
+        # On Windows, libtiff outputs libtiff-6.dll (versioned)
+        set(LIBTIFF_DLL_NAME "libtiff-6.dll")
+        set(LIBTIFF_DLL_PATH "${LIBTIFF_INSTALL_DIR}/bin/${LIBTIFF_DLL_NAME}")
+        
+        # For MinGW, the import library is libtiff.dll.a
+        if(MINGW)
+            set(LIBTIFF_IMPLIB_NAME "libtiff.dll.a")
+        else()
+            set(LIBTIFF_IMPLIB_NAME "tiff.lib")
+        endif()
+        set(LIBTIFF_IMPLIB_PATH "${LIBTIFF_INSTALL_DIR}/lib/${LIBTIFF_IMPLIB_NAME}")
+    else()
+        # On Unix-like systems, shared library is in lib/
+        set(LIBTIFF_LIB_NAME "libtiff${CMAKE_SHARED_LIBRARY_SUFFIX}")
+        set(LIBTIFF_LIB_PATH "${LIBTIFF_INSTALL_DIR}/lib/${LIBTIFF_LIB_NAME}")
+    endif()
+    
+    # Configure CMake arguments for libtiff
+    # Only build shared library, not static
+    set(LIBTIFF_CMAKE_ARGS
+        -DCMAKE_INSTALL_PREFIX=${LIBTIFF_INSTALL_DIR}
+        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+        -DBUILD_SHARED_LIBS=ON
+        -Dtiff-tools=OFF
+        -Dtiff-tests=OFF
+        -Dtiff-contrib=OFF
+        -Dtiff-docs=OFF
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+    )
+    
+    # Pass zlib information to libtiff if we're building zlib from source
+    if(ZLIB_TARGET AND TARGET ${ZLIB_TARGET})
+        if(WIN32)
+            list(APPEND LIBTIFF_CMAKE_ARGS 
+                -DZLIB_ROOT=${ZLIB_INSTALL_DIR}
+                -DZLIB_INCLUDE_DIR=${ZLIB_INSTALL_DIR}/include
+                -DZLIB_LIBRARY=${ZLIB_IMPLIB_PATH}
+                -DCMAKE_PREFIX_PATH=${ZLIB_INSTALL_DIR}
+            )
+        else()
+            list(APPEND LIBTIFF_CMAKE_ARGS 
+                -DZLIB_ROOT=${ZLIB_INSTALL_DIR}
+                -DZLIB_INCLUDE_DIR=${ZLIB_INSTALL_DIR}/include
+                -DZLIB_LIBRARY=${ZLIB_LIB_PATH}
+                -DCMAKE_PREFIX_PATH=${ZLIB_INSTALL_DIR}
+            )
+        endif()
+    endif()
+    
+    # Pass jpeg information to libtiff if we're building jpeg from source
+    if(LIBJPEG_TARGET AND TARGET ${LIBJPEG_TARGET})
+        if(WIN32)
+            list(APPEND LIBTIFF_CMAKE_ARGS 
+                -DJPEG_ROOT=${LIBJPEG_INSTALL_DIR}
+                -DJPEG_INCLUDE_DIR=${LIBJPEG_INCLUDE_DIRS}
+                -DJPEG_LIBRARY=${LIBJPEG_IMPLIB_PATH}
+                -DCMAKE_PREFIX_PATH=${LIBJPEG_INSTALL_DIR}
+            )
+        else()
+            list(APPEND LIBTIFF_CMAKE_ARGS 
+                -DJPEG_ROOT=${LIBJPEG_INSTALL_DIR}
+                -DJPEG_INCLUDE_DIR=${LIBJPEG_INCLUDE_DIRS}
+                -DJPEG_LIBRARY=${LIBJPEG_LIB_PATH}
+                -DCMAKE_PREFIX_PATH=${LIBJPEG_INSTALL_DIR}
+            )
+        endif()
+    endif()
+    
+    # Pass architecture-specific settings
+    if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+        # 64-bit
+        list(APPEND LIBTIFF_CMAKE_ARGS -DCMAKE_SYSTEM_PROCESSOR=${CMAKE_SYSTEM_PROCESSOR})
+    else()
+        # 32-bit
+        list(APPEND LIBTIFF_CMAKE_ARGS -DCMAKE_SYSTEM_PROCESSOR=${CMAKE_SYSTEM_PROCESSOR})
+    endif()
+    
+    # Collect dependencies for libtiff
+    set(LIBTIFF_DEPENDS "")
+    if(ZLIB_TARGET AND TARGET zlib_external)
+        list(APPEND LIBTIFF_DEPENDS zlib_external)
+    endif()
+    if(LIBJPEG_TARGET AND TARGET libjpeg_external)
+        list(APPEND LIBTIFF_DEPENDS libjpeg_external)
+    endif()
+    
+    # Add ExternalProject to build libtiff
+    if(LIBTIFF_DEPENDS)
+        ExternalProject_Add(
+            libtiff_external
+            SOURCE_DIR "${CMAKE_SOURCE_DIR}/lib/libtiff"
+            BINARY_DIR "${LIBTIFF_BUILD_DIR}"
+            INSTALL_DIR "${LIBTIFF_INSTALL_DIR}"
+            CMAKE_ARGS ${LIBTIFF_CMAKE_ARGS}
+            BUILD_ALWAYS FALSE
+            DEPENDS ${LIBTIFF_DEPENDS}
+        )
+    else()
+        ExternalProject_Add(
+            libtiff_external
+            SOURCE_DIR "${CMAKE_SOURCE_DIR}/lib/libtiff"
+            BINARY_DIR "${LIBTIFF_BUILD_DIR}"
+            INSTALL_DIR "${LIBTIFF_INSTALL_DIR}"
+            CMAKE_ARGS ${LIBTIFF_CMAKE_ARGS}
+            BUILD_ALWAYS FALSE
+        )
+    endif()
+    
+    # Set include directory - use source directory for headers during configure
+    # The installed headers will be available at build time
+    if(EXISTS "${CMAKE_SOURCE_DIR}/lib/libtiff/libtiff")
+        set(LIBTIFF_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/lib/libtiff/libtiff")
+    else()
+        # Fallback to source directory root
+        set(LIBTIFF_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/lib/libtiff")
+    endif()
+    
+    include_directories(${LIBTIFF_INCLUDE_DIRS})
+    
+    # Create imported target for linking
+    add_library(tiff SHARED IMPORTED GLOBAL)
+    
+    # Set properties
+    if(WIN32)
+        # On Windows, set the DLL location and import library
+        set_target_properties(tiff PROPERTIES
+            INTERFACE_INCLUDE_DIRECTORIES "${LIBTIFF_INCLUDE_DIRS}"
+            IMPORTED_LOCATION "${LIBTIFF_DLL_PATH}"
+            IMPORTED_IMPLIB "${LIBTIFF_IMPLIB_PATH}"
+        )
+        
+        # Copy DLL to bin directory at build time
+        add_custom_command(TARGET libtiff_external POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${LIBTIFF_DLL_PATH}"
+                "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/"
+            COMMENT "Copying libtiff DLL to bin directory"
+        )
+    else()
+        # On Unix-like systems, set the shared library location
+        set_target_properties(tiff PROPERTIES
+            INTERFACE_INCLUDE_DIRECTORIES "${LIBTIFF_INCLUDE_DIRS}"
+            IMPORTED_LOCATION "${LIBTIFF_LIB_PATH}"
+        )
+        
+        # Copy shared library to bin directory at build time
+        add_custom_command(TARGET libtiff_external POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${LIBTIFF_LIB_PATH}"
+                "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/"
+            COMMENT "Copying libtiff shared library to bin directory"
+        )
+    endif()
+    
+    set(LIBTIFF_FOUND TRUE)
+    set(LIBTIFF_TARGET tiff)
+    
+    message(STATUS "Building libtiff from source as shared library")
+    message(STATUS "libtiff include dirs: ${LIBTIFF_INCLUDE_DIRS}")
+    if(WIN32)
+        message(STATUS "libtiff DLL path: ${LIBTIFF_DLL_PATH}")
+        message(STATUS "libtiff import library path: ${LIBTIFF_IMPLIB_PATH}")
+    else()
+        message(STATUS "libtiff library path: ${LIBTIFF_LIB_PATH}")
+    endif()
+else()
+    # Fallback to system libtiff via pkg-config
+    message(STATUS "libtiff submodule not found, trying system libtiff")
+    pkg_check_modules(LIBTIFF libtiff-4)
+    
+    if(NOT LIBTIFF_FOUND)
+        pkg_check_modules(LIBTIFF libtiff)
+    endif()
+    
+    if(LIBTIFF_FOUND)
+        include_directories(${LIBTIFF_INCLUDE_DIRS})
+        message(STATUS "Using system libtiff: ${LIBTIFF_INCLUDE_DIRS}")
+    else()
+        message(WARNING "libtiff not found. TIFF plugin will not be available.")
+        message(WARNING "To add libtiff as submodule, run:")
+        message(WARNING "  git submodule add https://gitlab.com/libtiff/libtiff.git lib/libtiff")
+        message(WARNING "  git submodule update --init --recursive")
+    endif()
+endif()
+
+if(LIBTIFF_FOUND)
+    set(HAVE_LIBTIFF 1)
+else()
+    set(HAVE_LIBTIFF 0)
+endif()
+
 # Find GTK3, GdkPixbuf, libxml2, and LZ4 using pkg-config
 # NOTE: This is done AFTER zlib/libpng configuration to ensure our libpng headers
 # are set up before GTK3's pkg-config adds system libpng headers to CFLAGS
