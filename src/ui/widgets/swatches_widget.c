@@ -24,6 +24,7 @@ G_DEFINE_TYPE(SwatchesWidget, swatches_widget, GTK_TYPE_DRAWING_AREA)
 /* Forward declarations */
 static gboolean swatches_widget_draw(GtkWidget* widget, cairo_t* cr);
 static void swatches_widget_size_allocate(GtkWidget* widget, GtkAllocation* allocation);
+static void swatches_widget_get_preferred_width(GtkWidget* widget, gint* minimum_width, gint* natural_width);
 static void swatches_widget_get_preferred_height(GtkWidget* widget, gint* minimum_height, gint* natural_height);
 static gboolean swatches_widget_motion_notify(GtkWidget* widget, GdkEventMotion* event);
 static gboolean swatches_widget_leave_notify(GtkWidget* widget, GdkEventCrossing* event);
@@ -85,6 +86,7 @@ static void swatches_widget_class_init(SwatchesWidgetClass* klass) {
 
     widget_class->draw = swatches_widget_draw;
     widget_class->size_allocate = swatches_widget_size_allocate;
+    widget_class->get_preferred_width = swatches_widget_get_preferred_width;
     widget_class->get_preferred_height = swatches_widget_get_preferred_height;
     widget_class->motion_notify_event = swatches_widget_motion_notify;
     widget_class->leave_notify_event = swatches_widget_leave_notify;
@@ -255,6 +257,21 @@ static gint get_swatch_at_position(SwatchesWidget* self, gdouble x, gdouble y) {
     return -1;
 }
 
+/* Get preferred width */
+static void swatches_widget_get_preferred_width(GtkWidget* widget, gint* minimum_width, gint* natural_width) {
+    SwatchesWidget* self = SWATCHES_WIDGET(widget);
+    GtkAllocation allocation;
+
+    /* Get current allocation or use a reasonable default */
+    gtk_widget_get_allocation(widget, &allocation);
+    gint width = allocation.width > 0 ? allocation.width : 300;
+
+    if (minimum_width)
+        *minimum_width = width;
+    if (natural_width)
+        *natural_width = width;
+}
+
 /* Get preferred height based on content */
 static void swatches_widget_get_preferred_height(GtkWidget* widget, gint* minimum_height, gint* natural_height) {
     SwatchesWidget* self = SWATCHES_WIDGET(widget);
@@ -373,11 +390,32 @@ static void swatches_widget_get_preferred_height(GtkWidget* widget, gint* minimu
 static void swatches_widget_size_allocate(GtkWidget* widget, GtkAllocation* allocation) {
     SwatchesWidget* self = SWATCHES_WIDGET(widget);
 
-    /* Call parent implementation */
+    /* Call parent implementation first */
     GTK_WIDGET_CLASS(swatches_widget_parent_class)->size_allocate(widget, allocation);
 
     /* Recalculate layout for new size */
     calculate_swatch_size(self);
+
+    /* Calculate natural height based on current layout */
+    /* Guard against division by zero */
+    if (self->columns <= 0 || self->swatch_count == 0) {
+        gtk_widget_queue_draw(widget);
+        return;
+    }
+
+    gint rows = (self->swatch_count + self->columns - 1) / self->columns;
+    gdouble required_height = (2.0 * self->padding) +
+                              (rows * self->swatch_size) +
+                              ((rows > 0 ? rows - 1 : 0) * self->spacing);
+    gint natural_height = (gint)ceil(required_height);
+
+    /* If natural height differs from allocated height, we need to request the natural height */
+    /* This ensures the scrolled window knows the widget needs more space and shows scrollbar */
+    if (natural_height > 0 && natural_height > allocation->height) {
+        /* Queue a resize request so the widget gets its natural height */
+        gtk_widget_queue_resize(widget);
+    }
+
     gtk_widget_queue_draw(widget);
 }
 
