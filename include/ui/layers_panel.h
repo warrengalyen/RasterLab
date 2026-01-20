@@ -5,6 +5,10 @@
 #include "ui/widgets/accordion.h"
 #include <gtk/gtk.h>
 
+/* Forward declaration - AppContext is defined in ui.h */
+struct _AppContext;
+typedef struct _AppContext AppContext;
+
 /**
  * Layers panel structure
  */
@@ -29,9 +33,10 @@ typedef struct {
 
 /**
  * Create the layers panel with tree view
+ * @param ctx Application context (can be NULL, but needed for swatches sync)
  * @return LayersPanel structure
  */
-LayersPanel* create_layers_panel(void);
+LayersPanel* create_layers_panel(AppContext* ctx);
 
 /**
  * Update layers panel with document layers
@@ -108,5 +113,11 @@ void layers_panel_connect_buttons(LayersPanel* layers_panel,
  * @param layers_panel The layers panel to free
  */
 void layers_panel_free(LayersPanel* layers_panel);
+
+/**
+ * Add a color to recent colors
+ * @param color The color to add
+ */
+void layers_panel_add_recent_color(GdkRGBA* color);
 
 #endif /* LAYERS_PANEL_H */

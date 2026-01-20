@@ -186,6 +186,7 @@ set(SOURCES
     ui/filters/filter_whitebalance.c
     ui/filters/filter_zoom_blur.c
     ui/layers_panel.c
+    ui/swatches.c
     ui/tool_options_panel.c
     ui/tools_panel.c
     ui/ui_edit_menu.c
@@ -207,6 +208,7 @@ set(SOURCES
     ui/widgets/hsv_color_wheel.c
     ui/widgets/hsv_scale.c
     ui/widgets/rgb_scale.c
+    ui/widgets/swatches_widget.c
     ui/widgets/vertical_spin_button.c
     undo/undo_disk.c
 )

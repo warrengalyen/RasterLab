@@ -7,6 +7,7 @@
 #include "panels.h"
 #include "tools.h"
 #include "ui/layers_panel.h"
+#include "ui/swatches.h"
 #include "ui/tool_options_panel.h"
 #include "ui/tools_panel.h"
 #include <gtk/gtk.h>
@@ -14,7 +15,7 @@
 /**
  * Application context structure
  */
-typedef struct {
+struct _AppContext {
     GtkWidget* window;                    /* Main application window */
     GtkWidget* notebook;                  /* Notebook widget for tabs */
     GtkWidget* menu_bar;                  /* Menu bar */
@@ -32,7 +33,9 @@ typedef struct {
     Settings* settings;                   /* Application settings */
     gchar* app_dir;                       /* Application executable directory */
     gchar* size_unit;                     /* Current size unit for dimensions display (default: "px") */
-} AppContext;
+    SwatchesData swatches;                /* Swatches data (main swatches and recent colors) */
+};
+typedef struct _AppContext AppContext;
 
 /**
  * Create the main application UI

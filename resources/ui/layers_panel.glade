@@ -111,6 +111,7 @@
       <object class="GtkScrolledWindow" id="layers_scroll">
         <property name="visible">True</property>
         <property name="can-focus">True</property>
+        <property name="border-width">1</property>
         <child>
           <placeholder/>
         </child>

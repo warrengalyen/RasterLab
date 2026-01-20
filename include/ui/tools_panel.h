@@ -33,4 +33,11 @@ void tools_panel_set_main_window(GtkWindow* window);
  */
 gboolean tools_panel_get_foreground_color(GdkRGBA* rgba);
 
+/**
+ * Set the foreground color programmatically
+ * @param color The color to set as foreground color
+ * @return TRUE if color was set, FALSE if color button not available
+ */
+gboolean tools_panel_set_foreground_color(GdkRGBA* color);
+
 #endif /* TOOLS_PANEL_H */

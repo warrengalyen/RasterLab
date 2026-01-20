@@ -7,6 +7,7 @@
 #include "render/layer.h"
 #include "test_widgets.h"
 #include "ui.h"
+#include "ui/swatches.h"
 #include <cairo.h>
 #include <gtk/gtk.h>
 #include <stdio.h>
@@ -56,6 +57,18 @@ int main(int argc, char* argv[]) {
         /* Store app directory in context */
         app->app_dir = app_dir;
 
+        /* Load swatches from file (widgets are created in ui_create_main_window, 
+         * and they sync when created, but we also sync here to ensure they're updated) */
+        if (app->app_dir) {
+            swatches_load(&app->swatches, app->app_dir);
+            /* Sync to widgets if they already exist (they should, since layers panel is created in ui_create_main_window) */
+            GtkWidget* main_widget = (GtkWidget*)g_object_get_data(G_OBJECT(app->window), "main_swatches_widget");
+            GtkWidget* recent_widget = (GtkWidget*)g_object_get_data(G_OBJECT(app->window), "recent_colors_widget");
+            if (main_widget || recent_widget) {
+                swatches_sync_to_widgets(&app->swatches, main_widget, recent_widget);
+            }
+        }
+
         /* Load settings */
         app->settings = settings_load(app_dir);
         if (app->settings) {
@@ -93,6 +106,13 @@ int main(int argc, char* argv[]) {
         if (app->tool_registry) {
             ui_save_all_tool_options_to_settings(app);
         }
+
+        /* Sync widgets to swatches data before saving */
+        GtkWidget* main_widget = (GtkWidget*)g_object_get_data(G_OBJECT(app->window), "main_swatches_widget");
+        GtkWidget* recent_widget = (GtkWidget*)g_object_get_data(G_OBJECT(app->window), "recent_colors_widget");
+        swatches_sync_from_widgets(&app->swatches, main_widget, recent_widget);
+        /* Save swatches to file */
+        swatches_save(&app->swatches, app->app_dir);
 
         /* Save all settings to file */
         settings_save(app->settings, app->app_dir);

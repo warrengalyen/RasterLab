@@ -8,6 +8,7 @@
 #include "ui.h"
 #include "ui/dialogs/save_options_dialog.h"
 #include "ui/layers_panel.h"
+#include "ui/swatches.h"
 #include <glib.h>
 #include <glib/gstdio.h>
 #include <stdio.h>
@@ -918,6 +919,13 @@ gboolean on_window_delete(GtkWidget* widget, GdkEvent* event, gpointer data) {
             ui_save_all_tool_options_to_settings(ctx);
         }
 
+        /* Sync widgets to swatches data before saving */
+        GtkWidget* main_widget = (GtkWidget*)g_object_get_data(G_OBJECT(ctx->window), "main_swatches_widget");
+        GtkWidget* recent_widget = (GtkWidget*)g_object_get_data(G_OBJECT(ctx->window), "recent_colors_widget");
+        swatches_sync_from_widgets(&ctx->swatches, main_widget, recent_widget);
+        /* Save swatches to file */
+        swatches_save(&ctx->swatches, ctx->app_dir);
+
         /* Save all settings to file */
         settings_save(ctx->settings, ctx->app_dir);
     }
@@ -946,6 +954,13 @@ void on_file_exit(GtkWidget* widget, gpointer data) {
         if (ctx->tool_registry) {
             ui_save_all_tool_options_to_settings(ctx);
         }
+
+        /* Sync widgets to swatches data before saving */
+        GtkWidget* main_widget = (GtkWidget*)g_object_get_data(G_OBJECT(ctx->window), "main_swatches_widget");
+        GtkWidget* recent_widget = (GtkWidget*)g_object_get_data(G_OBJECT(ctx->window), "recent_colors_widget");
+        swatches_sync_from_widgets(&ctx->swatches, main_widget, recent_widget);
+        /* Save swatches to file */
+        swatches_save(&ctx->swatches, ctx->app_dir);
 
         /* Save all settings to file */
         settings_save(ctx->settings, ctx->app_dir);

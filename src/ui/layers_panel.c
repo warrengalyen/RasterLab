@@ -4,11 +4,24 @@
 #include "render/dirty.h"
 #include "render/layer.h"
 #include "render/render_utils.h"
+#include "ui.h"
+#include "ui/swatches.h"
+#include "ui/tools_panel.h"
+#include "ui/ui_utils.h"
 #include "ui/widgets/accordion.h"
+#include "ui/widgets/swatches_widget.h"
+#include <glib/gstdio.h>
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
+/* Static references to swatches widgets */
+static SwatchesWidget* g_recent_colors_widget = NULL;
+static SwatchesWidget* g_main_swatches_widget = NULL;
+
 /* Forward declarations */
+static void on_recent_color_selected(SwatchesWidget* widget, gint index, gpointer user_data);
+static void on_swatch_selected(SwatchesWidget* widget, gint index, gpointer user_data);
 static GdkPixbuf* create_layer_thumbnail(cairo_surface_t* layer_surface, gint thumb_size, gboolean visible);
 static GdkPixbuf* get_visibility_icon(gboolean visible);
 static GtkWidget* create_overview_widget(LayersPanel* layers_panel);
@@ -1091,7 +1104,7 @@ static void set_button_icon(GtkButton* button, const gchar* resource_path, gint 
 /**
  * Create the layers panel with tree view (loads from Glade file)
  */
-LayersPanel* create_layers_panel(void) {
+LayersPanel* create_layers_panel(AppContext* ctx) {
     LayersPanel* layers_panel = (LayersPanel*)g_malloc(sizeof(LayersPanel));
     GtkBuilder* builder;
     GError* error = NULL;
@@ -1326,12 +1339,207 @@ LayersPanel* create_layers_panel(void) {
     /* Create overview widget for composite thumbnail */
     layers_panel->overview_widget = create_overview_widget(layers_panel);
 
+    /* Load swatches panel from Glade */
+    GtkBuilder* swatches_builder = gtk_builder_new();
+    GtkWidget* swatches_panel = NULL;
+    error = NULL; /* Clear error before loading swatches panel */
+    if (gtk_builder_add_from_resource(swatches_builder, "/ui/swatches_panel.glade", &error)) {
+        swatches_panel = GTK_WIDGET(gtk_builder_get_object(swatches_builder, "swatches_panel"));
+        if (swatches_panel) {
+            /* Keep builder alive by storing it on the widget as object data */
+            g_object_set_data_full(G_OBJECT(swatches_panel), "builder", swatches_builder, g_object_unref);
+            /* Ensure swatches panel content expands vertically */
+            gtk_widget_set_vexpand(swatches_panel, TRUE);
+            gtk_widget_set_hexpand(swatches_panel, TRUE);
+
+            /* Get swatches_recent_colors_box and create recent colors widget */
+            GtkWidget* swatches_recent_colors_box = GTK_WIDGET(gtk_builder_get_object(swatches_builder, "swatches_recent_colors_box"));
+            if (swatches_recent_colors_box) {
+
+                /* Create recent colors widget (up to 9 colors) */
+                SwatchesWidget* recent_colors_widget = SWATCHES_WIDGET(swatches_widget_new());
+                if (recent_colors_widget) {
+                    swatches_widget_set_spacing(recent_colors_widget, 1.0);
+                    swatches_widget_set_padding(recent_colors_widget, 2.0);
+                    swatches_widget_set_max_swatch_size(recent_colors_widget, 20.0);
+
+                    gtk_widget_set_size_request(GTK_WIDGET(recent_colors_widget), -1, 28);
+
+                    /* Make widget expand horizontally but not vertically */
+                    gtk_widget_set_hexpand(GTK_WIDGET(recent_colors_widget), TRUE);
+                    gtk_widget_set_vexpand(GTK_WIDGET(recent_colors_widget), FALSE);
+
+                    /* Store widget reference in swatches panel for color tracking */
+                    g_object_set_data(G_OBJECT(swatches_panel), "recent_colors_widget", recent_colors_widget);
+
+                    /* Store in static variable for easy access */
+                    g_recent_colors_widget = recent_colors_widget;
+
+                    /* Also store in main window for global access */
+                    if (ctx && ctx->window) {
+                        g_object_set_data(G_OBJECT(ctx->window), "recent_colors_widget", recent_colors_widget);
+                        /* Sync recent colors from app context to widget */
+                        swatches_sync_to_widgets(&ctx->swatches, NULL, GTK_WIDGET(recent_colors_widget));
+                    }
+
+                    /* Connect swatch selection signal to set foreground color */
+                    g_signal_connect(recent_colors_widget, "swatch-selected",
+                                     G_CALLBACK(on_recent_color_selected), ctx);
+
+                    /* Add to swatches_recent_colors_box */
+                    gtk_container_add(GTK_CONTAINER(swatches_recent_colors_box), GTK_WIDGET(recent_colors_widget));
+
+                    /* Ensure the box expands horizontally */
+                    gtk_widget_set_hexpand(swatches_recent_colors_box, TRUE);
+                    gtk_widget_set_vexpand(swatches_recent_colors_box, FALSE);
+
+                    /* Show all widgets in the hierarchy */
+                    gtk_widget_show_all(swatches_recent_colors_box);
+
+                    /* Force a queue resize to ensure proper layout */
+                    gtk_widget_queue_resize(GTK_WIDGET(recent_colors_widget));
+                    gtk_widget_queue_resize(swatches_recent_colors_box);
+                } else {
+                    g_warning("Failed to create recent colors widget");
+                }
+            } else {
+                g_warning("Failed to get swatches_recent_colors_box from builder");
+            }
+
+            /* Apply CSS to remove padding from swatches buttons */
+            /* Remove padding from all swatches control buttons */
+            const gchar* button_ids[] = {
+                "swatches_add_button",
+                "swatches_delete_button",
+                "swatches_reset_button",
+                "swatches_import_button",
+                "swatches_export_button",
+            };
+
+            GtkCssProvider* provider = gtk_css_provider_new();
+            gtk_css_provider_load_from_data(provider, "button { padding: 0px; padding-right: 5px; padding-left: 5px; margin: 0px; }", -1, NULL);
+
+            for (gint i = 0; i < 5; i++) {
+                GtkWidget* button = GTK_WIDGET(gtk_builder_get_object(swatches_builder, button_ids[i]));
+                if (button) {
+                    GtkStyleContext* context = gtk_widget_get_style_context(button);
+                    gtk_style_context_add_provider(context, GTK_STYLE_PROVIDER(provider),
+                                                   GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+                }
+            }
+
+            g_object_unref(provider);
+
+            /* Get scrolled window and create swatches widget */
+            GtkWidget* swatches_scroll = GTK_WIDGET(gtk_builder_get_object(swatches_builder, "swatches_scroll"));
+            if (swatches_scroll) {
+                SwatchesWidget* swatches_widget = SWATCHES_WIDGET(swatches_widget_new());
+                if (swatches_widget) {
+                    /* Configure widget */
+                    /* Columns are now calculated automatically based on widget size */
+                    swatches_widget_set_spacing(swatches_widget, 1.0);
+                    swatches_widget_set_padding(swatches_widget, 4.0);
+
+                    /* Store reference */
+                    g_main_swatches_widget = swatches_widget;
+
+                    /* Connect swatch selection signal to update foreground color */
+                    g_signal_connect(swatches_widget, "swatch-selected",
+                                     G_CALLBACK(on_swatch_selected), ctx);
+
+                    /* Store reference */
+                    g_main_swatches_widget = swatches_widget;
+
+                    /* Store in main window for global access */
+                    if (ctx && ctx->window) {
+                        g_object_set_data(G_OBJECT(ctx->window), "main_swatches_widget", swatches_widget);
+
+                        /* If no swatches loaded, add default gradient */
+                        if (ctx->swatches.main_swatch_count == 0) {
+                            /* Add default swatches - create a color gradient */
+                            GdkRGBA color;
+                            for (gint row = 0; row < 8; row++) {
+                                for (gint col = 0; col < 16; col++) {
+                                    /* Calculate hue (0-360) based on column */
+                                    gdouble hue = (col / 15.0) * 360.0;
+                                    /* Calculate saturation and value based on row */
+                                    gdouble saturation = 0.3 + (row / 7.0) * 0.7; /* 0.3 to 1.0 */
+                                    gdouble value = 1.0 - (row / 7.0) * 0.5;      /* 1.0 to 0.5 */
+
+                                    /* Convert HSV to RGB */
+                                    gdouble c = value * saturation;
+                                    gdouble x = c * (1.0 - fabs(fmod(hue / 60.0, 2.0) - 1.0));
+                                    gdouble m = value - c;
+
+                                    gdouble r = 0.0, g = 0.0, b = 0.0;
+                                    if (hue < 60.0) {
+                                        r = c;
+                                        g = x;
+                                        b = 0.0;
+                                    } else if (hue < 120.0) {
+                                        r = x;
+                                        g = c;
+                                        b = 0.0;
+                                    } else if (hue < 180.0) {
+                                        r = 0.0;
+                                        g = c;
+                                        b = x;
+                                    } else if (hue < 240.0) {
+                                        r = 0.0;
+                                        g = x;
+                                        b = c;
+                                    } else if (hue < 300.0) {
+                                        r = x;
+                                        g = 0.0;
+                                        b = c;
+                                    } else {
+                                        r = c;
+                                        g = 0.0;
+                                        b = x;
+                                    }
+
+                                    color.red = r + m;
+                                    color.green = g + m;
+                                    color.blue = b + m;
+                                    color.alpha = 1.0;
+
+                                    swatches_add_main(&ctx->swatches, &color, NULL);
+                                }
+                            }
+                        }
+                        /* Always sync swatches data to widget (either loaded or defaults) */
+                        swatches_sync_to_widgets(&ctx->swatches, GTK_WIDGET(swatches_widget), NULL);
+                    }
+
+                    /* Add widget to scrolled window */
+                    gtk_container_add(GTK_CONTAINER(swatches_scroll), GTK_WIDGET(swatches_widget));
+                    gtk_widget_show_all(GTK_WIDGET(swatches_widget));
+                }
+            }
+        } else {
+            g_warning("Failed to get swatches_panel from builder");
+            g_object_unref(swatches_builder);
+        }
+    } else {
+        g_warning("Failed to load swatches_panel.glade: %s", error ? error->message : "Unknown error");
+        if (error) {
+            g_error_free(error);
+        }
+        g_object_unref(swatches_builder);
+    }
+
+    /* Note: Swatches will be loaded after UI is fully created via layers_panel_load_swatches() */
+    /* This is called from ui.c after the layers panel is added to the main window */
+
     /* Ensure layers panel content expands vertically */
     gtk_widget_set_vexpand(glade_panel, TRUE);
     gtk_widget_set_hexpand(glade_panel, TRUE);
 
-    /* Add overview section first, then layers section */
+    /* Add overview section first, then swatches section, then layers section */
     accordion_add_section(layers_panel->accordion, "Overview", layers_panel->overview_widget);
+    if (swatches_panel) {
+        accordion_add_section(layers_panel->accordion, "Swatches", swatches_panel);
+    }
     accordion_add_section(layers_panel->accordion, "Layers", glade_panel);
 
     /* Make accordion expand to fill available vertical space */
@@ -1850,12 +2058,132 @@ void layers_panel_connect_buttons(LayersPanel* layers_panel,
 }
 
 /**
+ * Callback when a recent color swatch is selected
+ */
+static void on_recent_color_selected(SwatchesWidget* widget, gint index, gpointer user_data) {
+    if (!widget || index < 0) {
+        return;
+    }
+
+    /* Get the selected color */
+    GdkRGBA color;
+    if (swatches_widget_get_swatch(widget, index, &color, NULL)) {
+        /* Set foreground color using tools_panel function */
+        tools_panel_set_foreground_color(&color);
+
+        /* Also add to recent colors directly if we have AppContext */
+        /* Note: tools_panel_set_foreground_color should handle this, but if it fails,
+         * we do it here as a fallback */
+        AppContext* ctx = (AppContext*)user_data;
+        if (ctx) {
+            swatches_add_recent(&ctx->swatches, &color);
+            /* Sync to widget */
+            GtkWidget* recent_widget = (GtkWidget*)g_object_get_data(G_OBJECT(ctx->window), "recent_colors_widget");
+            if (recent_widget && SWATCHES_IS_WIDGET(recent_widget)) {
+                swatches_sync_to_widgets(&ctx->swatches, NULL, recent_widget);
+            }
+        }
+    }
+}
+
+/**
+ * Callback when a swatch is selected in the main swatches widget
+ */
+static void on_swatch_selected(SwatchesWidget* widget, gint index, gpointer user_data) {
+    if (!widget || index < 0) {
+        return;
+    }
+
+    /* Get the selected color */
+    GdkRGBA color;
+    if (swatches_widget_get_swatch(widget, index, &color, NULL)) {
+        /* Set foreground color using tools_panel function */
+        /* This will also add to recent colors */
+        tools_panel_set_foreground_color(&color);
+
+        /* Also add to recent colors directly if we have AppContext */
+        AppContext* ctx = (AppContext*)user_data;
+        if (ctx) {
+            swatches_add_recent(&ctx->swatches, &color);
+            /* Sync to widget */
+            GtkWidget* recent_widget = (GtkWidget*)g_object_get_data(G_OBJECT(ctx->window), "recent_colors_widget");
+            if (recent_widget && SWATCHES_IS_WIDGET(recent_widget)) {
+                swatches_sync_to_widgets(&ctx->swatches, NULL, recent_widget);
+            }
+        }
+    }
+}
+
+/**
+ * Add a color to recent colors
+ */
+void layers_panel_add_recent_color(GdkRGBA* color) {
+    if (!color) {
+        g_warning("layers_panel_add_recent_color: color is NULL");
+        return;
+    }
+
+    /* Try static reference first */
+    SwatchesWidget* recent_widget = g_recent_colors_widget;
+
+    /* If not found, try to find from toplevel windows */
+    if (!recent_widget) {
+        GList* toplevels = gtk_window_list_toplevels();
+        GList* iter;
+        for (iter = toplevels; iter != NULL; iter = iter->next) {
+            GtkWidget* window = GTK_WIDGET(iter->data);
+            if (GTK_IS_WINDOW(window)) {
+                recent_widget = SWATCHES_WIDGET(g_object_get_data(G_OBJECT(window), "recent_colors_widget"));
+                if (recent_widget) {
+                    /* Cache it for next time */
+                    g_recent_colors_widget = recent_widget;
+                    g_list_free(toplevels);
+                    break;
+                }
+            }
+        }
+        if (!recent_widget) {
+            g_list_free(toplevels);
+        }
+    }
+
+    if (!recent_widget) {
+        g_warning("layers_panel_add_recent_color: recent_colors_widget not found. Widget may not be initialized yet.");
+        return;
+    }
+
+    /* Get AppContext to access swatches data */
+    GtkWidget* main_window = gtk_widget_get_toplevel(GTK_WIDGET(recent_widget));
+    if (!main_window || !GTK_IS_WINDOW(main_window)) {
+        g_warning("layers_panel_add_recent_color: Failed to get main window");
+        return;
+    }
+
+    AppContext* ctx = (AppContext*)g_object_get_data(G_OBJECT(main_window), "app_context");
+    if (!ctx) {
+        g_warning("layers_panel_add_recent_color: AppContext not found");
+        return;
+    }
+
+    /* Add to swatches data */
+    swatches_add_recent(&ctx->swatches, color);
+
+    /* Sync to widget */
+    swatches_sync_to_widgets(&ctx->swatches, NULL, GTK_WIDGET(recent_widget));
+}
+
+/**
  * Free a layers panel
  */
 void layers_panel_free(LayersPanel* layers_panel) {
     if (!layers_panel) {
         return;
     }
+
+    /* Clear static widget references before widgets are destroyed */
+    /* This prevents segfaults if save is called after widgets are destroyed */
+    g_main_swatches_widget = NULL;
+    g_recent_colors_widget = NULL;
 
     if (layers_panel->accordion) {
         accordion_free(layers_panel->accordion);

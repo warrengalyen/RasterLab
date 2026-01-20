@@ -1,7 +1,11 @@
 #include "ui/tools_panel.h"
 #include "tool_options.h"
+#include "ui.h"
 #include "ui/dialogs/color_chooser_dialog.h"
+#include "ui/layers_panel.h"
+#include "ui/swatches.h"
 #include "ui/ui_utils.h"
+#include "ui/widgets/swatches_widget.h"
 
 #include <stdio.h>
 
@@ -109,6 +113,26 @@ static void on_fg_color_clicked(GtkButton* button, gpointer user_data) {
 
     update_color_button_appearance(g_fg_color_button, &g_fg_color);
 
+    /* Add to recent colors - get AppContext from main window */
+    if (g_main_window) {
+        AppContext* ctx = (AppContext*)g_object_get_data(G_OBJECT(g_main_window), "app_context");
+        if (ctx) {
+            swatches_add_recent(&ctx->swatches, &g_fg_color);
+            /* Sync to widget */
+            GtkWidget* recent_widget = (GtkWidget*)g_object_get_data(G_OBJECT(g_main_window), "recent_colors_widget");
+            if (recent_widget && SWATCHES_IS_WIDGET(recent_widget)) {
+                swatches_sync_to_widgets(&ctx->swatches, NULL, recent_widget);
+            } else {
+                g_warning("tools_panel: recent_colors_widget not found or invalid when adding color (window=%p, widget=%p)",
+                          g_main_window, recent_widget);
+            }
+        } else {
+            g_warning("tools_panel: AppContext not found when adding color");
+        }
+    } else {
+        g_warning("tools_panel: g_main_window not set when adding color");
+    }
+
     gtk_widget_destroy(dialog);
 }
 
@@ -146,6 +170,26 @@ static void on_bg_color_clicked(GtkButton* button, gpointer user_data) {
     g_bg_color.alpha = 1.0;
 
     update_color_button_appearance(g_bg_color_button, &g_bg_color);
+
+    /* Add to recent colors - get AppContext from main window */
+    if (g_main_window) {
+        AppContext* ctx = (AppContext*)g_object_get_data(G_OBJECT(g_main_window), "app_context");
+        if (ctx) {
+            swatches_add_recent(&ctx->swatches, &g_bg_color);
+            /* Sync to widget */
+            GtkWidget* recent_widget = (GtkWidget*)g_object_get_data(G_OBJECT(g_main_window), "recent_colors_widget");
+            if (recent_widget && SWATCHES_IS_WIDGET(recent_widget)) {
+                swatches_sync_to_widgets(&ctx->swatches, NULL, recent_widget);
+            } else {
+                g_warning("tools_panel: recent_colors_widget not found or invalid when adding bg color (window=%p, widget=%p)",
+                          g_main_window, recent_widget);
+            }
+        } else {
+            g_warning("tools_panel: AppContext not found when adding bg color");
+        }
+    } else {
+        g_warning("tools_panel: g_main_window not set when adding bg color");
+    }
 
     gtk_widget_destroy(dialog);
 }
@@ -233,6 +277,43 @@ gboolean tools_panel_get_foreground_color(GdkRGBA* rgba) {
         return FALSE;
     }
     *rgba = g_fg_color;
+    return TRUE;
+}
+
+/**
+ * Set the foreground color programmatically
+ */
+gboolean tools_panel_set_foreground_color(GdkRGBA* color) {
+    if (!color || !g_fg_color_button) {
+        return FALSE;
+    }
+
+    /* Update global color */
+    g_fg_color = *color;
+
+    /* Update button appearance */
+    update_color_button_appearance(g_fg_color_button, &g_fg_color);
+
+    /* Add to recent colors - get AppContext from main window */
+    if (g_main_window) {
+        AppContext* ctx = (AppContext*)g_object_get_data(G_OBJECT(g_main_window), "app_context");
+        if (ctx) {
+            swatches_add_recent(&ctx->swatches, color);
+            /* Sync to widget */
+            GtkWidget* recent_widget = (GtkWidget*)g_object_get_data(G_OBJECT(g_main_window), "recent_colors_widget");
+            if (recent_widget && SWATCHES_IS_WIDGET(recent_widget)) {
+                swatches_sync_to_widgets(&ctx->swatches, NULL, recent_widget);
+            } else {
+                g_warning("tools_panel_set_foreground_color: recent_colors_widget not found or invalid (window=%p, widget=%p)",
+                          g_main_window, recent_widget);
+            }
+        } else {
+            g_warning("tools_panel_set_foreground_color: AppContext not found");
+        }
+    } else {
+        g_warning("tools_panel_set_foreground_color: g_main_window not set");
+    }
+
     return TRUE;
 }
 

@@ -22,6 +22,7 @@
 #include "ui/dialogs/recovery_dialog.h"
 #include "ui/dialogs/selection_radius_dialog.h"
 #include "ui/layers_panel.h"
+#include "ui/swatches.h"
 #include "ui/tool_options_panel.h"
 #include "ui/tools_panel.h"
 #include "ui/ui_edit_menu.h"
@@ -337,6 +338,7 @@ AppContext* ui_create_main_window(void) {
     ctx->settings = NULL;            /* Will be set in main.c */
     ctx->app_dir = NULL;             /* Will be set in main.c */
     ctx->size_unit = g_strdup("px"); /* Default size unit is pixels */
+    swatches_init(&ctx->swatches);   /* Initialize swatches data */
 
     /* Create and initialize tool manager */
     ctx->tool_registry = tool_manager_new();
@@ -380,6 +382,9 @@ AppContext* ui_create_main_window(void) {
         g_free(ctx);
         return NULL;
     }
+
+    /* Store AppContext in window for global access */
+    g_object_set_data(G_OBJECT(ctx->window), "app_context", ctx);
 
     /* Set application icon */
     {
@@ -473,7 +478,7 @@ AppContext* ui_create_main_window(void) {
     tools_panel_set_main_window(GTK_WINDOW(ctx->window));
 
     /* ==== RIGHT PANEL: Layers ==== */
-    ctx->layers_panel = create_layers_panel();
+    ctx->layers_panel = create_layers_panel(ctx);
     layers_panel_widget = ctx->layers_panel->panel;
     gtk_container_add(GTK_CONTAINER(right_panel_container), layers_panel_widget);
 
@@ -579,8 +584,6 @@ AppContext* ui_create_main_window(void) {
 
     /* Check for recovery files and show dialog if found */
     recovery_dialog_show(ctx);
-
-    // printf("Main window created with dockable panels and status bar\n");
 
     return ctx;
 }
@@ -991,6 +994,9 @@ void ui_context_free(AppContext* ctx) {
     if (ctx->settings) {
         settings_free(ctx->settings);
     }
+
+    /* Free swatches data */
+    swatches_free(&ctx->swatches);
 
     /* Free app directory */
     if (ctx->app_dir) {

@@ -43,6 +43,11 @@
     <file preprocess="to-pixdata">icons/sb-zoom-out.png</file>
     <file preprocess="to-pixdata">icons/sb-dimensions.png</file>
     <file preprocess="to-pixdata">icons/sb-pointer.png</file>
+    <file preprocess="to-pixdata">icons/swatches-add.png</file>
+    <file preprocess="to-pixdata">icons/swatches-delete.png</file>
+    <file preprocess="to-pixdata">icons/swatches-reset.png</file>
+    <file preprocess="to-pixdata">icons/swatches-import.png</file>
+    <file preprocess="to-pixdata">icons/swatches-export.png</file>
     <file compressed="true" alias="app-icon">icons/rasterlab-icon.ico</file>
     <file>cursors/zoom_cursor.cur</file>
     <file>cursors/rect_select_cursor.cur</file>
@@ -51,6 +56,7 @@
     <file>cursors/hand_up_cursor.cur</file>
     <file>cursors/hand_down_cursor.cur</file>
     <file>ui/layers_panel.glade</file>
+    <file>ui/swatches_panel.glade</file>
     <file>ui/brush_options.glade</file>
     <file>ui/eraser_options.glade</file>
     <file>ui/pencil_options.glade</file>
