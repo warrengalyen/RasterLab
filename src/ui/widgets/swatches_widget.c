@@ -46,6 +46,7 @@ static void swatches_widget_init(SwatchesWidget* self) {
     self->padding = DEFAULT_PADDING;
     self->hovered_swatch = -1;
     self->show_outline = TRUE;
+    self->selected_swatch = -1;
     self->tooltip_window = NULL;
     self->tooltip_visible = FALSE;
 
@@ -426,9 +427,35 @@ static gboolean swatches_widget_draw(GtkWidget* widget, cairo_t* cr) {
         cairo_stroke(cr);
     }
 
-    /* Second pass: Draw hover outline on top of everything */
+    /* Second pass: Draw selection and hover outlines on top of everything */
+
+    /* Draw selected swatch outline */
+    if (self->selected_swatch >= 0 && self->selected_swatch < self->swatch_count) {
+        gint row = self->selected_swatch / self->columns;
+        gint col = self->selected_swatch % self->columns;
+
+        gdouble x = self->padding + col * (self->swatch_size + self->spacing);
+        gdouble y = self->padding + row * (self->swatch_size + self->spacing);
+
+        /* Calculate border position */
+        gdouble border_x = x - self->spacing * 0.5;
+        gdouble border_y = y - self->spacing * 0.5;
+        gdouble border_size = self->swatch_size + self->spacing;
+
+        /* Draw selection outline 1px outside the black border on all sides */
+        cairo_set_line_width(cr, 2.0);
+        /* Yellow/orange color for selection outline */
+        cairo_set_source_rgb(cr, 255.0 / 255.0, 200.0 / 255.0, 0.0 / 255.0);
+        /* Outline rectangle: 1px outside on all sides */
+        cairo_rectangle(cr, border_x - 1.0, border_y - 1.0,
+                        border_size + 2.0, border_size + 2.0);
+        cairo_stroke(cr);
+    }
+
+    /* Draw hover outline (only if not the selected swatch) */
     if (self->hovered_swatch >= 0 && self->show_outline &&
-        self->hovered_swatch < self->swatch_count) {
+        self->hovered_swatch < self->swatch_count &&
+        self->hovered_swatch != self->selected_swatch) {
         gint row = self->hovered_swatch / self->columns;
         gint col = self->hovered_swatch % self->columns;
 
@@ -546,10 +573,37 @@ static gboolean swatches_widget_leave_notify(GtkWidget* widget, GdkEventCrossing
 static gboolean swatches_widget_button_press(GtkWidget* widget, GdkEventButton* event) {
     SwatchesWidget* self = SWATCHES_WIDGET(widget);
 
-    if (event->button == 1 && event->type == GDK_BUTTON_PRESS) {
+    if (event->button == 1) {
         gint swatch_index = get_swatch_at_position(self, event->x, event->y);
+
         if (swatch_index >= 0) {
-            g_signal_emit(self, swatches_widget_signals[SWATCH_SELECTED_SIGNAL], 0, swatch_index);
+            if (event->type == GDK_2BUTTON_PRESS || event->type == GDK_DOUBLE_BUTTON_PRESS) {
+                /* Double-click: toggle selection */
+                if (self->selected_swatch == swatch_index) {
+                    /* Deselect if already selected */
+                    self->selected_swatch = -1;
+                } else {
+                    /* Select this swatch */
+                    self->selected_swatch = swatch_index;
+                }
+                gtk_widget_queue_draw(widget);
+                /* Emit selection signal */
+                g_signal_emit(self, swatches_widget_signals[SWATCH_SELECTED_SIGNAL], 0, self->selected_swatch);
+            } else if (event->type == GDK_BUTTON_PRESS) {
+                /* Single-click: deselect if clicking a different swatch */
+                if (self->selected_swatch >= 0 && self->selected_swatch != swatch_index) {
+                    self->selected_swatch = -1;
+                    gtk_widget_queue_draw(widget);
+                }
+                /* Always emit selection signal for single-click */
+                g_signal_emit(self, swatches_widget_signals[SWATCH_SELECTED_SIGNAL], 0, swatch_index);
+            }
+        } else {
+            /* Clicked outside any swatch: deselect */
+            if (self->selected_swatch >= 0) {
+                self->selected_swatch = -1;
+                gtk_widget_queue_draw(widget);
+            }
         }
     }
 
@@ -750,6 +804,7 @@ void swatches_widget_clear(SwatchesWidget* self) {
 
     self->swatch_count = 0;
     self->hovered_swatch = -1;
+    self->selected_swatch = -1; /* Clear selection */
     hide_tooltip(self);
     gtk_widget_queue_draw(GTK_WIDGET(self));
 }
@@ -820,4 +875,29 @@ void swatches_widget_set_max_swatch_size(SwatchesWidget* self, gdouble max_size)
     /* Recalculate layout with new max size */
     calculate_swatch_size(self);
     gtk_widget_queue_draw(GTK_WIDGET(self));
+}
+
+/* Get selected swatch index */
+gint swatches_widget_get_selected(SwatchesWidget* self) {
+    if (!SWATCHES_IS_WIDGET(self)) {
+        return -1;
+    }
+
+    return self->selected_swatch;
+}
+
+/* Set selected swatch index */
+void swatches_widget_set_selected(SwatchesWidget* self, gint index) {
+    if (!SWATCHES_IS_WIDGET(self)) {
+        return;
+    }
+
+    if (index < -1 || index >= self->swatch_count) {
+        return;
+    }
+
+    if (self->selected_swatch != index) {
+        self->selected_swatch = index;
+        gtk_widget_queue_draw(GTK_WIDGET(self));
+    }
 }

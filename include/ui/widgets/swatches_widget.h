@@ -32,6 +32,7 @@ struct _SwatchesWidget {
     /* Mouse interaction */
     gint hovered_swatch;   /* Index of currently hovered swatch (-1 if none) */
     gboolean show_outline; /* Whether to show outline on hover */
+    gint selected_swatch;  /* Index of currently selected swatch (-1 if none) */
 
     /* Tooltip */
     GtkWidget* tooltip_window; /* Tooltip window */
@@ -56,6 +57,8 @@ void swatches_widget_clear(SwatchesWidget* self);
 void swatches_widget_set_swatch(SwatchesWidget* self, gint index, const GdkRGBA* color, const gchar* name);
 gint swatches_widget_get_swatch_count(SwatchesWidget* self);
 gboolean swatches_widget_get_swatch(SwatchesWidget* self, gint index, GdkRGBA* color, gchar** name);
+gint swatches_widget_get_selected(SwatchesWidget* self);
+void swatches_widget_set_selected(SwatchesWidget* self, gint index);
 
 /* Layout configuration */
 void swatches_widget_set_columns(SwatchesWidget* self, gint columns);
