@@ -412,6 +412,8 @@ void swatches_sync_to_widgets(const SwatchesData* swatches, GtkWidget* main_widg
             swatches_widget_add_swatch(widget, &swatches->main_swatches[i].color,
                                        swatches->main_swatches[i].name);
         }
+        /* Queue resize to recalculate widget size based on new swatch count */
+        gtk_widget_queue_resize(GTK_WIDGET(main_widget));
         /* Queue redraw to update the widget */
         gtk_widget_queue_draw(GTK_WIDGET(main_widget));
     }
@@ -423,6 +425,8 @@ void swatches_sync_to_widgets(const SwatchesData* swatches, GtkWidget* main_widg
         for (gint i = 0; i < swatches->recent_color_count; i++) {
             swatches_widget_add_swatch(widget, &swatches->recent_colors[i].color, NULL);
         }
+        /* Queue resize to recalculate widget size based on new swatch count */
+        gtk_widget_queue_resize(GTK_WIDGET(recent_widget));
         /* Queue redraw to update the widget */
         gtk_widget_queue_draw(GTK_WIDGET(recent_widget));
     }
