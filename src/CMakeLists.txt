@@ -173,6 +173,7 @@ set(SOURCES
     ui/filters/filter_shadow_highlights.c
     ui/filters/filter_sharpen.c
     ui/filters/filter_skin_smooth.c
+    ui/filters/filter_split_toning.c
     ui/filters/filter_sobel_edge.c
     ui/filters/filter_spherize.c
     ui/filters/filter_stretch.c
@@ -186,7 +187,9 @@ set(SOURCES
     ui/filters/filter_whitebalance.c
     ui/filters/filter_zoom_blur.c
     ui/layers_panel.c
+    ui/overview_panel.c
     ui/swatches.c
+    ui/swatches_panel.c
     ui/tool_options_panel.c
     ui/tools_panel.c
     ui/ui_edit_menu.c

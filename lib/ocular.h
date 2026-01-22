@@ -393,6 +393,9 @@ OC_STATUS ocularPalettetizeFromImage(unsigned char* input, unsigned char* output
                                      OcQuantizeMethod quantizeMethod, int maxColors, OcDitherMethod ditherMethod,
                                      int ditherAmount);
 
+OC_STATUS ocularSplitToningFilter(unsigned char* input, unsigned char* output, int width, int height, int stride,
+                                  OcColor highlightColor, OcColor shadowColor, float balance, float strength);
+
 /* ============================================================================
  * Image Processing Functions
  * ============================================================================ */

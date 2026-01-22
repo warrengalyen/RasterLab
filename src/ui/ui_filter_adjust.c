@@ -35,6 +35,7 @@
 #include "ui/filters/filter_retinex.h"
 #include "ui/filters/filter_sepia.h"
 #include "ui/filters/filter_shadow_highlights.h"
+#include "ui/filters/filter_split_toning.h"
 #include "ui/filters/filter_stretch.h"
 #include "ui/filters/filter_temperature.h"
 #include "ui/filters/filter_utils.h"
@@ -1622,6 +1623,105 @@ static void on_adjust_shadows_highlights_tint(GtkWidget* widget, gpointer data) 
 }
 
 /**
+ * Split Toning filter preview update callback
+ */
+static gboolean on_split_toning_preview_update(FilterDialog* dialog,
+                                               const gdouble* values,
+                                               gint num_values,
+                                               gpointer user_data) {
+    gfloat filter_values[8];
+
+    if (!dialog || !values || num_values < 8) {
+        return FALSE;
+    }
+
+    /* Values: [highlightR, highlightG, highlightB, balance, shadowR, shadowG, shadowB, strength] */
+    filter_values[0] = (gfloat)values[0]; /* highlightR */
+    filter_values[1] = (gfloat)values[1]; /* highlightG */
+    filter_values[2] = (gfloat)values[2]; /* highlightB */
+    filter_values[3] = (gfloat)values[3]; /* balance */
+    filter_values[4] = (gfloat)values[4]; /* shadowR */
+    filter_values[5] = (gfloat)values[5]; /* shadowG */
+    filter_values[6] = (gfloat)values[6]; /* shadowB */
+    filter_values[7] = (gfloat)values[7]; /* strength */
+
+    /* Set up viewport-based filter */
+    ui_filter_utils_setup_viewport_filter(dialog, (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_split_toning_apply,
+                                          filter_values, 8);
+
+    return TRUE;
+}
+
+/**
+ * Adjustments > Split Toning callback
+ */
+static void on_adjust_split_toning(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    FilterControlParam controls[4];
+    gdouble values[8];
+    gint response;
+    gfloat filter_values[8];
+
+    if (!ctx) {
+        return;
+    }
+
+    /* Control 0: Highlight Color (RGB) */
+    controls[0].type = FILTER_CONTROL_RGB;
+    controls[0].label = "Highlight Color";
+    controls[0].default_r = 255.0 / 255.0; /* 255/255 = 1.0 */
+    controls[0].default_g = 200.0 / 255.0; /* 200/255 */
+    controls[0].default_b = 150.0 / 255.0; /* 150/255 */
+
+    /* Control 1: Balance (double) */
+    controls[1].type = FILTER_CONTROL_DOUBLE;
+    controls[1].label = "Balance";
+    controls[1].min_value = -100.0;
+    controls[1].max_value = 100.0;
+    controls[1].default_value = 0.0;
+    controls[1].step = 1.0;
+    controls[1].decimals = 0;
+    controls[1].filter_min = -100.0;
+    controls[1].filter_max = 100.0;
+
+    /* Control 2: Shadow Color (RGB) */
+    controls[2].type = FILTER_CONTROL_RGB;
+    controls[2].label = "Shadow Color";
+    controls[2].default_r = 150.0 / 255.0; /* 150/255 */
+    controls[2].default_g = 200.0 / 255.0; /* 200/255 */
+    controls[2].default_b = 255.0 / 255.0; /* 255/255 = 1.0 */
+
+    /* Control 3: Toning Strength (double) */
+    controls[3].type = FILTER_CONTROL_DOUBLE;
+    controls[3].label = "Toning Strength";
+    controls[3].min_value = 0.0;
+    controls[3].max_value = 100.0;
+    controls[3].default_value = 50.0;
+    controls[3].step = 1.0;
+    controls[3].decimals = 0;
+    controls[3].filter_min = 0.0;
+    controls[3].filter_max = 100.0;
+
+    response = ui_show_filter_dialog(ctx, "Split Toning", controls, 4,
+                                     on_split_toning_preview_update, values);
+
+    if (response == GTK_RESPONSE_OK) {
+        filter_values[0] = (gfloat)values[0]; /* highlightR */
+        filter_values[1] = (gfloat)values[1]; /* highlightG */
+        filter_values[2] = (gfloat)values[2]; /* highlightB */
+        filter_values[3] = (gfloat)values[3]; /* balance */
+        filter_values[4] = (gfloat)values[4]; /* shadowR */
+        filter_values[5] = (gfloat)values[5]; /* shadowG */
+        filter_values[6] = (gfloat)values[6]; /* shadowB */
+        filter_values[7] = (gfloat)values[7]; /* strength */
+
+        ui_apply_layer_filter_with_value(ctx, filter_split_toning_apply,
+                                         "Split Toning", filter_values, 8);
+    }
+}
+
+/**
  * Adjustments > Palettize callback
  */
 static void on_adjust_palettize(GtkWidget* widget, gpointer data) {
@@ -2082,6 +2182,11 @@ void ui_filter_adjust_setup_menu(GtkBuilder* builder, AppContext* ctx) {
     GtkWidget* adjust_menu_chroma_key = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_chroma_key"));
     if (adjust_menu_chroma_key) {
         g_signal_connect(adjust_menu_chroma_key, "activate", G_CALLBACK(on_adjust_chroma_key), ctx);
+    }
+
+    GtkWidget* adjust_menu_split_toning = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_split_toning"));
+    if (adjust_menu_split_toning) {
+        g_signal_connect(adjust_menu_split_toning, "activate", G_CALLBACK(on_adjust_split_toning), ctx);
     }
 
     GtkWidget* adjust_menu_palettize = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_palettize"));
