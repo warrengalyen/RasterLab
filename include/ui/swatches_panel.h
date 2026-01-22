@@ -15,12 +15,6 @@ typedef struct _AppContext AppContext;
 GtkWidget* swatches_panel_create(AppContext* ctx);
 
 /**
- * Add a color to recent colors
- * @param color The color to add
- */
-void swatches_panel_add_recent_color(GdkRGBA* color);
-
-/**
  * Cleanup swatches panel static references
  * Call this when the panel is being destroyed
  */

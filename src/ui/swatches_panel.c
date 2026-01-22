@@ -716,64 +716,6 @@ GtkWidget* swatches_panel_create(AppContext* ctx) {
 }
 
 /**
- * Add a color to recent colors
- */
-void swatches_panel_add_recent_color(GdkRGBA* color) {
-    if (!color) {
-        g_warning("swatches_panel_add_recent_color: color is NULL");
-        return;
-    }
-
-    /* Try static reference first */
-    SwatchesWidget* recent_widget = g_recent_colors_widget;
-
-    /* If not found, try to find from toplevel windows */
-    if (!recent_widget) {
-        GList* toplevels = gtk_window_list_toplevels();
-        GList* iter;
-        for (iter = toplevels; iter != NULL; iter = iter->next) {
-            GtkWidget* window = GTK_WIDGET(iter->data);
-            if (GTK_IS_WINDOW(window)) {
-                recent_widget = SWATCHES_WIDGET(g_object_get_data(G_OBJECT(window), "recent_colors_widget"));
-                if (recent_widget) {
-                    /* Cache it for next time */
-                    g_recent_colors_widget = recent_widget;
-                    g_list_free(toplevels);
-                    break;
-                }
-            }
-        }
-        if (!recent_widget) {
-            g_list_free(toplevels);
-        }
-    }
-
-    if (!recent_widget) {
-        g_warning("swatches_panel_add_recent_color: recent_colors_widget not found. Widget may not be initialized yet.");
-        return;
-    }
-
-    /* Get AppContext to access swatches data */
-    GtkWidget* main_window = gtk_widget_get_toplevel(GTK_WIDGET(recent_widget));
-    if (!main_window || !GTK_IS_WINDOW(main_window)) {
-        g_warning("swatches_panel_add_recent_color: Failed to get main window");
-        return;
-    }
-
-    AppContext* ctx = (AppContext*)g_object_get_data(G_OBJECT(main_window), "app_context");
-    if (!ctx) {
-        g_warning("swatches_panel_add_recent_color: AppContext not found");
-        return;
-    }
-
-    /* Add to swatches data */
-    swatches_add_recent(&ctx->swatches, color);
-
-    /* Sync to widget */
-    swatches_sync_to_widgets(&ctx->swatches, NULL, GTK_WIDGET(recent_widget));
-}
-
-/**
  * Cleanup swatches panel static references
  */
 void swatches_panel_cleanup(void) {

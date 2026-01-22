@@ -1359,13 +1359,6 @@ void layers_panel_connect_buttons(LayersPanel* layers_panel,
 }
 
 /**
- * Add a color to recent colors
- */
-void layers_panel_add_recent_color(GdkRGBA* color) {
-    swatches_panel_add_recent_color(color);
-}
-
-/**
  * Free a layers panel
  */
 void layers_panel_free(LayersPanel* layers_panel) {
