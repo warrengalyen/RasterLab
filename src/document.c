@@ -18,6 +18,7 @@
 #include "tools/tool_rect_select.h"
 #include "ui.h"
 #include "ui/layers_panel.h"
+#include "ui/workspace.h"
 #include "undo/undo_disk.h"
 #include <math.h>
 #include <stdio.h>
@@ -82,8 +83,18 @@ static void on_scroll_adjustment_changed(GtkAdjustment* adjustment, gpointer use
 
         /* Update overview widget selection rectangle when scrolling */
         layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(doc->drawing_area), "layers_panel");
-        if (layers_panel && layers_panel->overview_widget && layers_panel->current_doc == doc) {
-            gtk_widget_queue_draw(layers_panel->overview_widget);
+        if (layers_panel && layers_panel->current_doc == doc) {
+            /* Get workspace from window to access overview widget */
+            GtkWidget* window = gtk_widget_get_toplevel(doc->drawing_area);
+            if (GTK_IS_WINDOW(window)) {
+                Workspace* workspace = (Workspace*)g_object_get_data(G_OBJECT(window), "workspace");
+                if (workspace) {
+                    GtkWidget* overview_widget = workspace_get_overview_widget(workspace);
+                    if (overview_widget) {
+                        gtk_widget_queue_draw(overview_widget);
+                    }
+                }
+            }
         }
     }
 }

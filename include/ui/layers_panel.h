@@ -2,7 +2,6 @@
 #define LAYERS_PANEL_H
 
 #include "document.h"
-#include "ui/widgets/accordion.h"
 #include <gtk/gtk.h>
 
 /* Forward declaration - AppContext is defined in ui.h */
@@ -13,8 +12,6 @@ typedef struct _AppContext AppContext;
  * Layers panel structure
  */
 typedef struct {
-    GtkWidget* panel;             /* Main panel widget */
-    Accordion* accordion;         /* Accordion widget for sections */
     GtkWidget* tree_view;         /* Layer list tree view */
     GtkListStore* store;          /* List store for layers */
     ImageDocument* current_doc;   /* Current document reference */
@@ -27,7 +24,6 @@ typedef struct {
     GtkWidget* spin_opacity;      /* Opacity spin button */
     GtkWidget* btn_opacity_reset; /* Opacity reset button */
     GtkWidget* combo_blend;       /* Blend mode combo box */
-    GtkWidget* overview_widget;   /* Overview thumbnail widget */
     gpointer app_context;         /* Reference to AppContext for callbacks */
 } LayersPanel;
 
@@ -113,6 +109,13 @@ void layers_panel_connect_buttons(LayersPanel* layers_panel,
  * @param layers_panel The layers panel to free
  */
 void layers_panel_free(LayersPanel* layers_panel);
+
+/**
+ * Get the main panel widget from layers panel
+ * @param layers_panel The layers panel
+ * @return The panel widget, or NULL if not available
+ */
+GtkWidget* layers_panel_get_panel(LayersPanel* layers_panel);
 
 /**
  * Add a color to recent colors

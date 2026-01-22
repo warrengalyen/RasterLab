@@ -34,6 +34,7 @@
 #include "ui/ui_layer_menu.h"
 #include "ui/ui_select_menu.h"
 #include "ui/ui_view_menu.h"
+#include "ui/workspace.h"
 #include "undo/undo_disk.h"
 #include <glib.h>
 #include <math.h>
@@ -326,7 +327,7 @@ static void on_combo_notify_popup_shown(GObject* obj, GParamSpec* pspec, gpointe
 AppContext* ui_create_main_window(void) {
     AppContext* ctx = (AppContext*)g_malloc(sizeof(AppContext));
     GtkWidget* tools_panel;
-    GtkWidget* layers_panel_widget;
+    GtkWidget* workspace_widget;
 
     ctx->documents = NULL;
     ctx->layer_menu_new = NULL;
@@ -334,7 +335,8 @@ AppContext* ui_create_main_window(void) {
     ctx->layer_menu_duplicate = NULL;
     ctx->edit_menu_undo = NULL;
     ctx->edit_menu_redo = NULL;
-    ctx->layers_panel = NULL;        /* Initialize layers_panel early */
+    ctx->workspace = NULL;           /* Initialize workspace early */
+    ctx->layers_panel = NULL;        /* Will be set from workspace */
     ctx->settings = NULL;            /* Will be set in main.c */
     ctx->app_dir = NULL;             /* Will be set in main.c */
     ctx->size_unit = g_strdup("px"); /* Default size unit is pixels */
@@ -477,36 +479,55 @@ AppContext* ui_create_main_window(void) {
     /* Set main window reference for color chooser dialogs */
     tools_panel_set_main_window(GTK_WINDOW(ctx->window));
 
-    /* ==== RIGHT PANEL: Layers ==== */
-    ctx->layers_panel = create_layers_panel(ctx);
-    layers_panel_widget = ctx->layers_panel->panel;
-    gtk_container_add(GTK_CONTAINER(right_panel_container), layers_panel_widget);
+    /* ==== RIGHT PANEL: Workspace ==== */
+    ctx->workspace = workspace_create(ctx);
+    if (!ctx->workspace) {
+        g_warning("Failed to create workspace");
+        g_object_unref(builder);
+        g_free(ctx);
+        return NULL;
+    }
+    workspace_widget = workspace_get_panel(ctx->workspace);
+    if (!workspace_widget) {
+        g_warning("Failed to get workspace panel");
+        workspace_free(ctx->workspace);
+        g_object_unref(builder);
+        g_free(ctx);
+        return NULL;
+    }
+    gtk_container_add(GTK_CONTAINER(right_panel_container), workspace_widget);
 
-    /* Store layers panel reference for later updates */
+    /* Get layers panel from workspace for compatibility */
+    ctx->layers_panel = workspace_get_layers_panel(ctx->workspace);
+
+    /* Store layers panel reference for later updates (for backward compatibility) */
     g_object_set_data(G_OBJECT(ctx->window), "layers_panel", ctx->layers_panel);
+    g_object_set_data(G_OBJECT(ctx->window), "workspace", ctx->workspace);
 
     /* Connect layers panel buttons to callbacks */
-    layers_panel_connect_buttons(ctx->layers_panel,
-                                 G_CALLBACK(on_layer_new),
-                                 G_CALLBACK(on_layer_delete),
-                                 G_CALLBACK(on_layer_duplicate),
-                                 ctx);
+    if (ctx->layers_panel) {
+        layers_panel_connect_buttons(ctx->layers_panel,
+                                     G_CALLBACK(on_layer_new),
+                                     G_CALLBACK(on_layer_delete),
+                                     G_CALLBACK(on_layer_duplicate),
+                                     ctx);
 
-    /* Connect move layer buttons */
-    if (ctx->layers_panel->btn_up) {
-        g_signal_connect(ctx->layers_panel->btn_up, "clicked",
-                         G_CALLBACK(on_layer_move_up), ctx);
-    }
-    if (ctx->layers_panel->btn_down) {
-        g_signal_connect(ctx->layers_panel->btn_down, "clicked",
-                         G_CALLBACK(on_layer_move_down), ctx);
-    }
+        /* Connect move layer buttons */
+        if (ctx->layers_panel->btn_up) {
+            g_signal_connect(ctx->layers_panel->btn_up, "clicked",
+                             G_CALLBACK(on_layer_move_up), ctx);
+        }
+        if (ctx->layers_panel->btn_down) {
+            g_signal_connect(ctx->layers_panel->btn_down, "clicked",
+                             G_CALLBACK(on_layer_move_down), ctx);
+        }
 
-    /* Connect layer tree view selection changes to update UI state */
-    GtkTreeSelection* layer_selection = gtk_tree_view_get_selection(
-        GTK_TREE_VIEW(ctx->layers_panel->tree_view));
-    g_signal_connect(layer_selection, "changed",
-                     G_CALLBACK(on_layer_selection_changed), ctx);
+        /* Connect layer tree view selection changes to update UI state */
+        GtkTreeSelection* layer_selection = gtk_tree_view_get_selection(
+            GTK_TREE_VIEW(ctx->layers_panel->tree_view));
+        g_signal_connect(layer_selection, "changed",
+                         G_CALLBACK(on_layer_selection_changed), ctx);
+    }
 
     /* Setup status bar zoom controls */
     GtkWidget* sb_zoom_out_button = GTK_WIDGET(gtk_builder_get_object(builder, "sb_zoom_out_button"));
@@ -525,9 +546,9 @@ AppContext* ui_create_main_window(void) {
     if (sb_zoom_combobox) {
         apply_statusbar_combobox_style(sb_zoom_combobox);
 
-        /* Keep popup width stable (GTK3 API) */
+        /* Keep popup width stable  */
         gtk_combo_box_set_popup_fixed_width(GTK_COMBO_BOX(sb_zoom_combobox), TRUE);
-        /* Fix popup whitespace when opening above (limited space below) */
+        /* Fix popup whitespace when opening above */
         g_signal_connect(sb_zoom_combobox, "notify::popup-shown",
                          G_CALLBACK(on_combo_notify_popup_shown), NULL);
 
@@ -784,9 +805,13 @@ static void ui_close_document_tab_internal(AppContext* ctx, ImageDocument* doc) 
         /* Update layers panel - show active document if one exists, otherwise clear */
         LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window),
                                                                     "layers_panel");
+        Workspace* workspace = (Workspace*)g_object_get_data(G_OBJECT(ctx->window), "workspace");
         if (layers_panel) {
             ImageDocument* active_doc = ui_get_active_document(ctx);
             layers_panel_update(layers_panel, active_doc);
+        }
+        if (workspace) {
+            workspace_update_overview(workspace);
         }
 
         ui_update_menu_and_button_states(ctx);
@@ -997,6 +1022,11 @@ void ui_context_free(AppContext* ctx) {
 
     /* Free swatches data */
     swatches_free(&ctx->swatches);
+
+    /* Free workspace (this will free layers panel, accordion, etc.) */
+    if (ctx->workspace) {
+        workspace_free(ctx->workspace);
+    }
 
     /* Free app directory */
     if (ctx->app_dir) {
@@ -1491,8 +1521,12 @@ static void on_notebook_switch_page(GtkNotebook* notebook, GtkWidget* page,
     ui_update_status_bar(ctx, doc);
 
     /* Update layers panel with current document's layers */
+    Workspace* workspace = (Workspace*)g_object_get_data(G_OBJECT(ctx->window), "workspace");
     if (layers_panel && doc) {
         layers_panel_update(layers_panel, doc);
+    }
+    if (workspace) {
+        workspace_update_overview(workspace);
     }
 
     /* Update menu and button sensitivity */

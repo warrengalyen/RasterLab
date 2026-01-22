@@ -192,6 +192,7 @@ set(SOURCES
     ui/swatches_panel.c
     ui/tool_options_panel.c
     ui/tools_panel.c
+    ui/workspace.c
     ui/ui_edit_menu.c
     ui/ui_file_menu.c
     ui/ui_filter.c

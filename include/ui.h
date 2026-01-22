@@ -10,6 +10,7 @@
 #include "ui/swatches.h"
 #include "ui/tool_options_panel.h"
 #include "ui/tools_panel.h"
+#include "ui/workspace.h"
 #include <gtk/gtk.h>
 
 /**
@@ -29,7 +30,8 @@ struct _AppContext {
     GtkWidget* file_menu_save;            /* File > Save menu item */
     ToolRegistry* tool_registry;          /* Tool registry and management */
     ToolOptionsPanel* tool_options_panel; /* Tool options panel */
-    LayersPanel* layers_panel;            /* Layers panel for layer selection */
+    Workspace* workspace;                 /* Workspace with accordion and panels */
+    LayersPanel* layers_panel;            /* Layers panel (accessed via workspace) - kept for compatibility */
     Settings* settings;                   /* Application settings */
     gchar* app_dir;                       /* Application executable directory */
     gchar* size_unit;                     /* Current size unit for dimensions display (default: "px") */

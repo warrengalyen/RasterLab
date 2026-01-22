@@ -6,11 +6,8 @@
 #include "render/layer.h"
 #include "render/render_utils.h"
 #include "ui.h"
-#include "ui/overview_panel.h"
-#include "ui/swatches_panel.h"
 #include "ui/tools_panel.h"
 #include "ui/ui_utils.h"
-#include "ui/widgets/accordion.h"
 #include <glib/gstdio.h>
 #include <math.h>
 #include <stdio.h>
@@ -103,7 +100,7 @@ static gboolean on_treeview_button_press(GtkWidget* widget,
     }
 
     gtk_tree_path_free(path);
-    // printf("Layer visibility toggled to %s\n", visible ? "visible" : "hidden");
+
     return TRUE;
 }
 
@@ -190,8 +187,6 @@ static void on_blend_mode_changed(GtkComboBox* combo, gpointer user_data) {
     dirty_rect_clamp(&dirty_rect, layers_panel->current_doc->width,
                      layers_panel->current_doc->height);
     document_invalidate_region(layers_panel->current_doc, &dirty_rect);
-
-    // printf("Layer blend mode changed to %d\n", blend_mode);
 }
 
 /**
@@ -387,8 +382,6 @@ static void on_layer_name_edited(GtkCellRendererText* renderer,
     gtk_list_store_set(layers_panel->store, &iter,
                        2, new_text,
                        -1);
-
-    // printf("Layer name changed to: %s\n", new_text);
 }
 
 /**
@@ -401,7 +394,6 @@ static gboolean on_layer_row_activated(GtkTreeView* tree_view, GtkTreePath* path
     (void)column;
     (void)user_data;
 
-    // printf("Layer selected\n");
     return FALSE;
 }
 
@@ -516,19 +508,16 @@ static GdkPixbuf* get_visibility_icon(gboolean visible) {
 static void on_panel_btn_new_clicked(GtkButton* button, gpointer user_data) {
     (void)button;    /* Unused */
     (void)user_data; /* Context passed differently */
-    // printf("New layer button clicked (handled by UI callback)\n");
 }
 
 static void on_panel_btn_delete_clicked(GtkButton* button, gpointer user_data) {
     (void)button;    /* Unused */
     (void)user_data; /* Context passed differently */
-    // printf("Delete layer button clicked (handled by UI callback)\n");
 }
 
 static void on_panel_btn_duplicate_clicked(GtkButton* button, gpointer user_data) {
     (void)button;    /* Unused */
     (void)user_data; /* Context passed differently */
-    // printf("Duplicate layer button clicked (handled by UI callback)\n");
 }
 
 /**
@@ -609,31 +598,7 @@ LayersPanel* create_layers_panel(AppContext* ctx) {
         g_error_free(error);
         g_object_unref(builder);
 
-        /* Fallback: create empty panel */
-        layers_panel->panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-        layers_panel->store = NULL;
-        layers_panel->tree_view = NULL;
-        layers_panel->btn_new = NULL;
-        layers_panel->btn_delete = NULL;
-        layers_panel->btn_up = NULL;
-        layers_panel->btn_down = NULL;
-        layers_panel->btn_duplicate = NULL;
-        layers_panel->scale_opacity = NULL;
-        layers_panel->spin_opacity = NULL;
-        layers_panel->btn_opacity_reset = NULL;
-        layers_panel->combo_blend = NULL;
-        layers_panel->overview_widget = NULL;
-        layers_panel->current_doc = NULL;
-        layers_panel->app_context = NULL;
-        return layers_panel;
-    }
-
-    /* Get the main Glade panel container */
-    GtkWidget* glade_panel = GTK_WIDGET(gtk_builder_get_object(builder, "layers_panel"));
-    if (!glade_panel) {
-        g_warning("Failed to get layers_panel from builder");
-        g_object_unref(builder);
-        layers_panel->panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+        /* Fallback: create empty structure */
         layers_panel->store = NULL;
         layers_panel->tree_view = NULL;
         layers_panel->btn_new = NULL;
@@ -668,13 +633,6 @@ LayersPanel* create_layers_panel(AppContext* ctx) {
     /* Get blend mode combo box from builder */
     layers_panel->combo_blend = GTK_WIDGET(gtk_builder_get_object(builder, "combo_blend"));
 
-    /* Create accordion widget - this becomes the main panel container */
-    layers_panel->accordion = accordion_new();
-    layers_panel->panel = accordion_get_widget(layers_panel->accordion);
-
-    /* Keep builder alive by storing it on the panel as object data */
-    g_object_set_data_full(G_OBJECT(layers_panel->panel), "builder", builder, g_object_unref);
-
     /* Create list store for layers */
     /* Column 0: Visibility icon (pixbuf) */
     /* Column 1: Thumbnail (pixbuf) */
@@ -694,6 +652,10 @@ LayersPanel* create_layers_panel(AppContext* ctx) {
     g_signal_connect(layers_panel->tree_view, "button-press-event",
                      G_CALLBACK(on_treeview_button_press), layers_panel);
     gtk_container_add(GTK_CONTAINER(scroll_window), layers_panel->tree_view);
+
+    /* Keep builder alive by storing it on the tree view as object data */
+    /* This allows workspace to retrieve the panel widget later */
+    g_object_set_data_full(G_OBJECT(layers_panel->tree_view), "builder", builder, g_object_unref);
 
     /* Visibility column (icon) - clickable */
     renderer = gtk_cell_renderer_pixbuf_new();
@@ -826,31 +788,8 @@ LayersPanel* create_layers_panel(AppContext* ctx) {
                          G_CALLBACK(on_blend_mode_changed), layers_panel);
     }
 
-    /* Create overview widget for composite thumbnail */
-    layers_panel->overview_widget = overview_panel_create(layers_panel);
-
-    /* Create swatches panel */
-    GtkWidget* swatches_panel = swatches_panel_create(ctx);
-
-    /* Ensure layers panel content expands vertically */
-    gtk_widget_set_vexpand(glade_panel, TRUE);
-    gtk_widget_set_hexpand(glade_panel, TRUE);
-
-    /* Add overview section first, then swatches section, then layers section */
-    accordion_add_section(layers_panel->accordion, "Overview", layers_panel->overview_widget);
-    if (swatches_panel) {
-        accordion_add_section(layers_panel->accordion, "Swatches", swatches_panel);
-    }
-    accordion_add_section(layers_panel->accordion, "Layers", glade_panel);
-
-    /* Make accordion expand to fill available vertical space */
-    gtk_widget_set_vexpand(layers_panel->panel, TRUE);
-    gtk_widget_set_hexpand(layers_panel->panel, TRUE);
-
     layers_panel->current_doc = NULL;
     layers_panel->app_context = NULL;
-
-    gtk_widget_show_all(layers_panel->panel);
 
     return layers_panel;
 }
@@ -881,21 +820,11 @@ void layers_panel_update(LayersPanel* layers_panel, ImageDocument* doc) {
             gtk_widget_set_sensitive(layers_panel->btn_opacity_reset, FALSE);
         }
 
-        /* Update overview widget */
-        if (layers_panel->overview_widget) {
-            overview_panel_update(layers_panel->overview_widget);
-        }
-
         return;
     }
 
     /* Clear existing layers */
     gtk_list_store_clear(layers_panel->store);
-
-    /* Update overview widget to show new document */
-    if (layers_panel->overview_widget) {
-        gtk_widget_queue_draw(layers_panel->overview_widget);
-    }
 
     /* Add all layers from document */
     guint layer_count = document_get_layer_count(doc);
@@ -925,8 +854,6 @@ void layers_panel_update(LayersPanel* layers_panel, ImageDocument* doc) {
             }
         }
     }
-
-    // printf("Layers panel updated with %u layers\n", layer_count);
 
     /* Always select the layer at index 0 (last row in tree view since layers are displayed in reverse) */
     if (layer_count > 0 && layers_panel->tree_view) {
@@ -1366,14 +1293,26 @@ void layers_panel_free(LayersPanel* layers_panel) {
         return;
     }
 
-    /* Clear static widget references before widgets are destroyed */
-    /* This prevents segfaults if save is called after widgets are destroyed */
-    swatches_panel_cleanup();
+    if (layers_panel->store) {
+        g_object_unref(layers_panel->store);
+    }
+    g_free(layers_panel);
+}
 
-    if (layers_panel->accordion) {
-        accordion_free(layers_panel->accordion);
+/**
+ * Get the main panel widget from layers panel
+ */
+GtkWidget* layers_panel_get_panel(LayersPanel* layers_panel) {
+    if (!layers_panel || !layers_panel->tree_view) {
+        return NULL;
     }
 
-    g_object_unref(layers_panel->store);
-    g_free(layers_panel);
+    /* Get builder from tree view */
+    GtkBuilder* builder = GTK_BUILDER(g_object_get_data(G_OBJECT(layers_panel->tree_view), "builder"));
+    if (!builder) {
+        return NULL;
+    }
+
+    /* Get the panel widget from builder */
+    return GTK_WIDGET(gtk_builder_get_object(builder, "layers_panel"));
 }

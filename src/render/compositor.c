@@ -5,6 +5,7 @@
 #include "render/tile_thread_pool.h"
 #include "render/tile_worker.h"
 #include "ui/layers_panel.h"
+#include "ui/workspace.h"
 #include <stdio.h>
 
 /**
@@ -715,8 +716,15 @@ void document_invalidate_composite(ImageDocument* doc) {
                 layers_panel_update_selected_thumbnail(layers_panel);
 
                 /* Update overview widget */
-                if (layers_panel->overview_widget) {
-                    gtk_widget_queue_draw(layers_panel->overview_widget);
+                GtkWidget* window = gtk_widget_get_toplevel(doc->drawing_area);
+                if (GTK_IS_WINDOW(window)) {
+                    Workspace* workspace = (Workspace*)g_object_get_data(G_OBJECT(window), "workspace");
+                    if (workspace) {
+                        GtkWidget* overview_widget = workspace_get_overview_widget(workspace);
+                        if (overview_widget) {
+                            gtk_widget_queue_draw(overview_widget);
+                        }
+                    }
                 }
             }
         }
@@ -855,8 +863,15 @@ void document_invalidate_region(ImageDocument* doc, const DirtyRect* dirty_rect)
                 layers_panel_update_selected_thumbnail(layers_panel);
 
                 /* Update overview widget */
-                if (layers_panel->overview_widget) {
-                    gtk_widget_queue_draw(layers_panel->overview_widget);
+                GtkWidget* window = gtk_widget_get_toplevel(doc->drawing_area);
+                if (GTK_IS_WINDOW(window)) {
+                    Workspace* workspace = (Workspace*)g_object_get_data(G_OBJECT(window), "workspace");
+                    if (workspace) {
+                        GtkWidget* overview_widget = workspace_get_overview_widget(workspace);
+                        if (overview_widget) {
+                            gtk_widget_queue_draw(overview_widget);
+                        }
+                    }
                 }
             }
         }
