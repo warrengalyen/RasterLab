@@ -55,12 +55,6 @@ static gboolean on_overview_draw(GtkWidget* widget, cairo_t* cr, gpointer user_d
 
     doc = layers_panel->current_doc;
     if (!doc) {
-        /* Draw empty state */
-        widget_width = gtk_widget_get_allocated_width(widget);
-        widget_height = gtk_widget_get_allocated_height(widget);
-        cairo_set_source_rgb(cr, 0.9, 0.9, 0.9);
-        cairo_rectangle(cr, 0, 0, widget_width, widget_height);
-        cairo_fill(cr);
         return FALSE;
     }
 
