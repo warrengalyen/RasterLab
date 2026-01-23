@@ -479,6 +479,13 @@ AppContext* ui_create_main_window(void) {
     /* Set main window reference for color chooser dialogs */
     tools_panel_set_main_window(GTK_WINDOW(ctx->window));
 
+    /* Connect window key press handler for tool hotkeys
+     * This should intercept keys before GTK's default mnemonic handling */
+    if (ctx->window) {
+        g_signal_connect(ctx->window, "key-press-event",
+                         G_CALLBACK(tools_panel_on_window_key_press), ctx);
+    }
+
     /* ==== RIGHT PANEL: Workspace ==== */
     ctx->workspace = workspace_create(ctx);
     if (!ctx->workspace) {

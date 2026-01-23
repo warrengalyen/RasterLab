@@ -516,3 +516,116 @@ GtkWidget* tools_panel_initialize_from_builder(GtkBuilder* builder, ToolRegistry
 
     return panel;
 }
+
+/**
+ * Window key press handler for tool hotkeys
+ * This is connected to catch tool hotkeys before other handlers
+ */
+gboolean tools_panel_on_window_key_press(GtkWidget* widget, GdkEventKey* event, gpointer user_data) {
+    (void)widget; /* Unused */
+    AppContext* ctx = (AppContext*)user_data;
+
+    if (!ctx || !ctx->tool_registry) {
+        return FALSE;
+    }
+
+    /* Get the modifier state, ignoring lock keys (Caps Lock, Num Lock) */
+    GdkModifierType modifiers = event->state & gtk_accelerator_get_default_mod_mask();
+
+    /* Only handle bare keys (no modifiers) */
+    if (modifiers != 0) {
+        return FALSE; /* Let other handlers process modified keys */
+    }
+
+    ToolType tool_to_activate = TOOL_COUNT; /* Invalid tool type */
+
+    /* Check for tool hotkeys (bare keys only) */
+    switch (event->keyval) {
+        case GDK_KEY_h:
+        case GDK_KEY_H:
+            tool_to_activate = TOOL_HAND;
+            break;
+        case GDK_KEY_m:
+        case GDK_KEY_M:
+            tool_to_activate = TOOL_MOVE;
+            break;
+        case GDK_KEY_z:
+        case GDK_KEY_Z:
+            tool_to_activate = TOOL_ZOOM;
+            break;
+        case GDK_KEY_p:
+        case GDK_KEY_P:
+            tool_to_activate = TOOL_PENCIL;
+            break;
+        case GDK_KEY_b:
+        case GDK_KEY_B:
+            tool_to_activate = TOOL_BRUSH;
+            break;
+        case GDK_KEY_f:
+        case GDK_KEY_F:
+            tool_to_activate = TOOL_PAINT_BUCKET;
+            break;
+        case GDK_KEY_e:
+        case GDK_KEY_E:
+            tool_to_activate = TOOL_ERASER;
+            break;
+        case GDK_KEY_s:
+        case GDK_KEY_S:
+            /* Toggle between rectangular and elliptical selection */
+            {
+                Tool* active_tool = tool_manager_get_active(ctx->tool_registry);
+                if (active_tool && active_tool->type == TOOL_RECT_SELECT) {
+                    tool_to_activate = TOOL_ELLIPSE_SELECT;
+                } else {
+                    tool_to_activate = TOOL_RECT_SELECT;
+                }
+            }
+            break;
+        default:
+            return FALSE; /* Not a tool hotkey */
+    }
+
+    /* Activate the tool */
+    if (tool_to_activate != TOOL_COUNT) {
+        if (tool_manager_activate(ctx->tool_registry, tool_to_activate)) {
+            /* Update toggle button states - only active tool is pressed */
+            /* Check if tool buttons are initialized */
+            if (g_tool_buttons[0] != NULL) {
+                g_updating_tools = TRUE;
+
+                for (int i = 0; i < TOOL_COUNT; i++) {
+                    if (g_tool_buttons[i]) {
+                        /* Get tool type from button's object data */
+                        ToolType button_tool_type = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(g_tool_buttons[i]), "tool_type"));
+
+                        /* Block signals to prevent recursion */
+                        g_signal_handlers_block_by_func(g_tool_buttons[i],
+                                                        G_CALLBACK(on_tool_button_clicked),
+                                                        GINT_TO_POINTER(button_tool_type));
+
+                        /* Set button active only if it's the selected tool */
+                        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g_tool_buttons[i]),
+                                                     (button_tool_type == tool_to_activate));
+
+                        /* Unblock signals */
+                        g_signal_handlers_unblock_by_func(g_tool_buttons[i],
+                                                          G_CALLBACK(on_tool_button_clicked),
+                                                          GINT_TO_POINTER(button_tool_type));
+                    }
+                }
+
+                g_updating_tools = FALSE;
+            }
+
+            /* Update tool options panel */
+            Tool* active_tool = tool_manager_get_active(ctx->tool_registry);
+            if (active_tool && g_tool_options_panel) {
+                tool_options_panel_switch_tool(g_tool_options_panel, active_tool->name);
+            }
+
+            return TRUE; /* Event handled */
+        }
+    }
+
+    return FALSE; /* Event not handled */
+}

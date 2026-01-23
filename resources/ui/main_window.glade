@@ -1728,6 +1728,8 @@
                     <property name="visible">True</property>
                     <property name="can-focus">True</property>
                     <property name="receives-default">False</property>
+                    <property name="tooltip-text" translatable="yes">Hand (click and drag image scrolling)
+Shortcut Key: H</property>
                     <property name="relief">none</property>
                     <child>
                       <object class="GtkImage" id="hand_icon">
@@ -1751,6 +1753,8 @@
                     <property name="visible">True</property>
                     <property name="can-focus">True</property>
                     <property name="receives-default">False</property>
+                    <property name="tooltip-text" translatable="yes">Zoom
+Shortcut Key: Z</property>
                     <property name="relief">none</property>
                     <child>
                       <object class="GtkImage" id="zoom_icon">
@@ -1774,6 +1778,8 @@
                     <property name="visible">True</property>
                     <property name="can-focus">False</property>
                     <property name="receives-default">False</property>
+                    <property name="tooltip-text" translatable="yes">Move image layers
+Shortcut Key: M</property>
                     <property name="relief">none</property>
                     <child>
                       <object class="GtkImage" id="move_icon">
@@ -1797,6 +1803,8 @@
                     <property name="visible">True</property>
                     <property name="can-focus">False</property>
                     <property name="receives-default">False</property>
+                    <property name="tooltip-text" translatable="yes">Pencil
+Shortcut Key: P</property>
                     <property name="relief">none</property>
                     <child>
                       <object class="GtkImage" id="pencil_icon">
@@ -1820,6 +1828,8 @@
                     <property name="visible">True</property>
                     <property name="can-focus">False</property>
                     <property name="receives-default">False</property>
+                    <property name="tooltip-text" translatable="yes">Paintbrush
+Shortcut Key: B</property>
                     <property name="relief">none</property>
                     <child>
                       <object class="GtkImage" id="brush_icon">
@@ -1843,6 +1853,8 @@
                     <property name="visible">True</property>
                     <property name="can-focus">False</property>
                     <property name="receives-default">False</property>
+                    <property name="tooltip-text" translatable="yes">Eraser
+Shortcut Key: E</property>
                     <property name="relief">none</property>
                     <child>
                       <object class="GtkImage" id="eraser_icon">
@@ -1866,6 +1878,8 @@
                     <property name="visible">True</property>
                     <property name="can-focus">False</property>
                     <property name="receives-default">False</property>
+                    <property name="tooltip-text" translatable="yes">Paint bucket
+Shortcut Key: F</property>
                     <property name="relief">none</property>
                     <child>
                       <object class="GtkImage" id="fill_icon">
@@ -1900,6 +1914,8 @@
                     <property name="visible">True</property>
                     <property name="can-focus">True</property>
                     <property name="receives-default">False</property>
+                    <property name="tooltip-text" translatable="yes">Rectangular Selection
+Shortcut Key: S</property>
                     <property name="relief">none</property>
                     <child>
                       <object class="GtkImage" id="rect_select_icon">
@@ -1923,6 +1939,8 @@
                     <property name="visible">True</property>
                     <property name="can-focus">True</property>
                     <property name="receives-default">False</property>
+                    <property name="tooltip-text" translatable="yes">Elliptical Selection
+Shortcut Key: S</property>
                     <property name="relief">none</property>
                     <child>
                       <object class="GtkImage" id="ellipse_select_icon">

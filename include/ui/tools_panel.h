@@ -40,4 +40,13 @@ gboolean tools_panel_get_foreground_color(GdkRGBA* rgba);
  */
 gboolean tools_panel_set_foreground_color(GdkRGBA* color);
 
+/**
+ * Window key press handler for tool hotkeys
+ * @param widget The widget that received the key press
+ * @param event The key press event
+ * @param user_data AppContext pointer
+ * @return TRUE if the event was handled, FALSE otherwise
+ */
+gboolean tools_panel_on_window_key_press(GtkWidget* widget, GdkEventKey* event, gpointer user_data);
+
 #endif /* TOOLS_PANEL_H */
