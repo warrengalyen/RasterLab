@@ -137,6 +137,14 @@
                 <property name="use-underline">True</property>
               </object>
             </child>
+            <child>
+              <object class="GtkMenuItem" id="adjust_menu_split_toning">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">Split toning</property>
+                <property name="use-underline">True</property>
+              </object>
+            </child>
           </object>
         </child>
       </object>
@@ -241,14 +249,6 @@
                 <property name="visible">True</property>
                 <property name="can-focus">False</property>
                 <property name="label" translatable="yes">Shadows and Highlights</property>
-                <property name="use-underline">True</property>
-              </object>
-            </child>
-            <child>
-              <object class="GtkMenuItem" id="adjust_menu_split_toning">
-                <property name="visible">True</property>
-                <property name="can-focus">False</property>
-                <property name="label" translatable="yes">Split toning</property>
                 <property name="use-underline">True</property>
               </object>
             </child>
@@ -1957,14 +1957,14 @@
                     <property name="margin-start">4</property>
                     <property name="margin-end">4</property>
                     <property name="orientation">vertical</property>
-                    <property name="spacing">12</property>
+                    <property name="spacing">2</property>
                     <child>
                       <object class="GtkFixed" id="color_picker_container">
                         <property name="visible">True</property>
                         <property name="can-focus">False</property>
                         <child>
                           <object class="GtkButton" id="bg_color_button">
-                            <property name="width-request">20</property>
+                            <property name="width-request">18</property>
                             <property name="height-request">20</property>
                             <property name="visible">True</property>
                             <property name="can-focus">True</property>
@@ -1978,7 +1978,7 @@
                         </child>
                         <child>
                           <object class="GtkButton" id="fg_color_button">
-                            <property name="width-request">20</property>
+                            <property name="width-request">18</property>
                             <property name="height-request">20</property>
                             <property name="visible">True</property>
                             <property name="can-focus">True</property>
@@ -1986,24 +1986,34 @@
                             <property name="tooltip-text">Foreground Color</property>
                           </object>
                         </child>
+                        <child>
+                          <object class="GtkEventBox" id="swap_colors_event_box">
+                            <property name="width-request">10</property>
+                            <property name="height-request">10</property>
+                            <property name="visible">True</property>
+                            <property name="can-focus">False</property>
+                            <child>
+                              <object class="GtkImage" id="swap_colors_image">
+                                <property name="width-request">10</property>
+                                <property name="height-request">10</property>
+                                <property name="visible">True</property>
+                                <property name="can-focus">False</property>
+                                <property name="xpad">0</property>
+                                <property name="ypad">0</property>
+                                <property name="pixel-size">16</property>
+                                <property name="resource">/icons/swap-colors.png</property>
+                              </object>
+                            </child>
+                          </object>
+                          <packing>
+                            <property name="x">24</property>
+                          </packing>
+                        </child>
                       </object>
                       <packing>
                         <property name="expand">False</property>
                         <property name="fill">True</property>
                         <property name="position">0</property>
-                      </packing>
-                    </child>
-                    <child>
-                      <object class="GtkButton" id="swap_button">
-                        <property name="label">⇄</property>
-                        <property name="visible">True</property>
-                        <property name="can-focus">True</property>
-                        <property name="receives-default">True</property>
-                      </object>
-                      <packing>
-                        <property name="expand">False</property>
-                        <property name="fill">True</property>
-                        <property name="position">1</property>
                       </packing>
                     </child>
                   </object>

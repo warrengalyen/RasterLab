@@ -34,13 +34,15 @@ static GdkRGBA g_bg_color = {1.0, 1.0, 1.0, 1.0}; /* White */
 
 /**
  * Swap foreground and background colors
+ * Handles both button click and image button-press-event
  */
-static void on_swap_colors_clicked(GtkButton* button, gpointer user_data) {
-    (void)button;    /* Unused */
+static gboolean on_swap_colors_clicked(GtkWidget* widget, GdkEventButton* event, gpointer user_data) {
+    (void)widget;    /* Unused */
+    (void)event;     /* Unused */
     (void)user_data; /* Unused */
 
     if (!g_fg_color_button || !g_bg_color_button) {
-        return;
+        return FALSE;
     }
 
     /* Swap the stored colors */
@@ -51,6 +53,8 @@ static void on_swap_colors_clicked(GtkButton* button, gpointer user_data) {
     /* Update button appearances */
     update_color_button_appearance(g_fg_color_button, &g_fg_color);
     update_color_button_appearance(g_bg_color_button, &g_bg_color);
+
+    return TRUE;
 }
 
 /**
@@ -438,7 +442,6 @@ GtkWidget* tools_panel_initialize_from_builder(GtkBuilder* builder, ToolRegistry
     /* Set up color buttons */
     GtkWidget* fg_color = GTK_WIDGET(gtk_builder_get_object(builder, "fg_color_button"));
     GtkWidget* bg_color = GTK_WIDGET(gtk_builder_get_object(builder, "bg_color_button"));
-    GtkWidget* swap_button = GTK_WIDGET(gtk_builder_get_object(builder, "swap_button"));
 
     if (fg_color) {
         g_fg_color_button = fg_color; /* Store global reference */
@@ -464,12 +467,49 @@ GtkWidget* tools_panel_initialize_from_builder(GtkBuilder* builder, ToolRegistry
         g_warning("Failed to get background color button from builder");
     }
 
-    /* Connect swap button */
-    if (swap_button) {
-        g_signal_connect(swap_button, "clicked",
-                         G_CALLBACK(on_swap_colors_clicked), NULL);
+    /* Connect swap image - EventBox is already in glade file */
+    GtkWidget* swap_event_box = GTK_WIDGET(gtk_builder_get_object(builder, "swap_colors_event_box"));
+    GtkWidget* swap_image = GTK_WIDGET(gtk_builder_get_object(builder, "swap_colors_image"));
+
+    if (swap_image) {
+        /* Resize icon to 10x10 by loading resource, scaling, and setting pixbuf */
+        GError* error = NULL;
+        GdkPixbuf* pixbuf = gdk_pixbuf_new_from_resource("/icons/swap-colors.png", &error);
+        if (pixbuf) {
+            /* Scale to 10x10 */
+            GdkPixbuf* scaled = gdk_pixbuf_scale_simple(pixbuf, 10, 10, GDK_INTERP_BILINEAR);
+            g_object_unref(pixbuf);
+
+            if (scaled) {
+                /* Set the scaled pixbuf directly on the image */
+                gtk_image_set_from_pixbuf(GTK_IMAGE(swap_image), scaled);
+                g_object_unref(scaled);
+            }
+        } else if (error) {
+            g_warning("Failed to load swap-colors icon: %s", error->message);
+            g_error_free(error);
+        }
+
+        /* Remove all padding and margins from image */
+        gtk_widget_set_margin_start(swap_image, 0);
+        gtk_widget_set_margin_end(swap_image, 0);
+        gtk_widget_set_margin_top(swap_image, 0);
+        gtk_widget_set_margin_bottom(swap_image, 0);
     } else {
-        g_warning("Failed to get swap button from builder");
+        g_warning("Failed to get swap_colors_image from builder");
+    }
+
+    if (swap_event_box) {
+        /* Remove all padding and margins from event box */
+        gtk_widget_set_margin_start(swap_event_box, 0);
+        gtk_widget_set_margin_end(swap_event_box, 0);
+        gtk_widget_set_margin_top(swap_event_box, 0);
+        gtk_widget_set_margin_bottom(swap_event_box, 0);
+
+        /* Connect button-press-event to event box */
+        g_signal_connect(swap_event_box, "button-press-event", G_CALLBACK(on_swap_colors_clicked), NULL);
+    } else {
+        g_warning("Failed to get swap_colors_event_box from builder");
     }
 
     gtk_widget_show_all(panel);

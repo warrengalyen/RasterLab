@@ -17,7 +17,7 @@
     <file preprocess="xml-stripblanks">icons/layer-down.svg</file>
     <file preprocess="xml-stripblanks">icons/layer-duplicate.svg</file>
     <file preprocess="xml-stripblanks">icons/reset.svg</file>
-    <file preprocess="xml-stripblanks">icons/swap-colors.svg</file>
+    <file preprocess="to-pixdata">icons/swap-colors.png</file>
     <file preprocess="to-pixdata">icons/visibility-on.png</file>
     <file preprocess="to-pixdata">icons/visibility-off.png</file>
     <file preprocess="xml-stripblanks">icons/anchor-0.svg</file>
