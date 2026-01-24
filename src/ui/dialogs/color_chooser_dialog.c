@@ -1,4 +1,5 @@
 #include "ui/dialogs/color_chooser_dialog.h"
+#include "ui/ui_utils.h"
 #include "ui/widgets/hsv_color_wheel.h"
 #include "ui/widgets/hsv_scale.h"
 #include "ui/widgets/rgb_scale.h"
@@ -590,6 +591,10 @@ GtkWidget* color_chooser_dialog_new(GtkWindow* parent,
                                                     "_Close",
                                                     GTK_RESPONSE_CLOSE,
                                                     NULL);
+    
+    /* Replace default titlebar with header bar - must be done before other window properties */
+    ui_utils_set_header_bar(GTK_WINDOW(dialog), title);
+    
     gtk_window_set_default_size(GTK_WINDOW(dialog), 700, 450);
     gtk_window_set_resizable(GTK_WINDOW(dialog), FALSE);
 

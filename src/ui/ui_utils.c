@@ -159,3 +159,25 @@ void set_custom_color_button_color(GtkWidget* button, GdkRGBA* color) {
     data->color = *color;
     update_color_button_appearance(button, &data->color);
 }
+
+/**
+ * Replace default titlebar with header bar for a dialog window
+ */
+void ui_utils_set_header_bar(GtkWindow* window, const gchar* title) {
+    if (!window || !GTK_IS_WINDOW(window)) {
+        return;
+    }
+
+    GtkWidget* hb = gtk_header_bar_new();
+    if (!hb) {
+        return;
+    }
+
+    gtk_header_bar_set_show_close_button(GTK_HEADER_BAR(hb), TRUE);
+    gtk_header_bar_set_title(GTK_HEADER_BAR(hb), title ? title : "");
+
+    /* must be done before window is realized */
+    gtk_window_set_titlebar(window, hb);
+
+    gtk_widget_show(hb);
+}

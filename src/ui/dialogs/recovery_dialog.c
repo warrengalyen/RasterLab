@@ -3,10 +3,12 @@
 #include "document.h"
 #include "ui.h"
 #include "ui/layers_panel.h"
+#include "ui/ui_utils.h"
 #include <glib.h>
 #include <gtk/gtk.h>
 #include <string.h>
 #include <time.h>
+
 
 /* Forward declarations */
 static void on_recovery_dialog_response(GtkDialog* dialog, gint response_id, gpointer user_data);
@@ -34,6 +36,9 @@ void recovery_dialog_show(AppContext* ctx) {
         NULL);
 
     gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_ACCEPT);
+
+    /* Replace default titlebar with header bar */
+    ui_utils_set_header_bar(GTK_WINDOW(dialog), "Recovered Files Found");
 
     /* Create content area */
     GtkWidget* content_area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));

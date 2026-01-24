@@ -1,4 +1,5 @@
 #include "ui/dialogs/gamma_dialog.h"
+#include "ui/ui_utils.h"
 #include "render/compositor.h"
 #include "render/layer.h"
 #include "ui/filters/filter_utils.h"
@@ -351,6 +352,9 @@ GammaDialog* gamma_dialog_new(const gchar* title) {
                                                  "_Cancel",
                                                  GTK_RESPONSE_CANCEL,
                                                  NULL);
+
+    /* Replace default titlebar with header bar - must be done before other window properties */
+    ui_utils_set_header_bar(GTK_WINDOW(dialog->dialog), title);
 
     /* Don't set a fixed default size - let dialog size to content */
     gtk_window_set_resizable(GTK_WINDOW(dialog->dialog), TRUE);

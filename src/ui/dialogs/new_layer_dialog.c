@@ -1,4 +1,5 @@
 #include "ui/dialogs/new_layer_dialog.h"
+#include "ui/ui_utils.h"
 #include "document.h"
 #include <glib.h>
 #include <gtk/gtk.h>
@@ -177,6 +178,9 @@ NewLayerDialog* new_layer_dialog_new(void) {
         g_object_set_data(G_OBJECT(cancel_button), "response-id", GINT_TO_POINTER(GTK_RESPONSE_CANCEL));
         g_signal_connect(cancel_button, "clicked", G_CALLBACK(on_button_clicked), dialog->dialog);
     }
+
+    /* Replace default titlebar with header bar */
+    ui_utils_set_header_bar(GTK_WINDOW(dialog->dialog), "Add New Layer");
 
     /* Clean up builder */
     g_object_unref(builder);

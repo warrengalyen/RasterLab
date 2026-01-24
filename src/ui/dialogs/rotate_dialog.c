@@ -173,6 +173,10 @@ RotateDialog* rotate_dialog_new(const gchar* title) {
 
     dialog->dialog = gtk_dialog_new();
     gtk_window_set_title(GTK_WINDOW(dialog->dialog), title);
+    
+    /* Replace default titlebar with header bar - must be done before other window properties */
+    ui_utils_set_header_bar(GTK_WINDOW(dialog->dialog), title);
+    
     gtk_dialog_add_button(GTK_DIALOG(dialog->dialog), "_OK", GTK_RESPONSE_OK);
     gtk_dialog_add_button(GTK_DIALOG(dialog->dialog), "_Cancel", GTK_RESPONSE_CANCEL);
     gtk_window_set_modal(GTK_WINDOW(dialog->dialog), TRUE);

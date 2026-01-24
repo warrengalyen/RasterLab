@@ -1,5 +1,6 @@
 #include "ui/dialogs/canvas_size_dialog.h"
 #include "document.h"
+#include "ui/ui_utils.h"
 #include "ui/widgets/anchor_position_widget.h"
 #include <glib.h>
 #include <gtk/gtk.h>
@@ -466,26 +467,59 @@ static void update_dimensions_label(CanvasSizeDialog* dialog) {
  */
 static void update_aspect_ratio_label(CanvasSizeDialog* dialog) {
     gchar* text;
-    guint gcd_w = dialog->current_width;
-    guint gcd_h = dialog->current_height;
+    guint width = dialog->current_width;
+    guint height = dialog->current_height;
     guint gcd;
     gdouble ratio;
 
-    /* Calculate GCD for simplified ratio */
-    while (gcd_h != 0) {
-        guint temp = gcd_h;
-        gcd_h = gcd_w % gcd_h;
-        gcd_w = temp;
-    }
-    gcd = gcd_w;
-
-    if (gcd > 0) {
-        guint ratio_w = dialog->current_width / gcd;
-        guint ratio_h = dialog->current_height / gcd;
-        ratio = (gdouble)dialog->current_width / (gdouble)dialog->current_height;
-        text = g_strdup_printf("%u:%u (%.2f)", ratio_w, ratio_h, ratio);
-    } else {
+    /* Handle edge cases */
+    if (width == 0 || height == 0) {
         text = g_strdup("1:1 (1.00)");
+        gtk_label_set_text(GTK_LABEL(dialog->aspect_ratio_text), text);
+        g_free(text);
+        return;
+    }
+
+    /* Calculate GCD for simplified ratio using Euclidean algorithm */
+    /* This algorithm correctly handles cases where width < height or width > height */
+    guint a = width;
+    guint b = height;
+
+    /* Euclidean algorithm: GCD(a, b) = GCD(b, a mod b) until b == 0 */
+    while (b != 0) {
+        guint remainder = a % b;
+        a = b;
+        b = remainder;
+    }
+    gcd = a;
+
+    /* Ensure GCD is valid and divide both dimensions by GCD to get reduced ratio */
+    if (gcd > 0 && gcd <= width && gcd <= height) {
+        guint ratio_w = width / gcd;
+        guint ratio_h = height / gcd;
+
+        /* Verify the reduction is correct by checking GCD of the reduced values is 1 */
+        /* This ensures we have the fully reduced form */
+        guint check_a = ratio_w;
+        guint check_b = ratio_h;
+        while (check_b != 0) {
+            guint check_remainder = check_a % check_b;
+            check_a = check_b;
+            check_b = check_remainder;
+        }
+        /* If check_a != 1, there was an error in the GCD calculation */
+        if (check_a == 1) {
+            ratio = (gdouble)width / (gdouble)height;
+            text = g_strdup_printf("%u:%u (%.2f)", ratio_w, ratio_h, ratio);
+        } else {
+            /* Fallback: use original values if verification fails */
+            ratio = (gdouble)width / (gdouble)height;
+            text = g_strdup_printf("%u:%u (%.2f)", width, height, ratio);
+        }
+    } else {
+        /* Fallback if GCD calculation failed */
+        ratio = (gdouble)width / (gdouble)height;
+        text = g_strdup_printf("%u:%u (%.2f)", width, height, ratio);
     }
 
     gtk_label_set_text(GTK_LABEL(dialog->aspect_ratio_text), text);
@@ -850,6 +884,9 @@ CanvasSizeDialog* canvas_size_dialog_new(ImageDocument* doc) {
         g_object_set_data(G_OBJECT(cancel_button), "response-id", GINT_TO_POINTER(GTK_RESPONSE_CANCEL));
         g_signal_connect(cancel_button, "clicked", G_CALLBACK(on_button_clicked), dialog->dialog);
     }
+
+    /* Replace default titlebar with header bar */
+    ui_utils_set_header_bar(GTK_WINDOW(dialog->dialog), "Canvas Size");
 
     /* Update initial labels */
     update_dimensions_label(dialog);

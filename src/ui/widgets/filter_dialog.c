@@ -253,6 +253,9 @@ FilterDialog* filter_dialog_new(const gchar* title,
                                                  GTK_RESPONSE_CANCEL,
                                                  NULL);
 
+    /* Replace default titlebar with header bar - must be done before other window properties */
+    ui_utils_set_header_bar(GTK_WINDOW(dialog->dialog), title);
+
     /* Apply modal + destroy-with-parent behavior without enum bitwise warnings */
     gtk_window_set_modal(GTK_WINDOW(dialog->dialog), TRUE);
     gtk_window_set_destroy_with_parent(GTK_WINDOW(dialog->dialog), TRUE);

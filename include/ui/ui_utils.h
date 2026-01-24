@@ -49,4 +49,11 @@ gboolean get_custom_color_button_color(GtkWidget* button, GdkRGBA* color);
  */
 void set_custom_color_button_color(GtkWidget* button, GdkRGBA* color);
 
+/**
+ * Replace default titlebar with header bar for a dialog window
+ * @param window The window to set header bar for
+ * @param title The title to display in the header bar
+ */
+void ui_utils_set_header_bar(GtkWindow* window, const gchar* title);
+
 #endif /* UI_UTILS_H */

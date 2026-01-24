@@ -1,4 +1,5 @@
 #include "ui/dialogs/palettize_dialog.h"
+#include "ui/ui_utils.h"
 #include "document.h"
 #include "filters.h"
 #include "render/compositor.h"
@@ -660,6 +661,9 @@ PalettizeDialog* palettize_dialog_new(const gchar* title) {
                                                  "_Cancel",
                                                  GTK_RESPONSE_CANCEL,
                                                  NULL);
+
+    /* Replace default titlebar with header bar - must be done before other window properties */
+    ui_utils_set_header_bar(GTK_WINDOW(dialog->dialog), title);
 
     gtk_window_set_resizable(GTK_WINDOW(dialog->dialog), TRUE);
 

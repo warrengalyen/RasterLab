@@ -1,4 +1,5 @@
 #include "ui/dialogs/formats/tiff_options_dialog.h"
+#include "ui/ui_utils.h"
 #include "document.h"
 #include <glib.h>
 #include <gtk/gtk.h>
@@ -321,8 +322,11 @@ gboolean tiff_options_dialog_show(GtkWindow* parent, SaveOptions* opts, ImageDoc
     /* Set default size */
     gtk_window_set_default_size(GTK_WINDOW(dialog), 500, -1);
 
-    /* Hide icon in titlebar */
-    gtk_window_set_icon(GTK_WINDOW(dialog), NULL);
+    /* Replace default titlebar with header bar */
+    if (GTK_IS_WINDOW(dialog)) {
+        const gchar* title = gtk_window_get_title(GTK_WINDOW(dialog));
+        ui_utils_set_header_bar(GTK_WINDOW(dialog), title ? title : "TIFF Options");
+    }
 
     /* Get all widgets */
     /* Note: The glade file has incorrect IDs - the first button (labeled "auto") has ID "color_compression_none_button" */

@@ -1,4 +1,5 @@
 #include "ui/dialogs/formats/png_options_dialog.h"
+#include "ui/ui_utils.h"
 #include <glib.h>
 #include <gtk/gtk.h>
 #include <string.h>
@@ -232,8 +233,11 @@ gboolean png_options_dialog_show(GtkWindow* parent, SaveOptions* opts) {
     /* Set default size */
     gtk_window_set_default_size(GTK_WINDOW(dialog), 500, -1);
 
-    /* Hide icon in titlebar */
-    gtk_window_set_icon(GTK_WINDOW(dialog), NULL);
+    /* Replace default titlebar with header bar */
+    if (GTK_IS_WINDOW(dialog)) {
+        const gchar* title = gtk_window_get_title(GTK_WINDOW(dialog));
+        ui_utils_set_header_bar(GTK_WINDOW(dialog), title ? title : "PNG Options");
+    }
 
     /* Get all widgets */
     compression_level_scale = GTK_WIDGET(gtk_builder_get_object(builder, "compression_level_scale"));
