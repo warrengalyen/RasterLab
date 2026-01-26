@@ -62,6 +62,7 @@ set(SOURCES
     plugins/plugin_xpm.c
     plugins/plugin_cut.c
     plugins/plugin_deep.c
+    plugins/plugin_hdr.c
     plugins/plugin_webp.c
     render/compositor.c
     render/dirty.c
@@ -76,6 +77,7 @@ set(SOURCES
     selection/selection_render.c
     selection/selection_undo.c
     selection/selection_undo_helpers.c
+    tone_mapping.c
     tool_options.c
     tools.c
     tools/tool_brush.c
@@ -91,6 +93,7 @@ set(SOURCES
     ui.c
     ui/dialogs/beeps_dialog.c
     ui/dialogs/canvas_size_dialog.c
+    ui/dialogs/hdr_image_dialog.c
     ui/dialogs/clouds_dialog.c
     ui/dialogs/color_balance_dialog.c
     ui/dialogs/color_chooser_dialog.c

@@ -14,6 +14,7 @@
 #include "plugins/plugin_tiff.h"
 #include "plugins/plugin_webp.h"
 #include "plugins/plugin_xpm.h"
+#include "plugins/plugin_hdr.h"
 #include <glib.h>
 
 /**
@@ -34,6 +35,7 @@ void builtin_plugins_register(void) {
     ImageFormatPlugin deep_plugin;
     ImageFormatPlugin webp_plugin;
     ImageFormatPlugin tiff_plugin;
+    ImageFormatPlugin hdr_plugin;
 
     /* Register PNG plugin (using libpng) */
 #ifdef HAVE_LIBPNG
@@ -194,4 +196,16 @@ void builtin_plugins_register(void) {
 #else
     g_message("TIFF plugin not available (HAVE_LIBTIFF not defined)");
 #endif
+
+    /* Register HDR plugin */
+    g_message("Registering built-in HDR plugin");
+    if (plugin_init_hdr(host_api, &hdr_plugin)) {
+        if (format_registry_register_builtin(&hdr_plugin)) {
+            g_message("Successfully registered HDR plugin");
+        } else {
+            g_message("Failed to register HDR plugin with format registry");
+        }
+    } else {
+        g_message("Failed to initialize HDR plugin");
+    }
 }

@@ -190,11 +190,14 @@ typedef struct {
     /* Whether format supports multiple layers (optional) */
     bool supports_layers;
 
+    /* Whether format supports HDR (High Dynamic Range) - requires tone mapping dialog */
+    bool supports_hdr;
+
     /* Priority for extension conflicts (higher = preferred) */
     int32_t priority;
 
     /* Reserved for future use */
-    uint32_t reserved[4];
+    uint32_t reserved[3];
 } FormatInfo;
 
 /**
