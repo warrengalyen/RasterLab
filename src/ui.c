@@ -617,15 +617,11 @@ AppContext* ui_create_main_window(void) {
 }
 
 /**
- * Create and attach a new document tab
+ * Create a document without adding it to the notebook
+ * This allows loading the image first, then adding to notebook only if successful
  */
-ImageDocument* ui_create_document_tab(AppContext* ctx, const gchar* filename) {
+ImageDocument* ui_create_document_without_tab(AppContext* ctx, const gchar* filename) {
     ImageDocument* doc;
-    GtkWidget* page_content;
-    GtkWidget* tab_hbox;
-    GtkWidget* tab_label;
-    GtkWidget* close_button;
-    gint page_num;
 
     /* Get undo levels and worker threads from settings */
     guint undo_levels = 10;   /* Default */
@@ -663,41 +659,7 @@ ImageDocument* ui_create_document_tab(AppContext* ctx, const gchar* filename) {
     }
 
     /* Create the drawing area (scrolled window with drawing area) */
-    page_content = document_create_drawing_area(doc);
-
-    /* Create tab label with close button */
-    tab_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
-    gtk_container_set_border_width(GTK_CONTAINER(tab_hbox), 0);
-
-    tab_label = gtk_label_new(filename);
-    gtk_box_pack_start(GTK_BOX(tab_hbox), tab_label, FALSE, FALSE, 0);
-
-    close_button = gtk_button_new();
-    gtk_button_set_relief(GTK_BUTTON(close_button), GTK_RELIEF_NONE);
-    gtk_widget_set_focus_on_click(close_button, FALSE);
-    gtk_widget_set_size_request(close_button, 20, 20);
-    GtkWidget* close_image = gtk_image_new_from_icon_name("window-close-symbolic",
-                                                          GTK_ICON_SIZE_BUTTON);
-    gtk_button_set_image(GTK_BUTTON(close_button), close_image);
-    g_signal_connect(close_button, "clicked",
-                     G_CALLBACK(on_tab_close_button_clicked), doc);
-    gtk_box_pack_start(GTK_BOX(tab_hbox), close_button, FALSE, FALSE, 0);
-
-    gtk_widget_show_all(tab_hbox);
-    gtk_widget_show_all(page_content);
-
-    /* Add document to list BEFORE adding page to notebook
-     * This ensures that when switch-page signal fires, the document is already in the list */
-    ctx->documents = g_list_append(ctx->documents, doc);
-
-    /* Add page to notebook */
-    page_num = gtk_notebook_append_page(GTK_NOTEBOOK(ctx->notebook),
-                                        page_content, tab_hbox);
-    gtk_notebook_set_current_page(GTK_NOTEBOOK(ctx->notebook), page_num);
-
-    /* Store label in close button's data for later reference */
-    g_object_set_data(G_OBJECT(close_button), "tab_label", tab_label);
-    g_object_set_data(G_OBJECT(close_button), "app_context", ctx);
+    document_create_drawing_area(doc);
 
     /* Store AppContext and tool registry in drawing area for tool event handlers */
     if (doc && doc->drawing_area) {
@@ -735,16 +697,78 @@ ImageDocument* ui_create_document_tab(AppContext* ctx, const gchar* filename) {
         gtk_widget_queue_draw(doc->viewport);
     }
 
-    /* Set the current document in tool registry so tools can access it */
-    if (ctx->tool_registry) {
-        ctx->tool_registry->current_doc = doc;
+    return doc;
+}
+
+/**
+ * Add an existing document to the notebook tab
+ */
+void ui_add_document_to_notebook(AppContext* ctx, ImageDocument* doc) {
+    GtkWidget* page_content;
+    GtkWidget* tab_hbox;
+    GtkWidget* tab_label;
+    GtkWidget* close_button;
+    gint page_num;
+
+    if (!ctx || !doc || !doc->scrolled_window) {
+        return;
     }
 
-    /* Register document for autosave */
-    autosave_register_document(doc);
+    /* Get the page content (scrolled window) */
+    page_content = doc->scrolled_window;
 
-    /* Update window title (pass doc to ensure correct title) */
-    ui_update_window_title(ctx, doc);
+    /* Create tab label with close button */
+    tab_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+    gtk_container_set_border_width(GTK_CONTAINER(tab_hbox), 0);
+
+    tab_label = gtk_label_new(doc->filename ? doc->filename : "Untitled");
+    gtk_box_pack_start(GTK_BOX(tab_hbox), tab_label, FALSE, FALSE, 0);
+
+    close_button = gtk_button_new();
+    gtk_button_set_relief(GTK_BUTTON(close_button), GTK_RELIEF_NONE);
+    gtk_widget_set_focus_on_click(close_button, FALSE);
+    gtk_widget_set_size_request(close_button, 20, 20);
+    GtkWidget* close_image = gtk_image_new_from_icon_name("window-close-symbolic",
+                                                          GTK_ICON_SIZE_BUTTON);
+    gtk_button_set_image(GTK_BUTTON(close_button), close_image);
+    g_signal_connect(close_button, "clicked",
+                     G_CALLBACK(on_tab_close_button_clicked), doc);
+    gtk_box_pack_start(GTK_BOX(tab_hbox), close_button, FALSE, FALSE, 0);
+
+    gtk_widget_show_all(tab_hbox);
+    gtk_widget_show_all(page_content);
+
+    /* Add document to list BEFORE adding page to notebook
+     * This ensures that when switch-page signal fires, the document is already in the list */
+    ctx->documents = g_list_append(ctx->documents, doc);
+
+    /* Add page to notebook */
+    page_num = gtk_notebook_append_page(GTK_NOTEBOOK(ctx->notebook),
+                                        page_content, tab_hbox);
+    gtk_notebook_set_current_page(GTK_NOTEBOOK(ctx->notebook), page_num);
+
+    /* Store label in close button's data for later reference */
+    g_object_set_data(G_OBJECT(close_button), "tab_label", tab_label);
+    g_object_set_data(G_OBJECT(close_button), "app_context", ctx);
+}
+
+/**
+ * Create and attach a new document tab
+ * This is a convenience function that creates document and adds it to notebook
+ */
+ImageDocument* ui_create_document_tab(AppContext* ctx, const gchar* filename) {
+    ImageDocument* doc = ui_create_document_without_tab(ctx, filename);
+    if (doc) {
+        ui_add_document_to_notebook(ctx, doc);
+
+        /* Set the current document in tool registry so tools can access it */
+        if (ctx->tool_registry) {
+            ctx->tool_registry->current_doc = doc;
+        }
+
+        /* Register document for autosave */
+        autosave_register_document(doc);
+    }
 
     return doc;
 }

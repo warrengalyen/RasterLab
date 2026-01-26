@@ -255,6 +255,14 @@ cairo_surface_t* document_get_composite_surface(ImageDocument* doc);
 void document_invalidate_composite(ImageDocument* doc);
 
 /**
+ * Initialize document rendering structures after image dimensions are set
+ * This should be called after loading an image to set up tile grid and rendering
+ * @param doc The document to initialize
+ * @return TRUE on success, FALSE on failure
+ */
+gboolean document_init_rendering_structures(ImageDocument* doc);
+
+/**
  * Add a new empty layer to the document
  * @param doc The document
  * @param name The layer name

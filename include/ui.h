@@ -52,6 +52,8 @@ AppContext* ui_create_main_window(void);
  * @return The created ImageDocument
  */
 ImageDocument* ui_create_document_tab(AppContext* ctx, const gchar* filename);
+ImageDocument* ui_create_document_without_tab(AppContext* ctx, const gchar* filename);
+void ui_add_document_to_notebook(AppContext* ctx, ImageDocument* doc);
 
 /**
  * Close a document tab

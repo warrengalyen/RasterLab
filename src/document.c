@@ -1200,7 +1200,7 @@ const gchar* document_get_filename(ImageDocument* doc) {
  * Initialize document rendering structures after image dimensions are set
  * This should be called after loading an image
  */
-static gboolean document_init_rendering_structures(ImageDocument* doc) {
+gboolean document_init_rendering_structures(ImageDocument* doc) {
     if (!doc || doc->width == 0 || doc->height == 0) {
         return FALSE;
     }

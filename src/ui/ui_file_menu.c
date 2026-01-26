@@ -1,4 +1,5 @@
 #include "ui/ui_file_menu.h"
+#include "app/autosave.h"
 #include "app/recent_files.h"
 #include "app/settings.h"
 #include "command.h"
@@ -80,9 +81,9 @@ void on_recent_file_activate(GtkMenuItem* menu_item, gpointer user_data) {
         return;
     }
 
-    /* Open the file */
+    /* Create document WITHOUT adding to notebook - we'll add it only after successful load */
     gchar* basename = g_path_get_basename(file_path);
-    ImageDocument* doc = ui_create_document_tab(ctx, basename);
+    ImageDocument* doc = ui_create_document_without_tab(ctx, basename);
 
     if (doc) {
         /* Load the image into the document using plugin system */
@@ -105,30 +106,68 @@ void on_recent_file_activate(GtkMenuItem* menu_item, gpointer user_data) {
             gtk_dialog_run(GTK_DIALOG(dialog));
             gtk_widget_destroy(dialog);
 
-            /* Close the document tab since load failed */
-            ui_close_document_tab(ctx, doc);
+            /* Destroy document since load failed (it was never added to notebook) */
+            document_free(doc);
             g_free(basename);
             return;
         }
 
-        /* Continue with document initialization */
-        if (!document_load_image_from_file(doc, file_path)) {
-            /* This should not happen if image_io_load succeeded, but handle it anyway */
+        /* Load succeeded - now add document to notebook */
+        ui_add_document_to_notebook(ctx, doc);
+        
+        /* Register document for autosave */
+        autosave_register_document(doc);
+
+        /* Initialize rendering structures after image is loaded */
+        /* Note: We don't call document_load_image_from_file() here because it would
+         * call image_io_load() again, which would re-trigger the plugin and show
+         * dialogs again (e.g., HDR tone mapping dialog). Instead, we call the
+         * initialization parts directly since image_io_load() already loaded everything. */
+        if (!document_init_rendering_structures(doc)) {
             GtkWidget* dialog = gtk_message_dialog_new(
                 GTK_WINDOW(ctx->window),
                 GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
                 GTK_MESSAGE_ERROR,
                 GTK_BUTTONS_OK,
-                "Failed to initialize document for: %s",
+                "Failed to initialize document rendering for: %s",
                 file_path);
 
             gtk_dialog_run(GTK_DIALOG(dialog));
             gtk_widget_destroy(dialog);
 
-            /* Close the document tab since initialization failed */
-            ui_close_document_tab(ctx, doc);
+            /* Remove from notebook if it was added, then destroy document */
+            if (doc->scrolled_window && ctx->notebook) {
+                gint page_num = gtk_notebook_page_num(GTK_NOTEBOOK(ctx->notebook), doc->scrolled_window);
+                if (page_num >= 0) {
+                    ui_close_document_tab(ctx, doc);
+                } else {
+                    document_free(doc);
+                }
+            } else {
+                document_free(doc);
+            }
             g_free(basename);
             return;
+        }
+
+        /* Ensure we have at least one layer selected */
+        ImageLayer* layer_0 = document_get_layer(doc, 0);
+        if (layer_0) {
+            document_set_selected_layer(doc, layer_0);
+        }
+
+        /* Mark composite as needing re-render */
+        document_invalidate_composite(doc);
+
+        /* Update drawing area size to match image dimensions */
+        if (doc->drawing_area) {
+            /* Set exact size for the drawing area based on image dimensions */
+            gint display_width = (gint)(doc->width * doc->zoom_factor);
+            gint display_height = (gint)(doc->height * doc->zoom_factor);
+            gtk_widget_set_size_request(doc->drawing_area, display_width, display_height);
+
+            /* Queue redraw to display the image */
+            gtk_widget_queue_draw(doc->drawing_area);
         }
 
         {
@@ -375,9 +414,37 @@ void on_file_open_response(GtkDialog* dialog, gint response_id, gpointer user_da
         gchar* file_path = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));
 
         if (file_path) {
-            /* Create new document with filename */
+            /* Check if a plugin can handle this file format */
+            FormatHandler* handler = NULL;
+            uint8_t header[64];
+            size_t header_size = 0;
+            FILE* file = g_fopen(file_path, "rb");
+            if (file) {
+                header_size = fread(header, 1, sizeof(header), file);
+                fclose(file);
+            }
+
+            handler = format_registry_find_loader(file_path, header, header_size);
+            if (!handler) {
+                /* No plugin can handle this file format */
+                GtkWidget* error_dialog = gtk_message_dialog_new(
+                    GTK_WINDOW(ctx->window),
+                    GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+                    GTK_MESSAGE_ERROR,
+                    GTK_BUTTONS_OK,
+                    "Unsupported file format: %s",
+                    file_path);
+
+                gtk_dialog_run(GTK_DIALOG(error_dialog));
+                gtk_widget_destroy(error_dialog);
+                g_free(file_path);
+                gtk_widget_destroy(GTK_WIDGET(dialog));
+                return;
+            }
+
+            /* Create document WITHOUT adding to notebook - we'll add it only after successful load */
             gchar* basename = g_path_get_basename(file_path);
-            ImageDocument* doc = ui_create_document_tab(ctx, basename);
+            ImageDocument* doc = ui_create_document_without_tab(ctx, basename);
 
             if (doc) {
                 /* Load the image into the document */
@@ -400,34 +467,72 @@ void on_file_open_response(GtkDialog* dialog, gint response_id, gpointer user_da
                     gtk_dialog_run(GTK_DIALOG(error_dialog));
                     gtk_widget_destroy(error_dialog);
 
-                    /* Close the document tab since load failed */
-                    ui_close_document_tab(ctx, doc);
+                    /* Destroy document since load failed (it was never added to notebook) */
+                    document_free(doc);
                     g_free(basename);
                     g_free(file_path);
                     gtk_widget_destroy(GTK_WIDGET(dialog));
                     return;
                 }
 
-                /* Continue with document initialization */
-                if (!document_load_image_from_file(doc, file_path)) {
-                    /* This should not happen if image_io_load succeeded, but handle it anyway */
+                /* Load succeeded - now add document to notebook */
+                ui_add_document_to_notebook(ctx, doc);
+                
+                /* Register document for autosave */
+                autosave_register_document(doc);
+
+                /* Initialize rendering structures after image is loaded */
+                /* Note: We don't call document_load_image_from_file() here because it would
+                 * call image_io_load() again, which would re-trigger the plugin and show
+                 * dialogs again (e.g., HDR tone mapping dialog). Instead, we call the
+                 * initialization parts directly since image_io_load() already loaded everything. */
+                if (!document_init_rendering_structures(doc)) {
                     GtkWidget* error_dialog = gtk_message_dialog_new(
                         GTK_WINDOW(ctx->window),
                         GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
                         GTK_MESSAGE_ERROR,
                         GTK_BUTTONS_OK,
-                        "Failed to initialize document for: %s",
+                        "Failed to initialize document rendering for: %s",
                         file_path);
 
                     gtk_dialog_run(GTK_DIALOG(error_dialog));
                     gtk_widget_destroy(error_dialog);
 
-                    /* Close the document tab since initialization failed */
-                    ui_close_document_tab(ctx, doc);
+                    /* Remove from notebook if it was added, then destroy document */
+                    if (doc->scrolled_window && ctx->notebook) {
+                        gint page_num = gtk_notebook_page_num(GTK_NOTEBOOK(ctx->notebook), doc->scrolled_window);
+                        if (page_num >= 0) {
+                            ui_close_document_tab(ctx, doc);
+                        } else {
+                            document_free(doc);
+                        }
+                    } else {
+                        document_free(doc);
+                    }
                     g_free(basename);
                     g_free(file_path);
                     gtk_widget_destroy(GTK_WIDGET(dialog));
                     return;
+                }
+
+                /* Ensure we have at least one layer selected */
+                ImageLayer* layer_0 = document_get_layer(doc, 0);
+                if (layer_0) {
+                    document_set_selected_layer(doc, layer_0);
+                }
+
+                /* Mark composite as needing re-render */
+                document_invalidate_composite(doc);
+
+                /* Update drawing area size to match image dimensions */
+                if (doc->drawing_area) {
+                    /* Set exact size for the drawing area based on image dimensions */
+                    gint display_width = (gint)(doc->width * doc->zoom_factor);
+                    gint display_height = (gint)(doc->height * doc->zoom_factor);
+                    gtk_widget_set_size_request(doc->drawing_area, display_width, display_height);
+
+                    /* Queue redraw to display the image */
+                    gtk_widget_queue_draw(doc->drawing_area);
                 }
 
                 {
