@@ -77,6 +77,17 @@ static Settings* settings_create_default(void) {
     settings->show_layer_edges = TRUE; /* Show layer edges by default */
     settings->show_statusbar = TRUE;   /* Show status bar by default */
 
+    /* Tone mapping defaults */
+    settings->tone_map_auto_apply = FALSE;     /* Show dialog by default */
+    settings->tone_map_operator = 0;           /* Linear operator */
+    settings->tone_map_normalize = 0;          /* No normalization */
+    settings->tone_map_gamma = 2.20;          /* Default gamma */
+    settings->tone_map_exposure = 2.00;       /* Default exposure */
+    settings->tone_map_white_point = 11.20;   /* Default white point */
+    settings->tone_map_intensity = 0.00;       /* Default intensity */
+    settings->tone_map_adaptation = 1.00;     /* Default adaptation */
+    settings->tone_map_color_correction = 0.00; /* Default color correction */
+
     return settings;
 }
 
@@ -267,6 +278,16 @@ static void settings_load_view(Settings* settings, xmlNode* view_node);
 static void settings_save_view(xmlTextWriterPtr writer, Settings* settings);
 
 /**
+ * Load tone mapping settings from XML (forward declaration)
+ */
+static void settings_load_tone_mapping(Settings* settings, xmlNode* tone_mapping_node);
+
+/**
+ * Save tone mapping settings to XML (forward declaration)
+ */
+static void settings_save_tone_mapping(xmlTextWriterPtr writer, Settings* settings);
+
+/**
  * Load recent files from XML
  * Stores RecentFile* entries in Settings->recent_files (includes path and timestamp)
  */
@@ -366,6 +387,8 @@ Settings* settings_load(const char* app_dir) {
             settings_load_undo(settings, cur);
         } else if (xmlStrcmp(cur->name, (const xmlChar*)"view") == 0) {
             settings_load_view(settings, cur);
+        } else if (xmlStrcmp(cur->name, (const xmlChar*)"tone_mapping") == 0) {
+            settings_load_tone_mapping(settings, cur);
         }
     }
 
@@ -729,6 +752,9 @@ gboolean settings_save(Settings* settings, const char* app_dir) {
 
     /* Write view settings */
     settings_save_view(writer, settings);
+
+    /* Write tone mapping settings */
+    settings_save_tone_mapping(writer, settings);
 
     /* Close root element */
     xmlTextWriterEndElement(writer); /* app_settings */
@@ -1144,4 +1170,306 @@ void settings_set_show_statusbar(Settings* settings, gboolean show) {
         return;
     }
     settings->show_statusbar = show;
+}
+
+/**
+ * Load tone mapping settings from XML
+ */
+static void settings_load_tone_mapping(Settings* settings, xmlNode* tone_mapping_node) {
+    if (!settings || !tone_mapping_node) {
+        return;
+    }
+
+    /* Load auto_apply */
+    xmlChar* auto_apply_attr = xmlGetProp(tone_mapping_node, (const xmlChar*)"auto_apply");
+    if (auto_apply_attr) {
+        if (xmlStrcmp(auto_apply_attr, (const xmlChar*)"true") == 0) {
+            settings->tone_map_auto_apply = TRUE;
+        } else {
+            settings->tone_map_auto_apply = FALSE;
+        }
+        xmlFree(auto_apply_attr);
+    }
+
+    /* Load operator */
+    xmlChar* operator_attr = xmlGetProp(tone_mapping_node, (const xmlChar*)"operator");
+    if (operator_attr) {
+        gint op = (gint)strtol((const char*)operator_attr, NULL, 10);
+        if (op >= 0 && op <= 3) {
+            settings->tone_map_operator = op;
+        }
+        xmlFree(operator_attr);
+    }
+
+    /* Load normalize */
+    xmlChar* normalize_attr = xmlGetProp(tone_mapping_node, (const xmlChar*)"normalize");
+    if (normalize_attr) {
+        gint norm = (gint)strtol((const char*)normalize_attr, NULL, 10);
+        if (norm >= 0 && norm <= 2) {
+            settings->tone_map_normalize = norm;
+        }
+        xmlFree(normalize_attr);
+    }
+
+    /* Load gamma */
+    xmlChar* gamma_attr = xmlGetProp(tone_mapping_node, (const xmlChar*)"gamma");
+    if (gamma_attr) {
+        gdouble gamma = g_strtod((const char*)gamma_attr, NULL);
+        if (gamma >= 1.0 && gamma <= 5.0) {
+            settings->tone_map_gamma = gamma;
+        }
+        xmlFree(gamma_attr);
+    }
+
+    /* Load exposure */
+    xmlChar* exposure_attr = xmlGetProp(tone_mapping_node, (const xmlChar*)"exposure");
+    if (exposure_attr) {
+        gdouble exposure = g_strtod((const char*)exposure_attr, NULL);
+        if (exposure >= 0.01 && exposure <= 8.0) {
+            settings->tone_map_exposure = exposure;
+        }
+        xmlFree(exposure_attr);
+    }
+
+    /* Load white_point */
+    xmlChar* white_point_attr = xmlGetProp(tone_mapping_node, (const xmlChar*)"white_point");
+    if (white_point_attr) {
+        gdouble white_point = g_strtod((const char*)white_point_attr, NULL);
+        if (white_point >= 1.0 && white_point <= 40.0) {
+            settings->tone_map_white_point = white_point;
+        }
+        xmlFree(white_point_attr);
+    }
+
+    /* Load intensity */
+    xmlChar* intensity_attr = xmlGetProp(tone_mapping_node, (const xmlChar*)"intensity");
+    if (intensity_attr) {
+        gdouble intensity = g_strtod((const char*)intensity_attr, NULL);
+        if (intensity >= -4.0 && intensity <= 4.0) {
+            settings->tone_map_intensity = intensity;
+        }
+        xmlFree(intensity_attr);
+    }
+
+    /* Load adaptation */
+    xmlChar* adaptation_attr = xmlGetProp(tone_mapping_node, (const xmlChar*)"adaptation");
+    if (adaptation_attr) {
+        gdouble adaptation = g_strtod((const char*)adaptation_attr, NULL);
+        if (adaptation >= 0.0 && adaptation <= 1.0) {
+            settings->tone_map_adaptation = adaptation;
+        }
+        xmlFree(adaptation_attr);
+    }
+
+    /* Load color_correction */
+    xmlChar* color_correction_attr = xmlGetProp(tone_mapping_node, (const xmlChar*)"color_correction");
+    if (color_correction_attr) {
+        gdouble color_correction = g_strtod((const char*)color_correction_attr, NULL);
+        if (color_correction >= 0.0 && color_correction <= 1.0) {
+            settings->tone_map_color_correction = color_correction;
+        }
+        xmlFree(color_correction_attr);
+    }
+}
+
+/**
+ * Save tone mapping settings to XML
+ */
+static void settings_save_tone_mapping(xmlTextWriterPtr writer, Settings* settings) {
+    if (!writer || !settings) {
+        return;
+    }
+
+    xmlTextWriterStartElement(writer, (const xmlChar*)"tone_mapping");
+
+    /* Save auto_apply */
+    xmlTextWriterWriteAttribute(writer, (const xmlChar*)"auto_apply",
+                                (const xmlChar*)(settings->tone_map_auto_apply ? "true" : "false"));
+
+    /* Save operator */
+    gchar operator_str[16];
+    g_snprintf(operator_str, sizeof(operator_str), "%d", settings->tone_map_operator);
+    xmlTextWriterWriteAttribute(writer, (const xmlChar*)"operator", (const xmlChar*)operator_str);
+
+    /* Save normalize */
+    gchar normalize_str[16];
+    g_snprintf(normalize_str, sizeof(normalize_str), "%d", settings->tone_map_normalize);
+    xmlTextWriterWriteAttribute(writer, (const xmlChar*)"normalize", (const xmlChar*)normalize_str);
+
+    /* Save gamma */
+    gchar gamma_str[32];
+    g_snprintf(gamma_str, sizeof(gamma_str), "%.2f", settings->tone_map_gamma);
+    xmlTextWriterWriteAttribute(writer, (const xmlChar*)"gamma", (const xmlChar*)gamma_str);
+
+    /* Save exposure */
+    gchar exposure_str[32];
+    g_snprintf(exposure_str, sizeof(exposure_str), "%.2f", settings->tone_map_exposure);
+    xmlTextWriterWriteAttribute(writer, (const xmlChar*)"exposure", (const xmlChar*)exposure_str);
+
+    /* Save white_point */
+    gchar white_point_str[32];
+    g_snprintf(white_point_str, sizeof(white_point_str), "%.2f", settings->tone_map_white_point);
+    xmlTextWriterWriteAttribute(writer, (const xmlChar*)"white_point", (const xmlChar*)white_point_str);
+
+    /* Save intensity */
+    gchar intensity_str[32];
+    g_snprintf(intensity_str, sizeof(intensity_str), "%.2f", settings->tone_map_intensity);
+    xmlTextWriterWriteAttribute(writer, (const xmlChar*)"intensity", (const xmlChar*)intensity_str);
+
+    /* Save adaptation */
+    gchar adaptation_str[32];
+    g_snprintf(adaptation_str, sizeof(adaptation_str), "%.2f", settings->tone_map_adaptation);
+    xmlTextWriterWriteAttribute(writer, (const xmlChar*)"adaptation", (const xmlChar*)adaptation_str);
+
+    /* Save color_correction */
+    gchar color_correction_str[32];
+    g_snprintf(color_correction_str, sizeof(color_correction_str), "%.2f", settings->tone_map_color_correction);
+    xmlTextWriterWriteAttribute(writer, (const xmlChar*)"color_correction", (const xmlChar*)color_correction_str);
+
+    xmlTextWriterEndElement(writer); /* tone_mapping */
+}
+
+/**
+ * Tone mapping settings getters/setters
+ */
+void settings_set_tone_map_auto_apply(Settings* settings, gboolean auto_apply) {
+    if (!settings) {
+        return;
+    }
+    settings->tone_map_auto_apply = auto_apply;
+}
+
+gboolean settings_get_tone_map_auto_apply(Settings* settings) {
+    if (!settings) {
+        return FALSE;
+    }
+    return settings->tone_map_auto_apply;
+}
+
+void settings_set_tone_map_operator(Settings* settings, gint operator) {
+    if (!settings) {
+        return;
+    }
+    if (operator >= 0 && operator <= 3) {
+        settings->tone_map_operator = operator;
+    }
+}
+
+gint settings_get_tone_map_operator(Settings* settings) {
+    if (!settings) {
+        return 0;
+    }
+    return settings->tone_map_operator;
+}
+
+void settings_set_tone_map_normalize(Settings* settings, gint normalize) {
+    if (!settings) {
+        return;
+    }
+    if (normalize >= 0 && normalize <= 2) {
+        settings->tone_map_normalize = normalize;
+    }
+}
+
+gint settings_get_tone_map_normalize(Settings* settings) {
+    if (!settings) {
+        return 0;
+    }
+    return settings->tone_map_normalize;
+}
+
+void settings_set_tone_map_gamma(Settings* settings, gdouble gamma) {
+    if (!settings) {
+        return;
+    }
+    if (gamma >= 1.0 && gamma <= 5.0) {
+        settings->tone_map_gamma = gamma;
+    }
+}
+
+gdouble settings_get_tone_map_gamma(Settings* settings) {
+    if (!settings) {
+        return 2.20;
+    }
+    return settings->tone_map_gamma;
+}
+
+void settings_set_tone_map_exposure(Settings* settings, gdouble exposure) {
+    if (!settings) {
+        return;
+    }
+    if (exposure >= 0.01 && exposure <= 8.0) {
+        settings->tone_map_exposure = exposure;
+    }
+}
+
+gdouble settings_get_tone_map_exposure(Settings* settings) {
+    if (!settings) {
+        return 2.00;
+    }
+    return settings->tone_map_exposure;
+}
+
+void settings_set_tone_map_white_point(Settings* settings, gdouble white_point) {
+    if (!settings) {
+        return;
+    }
+    if (white_point >= 1.0 && white_point <= 40.0) {
+        settings->tone_map_white_point = white_point;
+    }
+}
+
+gdouble settings_get_tone_map_white_point(Settings* settings) {
+    if (!settings) {
+        return 11.20;
+    }
+    return settings->tone_map_white_point;
+}
+
+void settings_set_tone_map_intensity(Settings* settings, gdouble intensity) {
+    if (!settings) {
+        return;
+    }
+    if (intensity >= -4.0 && intensity <= 4.0) {
+        settings->tone_map_intensity = intensity;
+    }
+}
+
+gdouble settings_get_tone_map_intensity(Settings* settings) {
+    if (!settings) {
+        return 0.00;
+    }
+    return settings->tone_map_intensity;
+}
+
+void settings_set_tone_map_adaptation(Settings* settings, gdouble adaptation) {
+    if (!settings) {
+        return;
+    }
+    if (adaptation >= 0.0 && adaptation <= 1.0) {
+        settings->tone_map_adaptation = adaptation;
+    }
+}
+
+gdouble settings_get_tone_map_adaptation(Settings* settings) {
+    if (!settings) {
+        return 1.00;
+    }
+    return settings->tone_map_adaptation;
+}
+
+void settings_set_tone_map_color_correction(Settings* settings, gdouble color_correction) {
+    if (!settings) {
+        return;
+    }
+    if (color_correction >= 0.0 && color_correction <= 1.0) {
+        settings->tone_map_color_correction = color_correction;
+    }
+}
+
+gdouble settings_get_tone_map_color_correction(Settings* settings) {
+    if (!settings) {
+        return 0.00;
+    }
+    return settings->tone_map_color_correction;
 }

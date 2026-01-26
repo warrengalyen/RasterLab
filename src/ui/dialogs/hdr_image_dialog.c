@@ -1,4 +1,5 @@
 #include "ui/dialogs/hdr_image_dialog.h"
+#include "app/settings.h"
 #include "tone_mapping.h"
 #include "ui/ui_utils.h"
 #include <cairo.h>
@@ -261,11 +262,21 @@ static cairo_surface_t* create_preview_surface(const uint8_t* rgbe_data, uint32_
 static gboolean on_preview_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     cairo_surface_t* preview_surface = (cairo_surface_t*)g_object_get_data(G_OBJECT(widget), "preview_surface");
 
+    /* Get canvas background color from settings */
+    gdouble bg_r = 0.8, bg_g = 0.8, bg_b = 0.8; /* Default gray */
+    GtkWidget* dialog = gtk_widget_get_toplevel(widget);
+    if (dialog && GTK_IS_DIALOG(dialog)) {
+        Settings* s = (Settings*)g_object_get_data(G_OBJECT(dialog), "settings");
+        if (s) {
+            settings_get_canvas_background(s, &bg_r, &bg_g, &bg_b);
+        }
+    }
+
     if (!preview_surface) {
-        /* Draw checkered background */
+        /* Draw background with canvas color */
         GtkAllocation alloc;
         gtk_widget_get_allocation(widget, &alloc);
-        cairo_set_source_rgb(cr, 0.8, 0.8, 0.8);
+        cairo_set_source_rgb(cr, bg_r, bg_g, bg_b);
         cairo_paint(cr);
         return FALSE;
     }
@@ -276,7 +287,7 @@ static gboolean on_preview_draw(GtkWidget* widget, cairo_t* cr, gpointer user_da
         /* Surface is invalid, draw background */
         GtkAllocation alloc;
         gtk_widget_get_allocation(widget, &alloc);
-        cairo_set_source_rgb(cr, 0.8, 0.8, 0.8);
+        cairo_set_source_rgb(cr, bg_r, bg_g, bg_b);
         cairo_paint(cr);
         return FALSE;
     }
@@ -303,8 +314,8 @@ static gboolean on_preview_draw(GtkWidget* widget, cairo_t* cr, gpointer user_da
     double draw_x = (widget_width - scaled_width) / 2.0;
     double draw_y = (widget_height - scaled_height) / 2.0;
 
-    /* Draw checkered background */
-    cairo_set_source_rgb(cr, 0.8, 0.8, 0.8);
+    /* Draw background with canvas color */
+    cairo_set_source_rgb(cr, bg_r, bg_g, bg_b);
     cairo_paint(cr);
 
     /* Draw preview image centered and scaled to fit */
@@ -534,7 +545,8 @@ static void on_parameter_changed(GtkWidget* widget, gpointer user_data) {
  * Show HDR image tone mapping dialog
  */
 gint hdr_image_dialog_show(GtkWindow* parent, ToneMapParams* params, gboolean* auto_apply,
-                           const uint8_t* rgbe_data, uint32_t width, uint32_t height) {
+                           const uint8_t* rgbe_data, uint32_t width, uint32_t height,
+                           void* settings, const char* app_dir) {
     GtkBuilder* builder;
     GtkWidget* dialog;
     GtkWidget* linear_operator_button;
@@ -594,6 +606,11 @@ gint hdr_image_dialog_show(GtkWindow* parent, ToneMapParams* params, gboolean* a
     g_object_set_data(G_OBJECT(dialog), "hdr_width", GUINT_TO_POINTER(width));
     g_object_set_data(G_OBJECT(dialog), "hdr_height", GUINT_TO_POINTER(height));
     g_object_set_data(G_OBJECT(dialog), "tone_params", params);
+    
+    /* Store settings for preview background color */
+    if (settings) {
+        g_object_set_data(G_OBJECT(dialog), "settings", settings);
+    }
 
     /* Replace default titlebar with header bar - must be done before other window properties */
     if (GTK_IS_WINDOW(dialog)) {
@@ -666,7 +683,7 @@ gint hdr_image_dialog_show(GtkWindow* parent, ToneMapParams* params, gboolean* a
         g_signal_connect(linear_normalize_full_button, "toggled", G_CALLBACK(on_linear_normalize_toggled), normalize_buttons);
     }
 
-    /* Initialize values from params */
+    /* Initialize values from params (params may already be loaded from settings by plugin) */
     switch (params->operator) {
         case TONE_MAP_LINEAR:
             gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(linear_operator_button), TRUE);
@@ -726,9 +743,15 @@ gint hdr_image_dialog_show(GtkWindow* parent, ToneMapParams* params, gboolean* a
         gtk_adjustment_set_value(reinhard_color_correction_adjustment, params->color_correction);
     }
 
-    /* Set auto apply checkbox */
+    /* Set auto apply checkbox - load from settings if available */
     if (auto_apply_check) {
-        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(auto_apply_check), *auto_apply);
+        gboolean initial_auto_apply = *auto_apply;
+        if (settings) {
+            Settings* s = (Settings*)settings;
+            initial_auto_apply = settings_get_tone_map_auto_apply(s);
+        }
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(auto_apply_check), initial_auto_apply);
+        *auto_apply = initial_auto_apply;
     }
 
     /* Get preview container  and connect draw signal */
@@ -889,6 +912,25 @@ gint hdr_image_dialog_show(GtkWindow* parent, ToneMapParams* params, gboolean* a
         /* Get auto apply checkbox value */
         if (auto_apply_check) {
             *auto_apply = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(auto_apply_check));
+            
+            /* If auto apply is checked, save settings */
+            if (*auto_apply && settings && app_dir) {
+                Settings* s = (Settings*)settings;
+                
+                /* Save tone mapping settings */
+                settings_set_tone_map_auto_apply(s, TRUE);
+                settings_set_tone_map_operator(s, (gint)params->operator);
+                settings_set_tone_map_normalize(s, (gint)params->normalize);
+                settings_set_tone_map_gamma(s, (gdouble)params->gamma);
+                settings_set_tone_map_exposure(s, (gdouble)params->exposure);
+                settings_set_tone_map_white_point(s, (gdouble)params->white_point);
+                settings_set_tone_map_intensity(s, (gdouble)params->intensity);
+                settings_set_tone_map_adaptation(s, (gdouble)params->adaptation);
+                settings_set_tone_map_color_correction(s, (gdouble)params->color_correction);
+                
+                /* Save to file */
+                settings_save(s, app_dir);
+            }
         }
     }
 

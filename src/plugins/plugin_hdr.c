@@ -1,4 +1,5 @@
 #include "plugins/plugin_hdr.h"
+#include "app/settings.h"
 #include "document.h"
 #include "image_format_plugin.h"
 #include "plugins/plugin_host_api.h"
@@ -6,6 +7,7 @@
 #include "render/layer.h"
 #include "render/render_utils.h"
 #include "tone_mapping.h"
+#include "ui.h"
 #include "ui/dialogs/hdr_image_dialog.h"
 #include <glib.h>
 #include <glib/gstdio.h>
@@ -462,18 +464,61 @@ static PluginError load_hdr(ImageDocument* doc, const char* filename) {
 
     fclose(infile);
 
-    /* Get tone mapping parameters from handler (will use defaults or global settings) */
+    /* Get tone mapping parameters - check settings first */
     ToneMapParams tone_params;
     tone_map_params_init(&tone_params);
 
-    /* Show tone mapping dialog with preview BEFORE creating document */
-    gboolean auto_apply = FALSE;
-    gint dialog_response = hdr_image_dialog_show(NULL, &tone_params, &auto_apply, rgbe_data, width, height);
+    /* Try to get AppContext from document's drawing_area to access settings */
+    AppContext* ctx = NULL;
+    Settings* settings = NULL;
+    const char* app_dir = NULL;
+    gboolean auto_apply_enabled = FALSE;
+    
+    if (doc && doc->drawing_area) {
+        ctx = (AppContext*)g_object_get_data(G_OBJECT(doc->drawing_area), "app_context");
+        if (ctx) {
+            settings = ctx->settings;
+            app_dir = ctx->app_dir;
+            if (settings) {
+                auto_apply_enabled = settings_get_tone_map_auto_apply(settings);
+                
+                /* Always load settings from saved values (for dialog to show last used, or to use if auto_apply) */
+                tone_params.operator = (ToneMapOperator)settings_get_tone_map_operator(settings);
+                tone_params.normalize = (ToneMapNormalize)settings_get_tone_map_normalize(settings);
+                tone_params.gamma = (float)settings_get_tone_map_gamma(settings);
+                tone_params.exposure = (float)settings_get_tone_map_exposure(settings);
+                tone_params.white_point = (float)settings_get_tone_map_white_point(settings);
+                tone_params.intensity = (float)settings_get_tone_map_intensity(settings);
+                tone_params.adaptation = (float)settings_get_tone_map_adaptation(settings);
+                tone_params.color_correction = (float)settings_get_tone_map_color_correction(settings);
+            }
+        }
+    }
 
-    /* If dialog was canceled, cancel loading without modifying document */
-    if (dialog_response != GTK_RESPONSE_OK) {
-        g_free(rgbe_data);
-        return PLUGIN_ERROR_UNSUPPORTED_FEATURE; /* User canceled */
+    /* Get parent window from AppContext if available */
+    GtkWindow* parent_window = NULL;
+    if (ctx && ctx->window) {
+        parent_window = GTK_WINDOW(ctx->window);
+    }
+
+    /* Show tone mapping dialog with preview BEFORE creating document */
+    /* Skip dialog if auto apply is enabled */
+    gboolean auto_apply = FALSE;
+    gint dialog_response = GTK_RESPONSE_OK;
+    
+    if (!auto_apply_enabled) {
+        /* Show dialog */
+        dialog_response = hdr_image_dialog_show(parent_window, &tone_params, &auto_apply, 
+                                                rgbe_data, width, height, settings, app_dir);
+        
+        /* If dialog was canceled, cancel loading without modifying document */
+        if (dialog_response != GTK_RESPONSE_OK) {
+            g_free(rgbe_data);
+            return PLUGIN_ERROR_UNSUPPORTED_FEATURE; /* User canceled */
+        }
+    } else {
+        /* Auto apply is enabled - use saved settings without showing dialog */
+        g_message("HDR plugin: Auto-apply enabled, using saved tone mapping settings");
     }
 
     /* User confirmed dialog - now create/modify document */

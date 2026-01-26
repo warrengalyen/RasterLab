@@ -32,6 +32,17 @@ typedef struct {
     /* View settings */
     gboolean show_layer_edges; /* Show outline when moving layers (default TRUE) */
     gboolean show_statusbar;   /* Show status bar (default TRUE) */
+
+    /* Tone mapping settings */
+    gboolean tone_map_auto_apply;     /* Auto-apply tone mapping settings (bypass dialog) */
+    gint tone_map_operator;            /* Tone mapping operator (0=linear, 1=filmic, 2=drago, 3=reinhard) */
+    gint tone_map_normalize;          /* Normalization mode (0=none, 1=visible, 2=full) */
+    gdouble tone_map_gamma;            /* Gamma value (1.00-5.00, default 2.20) */
+    gdouble tone_map_exposure;         /* Exposure value (0.01-8.00, default varies) */
+    gdouble tone_map_white_point;      /* White point (1.00-40.00, default 11.20, Filmic only) */
+    gdouble tone_map_intensity;        /* Intensity (-4.00-4.00, default 0.00, Reinhard only) */
+    gdouble tone_map_adaptation;       /* Adaptation (0.00-1.00, default 1.00, Reinhard only) */
+    gdouble tone_map_color_correction; /* Color correction (0.00-1.00, default 0.00, Reinhard only) */
 } Settings;
 
 /**
@@ -211,5 +222,27 @@ void settings_set_show_statusbar(Settings* settings, gboolean show);
  * @return TRUE if status bar should be shown
  */
 gboolean settings_get_show_statusbar(Settings* settings);
+
+/**
+ * Tone mapping settings getters/setters
+ */
+void settings_set_tone_map_auto_apply(Settings* settings, gboolean auto_apply);
+gboolean settings_get_tone_map_auto_apply(Settings* settings);
+void settings_set_tone_map_operator(Settings* settings, gint operator);
+gint settings_get_tone_map_operator(Settings* settings);
+void settings_set_tone_map_normalize(Settings* settings, gint normalize);
+gint settings_get_tone_map_normalize(Settings* settings);
+void settings_set_tone_map_gamma(Settings* settings, gdouble gamma);
+gdouble settings_get_tone_map_gamma(Settings* settings);
+void settings_set_tone_map_exposure(Settings* settings, gdouble exposure);
+gdouble settings_get_tone_map_exposure(Settings* settings);
+void settings_set_tone_map_white_point(Settings* settings, gdouble white_point);
+gdouble settings_get_tone_map_white_point(Settings* settings);
+void settings_set_tone_map_intensity(Settings* settings, gdouble intensity);
+gdouble settings_get_tone_map_intensity(Settings* settings);
+void settings_set_tone_map_adaptation(Settings* settings, gdouble adaptation);
+gdouble settings_get_tone_map_adaptation(Settings* settings);
+void settings_set_tone_map_color_correction(Settings* settings, gdouble color_correction);
+gdouble settings_get_tone_map_color_correction(Settings* settings);
 
 #endif /* SETTINGS_H */
