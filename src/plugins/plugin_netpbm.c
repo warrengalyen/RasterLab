@@ -16,7 +16,8 @@
 typedef enum {
     NETPBM_PBM = 1, /* Portable Bitmap (black/white) */
     NETPBM_PGM = 2, /* Portable Graymap (grayscale) */
-    NETPBM_PPM = 3  /* Portable Pixmap (color) */
+    NETPBM_PPM = 3, /* Portable Pixmap (color) */
+    NETPBM_PAM = 7  /* Portable Arbitrary Map (arbitrary channels including alpha) */
 } NetpbmType;
 
 /**
@@ -29,9 +30,11 @@ static bool can_load_netpbm(const char* filename, const uint8_t* header, size_t 
         return false;
     }
 
-    /* Check for Netpbm magic numbers: P1-P6 */
-    if (header[0] == 'P' && header[1] >= '1' && header[1] <= '6') {
-        return true;
+    /* Check for Netpbm magic numbers: P1-P6 (PBM, PGM, PPM) and P7 (PAM) */
+    if (header[0] == 'P') {
+        if ((header[1] >= '1' && header[1] <= '6') || header[1] == '7') {
+            return true;
+        }
     }
 
     return false;
@@ -98,6 +101,151 @@ static int read_netpbm_int(FILE* file, uint32_t* value) {
 }
 
 /**
+ * Read a line from file (up to max_size bytes, excluding newline)
+ * Returns number of bytes read (excluding newline), or -1 on error
+ */
+static int read_line(FILE* file, char* buffer, size_t max_size) {
+    size_t i = 0;
+    int c;
+
+    if (!file || !buffer || max_size == 0) {
+        return -1;
+    }
+
+    while (i < max_size - 1) {
+        c = fgetc(file);
+        if (c == EOF) {
+            if (i == 0) {
+                return -1; /* EOF before reading anything */
+            }
+            break; /* EOF after reading some data */
+        }
+        if (c == '\n') {
+            break; /* End of line */
+        }
+        if (c == '\r') {
+            /* Skip carriage return, but check for \n */
+            c = fgetc(file);
+            if (c != '\n' && c != EOF) {
+                ungetc(c, file);
+            }
+            break;
+        }
+        buffer[i++] = (char)c;
+    }
+
+    buffer[i] = '\0';
+    return (int)i;
+}
+
+/**
+ * Parse PAM header fields
+ * Returns true on success, false on error
+ */
+static bool parse_pam_header(FILE* file, uint32_t* width, uint32_t* height,
+                             uint32_t* depth, uint32_t* maxval,
+                             char* tupltype, size_t tupltype_size,
+                             bool* has_alpha) {
+    char line[512];
+    bool found_width = false, found_height = false, found_depth = false;
+    bool found_maxval = false, found_endhdr = false;
+
+    if (!file || !width || !height || !depth || !maxval) {
+        return false;
+    }
+
+    if (tupltype) {
+        tupltype[0] = '\0';
+    }
+    if (has_alpha) {
+        *has_alpha = false;
+    }
+
+    /* Read header fields until ENDHDR */
+    while (!found_endhdr) {
+        int line_len = read_line(file, line, sizeof(line));
+        if (line_len < 0) {
+            return false; /* EOF or error */
+        }
+
+        /* Skip empty lines */
+        if (line_len == 0) {
+            continue;
+        }
+
+        /* Skip comments */
+        if (line[0] == '#') {
+            continue;
+        }
+
+        /* Parse WIDTH */
+        if (strncmp(line, "WIDTH", 5) == 0 && (line[5] == ' ' || line[5] == '\t')) {
+            if (sscanf(line, "WIDTH %u", width) == 1) {
+                found_width = true;
+            }
+        }
+        /* Parse HEIGHT */
+        else if (strncmp(line, "HEIGHT", 6) == 0 && (line[6] == ' ' || line[6] == '\t')) {
+            if (sscanf(line, "HEIGHT %u", height) == 1) {
+                found_height = true;
+            }
+        }
+        /* Parse DEPTH */
+        else if (strncmp(line, "DEPTH", 5) == 0 && (line[5] == ' ' || line[5] == '\t')) {
+            if (sscanf(line, "DEPTH %u", depth) == 1) {
+                found_depth = true;
+            }
+        }
+        /* Parse MAXVAL */
+        else if (strncmp(line, "MAXVAL", 6) == 0 && (line[6] == ' ' || line[6] == '\t')) {
+            if (sscanf(line, "MAXVAL %u", maxval) == 1) {
+                found_maxval = true;
+            }
+        }
+        /* Parse TUPLTYPE */
+        else if (strncmp(line, "TUPLTYPE", 8) == 0 && (line[8] == ' ' || line[8] == '\t')) {
+            if (tupltype && tupltype_size > 0) {
+                /* Extract the tuple type value */
+                const char* value = line + 8;
+                while (*value == ' ' || *value == '\t') {
+                    value++;
+                }
+                size_t len = strlen(value);
+                if (len < tupltype_size) {
+                    strncpy(tupltype, value, tupltype_size - 1);
+                    tupltype[tupltype_size - 1] = '\0';
+                }
+            }
+        }
+        /* Parse ENDHDR */
+        else if (strcmp(line, "ENDHDR") == 0) {
+            found_endhdr = true;
+            break;
+        }
+    }
+
+    /* Check required fields */
+    if (!found_width || !found_height || !found_depth || !found_maxval || !found_endhdr) {
+        return false;
+    }
+
+    /* Determine if alpha channel is present based on TUPLTYPE or DEPTH */
+    if (has_alpha && tupltype && tupltype[0] != '\0') {
+        /* Check for alpha in tuple type name */
+        if (strstr(tupltype, "ALPHA") != NULL || strstr(tupltype, "alpha") != NULL) {
+            *has_alpha = true;
+        }
+    } else if (has_alpha) {
+        /* Infer from depth: RGB_ALPHA = 4, GRAYSCALE_ALPHA = 2 */
+        if (*depth == 4 || *depth == 2) {
+            *has_alpha = true;
+        }
+    }
+
+    return true;
+}
+
+/**
  * Load Netpbm image
  */
 static PluginError load_netpbm(ImageDocument* doc, const char* filename) {
@@ -107,6 +255,7 @@ static PluginError load_netpbm(ImageDocument* doc, const char* filename) {
     bool is_binary;
     uint32_t width, height;
     uint32_t max_value = 255;
+    uint32_t pam_depth = 0; /* For PAM format */
     uint8_t* image_data = NULL;
     ImageLayer* base_layer = NULL;
     cairo_surface_t* temp_surface;
@@ -131,52 +280,87 @@ static PluginError load_netpbm(ImageDocument* doc, const char* filename) {
     }
 
     /* Verify magic number */
-    if (magic[0] != 'P' || magic[1] < '1' || magic[1] > '6') {
+    if (magic[0] != 'P' || (magic[1] < '1' || (magic[1] > '6' && magic[1] != '7'))) {
         fclose(infile);
         return PLUGIN_ERROR_UNSUPPORTED_FORMAT;
     }
 
-    /* Determine format type and binary/ASCII */
-    format_type = (NetpbmType)(magic[1] - '0');
-    is_binary = (format_type >= 4);
+    /* Check if this is PAM (P7) format */
+    if (magic[1] == '7') {
+        /* PAM format - use special parsing */
+        format_type = NETPBM_PAM;
+        is_binary = true; /* PAM is always binary */
+    } else {
+        /* Determine format type and binary/ASCII */
+        format_type = (NetpbmType)(magic[1] - '0');
+        is_binary = (format_type >= 4);
 
-    /* Adjust format type for binary formats */
-    if (is_binary) {
-        format_type = (NetpbmType)(format_type - 3);
+        /* Adjust format type for binary formats */
+        if (is_binary) {
+            format_type = (NetpbmType)(format_type - 3);
+        }
     }
 
-    /* Read width */
-    if (read_netpbm_int(infile, &width) == EOF || width == 0) {
-        fclose(infile);
-        return PLUGIN_ERROR_FILE_READ_ERROR;
-    }
+    /* Parse header based on format type */
+    if (format_type == NETPBM_PAM) {
+        /* PAM format uses field-based header */
+        uint32_t depth = 0;
+        char tupltype[256] = {0};
+        bool pam_has_alpha = false;
 
-    /* Read height */
-    if (read_netpbm_int(infile, &height) == EOF || height == 0) {
-        fclose(infile);
-        return PLUGIN_ERROR_FILE_READ_ERROR;
-    }
+        if (!parse_pam_header(infile, &width, &height, &depth, &max_value,
+                             tupltype, sizeof(tupltype), &pam_has_alpha)) {
+            fclose(infile);
+            return PLUGIN_ERROR_CORRUPT_FILE;
+        }
 
-    /* Read max value for PGM and PPM (not needed for PBM) */
-    if (format_type != NETPBM_PBM) {
-        if (read_netpbm_int(infile, &max_value) == EOF) {
+        has_alpha = pam_has_alpha;
+        pam_depth = depth;
+
+        /* Validate PAM parameters */
+        if (width == 0 || height == 0 || depth == 0 || depth > 4) {
+            fclose(infile);
+            return PLUGIN_ERROR_UNSUPPORTED_FORMAT;
+        }
+        if (max_value == 0 || max_value > 65535) {
+            fclose(infile);
+            return PLUGIN_ERROR_UNSUPPORTED_FORMAT;
+        }
+    } else {
+        /* Standard PBM/PGM/PPM format */
+        /* Read width */
+        if (read_netpbm_int(infile, &width) == EOF || width == 0) {
             fclose(infile);
             return PLUGIN_ERROR_FILE_READ_ERROR;
         }
-        if (max_value == 0) {
-            max_value = 255; /* Default */
-        }
-        if (max_value > 65535) {
-            max_value = 65535; /* Clamp to 16-bit */
-        }
-    }
 
-    /* Skip single whitespace character before binary data */
-    if (is_binary) {
-        int c = fgetc(infile);
-        if (c == EOF) {
+        /* Read height */
+        if (read_netpbm_int(infile, &height) == EOF || height == 0) {
             fclose(infile);
             return PLUGIN_ERROR_FILE_READ_ERROR;
+        }
+
+        /* Read max value for PGM and PPM (not needed for PBM) */
+        if (format_type != NETPBM_PBM) {
+            if (read_netpbm_int(infile, &max_value) == EOF) {
+                fclose(infile);
+                return PLUGIN_ERROR_FILE_READ_ERROR;
+            }
+            if (max_value == 0) {
+                max_value = 255; /* Default */
+            }
+            if (max_value > 65535) {
+                max_value = 65535; /* Clamp to 16-bit */
+            }
+        }
+
+        /* Skip single whitespace character before binary data */
+        if (is_binary) {
+            int c = fgetc(infile);
+            if (c == EOF) {
+                fclose(infile);
+                return PLUGIN_ERROR_FILE_READ_ERROR;
+            }
         }
     }
 
@@ -191,7 +375,12 @@ static PluginError load_netpbm(ImageDocument* doc, const char* filename) {
     doc->height = height;
     doc->channels = 4; /* Always RGBA internally */
     doc->bit_depth = 8;
-    doc->has_alpha = has_alpha;
+    /* Update has_alpha based on format - PAM can have alpha, others don't */
+    if (format_type == NETPBM_PAM) {
+        doc->has_alpha = has_alpha;
+    } else {
+        doc->has_alpha = false; /* PBM, PGM, PPM don't support alpha */
+    }
 
     /* Free old layers */
     for (GList* iter = doc->layers; iter; iter = iter->next) {
@@ -301,8 +490,11 @@ static PluginError load_netpbm(ImageDocument* doc, const char* filename) {
             }
             g_free(row_data);
         } else if (format_type == NETPBM_PPM) {
-            /* PPM (P6): RGB, 24 bits per pixel (8 bits per channel) */
-            uint8_t* row_data = g_malloc(width * 3);
+            /* PPM (P6): RGB, 8 or 16 bits per channel */
+            bool is_16bit = (max_value > 255);
+            uint32_t bytes_per_channel = is_16bit ? 2 : 1;
+            uint32_t bytes_per_pixel = bytes_per_channel * 3;
+            uint8_t* row_data = g_malloc(width * bytes_per_pixel);
             if (!row_data) {
                 cairo_surface_destroy(temp_surface);
                 fclose(infile);
@@ -310,7 +502,7 @@ static PluginError load_netpbm(ImageDocument* doc, const char* filename) {
             }
 
             for (uint32_t y = 0; y < height; y++) {
-                if (fread(row_data, 3, width, infile) != width) {
+                if (fread(row_data, bytes_per_pixel, width, infile) != width) {
                     g_free(row_data);
                     cairo_surface_destroy(temp_surface);
                     fclose(infile);
@@ -319,15 +511,113 @@ static PluginError load_netpbm(ImageDocument* doc, const char* filename) {
 
                 guchar* row = surface_data + y * surface_stride;
                 for (uint32_t x = 0; x < width; x++) {
-                    uint8_t r = row_data[x * 3 + 0];
-                    uint8_t g = row_data[x * 3 + 1];
-                    uint8_t b = row_data[x * 3 + 2];
+                    uint8_t r, g, b;
+                    if (is_16bit) {
+                        uint32_t offset = x * bytes_per_pixel;
+                        uint16_t r_val = (row_data[offset + 0] << 8) | row_data[offset + 1];
+                        uint16_t g_val = (row_data[offset + 2] << 8) | row_data[offset + 3];
+                        uint16_t b_val = (row_data[offset + 4] << 8) | row_data[offset + 5];
+                        /* Scale from 16-bit to 8-bit */
+                        r = (uint8_t)((r_val * 255) / max_value);
+                        g = (uint8_t)((g_val * 255) / max_value);
+                        b = (uint8_t)((b_val * 255) / max_value);
+                    } else {
+                        uint32_t offset = x * 3;
+                        r = row_data[offset + 0];
+                        g = row_data[offset + 1];
+                        b = row_data[offset + 2];
+                    }
 
                     /* Convert to Cairo ARGB32 (BGRA in memory) */
                     row[x * 4 + 0] = b;   /* B */
                     row[x * 4 + 1] = g;   /* G */
                     row[x * 4 + 2] = r;   /* R */
                     row[x * 4 + 3] = 255; /* A */
+                }
+            }
+            g_free(row_data);
+        } else if (format_type == NETPBM_PAM) {
+            /* PAM (P7): Arbitrary depth, supports alpha */
+            bool is_16bit = (max_value > 255);
+            uint32_t bytes_per_sample = is_16bit ? 2 : 1;
+            uint32_t bytes_per_pixel = pam_depth * bytes_per_sample;
+            uint8_t* row_data = g_malloc(width * bytes_per_pixel);
+            if (!row_data) {
+                cairo_surface_destroy(temp_surface);
+                fclose(infile);
+                return PLUGIN_ERROR_OUT_OF_MEMORY;
+            }
+
+            for (uint32_t y = 0; y < height; y++) {
+                if (fread(row_data, bytes_per_pixel, width, infile) != width) {
+                    g_free(row_data);
+                    cairo_surface_destroy(temp_surface);
+                    fclose(infile);
+                    return PLUGIN_ERROR_FILE_READ_ERROR;
+                }
+
+                guchar* row = surface_data + y * surface_stride;
+                for (uint32_t x = 0; x < width; x++) {
+                    uint8_t r = 0, g = 0, b = 0, a = 255;
+                    uint32_t offset = x * bytes_per_pixel;
+
+                    if (pam_depth == 1) {
+                        /* Grayscale */
+                        if (is_16bit) {
+                            uint16_t gray_val = (row_data[offset + 0] << 8) | row_data[offset + 1];
+                            r = g = b = (uint8_t)((gray_val * 255) / max_value);
+                        } else {
+                            r = g = b = row_data[offset];
+                        }
+                    } else if (pam_depth == 2) {
+                        /* Grayscale + Alpha */
+                        if (is_16bit) {
+                            uint16_t gray_val = (row_data[offset + 0] << 8) | row_data[offset + 1];
+                            uint16_t alpha_val = (row_data[offset + 2] << 8) | row_data[offset + 3];
+                            r = g = b = (uint8_t)((gray_val * 255) / max_value);
+                            a = (uint8_t)((alpha_val * 255) / max_value);
+                        } else {
+                            r = g = b = row_data[offset + 0];
+                            a = row_data[offset + 1];
+                        }
+                    } else if (pam_depth == 3) {
+                        /* RGB */
+                        if (is_16bit) {
+                            uint16_t r_val = (row_data[offset + 0] << 8) | row_data[offset + 1];
+                            uint16_t g_val = (row_data[offset + 2] << 8) | row_data[offset + 3];
+                            uint16_t b_val = (row_data[offset + 4] << 8) | row_data[offset + 5];
+                            r = (uint8_t)((r_val * 255) / max_value);
+                            g = (uint8_t)((g_val * 255) / max_value);
+                            b = (uint8_t)((b_val * 255) / max_value);
+                        } else {
+                            r = row_data[offset + 0];
+                            g = row_data[offset + 1];
+                            b = row_data[offset + 2];
+                        }
+                    } else if (pam_depth == 4) {
+                        /* RGBA */
+                        if (is_16bit) {
+                            uint16_t r_val = (row_data[offset + 0] << 8) | row_data[offset + 1];
+                            uint16_t g_val = (row_data[offset + 2] << 8) | row_data[offset + 3];
+                            uint16_t b_val = (row_data[offset + 4] << 8) | row_data[offset + 5];
+                            uint16_t a_val = (row_data[offset + 6] << 8) | row_data[offset + 7];
+                            r = (uint8_t)((r_val * 255) / max_value);
+                            g = (uint8_t)((g_val * 255) / max_value);
+                            b = (uint8_t)((b_val * 255) / max_value);
+                            a = (uint8_t)((a_val * 255) / max_value);
+                        } else {
+                            r = row_data[offset + 0];
+                            g = row_data[offset + 1];
+                            b = row_data[offset + 2];
+                            a = row_data[offset + 3];
+                        }
+                    }
+
+                    /* Convert to Cairo ARGB32 (BGRA in memory) */
+                    row[x * 4 + 0] = b; /* B */
+                    row[x * 4 + 1] = g; /* G */
+                    row[x * 4 + 2] = r; /* R */
+                    row[x * 4 + 3] = a; /* A */
                 }
             }
             g_free(row_data);
@@ -430,9 +720,9 @@ bool plugin_init_netpbm(const ImageFormatHostAPI* host, ImageFormatPlugin* out_p
     memset(out_plugin, 0, sizeof(ImageFormatPlugin));
 
     out_plugin->plugin_version = 1;
-    out_plugin->format_info.name = "Netpbm - Portable Pixmap/Graymap/Bitmap";
-    out_plugin->format_info.extensions = "ppm,pgm,pbm,pnm";
-    out_plugin->format_info.supports_alpha = false;
+    out_plugin->format_info.name = "Netpbm - Portable Pixmap/Graymap/Bitmap/Arbitrary";
+    out_plugin->format_info.extensions = "ppm,pgm,pbm,pam,pnm";
+    out_plugin->format_info.supports_alpha = true; /* PAM supports alpha */
     out_plugin->format_info.supports_layers = false;
     out_plugin->format_info.priority = 70;
 
