@@ -15,6 +15,7 @@
 #include "plugins/plugin_webp.h"
 #include "plugins/plugin_xpm.h"
 #include "plugins/plugin_hdr.h"
+#include "plugins/plugin_fits.h"
 #include <glib.h>
 
 /**
@@ -36,6 +37,7 @@ void builtin_plugins_register(void) {
     ImageFormatPlugin webp_plugin;
     ImageFormatPlugin tiff_plugin;
     ImageFormatPlugin hdr_plugin;
+    ImageFormatPlugin fits_plugin;
 
     /* Register PNG plugin (using libpng) */
 #ifdef HAVE_LIBPNG
@@ -207,5 +209,17 @@ void builtin_plugins_register(void) {
         }
     } else {
         g_message("Failed to initialize HDR plugin");
+    }
+
+    /* Register FITS plugin */
+    g_message("Registering built-in FITS plugin");
+    if (plugin_init_fits(host_api, &fits_plugin)) {
+        if (format_registry_register_builtin(&fits_plugin)) {
+            g_message("Successfully registered FITS plugin");
+        } else {
+            g_message("Failed to register FITS plugin with format registry");
+        }
+    } else {
+        g_message("Failed to initialize FITS plugin");
     }
 }

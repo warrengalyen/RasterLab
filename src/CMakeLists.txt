@@ -63,6 +63,7 @@ set(SOURCES
     plugins/plugin_cut.c
     plugins/plugin_deep.c
     plugins/plugin_hdr.c
+    plugins/plugin_fits.c
     plugins/plugin_webp.c
     render/compositor.c
     render/dirty.c
