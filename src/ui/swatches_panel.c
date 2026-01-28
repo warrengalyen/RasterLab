@@ -148,56 +148,55 @@ static void on_swatches_import_button_clicked(GtkButton* button, gpointer user_d
         return;
     }
 
-    GtkWidget* file_dialog;
+    GtkFileChooserNative* native_dialog;
     GtkFileFilter* filter;
     gint response;
     gchar* filename;
 
-    /* Create file chooser dialog */
-    file_dialog = gtk_file_chooser_dialog_new(
+    /* Create native file chooser dialog */
+    native_dialog = gtk_file_chooser_native_new(
         "Import Palette File",
         GTK_WINDOW(ctx->window),
         GTK_FILE_CHOOSER_ACTION_OPEN,
-        "_Cancel", GTK_RESPONSE_CANCEL,
-        "_Open", GTK_RESPONSE_ACCEPT,
-        NULL);
+        "_Open",
+        "_Cancel");
 
     /* Add file filters for all supported palette formats */
     filter = gtk_file_filter_new();
     gtk_file_filter_set_name(filter, "GIMP Palette (*.gpl)");
     gtk_file_filter_add_pattern(filter, "*.gpl");
     gtk_file_filter_add_pattern(filter, "*.GPL");
-    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(file_dialog), filter);
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(native_dialog), filter);
 
     filter = gtk_file_filter_new();
     gtk_file_filter_set_name(filter, "RIFF Palette (*.pal)");
     gtk_file_filter_add_pattern(filter, "*.pal");
     gtk_file_filter_add_pattern(filter, "*.PAL");
-    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(file_dialog), filter);
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(native_dialog), filter);
 
     filter = gtk_file_filter_new();
     gtk_file_filter_set_name(filter, "Adobe Color Swatch (*.aco)");
     gtk_file_filter_add_pattern(filter, "*.aco");
     gtk_file_filter_add_pattern(filter, "*.ACO");
-    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(file_dialog), filter);
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(native_dialog), filter);
 
     filter = gtk_file_filter_new();
     gtk_file_filter_set_name(filter, "Paint.NET Palette (*.txt)");
     gtk_file_filter_add_pattern(filter, "*.txt");
     gtk_file_filter_add_pattern(filter, "*.TXT");
-    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(file_dialog), filter);
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(native_dialog), filter);
 
     filter = gtk_file_filter_new();
     gtk_file_filter_set_name(filter, "Adobe Color Table (*.act)");
     gtk_file_filter_add_pattern(filter, "*.act");
     gtk_file_filter_add_pattern(filter, "*.ACT");
-    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(file_dialog), filter);
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(native_dialog), filter);
 
     filter = gtk_file_filter_new();
     gtk_file_filter_set_name(filter, "Adobe Swatch Exchange (*.ase)");
     gtk_file_filter_add_pattern(filter, "*.ase");
     gtk_file_filter_add_pattern(filter, "*.ASE");
-    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(file_dialog), filter);
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(native_dialog), filter);
 
     filter = gtk_file_filter_new();
     gtk_file_filter_set_name(filter, "All Palette Files");
@@ -207,17 +206,17 @@ static void on_swatches_import_button_clicked(GtkButton* button, gpointer user_d
     gtk_file_filter_add_pattern(filter, "*.txt");
     gtk_file_filter_add_pattern(filter, "*.act");
     gtk_file_filter_add_pattern(filter, "*.ase");
-    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(file_dialog), filter);
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(native_dialog), filter);
 
     filter = gtk_file_filter_new();
     gtk_file_filter_set_name(filter, "All Files");
     gtk_file_filter_add_pattern(filter, "*");
-    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(file_dialog), filter);
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(native_dialog), filter);
 
-    response = gtk_dialog_run(GTK_DIALOG(file_dialog));
+    response = gtk_native_dialog_run(GTK_NATIVE_DIALOG(native_dialog));
 
     if (response == GTK_RESPONSE_ACCEPT) {
-        filename = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(file_dialog));
+        filename = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(native_dialog));
         if (filename) {
             /* Load palette using ocular */
             OcPalette palette = {0};
@@ -269,7 +268,7 @@ static void on_swatches_import_button_clicked(GtkButton* button, gpointer user_d
         }
     }
 
-    gtk_widget_destroy(file_dialog);
+    g_object_unref(native_dialog);
 }
 
 /**
@@ -297,60 +296,59 @@ static void on_swatches_export_button_clicked(GtkButton* button, gpointer user_d
         return;
     }
 
-    GtkWidget* file_dialog;
+    GtkFileChooserNative* native_dialog;
     GtkFileFilter* filter;
     gint response;
     gchar* filename;
 
-    /* Create file chooser dialog */
-    file_dialog = gtk_file_chooser_dialog_new(
+    /* Create native file chooser dialog */
+    native_dialog = gtk_file_chooser_native_new(
         "Export Palette File",
         GTK_WINDOW(ctx->window),
         GTK_FILE_CHOOSER_ACTION_SAVE,
-        "_Cancel", GTK_RESPONSE_CANCEL,
-        "_Save", GTK_RESPONSE_ACCEPT,
-        NULL);
+        "_Save",
+        "_Cancel");
 
-    gtk_file_chooser_set_do_overwrite_confirmation(GTK_FILE_CHOOSER(file_dialog), TRUE);
+    gtk_file_chooser_set_do_overwrite_confirmation(GTK_FILE_CHOOSER(native_dialog), TRUE);
 
     /* Add file filters for all supported palette formats */
     filter = gtk_file_filter_new();
     gtk_file_filter_set_name(filter, "GIMP Palette (*.gpl)");
     gtk_file_filter_add_pattern(filter, "*.gpl");
-    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(file_dialog), filter);
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(native_dialog), filter);
 
     filter = gtk_file_filter_new();
     gtk_file_filter_set_name(filter, "RIFF Palette (*.pal)");
     gtk_file_filter_add_pattern(filter, "*.pal");
-    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(file_dialog), filter);
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(native_dialog), filter);
 
     filter = gtk_file_filter_new();
     gtk_file_filter_set_name(filter, "Adobe Color Swatch (*.aco)");
     gtk_file_filter_add_pattern(filter, "*.aco");
-    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(file_dialog), filter);
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(native_dialog), filter);
 
     filter = gtk_file_filter_new();
     gtk_file_filter_set_name(filter, "Paint.NET Palette (*.txt)");
     gtk_file_filter_add_pattern(filter, "*.txt");
-    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(file_dialog), filter);
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(native_dialog), filter);
 
     filter = gtk_file_filter_new();
     gtk_file_filter_set_name(filter, "Adobe Color Table (*.act)");
     gtk_file_filter_add_pattern(filter, "*.act");
-    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(file_dialog), filter);
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(native_dialog), filter);
 
     filter = gtk_file_filter_new();
     gtk_file_filter_set_name(filter, "All Files");
     gtk_file_filter_add_pattern(filter, "*");
-    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(file_dialog), filter);
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(native_dialog), filter);
 
     /* Set default filename */
-    gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(file_dialog), "swatches.gpl");
+    gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(native_dialog), "swatches.gpl");
 
-    response = gtk_dialog_run(GTK_DIALOG(file_dialog));
+    response = gtk_native_dialog_run(GTK_NATIVE_DIALOG(native_dialog));
 
     if (response == GTK_RESPONSE_ACCEPT) {
-        filename = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(file_dialog));
+        filename = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(native_dialog));
         if (filename) {
             /* Convert SwatchesData to OcPalette */
             OcPalette palette = {0};
@@ -419,7 +417,7 @@ static void on_swatches_export_button_clicked(GtkButton* button, gpointer user_d
         }
     }
 
-    gtk_widget_destroy(file_dialog);
+    g_object_unref(native_dialog);
 }
 
 /**
