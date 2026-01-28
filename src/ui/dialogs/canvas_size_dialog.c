@@ -619,15 +619,18 @@ static void set_reset_button_icon(GtkButton* button) {
         return;
     }
 
-    /* Scale to 16x16 */
-    GdkPixbuf* scaled = gdk_pixbuf_scale_simple(pixbuf, 16, 16, GDK_INTERP_BILINEAR);
+    /* Scale to 20x20 */
+    GdkPixbuf* scaled = gdk_pixbuf_scale_simple(pixbuf, 20, 20, GDK_INTERP_BILINEAR);
     g_object_unref(pixbuf);
 
     if (scaled) {
-        /* gtk_button_set_image automatically replaces any existing image/label,
-         * so we don't need to manually remove the child - this avoids parent access issues */
+        /* Remove any existing label */
+        gtk_button_set_label(button, NULL);
+
+        /* Set the image */
         GtkWidget* image = gtk_image_new_from_pixbuf(scaled);
         gtk_button_set_image(button, image);
+        gtk_button_set_image_position(button, GTK_POS_LEFT);
         g_object_unref(scaled);
     }
 }
