@@ -2,7 +2,6 @@
 #include <glib-object.h>
 #include <gtk/gtk.h>
 #include <math.h>
-#include <pango/pango.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -291,10 +290,13 @@ static void vertical_spin_button_init(VerticalSpinButton* spin) {
     /* Use small text label for arrow - more reliable sizing */
     up_arrow = gtk_label_new("▲");
     gtk_widget_set_name(up_arrow, "spin-up-arrow");
-    PangoFontDescription* font_desc = pango_font_description_new();
-    pango_font_description_set_size(font_desc, 8 * PANGO_SCALE);
-    gtk_widget_override_font(up_arrow, font_desc);
-    pango_font_description_free(font_desc);
+    {
+        GtkCssProvider* font_css = gtk_css_provider_new();
+        gtk_css_provider_load_from_data(font_css, "* { font-size: 8pt; }", -1, NULL);
+        GtkStyleContext* ctx = gtk_widget_get_style_context(up_arrow);
+        gtk_style_context_add_provider(ctx, GTK_STYLE_PROVIDER(font_css), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+        g_object_unref(font_css);
+    }
 
     gtk_button_set_image(GTK_BUTTON(up_button), up_arrow);
     gtk_button_set_relief(GTK_BUTTON(up_button), GTK_RELIEF_NONE);
@@ -327,10 +329,13 @@ static void vertical_spin_button_init(VerticalSpinButton* spin) {
     /* Use small text label for arrow - more reliable sizing */
     down_arrow = gtk_label_new("▼");
     gtk_widget_set_name(down_arrow, "spin-down-arrow");
-    font_desc = pango_font_description_new();
-    pango_font_description_set_size(font_desc, 8 * PANGO_SCALE);
-    gtk_widget_override_font(down_arrow, font_desc);
-    pango_font_description_free(font_desc);
+    {
+        GtkCssProvider* font_css = gtk_css_provider_new();
+        gtk_css_provider_load_from_data(font_css, "* { font-size: 8pt; }", -1, NULL);
+        GtkStyleContext* ctx = gtk_widget_get_style_context(down_arrow);
+        gtk_style_context_add_provider(ctx, GTK_STYLE_PROVIDER(font_css), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+        g_object_unref(font_css);
+    }
 
     gtk_button_set_image(GTK_BUTTON(down_button), down_arrow);
     gtk_button_set_relief(GTK_BUTTON(down_button), GTK_RELIEF_NONE);

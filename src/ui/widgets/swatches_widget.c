@@ -741,11 +741,21 @@ static void update_tooltip(SwatchesWidget* self) {
         tooltip_y = wy - 30;
     }
 
-    /* Get screen dimensions to prevent tooltip from going off-screen */
-    GdkScreen* screen = gtk_widget_get_screen(GTK_WIDGET(self));
-    if (screen) {
-        gint screen_width = gdk_screen_get_width(screen);
-        gint screen_height = gdk_screen_get_height(screen);
+    /* Get monitor geometry to prevent tooltip from going off-screen */
+    GdkDisplay* display = gtk_widget_get_display(GTK_WIDGET(self));
+    GdkMonitor* monitor = NULL;
+    GdkWindow* window = gtk_widget_get_window(GTK_WIDGET(self));
+    if (window) {
+        monitor = gdk_display_get_monitor_at_window(display, window);
+    }
+    if (!monitor) {
+        monitor = gdk_display_get_primary_monitor(display);
+    }
+    if (monitor) {
+        GdkRectangle mon_geom;
+        gdk_monitor_get_geometry(monitor, &mon_geom);
+        gint r = mon_geom.x + mon_geom.width;
+        gint b = mon_geom.y + mon_geom.height;
 
         /* Get tooltip preferred size before showing */
         gint min_width, min_height, nat_width, nat_height;
@@ -761,8 +771,7 @@ static void update_tooltip(SwatchesWidget* self) {
             tooltip_height = 60;
 
         /* Adjust horizontal position if tooltip would go off right edge */
-        if (tooltip_width > 0 && tooltip_x + tooltip_width > screen_width) {
-            /* Position to the left of cursor instead */
+        if (tooltip_width > 0 && tooltip_x + tooltip_width > r) {
             if (cursor_valid) {
                 gint cursor_x = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(self), "tooltip_cursor_x"));
                 tooltip_x = cursor_x - tooltip_width - 15;
@@ -772,13 +781,12 @@ static void update_tooltip(SwatchesWidget* self) {
         }
 
         /* Adjust horizontal position if tooltip would go off left edge */
-        if (tooltip_x < 0) {
-            tooltip_x = 10; /* Small margin from left edge */
+        if (tooltip_x < mon_geom.x) {
+            tooltip_x = mon_geom.x + 10;
         }
 
         /* Adjust vertical position if tooltip would go off bottom edge */
-        if (tooltip_height > 0 && tooltip_y + tooltip_height > screen_height) {
-            /* Position above cursor instead */
+        if (tooltip_height > 0 && tooltip_y + tooltip_height > b) {
             if (cursor_valid) {
                 gint cursor_y = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(self), "tooltip_cursor_y"));
                 tooltip_y = cursor_y - tooltip_height - 20;
@@ -788,8 +796,8 @@ static void update_tooltip(SwatchesWidget* self) {
         }
 
         /* Adjust vertical position if tooltip would go off top edge */
-        if (tooltip_y < 0) {
-            tooltip_y = 10; /* Small margin from top edge */
+        if (tooltip_y < mon_geom.y) {
+            tooltip_y = mon_geom.y + 10;
         }
     }
 
