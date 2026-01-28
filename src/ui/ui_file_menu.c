@@ -114,7 +114,7 @@ void on_recent_file_activate(GtkMenuItem* menu_item, gpointer user_data) {
 
         /* Load succeeded - now add document to notebook */
         ui_add_document_to_notebook(ctx, doc);
-        
+
         /* Register document for autosave */
         autosave_register_document(doc);
 
@@ -407,7 +407,7 @@ void ui_file_menu_setup(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* acc
 /**
  * File Open dialog response callback
  */
-void on_file_open_response(GtkDialog* dialog, gint response_id, gpointer user_data) {
+void on_file_open_response(GtkNativeDialog* dialog, gint response_id, gpointer user_data) {
     AppContext* ctx = (AppContext*)user_data;
 
     if (response_id == GTK_RESPONSE_ACCEPT) {
@@ -438,7 +438,7 @@ void on_file_open_response(GtkDialog* dialog, gint response_id, gpointer user_da
                 gtk_dialog_run(GTK_DIALOG(error_dialog));
                 gtk_widget_destroy(error_dialog);
                 g_free(file_path);
-                gtk_widget_destroy(GTK_WIDGET(dialog));
+                g_object_unref(dialog);
                 return;
             }
 
@@ -471,13 +471,13 @@ void on_file_open_response(GtkDialog* dialog, gint response_id, gpointer user_da
                     document_free(doc);
                     g_free(basename);
                     g_free(file_path);
-                    gtk_widget_destroy(GTK_WIDGET(dialog));
+                    g_object_unref(dialog);
                     return;
                 }
 
                 /* Load succeeded - now add document to notebook */
                 ui_add_document_to_notebook(ctx, doc);
-                
+
                 /* Register document for autosave */
                 autosave_register_document(doc);
 
@@ -511,7 +511,7 @@ void on_file_open_response(GtkDialog* dialog, gint response_id, gpointer user_da
                     }
                     g_free(basename);
                     g_free(file_path);
-                    gtk_widget_destroy(GTK_WIDGET(dialog));
+                    g_object_unref(dialog);
                     return;
                 }
 
@@ -566,7 +566,7 @@ void on_file_open_response(GtkDialog* dialog, gint response_id, gpointer user_da
         }
     }
 
-    gtk_widget_destroy(GTK_WIDGET(dialog));
+    g_object_unref(dialog);
 }
 
 /**
@@ -584,20 +584,19 @@ void on_file_open(GtkWidget* widget, gpointer data) {
         g_warning("Invalid window in on_file_open");
         return;
     }
-    GtkWidget* dialog;
+    GtkFileChooserNative* native_dialog;
     GtkFileFilter* filter;
     GList* handlers;
     GHashTable* seen_formats;
     gchar* all_patterns;
 
-    /* Create file chooser dialog */
-    dialog = gtk_file_chooser_dialog_new(
+    /* Create native file chooser dialog */
+    native_dialog = gtk_file_chooser_native_new(
         "Open Image",
         GTK_WINDOW(ctx->window),
         GTK_FILE_CHOOSER_ACTION_OPEN,
-        "_Cancel", GTK_RESPONSE_CANCEL,
-        "_Open", GTK_RESPONSE_ACCEPT,
-        NULL);
+        "_Open",
+        "_Cancel");
 
     /* Get all registered format handlers from plugin system */
     handlers = format_registry_get_all_handlers();
@@ -617,7 +616,7 @@ void on_file_open(GtkWidget* widget, gpointer data) {
             }
         }
         g_strfreev(patterns);
-        gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
+        gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(native_dialog), filter);
         g_free(all_patterns);
     }
 
@@ -651,7 +650,7 @@ void on_file_open(GtkWidget* widget, gpointer data) {
             }
             g_strfreev(exts);
 
-            gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
+            gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(native_dialog), filter);
         }
     }
 
@@ -662,14 +661,14 @@ void on_file_open(GtkWidget* widget, gpointer data) {
         filter = gtk_file_filter_new();
         gtk_file_filter_set_name(filter, "All Files");
         gtk_file_filter_add_pattern(filter, "*");
-        gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
+        gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(native_dialog), filter);
     }
 
     /* Connect response signal */
-    g_signal_connect(dialog, "response", G_CALLBACK(on_file_open_response), ctx);
+    g_signal_connect(native_dialog, "response", G_CALLBACK(on_file_open_response), ctx);
 
     /* Show dialog */
-    gtk_widget_show(dialog);
+    gtk_native_dialog_show(GTK_NATIVE_DIALOG(native_dialog));
 }
 
 /**
