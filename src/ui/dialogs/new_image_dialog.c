@@ -650,7 +650,6 @@ static void set_reset_button_icon(GtkButton* button) {
     if (scaled) {
         /* Remove any existing label */
         gtk_button_set_label(button, NULL);
-        // gtk_button_set_use_stock(button, FALSE);
 
         /* Set the image */
         GtkWidget* image = gtk_image_new_from_pixbuf(scaled);

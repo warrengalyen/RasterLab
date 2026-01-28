@@ -69,6 +69,8 @@
             <property name="can-focus">False</property>
             <property name="margin-start">10</property>
             <property name="margin-end">10</property>
+            <property name="margin-top">10</property>
+            <property name="margin-bottom">10</property>
             <property name="orientation">vertical</property>
             <child>
               <object class="GtkBox" id="new_layer_name_vbox">
@@ -193,16 +195,17 @@
                   </packing>
                 </child>
                 <child>
-                  <object class="GtkColorButton" id="new_layer_bg_custom_color">
+                  <object class="GtkButton" id="new_layer_bg_custom_color">
                     <property name="visible">True</property>
                     <property name="can-focus">True</property>
                     <property name="receives-default">True</property>
                     <property name="margin-start">25</property>
+                    <property name="margin-top">5</property>
                   </object>
                   <packing>
                     <property name="expand">False</property>
                     <property name="fill">True</property>
-                    <property name="position">5</property>
+                    <property name="position">6</property>
                   </packing>
                 </child>
               </object>

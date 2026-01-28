@@ -1,9 +1,11 @@
 #include "ui/dialogs/new_layer_dialog.h"
-#include "ui/ui_utils.h"
 #include "document.h"
+#include "ui/dialogs/color_chooser_dialog.h"
+#include "ui/ui_utils.h"
 #include <glib.h>
 #include <gtk/gtk.h>
 #include <string.h>
+
 
 /**
  * New layer dialog structure
@@ -18,7 +20,66 @@ struct _NewLayerDialog {
     GtkWidget* bg_custom_color;
     GtkWidget* position_combo;
     GtkWidget* set_active_cb;
+
+    /* Custom background color */
+    GdkRGBA custom_color;
 };
+
+/**
+ * Color update callback for custom color button
+ */
+static void on_custom_color_update(double r, double g, double b, gpointer user_data) {
+    NewLayerDialog* dialog = (NewLayerDialog*)user_data;
+    if (!dialog) {
+        return;
+    }
+
+    dialog->custom_color.red = r;
+    dialog->custom_color.green = g;
+    dialog->custom_color.blue = b;
+    dialog->custom_color.alpha = 1.0;
+
+    /* Update color button appearance */
+    update_color_button_appearance(dialog->bg_custom_color, &dialog->custom_color);
+}
+
+/**
+ * Custom color button clicked callback
+ */
+static void on_custom_color_clicked(GtkButton* button, gpointer user_data) {
+    NewLayerDialog* dialog = (NewLayerDialog*)user_data;
+    if (!dialog || !dialog->dialog) {
+        return;
+    }
+
+    GtkWindow* parent = GTK_WINDOW(dialog->dialog);
+
+    /* Create and show color chooser dialog */
+    GtkWidget* color_dialog = color_chooser_dialog_new(
+        parent,
+        "Choose Background Color",
+        &dialog->custom_color,
+        on_custom_color_update,
+        dialog,
+        FALSE); /* Disable real-time updates */
+
+    /* Run dialog */
+    gtk_dialog_run(GTK_DIALOG(color_dialog));
+
+    /* Get final color */
+    double r, g, b;
+    color_chooser_dialog_get_color(color_dialog, &r, &g, &b);
+
+    dialog->custom_color.red = r;
+    dialog->custom_color.green = g;
+    dialog->custom_color.blue = b;
+    dialog->custom_color.alpha = 1.0;
+
+    /* Update color button appearance */
+    update_color_button_appearance(dialog->bg_custom_color, &dialog->custom_color);
+
+    gtk_widget_destroy(color_dialog);
+}
 
 /**
  * Background radio button changed callback
@@ -125,11 +186,21 @@ NewLayerDialog* new_layer_dialog_new(void) {
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(dialog->bg_transparent_rb), TRUE);
     gtk_widget_set_sensitive(dialog->bg_custom_color, FALSE);
 
+    /* Set default custom color to RGB(60, 160, 255) */
+    dialog->custom_color.red = 60.0 / 255.0;
+    dialog->custom_color.green = 160.0 / 255.0;
+    dialog->custom_color.blue = 255.0 / 255.0;
+    dialog->custom_color.alpha = 1.0;
+    update_color_button_appearance(dialog->bg_custom_color, &dialog->custom_color);
+
     /* Connect background radio button signals */
     g_signal_connect(dialog->bg_transparent_rb, "toggled", G_CALLBACK(on_bg_changed), dialog);
     g_signal_connect(dialog->bg_black_rb, "toggled", G_CALLBACK(on_bg_changed), dialog);
     g_signal_connect(dialog->bg_white_rb, "toggled", G_CALLBACK(on_bg_changed), dialog);
     g_signal_connect(dialog->bg_custom_rb, "toggled", G_CALLBACK(on_bg_changed), dialog);
+
+    /* Connect custom color button click signal to open color chooser dialog */
+    g_signal_connect(dialog->bg_custom_color, "clicked", G_CALLBACK(on_custom_color_clicked), dialog);
 
     /* Set default layer name */
     default_name = g_strdup_printf("Layer %d", layer_count++);
@@ -221,7 +292,6 @@ gint new_layer_dialog_run(NewLayerDialog* dialog, GtkWindow* parent, NewLayerDia
     const gchar* name_text;
     LayerBackgroundType background;
     LayerPosition position;
-    GdkRGBA color;
     gdouble custom_color[4];
 
     if (!dialog || !result) {
@@ -260,12 +330,11 @@ gint new_layer_dialog_run(NewLayerDialog* dialog, GtkWindow* parent, NewLayerDia
             background = LAYER_BACKGROUND_WHITE;
         } else if (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(dialog->bg_custom_rb))) {
             background = LAYER_BACKGROUND_CUSTOM;
-            /* Get custom color */
-            gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(dialog->bg_custom_color), &color);
-            custom_color[0] = color.red;
-            custom_color[1] = color.green;
-            custom_color[2] = color.blue;
-            custom_color[3] = color.alpha;
+            /* Get custom color from dialog structure */
+            custom_color[0] = dialog->custom_color.red;
+            custom_color[1] = dialog->custom_color.green;
+            custom_color[2] = dialog->custom_color.blue;
+            custom_color[3] = dialog->custom_color.alpha;
             memcpy((*result)->custom_color, custom_color, sizeof(custom_color));
         } else {
             background = LAYER_BACKGROUND_TRANSPARENT;
