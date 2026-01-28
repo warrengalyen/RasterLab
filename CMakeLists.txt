@@ -1,6 +1,15 @@
 cmake_minimum_required(VERSION 3.10)
 project(RasterLab C)
 
+# Option: build only the application, use system libs (skip building libjpeg, libpng, libtiff, libwebp, zlib from lib/)
+option(RASTERLAB_APP_ONLY "Only build the application; skip building libraries in lib/ (use system libjpeg, libpng, libtiff, libwebp, zlib)" ON)
+if(RASTERLAB_APP_ONLY)
+    message(STATUS "RASTERLAB_APP_ONLY=ON: skipping build of lib/ deps, using system libraries")
+endif()
+
+# PkgConfig needed early when using system libs (APP_ONLY or missing submodules)
+find_package(PkgConfig REQUIRED)
+
 # Set C standard
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -24,8 +33,8 @@ set(LIBJPEG_TARGET "")
 # Include ExternalProject module for building libjpeg-turbo
 include(ExternalProject)
 
-# Check if libjpeg-turbo submodule exists
-if(EXISTS "${CMAKE_SOURCE_DIR}/lib/libjpeg/CMakeLists.txt")
+# Check if libjpeg-turbo submodule exists (skip when APP_ONLY: use system libs)
+if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/libjpeg/CMakeLists.txt")
     message(STATUS "libjpeg-turbo submodule found, building from source")
     
     # Set up paths for ExternalProject
@@ -165,8 +174,8 @@ else()
     set(HAVE_LIBJPEG 0)
 endif()
 
-# Check if zlib submodule exists
-if(EXISTS "${CMAKE_SOURCE_DIR}/lib/zlib/CMakeLists.txt")
+# Check if zlib submodule exists (skip when APP_ONLY: use system libs)
+if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/zlib/CMakeLists.txt")
     message(STATUS "zlib submodule found, building from source")
     
     # Set up paths for ExternalProject
@@ -301,8 +310,8 @@ else()
     endif()
 endif()
 
-# Check if libpng submodule exists
-if(EXISTS "${CMAKE_SOURCE_DIR}/lib/libpng/CMakeLists.txt")
+# Check if libpng submodule exists (skip when APP_ONLY: use system libs)
+if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/libpng/CMakeLists.txt")
     message(STATUS "libpng submodule found, building from source")
     
     # Set up paths for ExternalProject
@@ -487,7 +496,8 @@ set(LIBWEBP_FOUND FALSE)
 set(LIBWEBP_LIBRARIES "")
 set(LIBWEBP_TARGET "")
 
-if(EXISTS "${CMAKE_SOURCE_DIR}/lib/libwebp/CMakeLists.txt")
+# Skip building libwebp from source when APP_ONLY
+if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/libwebp/CMakeLists.txt")
     message(STATUS "libwebp submodule found, building from source")
     
     # Set up paths for ExternalProject
@@ -675,7 +685,8 @@ set(LIBTIFF_FOUND FALSE)
 set(LIBTIFF_LIBRARIES "")
 set(LIBTIFF_TARGET "")
 
-if(EXISTS "${CMAKE_SOURCE_DIR}/lib/libtiff/CMakeLists.txt")
+# Skip building libtiff from source when APP_ONLY
+if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/libtiff/CMakeLists.txt")
     message(STATUS "libtiff submodule found, building from source")
     
     # Set up paths for ExternalProject
@@ -880,7 +891,6 @@ endif()
 # Find GTK3, GdkPixbuf, libxml2, and LZ4 using pkg-config
 # NOTE: This is done AFTER zlib/libpng configuration to ensure our libpng headers
 # are set up before GTK3's pkg-config adds system libpng headers to CFLAGS
-find_package(PkgConfig REQUIRED)
 pkg_check_modules(GTK3 REQUIRED gtk+-3.0 gdk-pixbuf-2.0)
 pkg_check_modules(LIBXML2 REQUIRED libxml-2.0)
 pkg_check_modules(LZ4 REQUIRED liblz4)
