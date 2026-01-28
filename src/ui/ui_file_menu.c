@@ -7,6 +7,7 @@
 #include "io/image_io.h"
 #include "plugins/format_registry.h"
 #include "ui.h"
+#include "ui/dialogs/new_image_dialog.h"
 #include "ui/dialogs/save_options_dialog.h"
 #include "ui/layers_panel.h"
 #include "ui/swatches.h"
@@ -358,12 +359,19 @@ void ui_file_menu_setup(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* acc
     }
 
     /* Connect File menu signals */
+    GtkWidget* file_menu_new = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_new"));
     GtkWidget* file_menu_open = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_open"));
     GtkWidget* file_menu_open_recent = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_open_recent"));
     GtkWidget* file_menu_save = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_save"));
     GtkWidget* file_menu_save_as = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_save_as"));
     GtkWidget* file_menu_close = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_close"));
     GtkWidget* file_menu_exit = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_exit"));
+
+    if (file_menu_new) {
+        g_signal_connect(file_menu_new, "activate", G_CALLBACK(on_file_new), ctx);
+        gtk_widget_add_accelerator(file_menu_new, "activate", accel_group,
+                                   GDK_KEY_n, GDK_CONTROL_MASK, GTK_ACCEL_VISIBLE);
+    }
 
     if (file_menu_open) {
         g_signal_connect(file_menu_open, "activate", G_CALLBACK(on_file_open), ctx);
@@ -1039,6 +1047,150 @@ gboolean on_window_delete(GtkWidget* widget, GdkEvent* event, gpointer data) {
     gtk_main_quit();
 
     return FALSE; /* Allow window to close */
+}
+
+/**
+ * File > New callback
+ */
+void on_file_new(GtkWidget* widget, gpointer data) {
+    (void)widget; /* Unused */
+
+    AppContext* ctx = (AppContext*)data;
+    NewImageDialog* dialog;
+    NewImageDialogResult* result;
+    gint response;
+    ImageDocument* doc;
+    ImageLayer* background_layer;
+    LayersPanel* layers_panel;
+    const gdouble* custom_color = NULL;
+
+    if (!ctx) {
+        g_warning("Invalid application context");
+        return;
+    }
+
+    if (!ctx->window || !GTK_IS_WINDOW(ctx->window)) {
+        g_warning("Invalid main window");
+        return;
+    }
+
+    layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window), "layers_panel");
+
+    /* Create and show new image dialog */
+    dialog = new_image_dialog_new();
+    if (!dialog) {
+        g_warning("Failed to create new image dialog");
+        return;
+    }
+
+    response = new_image_dialog_run(dialog, GTK_WINDOW(ctx->window), &result);
+
+    if (response == GTK_RESPONSE_OK && result) {
+        /* Validate dimensions */
+        if (result->width == 0 || result->height == 0) {
+            GtkWidget* error_dialog = gtk_message_dialog_new(
+                GTK_WINDOW(ctx->window),
+                GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+                GTK_MESSAGE_ERROR,
+                GTK_BUTTONS_OK,
+                "Invalid image dimensions: %u x %u\n\nWidth and height must be greater than 0.",
+                result->width, result->height);
+
+            gtk_dialog_run(GTK_DIALOG(error_dialog));
+            gtk_widget_destroy(error_dialog);
+            new_image_dialog_result_free(result);
+            new_image_dialog_free(dialog);
+            return;
+        }
+
+        /* Get custom color if needed */
+        if (result->background == LAYER_BACKGROUND_CUSTOM) {
+            custom_color = result->custom_color;
+        }
+
+        /* Create new document */
+        doc = ui_create_document_without_tab(ctx, "Untitled");
+        if (!doc) {
+            g_warning("Failed to create document");
+            new_image_dialog_result_free(result);
+            new_image_dialog_free(dialog);
+            return;
+        }
+
+        /* Set document dimensions */
+        doc->width = result->width;
+        doc->height = result->height;
+        doc->has_alpha = (result->background == LAYER_BACKGROUND_TRANSPARENT) ? TRUE : FALSE;
+        doc->channels = doc->has_alpha ? 4 : 3;
+        doc->bit_depth = 8;
+
+        /* Initialize rendering structures */
+        if (!document_init_rendering_structures(doc)) {
+            GtkWidget* error_dialog = gtk_message_dialog_new(
+                GTK_WINDOW(ctx->window),
+                GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+                GTK_MESSAGE_ERROR,
+                GTK_BUTTONS_OK,
+                "Failed to initialize document rendering structures");
+
+            gtk_dialog_run(GTK_DIALOG(error_dialog));
+            gtk_widget_destroy(error_dialog);
+            document_free(doc);
+            new_image_dialog_result_free(result);
+            new_image_dialog_free(dialog);
+            return;
+        }
+
+        /* Create background layer */
+        background_layer = layer_new("Background", doc->width, doc->height, TRUE,
+                                     result->background, LAYER_POSITION_ABOVE_CURRENT,
+                                     custom_color, doc);
+        if (!background_layer) {
+            g_warning("Failed to create background layer");
+            document_free(doc);
+            new_image_dialog_result_free(result);
+            new_image_dialog_free(dialog);
+            return;
+        }
+
+        /* Add layer to document */
+        doc->layers = g_list_append(doc->layers, background_layer);
+        document_set_selected_layer(doc, background_layer);
+
+        /* Mark composite as needing re-render */
+        document_invalidate_composite(doc);
+
+        /* Add document to notebook */
+        ui_add_document_to_notebook(ctx, doc);
+
+        /* Register document for autosave */
+        autosave_register_document(doc);
+
+        /* Update drawing area size to match image dimensions */
+        if (doc->drawing_area) {
+            gint display_width = (gint)(doc->width * doc->zoom_factor);
+            gint display_height = (gint)(doc->height * doc->zoom_factor);
+            gtk_widget_set_size_request(doc->drawing_area, display_width, display_height);
+            gtk_widget_queue_draw(doc->drawing_area);
+        }
+
+        /* Update layers panel */
+        if (layers_panel) {
+            layers_panel_update(layers_panel, doc);
+        }
+
+        /* Update UI state */
+        ui_update_menu_and_button_states(ctx);
+        ui_update_window_title(ctx, NULL);
+        ui_update_status_bar(ctx, NULL);
+        ui_update_status_bar_message(ctx, "New image created");
+
+        /* Free dialog result */
+        new_image_dialog_result_free(result);
+    }
+
+    /* Free dialog */
+    new_image_dialog_free(dialog);
 }
 
 /**
