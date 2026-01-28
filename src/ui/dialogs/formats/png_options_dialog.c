@@ -1,4 +1,5 @@
 #include "ui/dialogs/formats/png_options_dialog.h"
+#include "ui/dialogs/color_chooser_dialog.h"
 #include "ui/ui_utils.h"
 #include <glib.h>
 #include <gtk/gtk.h>
@@ -49,6 +50,174 @@ typedef struct {
     uint8_t compositing_color_b;
     uint32_t reserved[1];
 } PNGSaveOptions;
+
+/* Structure to hold color data for callbacks */
+typedef struct {
+    GdkRGBA* color;
+    GtkWidget* button;
+} PNGColorButtonData;
+
+/* Color update callback for transparent color button */
+static void on_transparent_color_update(double r, double g, double b, gpointer user_data) {
+    PNGColorButtonData* data = (PNGColorButtonData*)user_data;
+    if (!data || !data->color) {
+        return;
+    }
+
+    data->color->red = r;
+    data->color->green = g;
+    data->color->blue = b;
+    data->color->alpha = 1.0;
+
+    /* Update color button appearance */
+    if (data->button) {
+        update_color_button_appearance(data->button, data->color);
+    }
+}
+
+/* Color update callback for compositing color button */
+static void on_compositing_color_update(double r, double g, double b, gpointer user_data) {
+    PNGColorButtonData* data = (PNGColorButtonData*)user_data;
+    if (!data || !data->color) {
+        return;
+    }
+
+    data->color->red = r;
+    data->color->green = g;
+    data->color->blue = b;
+    data->color->alpha = 1.0;
+
+    /* Update color button appearance */
+    if (data->button) {
+        update_color_button_appearance(data->button, data->color);
+    }
+}
+
+/* Color update callback for embed background color button */
+static void on_embed_bgcolor_update(double r, double g, double b, gpointer user_data) {
+    PNGColorButtonData* data = (PNGColorButtonData*)user_data;
+    if (!data || !data->color) {
+        return;
+    }
+
+    data->color->red = r;
+    data->color->green = g;
+    data->color->blue = b;
+    data->color->alpha = 1.0;
+
+    /* Update color button appearance */
+    if (data->button) {
+        update_color_button_appearance(data->button, data->color);
+    }
+}
+
+/* Transparent color button clicked callback */
+static void on_transparent_color_clicked(GtkButton* button, gpointer user_data) {
+    PNGColorButtonData* data = (PNGColorButtonData*)user_data;
+    if (!data || !data->color || !button) {
+        return;
+    }
+
+    GtkWindow* parent = GTK_WINDOW(gtk_widget_get_toplevel(GTK_WIDGET(button)));
+
+    /* Create and show color chooser dialog */
+    GtkWidget* color_dialog = color_chooser_dialog_new(
+        parent,
+        "Choose Transparent Color",
+        data->color,
+        on_transparent_color_update,
+        data,
+        FALSE); /* Disable real-time updates */
+
+    /* Run dialog */
+    gtk_dialog_run(GTK_DIALOG(color_dialog));
+
+    /* Get final color */
+    double r, g, b;
+    color_chooser_dialog_get_color(color_dialog, &r, &g, &b);
+
+    data->color->red = r;
+    data->color->green = g;
+    data->color->blue = b;
+    data->color->alpha = 1.0;
+
+    /* Update color button appearance */
+    update_color_button_appearance(data->button, data->color);
+
+    gtk_widget_destroy(color_dialog);
+}
+
+/* Compositing color button clicked callback */
+static void on_compositing_color_clicked(GtkButton* button, gpointer user_data) {
+    PNGColorButtonData* data = (PNGColorButtonData*)user_data;
+    if (!data || !data->color || !button) {
+        return;
+    }
+
+    GtkWindow* parent = GTK_WINDOW(gtk_widget_get_toplevel(GTK_WIDGET(button)));
+
+    /* Create and show color chooser dialog */
+    GtkWidget* color_dialog = color_chooser_dialog_new(
+        parent,
+        "Choose Compositing Color",
+        data->color,
+        on_compositing_color_update,
+        data,
+        FALSE); /* Disable real-time updates */
+
+    /* Run dialog */
+    gtk_dialog_run(GTK_DIALOG(color_dialog));
+
+    /* Get final color */
+    double r, g, b;
+    color_chooser_dialog_get_color(color_dialog, &r, &g, &b);
+
+    data->color->red = r;
+    data->color->green = g;
+    data->color->blue = b;
+    data->color->alpha = 1.0;
+
+    /* Update color button appearance */
+    update_color_button_appearance(data->button, data->color);
+
+    gtk_widget_destroy(color_dialog);
+}
+
+/* Embed background color button clicked callback */
+static void on_embed_bgcolor_clicked(GtkButton* button, gpointer user_data) {
+    PNGColorButtonData* data = (PNGColorButtonData*)user_data;
+    if (!data || !data->color || !button) {
+        return;
+    }
+
+    GtkWindow* parent = GTK_WINDOW(gtk_widget_get_toplevel(GTK_WIDGET(button)));
+
+    /* Create and show color chooser dialog */
+    GtkWidget* color_dialog = color_chooser_dialog_new(
+        parent,
+        "Choose Background Color",
+        data->color,
+        on_embed_bgcolor_update,
+        data,
+        FALSE); /* Disable real-time updates */
+
+    /* Run dialog */
+    gtk_dialog_run(GTK_DIALOG(color_dialog));
+
+    /* Get final color */
+    double r, g, b;
+    color_chooser_dialog_get_color(color_dialog, &r, &g, &b);
+
+    data->color->red = r;
+    data->color->green = g;
+    data->color->blue = b;
+    data->color->alpha = 1.0;
+
+    /* Update color button appearance */
+    update_color_button_appearance(data->button, data->color);
+
+    gtk_widget_destroy(color_dialog);
+}
 
 /* Button clicked callback to emit dialog response */
 static void on_button_clicked(GtkButton* button, gpointer user_data) {
@@ -196,6 +365,12 @@ gboolean png_options_dialog_show(GtkWindow* parent, SaveOptions* opts) {
     gboolean result = FALSE;
     PNGSaveOptions* png_opts = NULL;
     GdkRGBA rgba;
+    GdkRGBA embed_bgcolor_rgba;
+    GdkRGBA transparent_color_rgba;
+    GdkRGBA compositing_color_rgba;
+    PNGColorButtonData embed_bgcolor_data;
+    PNGColorButtonData transparent_color_data;
+    PNGColorButtonData compositing_color_data;
 
     if (!opts) {
         return FALSE;
@@ -333,11 +508,14 @@ gboolean png_options_dialog_show(GtkWindow* parent, SaveOptions* opts) {
             gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(embed_bgcolor_checkbox), png_opts->embed_background_color ? TRUE : FALSE);
         }
         if (embed_bgcolor_color) {
-            rgba.red = (gdouble)png_opts->background_color_r / 255.0;
-            rgba.green = (gdouble)png_opts->background_color_g / 255.0;
-            rgba.blue = (gdouble)png_opts->background_color_b / 255.0;
-            rgba.alpha = 1.0;
-            gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(embed_bgcolor_color), &rgba);
+            embed_bgcolor_rgba.red = (gdouble)png_opts->background_color_r / 255.0;
+            embed_bgcolor_rgba.green = (gdouble)png_opts->background_color_g / 255.0;
+            embed_bgcolor_rgba.blue = (gdouble)png_opts->background_color_b / 255.0;
+            embed_bgcolor_rgba.alpha = 1.0;
+            embed_bgcolor_data.color = &embed_bgcolor_rgba;
+            embed_bgcolor_data.button = embed_bgcolor_color;
+            update_color_button_appearance(embed_bgcolor_color, &embed_bgcolor_rgba);
+            g_signal_connect(embed_bgcolor_color, "clicked", G_CALLBACK(on_embed_bgcolor_clicked), &embed_bgcolor_data);
         }
 
         /* Set color format */
@@ -367,20 +545,26 @@ gboolean png_options_dialog_show(GtkWindow* parent, SaveOptions* opts) {
 
         /* Set transparent color */
         if (transparent_color) {
-            rgba.red = (gdouble)png_opts->transparency_color_r / 255.0;
-            rgba.green = (gdouble)png_opts->transparency_color_g / 255.0;
-            rgba.blue = (gdouble)png_opts->transparency_color_b / 255.0;
-            rgba.alpha = 1.0;
-            gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(transparent_color), &rgba);
+            transparent_color_rgba.red = (gdouble)png_opts->transparency_color_r / 255.0;
+            transparent_color_rgba.green = (gdouble)png_opts->transparency_color_g / 255.0;
+            transparent_color_rgba.blue = (gdouble)png_opts->transparency_color_b / 255.0;
+            transparent_color_rgba.alpha = 1.0;
+            transparent_color_data.color = &transparent_color_rgba;
+            transparent_color_data.button = transparent_color;
+            update_color_button_appearance(transparent_color, &transparent_color_rgba);
+            g_signal_connect(transparent_color, "clicked", G_CALLBACK(on_transparent_color_clicked), &transparent_color_data);
         }
 
         /* Set compositing color */
         if (compositing_color) {
-            rgba.red = (gdouble)png_opts->compositing_color_r / 255.0;
-            rgba.green = (gdouble)png_opts->compositing_color_g / 255.0;
-            rgba.blue = (gdouble)png_opts->compositing_color_b / 255.0;
-            rgba.alpha = 1.0;
-            gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(compositing_color), &rgba);
+            compositing_color_rgba.red = (gdouble)png_opts->compositing_color_r / 255.0;
+            compositing_color_rgba.green = (gdouble)png_opts->compositing_color_g / 255.0;
+            compositing_color_rgba.blue = (gdouble)png_opts->compositing_color_b / 255.0;
+            compositing_color_rgba.alpha = 1.0;
+            compositing_color_data.color = &compositing_color_rgba;
+            compositing_color_data.button = compositing_color;
+            update_color_button_appearance(compositing_color, &compositing_color_rgba);
+            g_signal_connect(compositing_color, "clicked", G_CALLBACK(on_compositing_color_clicked), &compositing_color_data);
         }
     } else {
         /* Set defaults */
@@ -402,6 +586,40 @@ gboolean png_options_dialog_show(GtkWindow* parent, SaveOptions* opts) {
         }
         if (transparency_cutoff_adjustment) {
             gtk_adjustment_set_value(transparency_cutoff_adjustment, 64.0);
+        }
+
+        /* Set default colors */
+        if (embed_bgcolor_color) {
+            embed_bgcolor_rgba.red = 0.0;
+            embed_bgcolor_rgba.green = 0.0;
+            embed_bgcolor_rgba.blue = 0.0;
+            embed_bgcolor_rgba.alpha = 1.0;
+            embed_bgcolor_data.color = &embed_bgcolor_rgba;
+            embed_bgcolor_data.button = embed_bgcolor_color;
+            update_color_button_appearance(embed_bgcolor_color, &embed_bgcolor_rgba);
+            g_signal_connect(embed_bgcolor_color, "clicked", G_CALLBACK(on_embed_bgcolor_clicked), &embed_bgcolor_data);
+        }
+
+        if (transparent_color) {
+            transparent_color_rgba.red = 0.0;
+            transparent_color_rgba.green = 0.0;
+            transparent_color_rgba.blue = 0.0;
+            transparent_color_rgba.alpha = 1.0;
+            transparent_color_data.color = &transparent_color_rgba;
+            transparent_color_data.button = transparent_color;
+            update_color_button_appearance(transparent_color, &transparent_color_rgba);
+            g_signal_connect(transparent_color, "clicked", G_CALLBACK(on_transparent_color_clicked), &transparent_color_data);
+        }
+
+        if (compositing_color) {
+            compositing_color_rgba.red = 0.0;
+            compositing_color_rgba.green = 0.0;
+            compositing_color_rgba.blue = 0.0;
+            compositing_color_rgba.alpha = 1.0;
+            compositing_color_data.color = &compositing_color_rgba;
+            compositing_color_data.button = compositing_color;
+            update_color_button_appearance(compositing_color, &compositing_color_rgba);
+            g_signal_connect(compositing_color, "clicked", G_CALLBACK(on_compositing_color_clicked), &compositing_color_data);
         }
     }
 
@@ -483,10 +701,9 @@ gboolean png_options_dialog_show(GtkWindow* parent, SaveOptions* opts) {
                 png_opts->embed_background_color = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(embed_bgcolor_checkbox)) ? true : false;
             }
             if (embed_bgcolor_color) {
-                gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(embed_bgcolor_color), &rgba);
-                png_opts->background_color_r = (uint8_t)(rgba.red * 255.0 + 0.5);
-                png_opts->background_color_g = (uint8_t)(rgba.green * 255.0 + 0.5);
-                png_opts->background_color_b = (uint8_t)(rgba.blue * 255.0 + 0.5);
+                png_opts->background_color_r = (uint8_t)(embed_bgcolor_rgba.red * 255.0 + 0.5);
+                png_opts->background_color_g = (uint8_t)(embed_bgcolor_rgba.green * 255.0 + 0.5);
+                png_opts->background_color_b = (uint8_t)(embed_bgcolor_rgba.blue * 255.0 + 0.5);
             }
 
             /* Get color format */
@@ -516,18 +733,16 @@ gboolean png_options_dialog_show(GtkWindow* parent, SaveOptions* opts) {
 
             /* Get transparent color */
             if (transparent_color) {
-                gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(transparent_color), &rgba);
-                png_opts->transparency_color_r = (uint8_t)(rgba.red * 255.0 + 0.5);
-                png_opts->transparency_color_g = (uint8_t)(rgba.green * 255.0 + 0.5);
-                png_opts->transparency_color_b = (uint8_t)(rgba.blue * 255.0 + 0.5);
+                png_opts->transparency_color_r = (uint8_t)(transparent_color_rgba.red * 255.0 + 0.5);
+                png_opts->transparency_color_g = (uint8_t)(transparent_color_rgba.green * 255.0 + 0.5);
+                png_opts->transparency_color_b = (uint8_t)(transparent_color_rgba.blue * 255.0 + 0.5);
             }
 
             /* Get compositing color */
             if (compositing_color) {
-                gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(compositing_color), &rgba);
-                png_opts->compositing_color_r = (uint8_t)(rgba.red * 255.0 + 0.5);
-                png_opts->compositing_color_g = (uint8_t)(rgba.green * 255.0 + 0.5);
-                png_opts->compositing_color_b = (uint8_t)(rgba.blue * 255.0 + 0.5);
+                png_opts->compositing_color_r = (uint8_t)(compositing_color_rgba.red * 255.0 + 0.5);
+                png_opts->compositing_color_g = (uint8_t)(compositing_color_rgba.green * 255.0 + 0.5);
+                png_opts->compositing_color_b = (uint8_t)(compositing_color_rgba.blue * 255.0 + 0.5);
             }
         }
         result = TRUE;

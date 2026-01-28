@@ -173,6 +173,10 @@
           <object class="GtkBox" id="png_options_content_area">
             <property name="visible">True</property>
             <property name="can-focus">False</property>
+            <property name="margin-start">10</property>
+            <property name="margin-end">10</property>
+            <property name="margin-top">10</property>
+            <property name="margin-bottom">10</property>
             <property name="orientation">vertical</property>
             <child>
               <object class="GtkNotebook" id="notebook">
@@ -320,17 +324,16 @@
                           </packing>
                         </child>
                         <child>
-                          <object class="GtkColorButton" id="embed_bgcolor_color">
-                            <property name="width-request">80</property>
+                          <object class="GtkButton" id="embed_bgcolor_color">
+                            <property name="width-request">200</property>
                             <property name="visible">True</property>
                             <property name="can-focus">True</property>
                             <property name="receives-default">True</property>
-                            <property name="title" translatable="yes"> Change color</property>
                           </object>
                           <packing>
                             <property name="expand">False</property>
                             <property name="fill">True</property>
-                            <property name="position">1</property>
+                            <property name="position">2</property>
                           </packing>
                         </child>
                       </object>
@@ -623,16 +626,15 @@
                               <packing>
                                 <property name="expand">False</property>
                                 <property name="fill">False</property>
-                                <property name="position">1</property>
+                                <property name="position">0</property>
                               </packing>
                             </child>
                             <child>
-                              <object class="GtkColorButton" id="transparent_color">
+                              <object class="GtkButton" id="transparent_color">
                                 <property name="visible">True</property>
                                 <property name="can-focus">True</property>
                                 <property name="receives-default">True</property>
-                                <property name="title" translatable="yes">Change color</property>
-                                <property name="rgba">rgb(255,0,255)</property>
+                                <property name="margin-top">5</property>
                               </object>
                               <packing>
                                 <property name="expand">False</property>
@@ -665,17 +667,16 @@
                               </packing>
                             </child>
                             <child>
-                              <object class="GtkColorButton" id="compositing_color">
+                              <object class="GtkButton" id="compositing_color">
                                 <property name="visible">True</property>
                                 <property name="can-focus">True</property>
                                 <property name="receives-default">True</property>
-                                <property name="title" translatable="yes">Change color</property>
-                                <property name="rgba">rgb(255,255,255)</property>
+                                <property name="margin-top">5</property>
                               </object>
                               <packing>
                                 <property name="expand">False</property>
                                 <property name="fill">True</property>
-                                <property name="position">1</property>
+                                <property name="position">2</property>
                               </packing>
                             </child>
                           </object>
