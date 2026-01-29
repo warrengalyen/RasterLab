@@ -365,6 +365,7 @@ void ui_file_menu_setup(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* acc
     GtkWidget* file_menu_save = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_save"));
     GtkWidget* file_menu_save_as = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_save_as"));
     GtkWidget* file_menu_close = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_close"));
+    GtkWidget* file_menu_close_all = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_close_all"));
     GtkWidget* file_menu_exit = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_exit"));
 
     if (file_menu_new) {
@@ -406,6 +407,9 @@ void ui_file_menu_setup(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* acc
     }
     if (file_menu_close) {
         g_signal_connect(file_menu_close, "activate", G_CALLBACK(on_file_close), ctx);
+    }
+    if (file_menu_close_all) {
+        g_signal_connect(file_menu_close_all, "activate", G_CALLBACK(on_file_close_all), ctx);
     }
     if (file_menu_exit) {
         g_signal_connect(file_menu_exit, "activate", G_CALLBACK(on_file_exit), ctx);
@@ -1009,6 +1013,28 @@ void on_file_close(GtkWidget* widget, gpointer data) {
 
     if (active_doc) {
         ui_close_document_tab(ctx, active_doc);
+    }
+}
+
+/**
+ * File > Close All callback
+ * Closes all document tabs. Stops if user cancels a save prompt on any document.
+ */
+void on_file_close_all(GtkWidget* widget, gpointer data) {
+    (void)widget; /* Unused */
+
+    AppContext* ctx = (AppContext*)data;
+
+    while (ctx->documents != NULL) {
+        ImageDocument* doc = (ImageDocument*)ctx->documents->data;
+        guint n_before = g_list_length(ctx->documents);
+
+        ui_close_document_tab(ctx, doc);
+
+        /* If list length unchanged, user cancelled save prompt - stop closing */
+        if (g_list_length(ctx->documents) == n_before) {
+            break;
+        }
     }
 }
 
