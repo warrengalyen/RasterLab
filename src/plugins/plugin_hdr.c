@@ -473,7 +473,7 @@ static PluginError load_hdr(ImageDocument* doc, const char* filename) {
     Settings* settings = NULL;
     const char* app_dir = NULL;
     gboolean auto_apply_enabled = FALSE;
-    
+
     if (doc && doc->drawing_area) {
         ctx = (AppContext*)g_object_get_data(G_OBJECT(doc->drawing_area), "app_context");
         if (ctx) {
@@ -481,9 +481,9 @@ static PluginError load_hdr(ImageDocument* doc, const char* filename) {
             app_dir = ctx->app_dir;
             if (settings) {
                 auto_apply_enabled = settings_get_tone_map_auto_apply(settings);
-                
+
                 /* Always load settings from saved values (for dialog to show last used, or to use if auto_apply) */
-                tone_params.operator = (ToneMapOperator)settings_get_tone_map_operator(settings);
+                tone_params.operator=(ToneMapOperator) settings_get_tone_map_operator(settings);
                 tone_params.normalize = (ToneMapNormalize)settings_get_tone_map_normalize(settings);
                 tone_params.gamma = (float)settings_get_tone_map_gamma(settings);
                 tone_params.exposure = (float)settings_get_tone_map_exposure(settings);
@@ -505,12 +505,12 @@ static PluginError load_hdr(ImageDocument* doc, const char* filename) {
     /* Skip dialog if auto apply is enabled */
     gboolean auto_apply = FALSE;
     gint dialog_response = GTK_RESPONSE_OK;
-    
+
     if (!auto_apply_enabled) {
         /* Show dialog */
-        dialog_response = hdr_image_dialog_show(parent_window, &tone_params, &auto_apply, 
+        dialog_response = hdr_image_dialog_show(parent_window, &tone_params, &auto_apply,
                                                 rgbe_data, width, height, settings, app_dir);
-        
+
         /* If dialog was canceled, cancel loading without modifying document */
         if (dialog_response != GTK_RESPONSE_OK) {
             g_free(rgbe_data);
@@ -619,7 +619,7 @@ bool plugin_init_hdr(const ImageFormatHostAPI* host, ImageFormatPlugin* out_plug
 
     out_plugin->plugin_version = 1;
     out_plugin->format_info.name = "HDR - Radiance RGBE";
-    out_plugin->format_info.extensions = "hdr,pic";
+    out_plugin->format_info.extensions = "hdr,rgbe,zyze,pic";
     out_plugin->format_info.supports_alpha = false;
     out_plugin->format_info.supports_layers = false;
     out_plugin->format_info.supports_hdr = true;
