@@ -13,6 +13,7 @@
 #include "tool_manager.h"
 #include "tool_options.h"
 #include "tools.h"
+#include "tools/tool_colorpicker.h"
 #include "tools/tool_ellipse_select.h"
 #include "tools/tool_move.h"
 #include "tools/tool_rect_select.h"
@@ -517,8 +518,11 @@ static gboolean on_drawing_area_motion_notify(GtkWidget* widget, GdkEventMotion*
     /* Call tool handler */
     active_tool->mouse_move(active_tool, doc, &tool_event);
 
-    /* Request redraw */
-    gtk_widget_queue_draw(doc->drawing_area);
+    /* Request redraw only if the tool draws on the canvas. Color picker only
+     * updates the preview widget and does not modify the canvas on move. */
+    if (active_tool->type != TOOL_COLOR_PICKER) {
+        gtk_widget_queue_draw(doc->drawing_area);
+    }
 
     return TRUE;
 }
@@ -564,14 +568,29 @@ static gboolean on_drawing_area_enter_notify(GtkWidget* widget, GdkEventCrossing
 
 /**
  * Drawing area leave notify callback - no longer used for hiding position
- * (position is now hidden when leaving viewport)
+ * (position is now hidden when leaving viewport).
+ * Clears color picker preview when cursor leaves canvas and color picker is active.
  */
 static gboolean on_drawing_area_leave_notify(GtkWidget* widget, GdkEventCrossing* event, gpointer user_data) {
-    (void)widget;    /* Unused */
-    (void)event;     /* Unused */
-    (void)user_data; /* Unused */
+    ImageDocument* doc = (ImageDocument*)user_data;
+    (void)widget;
+    (void)event;
 
-    /* No-op: cursor position tracking is handled at viewport level */
+    if (!doc || !doc->drawing_area) {
+        return FALSE;
+    }
+    ToolRegistry* registry = (ToolRegistry*)g_object_get_data(G_OBJECT(doc->drawing_area), "tool_registry");
+    if (!registry) {
+        return FALSE;
+    }
+    Tool* active = tool_manager_get_active(registry);
+    if (active && active->type == TOOL_COLOR_PICKER) {
+        AppContext* ctx = (AppContext*)g_object_get_data(G_OBJECT(doc->drawing_area), "app_context");
+        if (ctx && ctx->tool_options_panel) {
+            tool_options_panel_set_color_picker_preview(ctx->tool_options_panel, FALSE, 0, 0, 0, 0);
+        }
+        tool_colorpicker_reset_preview_throttle();
+    }
     return FALSE;
 }
 

@@ -14,6 +14,7 @@ typedef struct {
     GtkWidget* eraser_panel;                     /* Eraser tool options panel (from Glade) */
     GtkWidget* pencil_panel;                     /* Pencil tool options panel (from Glade) */
     GtkWidget* paintbucket_panel;                /* Paint bucket tool options panel (from Glade) */
+    GtkWidget* color_picker_panel;               /* Color picker tool options panel (from Glade) */
     GtkWidget* rect_select_panel;                /* Rectangular select tool options panel (from Glade) */
     GtkWidget* ellipse_select_panel;             /* Elliptical select tool options panel (from Glade) */
     GtkWidget* move_panel;                       /* Move tool options panel (from Glade) */
@@ -79,5 +80,20 @@ void tool_options_panel_set_tool_registry(ToolOptionsPanel* panel, ToolRegistry*
  * @param mode The combine mode to display
  */
 void tool_options_panel_set_combine_mode(ToolOptionsPanel* panel, SelectionCombineMode mode);
+
+/**
+ * Update color picker preview in tool options (color_draw widget).
+ * When has_color is FALSE, show checkerboard only (transparency).
+ * When has_color is TRUE, show checkerboard + color overlay (r,g,b,a in 0–1).
+ * @param panel The tool options panel (may be NULL)
+ * @param has_color Whether a color is under the cursor
+ * @param r Red (0–1)
+ * @param g Green (0–1)
+ * @param b Blue (0–1)
+ * @param a Alpha (0–1)
+ */
+void tool_options_panel_set_color_picker_preview(ToolOptionsPanel* panel,
+                                                 gboolean has_color,
+                                                 gdouble r, gdouble g, gdouble b, gdouble a);
 
 #endif /* TOOL_OPTIONS_PANEL_H */

@@ -2611,6 +2611,8 @@ static const char* tool_type_to_name(ToolType tool_type) {
             return "move";
         case TOOL_RECT_SELECT:
             return "rect_select";
+        case TOOL_COLOR_PICKER:
+            return "color_picker";
         default:
             return NULL;
     }
@@ -2731,6 +2733,24 @@ void ui_load_tool_options_from_settings(AppContext* ctx) {
                 opts->pencil_align_pixel_grid = align;
             } else {
                 opts->pencil_align_pixel_grid = TRUE;
+            }
+        }
+
+        /* Color picker tool specific options */
+        if (tool_type == TOOL_COLOR_PICKER) {
+            const char* sample_radius_str = settings_get_tool_option(ctx->settings, tool_name, "sample_radius");
+            if (sample_radius_str) {
+                gint radius = (gint)g_ascii_strtoll(sample_radius_str, NULL, 10);
+                tool_options_set_color_picker_sample_radius(opts, radius);
+            } else {
+                tool_options_set_color_picker_sample_radius(opts, 0);
+            }
+            const char* sample_from_str = settings_get_tool_option(ctx->settings, tool_name, "sample_from_layer");
+            if (sample_from_str) {
+                gboolean from_layer = (g_strcmp0(sample_from_str, "true") == 0 || g_strcmp0(sample_from_str, "1") == 0);
+                tool_options_set_color_picker_sample_from_layer(opts, from_layer);
+            } else {
+                tool_options_set_color_picker_sample_from_layer(opts, TRUE);
             }
         }
 
@@ -2897,6 +2917,8 @@ static void ui_save_tool_options_to_settings_internal(AppContext* ctx, ToolType 
     SelectionSmoothingMode ellipse_select_smooth_val = opts->ellipse_select_smooth;
     gfloat ellipse_select_feather_val = opts->ellipse_select_feather;
     gboolean ellipse_select_animate_val = opts->ellipse_select_animate;
+    gint color_picker_sample_radius_val = opts->color_picker_sample_radius;
+    gboolean color_picker_sample_from_layer_val = opts->color_picker_sample_from_layer;
 
     /* Save only the options that this tool supports */
     /* Check tool_options_flags to determine which options to save */
@@ -2945,6 +2967,18 @@ static void ui_save_tool_options_to_settings_internal(AppContext* ctx, ToolType 
         settings_set_tool_option(ctx->settings, tool_name, "tolerance", tolerance_str);
         settings_set_tool_option(ctx->settings, tool_name, "fill_contiguous", fill_contiguous_val ? "true" : "false");
         settings_set_tool_option(ctx->settings, tool_name, "fill_antialiased", fill_antialiased_val ? "true" : "false");
+    }
+
+    /* Color picker tool uses sample_radius and sample_from */
+    if (tool_type == TOOL_COLOR_PICKER) {
+        gchar radius_str[32];
+        gint safe_radius = (color_picker_sample_radius_val >= 0 && color_picker_sample_radius_val <= 100)
+                              ? color_picker_sample_radius_val
+                              : 0;
+        g_snprintf(radius_str, sizeof(radius_str), "%d", safe_radius);
+        settings_set_tool_option(ctx->settings, tool_name, "sample_radius", radius_str);
+        settings_set_tool_option(ctx->settings, tool_name, "sample_from_layer",
+                                 color_picker_sample_from_layer_val ? "true" : "false");
     }
 
     /* Pencil tool uses antialias and align_pixel_grid options */

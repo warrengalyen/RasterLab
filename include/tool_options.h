@@ -37,6 +37,10 @@ typedef struct {
 
     /* Move tool options */
     gboolean move_auto_select_layer; /* Auto-select layer under cursor based on visibility */
+
+    /* Color picker tool options */
+    gint color_picker_sample_radius;      /* Sample radius 0–100, default 0 (single pixel) */
+    gboolean color_picker_sample_from_layer; /* TRUE = layer, FALSE = image; default TRUE */
 } ToolOptions;
 
 /**
@@ -245,5 +249,25 @@ void tool_options_set_move_auto_select(ToolOptions* opts, gboolean auto_select);
  * @return TRUE if auto-select enabled, FALSE otherwise
  */
 gboolean tool_options_get_move_auto_select(ToolOptions* opts);
+
+/**
+ * Set color picker sample radius (0–100)
+ */
+void tool_options_set_color_picker_sample_radius(ToolOptions* opts, gint radius);
+
+/**
+ * Get color picker sample radius
+ */
+gint tool_options_get_color_picker_sample_radius(ToolOptions* opts);
+
+/**
+ * Set color picker sample from (TRUE = layer, FALSE = image)
+ */
+void tool_options_set_color_picker_sample_from_layer(ToolOptions* opts, gboolean from_layer);
+
+/**
+ * Get color picker sample from (TRUE = layer, FALSE = image)
+ */
+gboolean tool_options_get_color_picker_sample_from_layer(ToolOptions* opts);
 
 #endif /* TOOL_OPTIONS_H */

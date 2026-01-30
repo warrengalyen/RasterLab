@@ -87,6 +87,7 @@ set(SOURCES
     tools/tool_manager.c
     tools/tool_move.c
     tools/tool_paintbucket.c
+    tools/tool_colorpicker.c
     tools/tool_pencil.c
     tools/tool_rect_select.c
     tools/tool_ellipse_select.c

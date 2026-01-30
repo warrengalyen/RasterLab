@@ -1,5 +1,6 @@
 #include "ui/tool_options_panel.h"
 #include "document.h"
+#include "render/render_utils.h"
 #include "selection.h"
 #include "tool_manager.h"
 #include "tool_options.h"
@@ -9,6 +10,13 @@
 #include "ui.h"
 #include "ui/widgets/vertical_spin_button.h"
 #include <stdio.h>
+
+/* Color picker preview state for color_draw */
+static gboolean g_color_picker_preview_has_color = FALSE;
+static gdouble g_color_picker_preview_r = 0.0;
+static gdouble g_color_picker_preview_g = 0.0;
+static gdouble g_color_picker_preview_b = 0.0;
+static gdouble g_color_picker_preview_a = 1.0;
 
 /**
  * Add a vertical spin button next to a scale widget
@@ -307,6 +315,89 @@ static void on_move_auto_select_toggled(GtkToggleButton* button, gpointer user_d
             save_tool_options_to_settings(panel, TOOL_MOVE);
         }
     }
+}
+
+/**
+ * Color picker: draw callback for color_draw (checkerboard + optional color overlay)
+ */
+static gboolean on_color_draw_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
+    (void)user_data;
+    gint w = gtk_widget_get_allocated_width(widget);
+    gint h = gtk_widget_get_allocated_height(widget);
+    if (w <= 0 || h <= 0) {
+        gint rw = -1, rh = -1;
+        gtk_widget_get_size_request(widget, &rw, &rh);
+        w = (rw > 0) ? rw : 80;
+        h = (rh > 0) ? rh : 54;
+    }
+    if (w <= 0 || h <= 0) {
+        return TRUE;
+    }
+    draw_checkered_background(cr, w, h);
+    if (g_color_picker_preview_has_color) {
+        cairo_set_source_rgba(cr,
+                              g_color_picker_preview_r,
+                              g_color_picker_preview_g,
+                              g_color_picker_preview_b,
+                              g_color_picker_preview_a);
+        cairo_rectangle(cr, 0, 0, w, h);
+        cairo_fill(cr);
+    }
+
+    cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
+    cairo_set_line_width(cr, 1.0);
+    cairo_rectangle(cr, 0.5, 0.5, (gdouble)w - 1.0, (gdouble)h - 1.0);
+    cairo_stroke(cr);
+    return TRUE; /* We drew everything; do not chain to default (would overwrite) */
+}
+
+/**
+ * Color picker: sample radius changed
+ */
+static void on_color_picker_sample_radius_changed(GtkRange* range, gpointer user_data) {
+    (void)user_data;
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)g_object_get_data(G_OBJECT(range), "tool_options_panel");
+    if (!panel || panel->current_tool_type != TOOL_COLOR_PICKER) {
+        return;
+    }
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_COLOR_PICKER);
+    if (opts) {
+        gint v = (gint)gtk_range_get_value(range);
+        tool_options_set_color_picker_sample_radius(opts, v);
+        save_tool_options_to_settings(panel, TOOL_COLOR_PICKER);
+    }
+}
+
+/**
+ * Color picker: sample from (layer/image) toggled
+ */
+static void on_color_picker_sample_from_toggled(GtkToggleButton* button, gpointer user_data) {
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    if (!gtk_toggle_button_get_active(button)) {
+        return;
+    }
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_COLOR_PICKER);
+    if (!opts) {
+        return;
+    }
+    GtkWidget* layer_btn = (GtkWidget*)g_object_get_data(G_OBJECT(panel->color_picker_panel), "sample_layer_button");
+    GtkWidget* image_btn = (GtkWidget*)g_object_get_data(G_OBJECT(panel->color_picker_panel), "sample_image_button");
+    if (button == (GtkToggleButton*)layer_btn) {
+        tool_options_set_color_picker_sample_from_layer(opts, TRUE);
+        if (image_btn) {
+            g_signal_handlers_block_by_func(image_btn, G_CALLBACK(on_color_picker_sample_from_toggled), panel);
+            gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(image_btn), FALSE);
+            g_signal_handlers_unblock_by_func(image_btn, G_CALLBACK(on_color_picker_sample_from_toggled), panel);
+        }
+    } else if (button == (GtkToggleButton*)image_btn) {
+        tool_options_set_color_picker_sample_from_layer(opts, FALSE);
+        if (layer_btn) {
+            g_signal_handlers_block_by_func(layer_btn, G_CALLBACK(on_color_picker_sample_from_toggled), panel);
+            gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(layer_btn), FALSE);
+            g_signal_handlers_unblock_by_func(layer_btn, G_CALLBACK(on_color_picker_sample_from_toggled), panel);
+        }
+    }
+    save_tool_options_to_settings(panel, TOOL_COLOR_PICKER);
 }
 
 /**
@@ -983,6 +1074,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
     tool_opts_panel->eraser_panel = NULL;
     tool_opts_panel->pencil_panel = NULL;
     tool_opts_panel->paintbucket_panel = NULL;
+    tool_opts_panel->color_picker_panel = NULL;
     tool_opts_panel->rect_select_panel = NULL;
     tool_opts_panel->ellipse_select_panel = NULL;
     tool_opts_panel->move_panel = NULL;
@@ -1249,6 +1341,71 @@ ToolOptionsPanel* create_tool_options_panel(void) {
         }
     }
 
+    /* Load color picker panel from Glade */
+    GtkBuilder* color_picker_builder = gtk_builder_new();
+    GError* color_picker_error = NULL;
+    GtkWidget* color_picker_title = NULL;
+    GtkWidget* color_picker_sample_radius = NULL;
+    GtkWidget* color_picker_sample_layer = NULL;
+    GtkWidget* color_picker_sample_image = NULL;
+    GtkWidget* color_draw = NULL;
+    ToolOptions* color_picker_opts = tool_options_get_for_tool(TOOL_COLOR_PICKER);
+
+    if (gtk_builder_add_from_resource(color_picker_builder, "/ui/color_picker_options.glade", &color_picker_error)) {
+        tool_opts_panel->color_picker_panel = GTK_WIDGET(gtk_builder_get_object(color_picker_builder, "color_picker_options_panel"));
+        if (tool_opts_panel->color_picker_panel) {
+            gtk_container_add(GTK_CONTAINER(container), tool_opts_panel->color_picker_panel);
+
+            color_picker_title = GTK_WIDGET(gtk_builder_get_object(color_picker_builder, "color_picker_title_label"));
+            color_picker_sample_radius = GTK_WIDGET(gtk_builder_get_object(color_picker_builder, "sample_radius_scale"));
+            color_picker_sample_layer = GTK_WIDGET(gtk_builder_get_object(color_picker_builder, "sample_layer_button"));
+            color_picker_sample_image = GTK_WIDGET(gtk_builder_get_object(color_picker_builder, "sample_image_button"));
+            color_draw = GTK_WIDGET(gtk_builder_get_object(color_picker_builder, "color_draw"));
+
+            if (color_picker_title) {
+                g_object_set_data(G_OBJECT(tool_opts_panel->color_picker_panel), "title_label", color_picker_title);
+            }
+            if (color_draw) {
+                g_object_set_data(G_OBJECT(tool_opts_panel->color_picker_panel), "color_draw", color_draw);
+                g_signal_connect(color_draw, "draw", G_CALLBACK(on_color_draw_draw), NULL);
+            }
+            if (color_picker_sample_radius) {
+                g_object_set_data(G_OBJECT(tool_opts_panel->color_picker_panel), "sample_radius_scale", color_picker_sample_radius);
+                if (color_picker_opts) {
+                    set_scale_value(color_picker_sample_radius, (gdouble)color_picker_opts->color_picker_sample_radius);
+                    g_object_set_data(G_OBJECT(color_picker_sample_radius), "tool_options_panel", tool_opts_panel);
+                    g_signal_connect(color_picker_sample_radius, "value-changed", G_CALLBACK(on_color_picker_sample_radius_changed), NULL);
+                }
+            }
+            if (color_picker_sample_layer) {
+                g_object_set_data(G_OBJECT(tool_opts_panel->color_picker_panel), "sample_layer_button", color_picker_sample_layer);
+                g_signal_connect(color_picker_sample_layer, "toggled", G_CALLBACK(on_color_picker_sample_from_toggled), tool_opts_panel);
+            }
+            if (color_picker_sample_image) {
+                g_object_set_data(G_OBJECT(tool_opts_panel->color_picker_panel), "sample_image_button", color_picker_sample_image);
+                g_signal_connect(color_picker_sample_image, "toggled", G_CALLBACK(on_color_picker_sample_from_toggled), tool_opts_panel);
+            }
+            if (color_picker_opts) {
+                gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(color_picker_sample_layer), color_picker_opts->color_picker_sample_from_layer);
+                gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(color_picker_sample_image), !color_picker_opts->color_picker_sample_from_layer);
+            }
+
+            gtk_widget_set_visible(tool_opts_panel->color_picker_panel, FALSE);
+            gtk_widget_set_no_show_all(tool_opts_panel->color_picker_panel, TRUE);
+
+            add_spin_button_to_scale(color_picker_builder, "sample_radius_scale", "sample_radius_control_box");
+        }
+        g_object_unref(color_picker_builder);
+    } else {
+        g_warning("Failed to load color picker options panel: %s", color_picker_error ? color_picker_error->message : "Unknown error");
+        if (color_picker_error) {
+            g_error_free(color_picker_error);
+        }
+        if (color_picker_builder) {
+            g_object_unref(color_picker_builder);
+        }
+    }
+
     /* Load rectangular select panel from Glade */
     GtkBuilder* rect_select_builder = gtk_builder_new();
     GError* rect_select_error = NULL;
@@ -1507,6 +1664,8 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
         new_tool_type = TOOL_ELLIPSE_SELECT;
     } else if (g_strcmp0(tool_name, "Move") == 0) {
         new_tool_type = TOOL_MOVE;
+    } else if (g_strcmp0(tool_name, "Color Picker") == 0) {
+        new_tool_type = TOOL_COLOR_PICKER;
     } else if (g_strcmp0(tool_name, "Hand") == 0) {
         new_tool_type = TOOL_HAND;
     } else if (g_strcmp0(tool_name, "Zoom") == 0) {
@@ -1528,6 +1687,9 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
     }
     if (panel->paintbucket_panel) {
         gtk_widget_set_visible(panel->paintbucket_panel, FALSE);
+    }
+    if (panel->color_picker_panel) {
+        gtk_widget_set_visible(panel->color_picker_panel, FALSE);
     }
     if (panel->rect_select_panel) {
         gtk_widget_set_visible(panel->rect_select_panel, FALSE);
@@ -1910,6 +2072,43 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
                 g_signal_connect(widget, "toggled", G_CALLBACK(on_fill_antialiased_toggled), NULL);
             }
         }
+    } else if (new_tool_type == TOOL_COLOR_PICKER && panel->color_picker_panel) {
+        if (panel->panel) {
+            gtk_widget_set_visible(panel->panel, TRUE);
+        }
+        gtk_widget_set_no_show_all(panel->color_picker_panel, FALSE);
+        gtk_widget_set_visible(panel->color_picker_panel, TRUE);
+        gtk_widget_show_all(panel->color_picker_panel);
+
+        GtkWidget* widget;
+        ToolOptions* opts = tool_options_get_for_tool(TOOL_COLOR_PICKER);
+
+        widget = GTK_WIDGET(g_object_get_data(G_OBJECT(panel->color_picker_panel), "title_label"));
+        if (widget) {
+            panel->title_label = widget;
+        }
+
+        widget = GTK_WIDGET(g_object_get_data(G_OBJECT(panel->color_picker_panel), "sample_radius_scale"));
+        if (widget) {
+            if (opts) {
+                g_signal_handlers_block_by_func(widget, G_CALLBACK(on_color_picker_sample_radius_changed), NULL);
+                set_scale_value(widget, (gdouble)opts->color_picker_sample_radius);
+                g_signal_handlers_unblock_by_func(widget, G_CALLBACK(on_color_picker_sample_radius_changed), NULL);
+            }
+        }
+
+        widget = GTK_WIDGET(g_object_get_data(G_OBJECT(panel->color_picker_panel), "sample_layer_button"));
+        if (widget && opts) {
+            g_signal_handlers_block_by_func(widget, G_CALLBACK(on_color_picker_sample_from_toggled), panel);
+            gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widget), opts->color_picker_sample_from_layer);
+            g_signal_handlers_unblock_by_func(widget, G_CALLBACK(on_color_picker_sample_from_toggled), panel);
+        }
+        widget = GTK_WIDGET(g_object_get_data(G_OBJECT(panel->color_picker_panel), "sample_image_button"));
+        if (widget && opts) {
+            g_signal_handlers_block_by_func(widget, G_CALLBACK(on_color_picker_sample_from_toggled), panel);
+            gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widget), !opts->color_picker_sample_from_layer);
+            g_signal_handlers_unblock_by_func(widget, G_CALLBACK(on_color_picker_sample_from_toggled), panel);
+        }
     } else if (new_tool_type == TOOL_MOVE && panel->move_panel) {
         /* Show main panel container */
         if (panel->panel) {
@@ -1961,6 +2160,10 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
             gtk_widget_set_no_show_all(panel->paintbucket_panel, TRUE);
             gtk_widget_hide(panel->paintbucket_panel);
         }
+        if (panel->color_picker_panel) {
+            gtk_widget_set_no_show_all(panel->color_picker_panel, TRUE);
+            gtk_widget_hide(panel->color_picker_panel);
+        }
         if (panel->rect_select_panel) {
             gtk_widget_set_no_show_all(panel->rect_select_panel, TRUE);
             gtk_widget_hide(panel->rect_select_panel);
@@ -2009,6 +2212,26 @@ void tool_options_panel_set_combine_mode(ToolOptionsPanel* panel, SelectionCombi
     }
 
     update_combine_mode_buttons(panel, mode);
+}
+
+void tool_options_panel_set_color_picker_preview(ToolOptionsPanel* panel,
+                                                 gboolean has_color,
+                                                 gdouble r, gdouble g, gdouble b, gdouble a) {
+    g_color_picker_preview_has_color = has_color ? TRUE : FALSE;
+    g_color_picker_preview_r = r;
+    g_color_picker_preview_g = g;
+    g_color_picker_preview_b = b;
+    g_color_picker_preview_a = a;
+
+    if (!panel || !panel->color_picker_panel) {
+        return;
+    }
+    GtkWidget* color_draw = (GtkWidget*)g_object_get_data(G_OBJECT(panel->color_picker_panel), "color_draw");
+    if (color_draw) {
+        gtk_widget_queue_draw(color_draw);
+    }
+    /* Also queue the panel so the preview section redraws reliably */
+    gtk_widget_queue_draw(panel->color_picker_panel);
 }
 
 /**

@@ -345,6 +345,7 @@ GtkWidget* tools_panel_initialize_from_builder(GtkBuilder* builder, ToolRegistry
         "tool_button_hand",
         "tool_button_zoom",
         "tool_button_move",
+        "tool_button_color_picker",
         "tool_button_pencil",
         "tool_button_brush",
         "tool_button_eraser",
@@ -357,6 +358,7 @@ GtkWidget* tools_panel_initialize_from_builder(GtkBuilder* builder, ToolRegistry
         TOOL_HAND,
         TOOL_ZOOM,
         TOOL_MOVE,
+        TOOL_COLOR_PICKER,
         TOOL_PENCIL,
         TOOL_BRUSH,
         TOOL_ERASER,
@@ -390,6 +392,7 @@ GtkWidget* tools_panel_initialize_from_builder(GtkBuilder* builder, ToolRegistry
                 "/icons/tool-hand.png",
                 "/icons/tool-zoom.png",
                 "/icons/tool-move.png",
+                "/icons/tool-colorpicker.png",
                 "/icons/tool-pencil.png",
                 "/icons/tool-paintbrush.png",
                 "/icons/tool-eraser.png",
@@ -397,7 +400,7 @@ GtkWidget* tools_panel_initialize_from_builder(GtkBuilder* builder, ToolRegistry
                 "/icons/tool-rect-select.png",
                 "/icons/tool-elliptical-select.png",
             };
-            if (i < TOOL_COUNT) {
+            if (i < (int)(sizeof(icon_resources) / sizeof(icon_resources[0]))) {
                 GError* error = NULL;
                 GdkPixbuf* pixbuf = gdk_pixbuf_new_from_resource(icon_resources[i], &error);
                 if (pixbuf) {
@@ -560,6 +563,10 @@ gboolean tools_panel_on_window_key_press(GtkWidget* widget, GdkEventKey* event, 
         case GDK_KEY_b:
         case GDK_KEY_B:
             tool_to_activate = TOOL_BRUSH;
+            break;
+        case GDK_KEY_i:
+        case GDK_KEY_I:
+            tool_to_activate = TOOL_COLOR_PICKER;
             break;
         case GDK_KEY_f:
         case GDK_KEY_F:

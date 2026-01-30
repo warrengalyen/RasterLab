@@ -1,6 +1,7 @@
 #include "tool_manager.h"
 #include "tool_options.h"
 #include "tools/tool_brush.h"
+#include "tools/tool_colorpicker.h"
 #include "tools/tool_ellipse_select.h"
 #include "tools/tool_eraser.h"
 #include "tools/tool_fill.h"
@@ -87,6 +88,13 @@ gboolean tool_manager_init_defaults(ToolRegistry* registry) {
         return FALSE;
     }
     tool_manager_register(registry, tool, TOOL_PAINT_BUCKET);
+
+    /* Create Color Picker tool */
+    tool = tool_colorpicker_create();
+    if (!tool) {
+        return FALSE;
+    }
+    tool_manager_register(registry, tool, TOOL_COLOR_PICKER);
 
     /* Create Rectangular Selection tool */
     tool = tool_rect_select_create();

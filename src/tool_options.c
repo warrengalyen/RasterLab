@@ -47,6 +47,10 @@ ToolOptions* tool_options_new(void) {
     /* Initialize move tool options */
     opts->move_auto_select_layer = TRUE; /* Default: auto-select enabled */
 
+    /* Initialize color picker tool options */
+    opts->color_picker_sample_radius = 0;      /* Default: single pixel */
+    opts->color_picker_sample_from_layer = TRUE; /* Default: sample from layer */
+
     return opts;
 }
 
@@ -339,6 +343,46 @@ gboolean tool_options_get_move_auto_select(ToolOptions* opts) {
         return TRUE; /* Default to auto-select enabled */
     }
     return opts->move_auto_select_layer;
+}
+
+/**
+ * Set color picker sample radius (0–100)
+ */
+void tool_options_set_color_picker_sample_radius(ToolOptions* opts, gint radius) {
+    if (!opts) {
+        return;
+    }
+    opts->color_picker_sample_radius = (radius < 0) ? 0 : ((radius > 100) ? 100 : radius);
+}
+
+/**
+ * Get color picker sample radius
+ */
+gint tool_options_get_color_picker_sample_radius(ToolOptions* opts) {
+    if (!opts) {
+        return 0;
+    }
+    return opts->color_picker_sample_radius;
+}
+
+/**
+ * Set color picker sample from (TRUE = layer, FALSE = image)
+ */
+void tool_options_set_color_picker_sample_from_layer(ToolOptions* opts, gboolean from_layer) {
+    if (!opts) {
+        return;
+    }
+    opts->color_picker_sample_from_layer = from_layer ? TRUE : FALSE;
+}
+
+/**
+ * Get color picker sample from (TRUE = layer, FALSE = image)
+ */
+gboolean tool_options_get_color_picker_sample_from_layer(ToolOptions* opts) {
+    if (!opts) {
+        return TRUE;
+    }
+    return opts->color_picker_sample_from_layer;
 }
 
 /**

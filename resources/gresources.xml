@@ -4,6 +4,7 @@
     <file preprocess="to-pixdata">icons/tool-hand.png</file>
     <file preprocess="to-pixdata">icons/tool-zoom.png</file>
     <file preprocess="to-pixdata">icons/tool-move.png</file>
+    <file preprocess="to-pixdata">icons/tool-colorpicker.png</file>
     <file preprocess="to-pixdata">icons/tool-pencil.png</file>
     <file preprocess="to-pixdata">icons/tool-paintbrush.png</file>
     <file preprocess="to-pixdata">icons/tool-eraser.png</file>
@@ -55,6 +56,7 @@
     <file>cursors/paintbucket_cursor.cur</file>
     <file>cursors/hand_up_cursor.cur</file>
     <file>cursors/hand_down_cursor.cur</file>
+    <file>cursors/colorpicker_cursor.cur</file>
     <file>ui/layers_panel.glade</file>
     <file>ui/swatches_panel.glade</file>
     <file>ui/brush_options.glade</file>
@@ -63,6 +65,7 @@
     <file>ui/paintbucket_options.glade</file>
     <file>ui/rect_select_options.glade</file>
     <file>ui/elliptical_select_options.glade</file>
+    <file>ui/color_picker_options.glade</file>
     <file>ui/move_options.glade</file>
     <file>ui/new_image_dialog.glade</file>
     <file>ui/new_layer_dialog.glade</file>
