@@ -53,6 +53,18 @@ static bool can_load_cut(const char* filename, const uint8_t* header, size_t hea
         return false;
     }
 
+    /* Reject known magic numbers so we don't claim other formats (e.g. EXR) */
+    if (header_size >= 4) {
+        /* OpenEXR magic: 0x01 0x31 0x2f 0x76 */
+        if (header[0] == 0x01 && header[1] == 0x31 && header[2] == 0x2f && header[3] == 0x76)
+            return false;
+        /* PNG, JPEG, etc. have distinct signatures */
+        if (header[0] == 0x89 && header[1] == 'P' && header[2] == 'N' && header[3] == 'G')
+            return false;
+        if (header[0] == 0xFF && header[1] == 0xD8)
+            return false;
+    }
+
     /* CUT files have a simple 6-byte header: width, height, reserved */
     /* We can't verify much from just the header, but check that reserved is 0 */
     if (header_size >= 6) {
