@@ -15,6 +15,9 @@
 #include <glib/gstdio.h>
 #include <stdio.h>
 
+/* Header probe size for format detection (must be >= 132 for DICOM) */
+#define FILE_HEADER_PROBE_SIZE 256
+
 /**
  * Callback for activating a recent file
  */
@@ -23,7 +26,7 @@ void on_recent_file_activate(GtkMenuItem* menu_item, gpointer user_data) {
     AppContext* ctx = (AppContext*)user_data;
     gchar* file_path = (gchar*)g_object_get_data(G_OBJECT(menu_item), "recent_file_path");
     FormatHandler* handler;
-    uint8_t header[64];
+    uint8_t header[FILE_HEADER_PROBE_SIZE];
     size_t header_size = 0;
     FILE* file;
 
@@ -287,7 +290,7 @@ void ui_update_recent_files_menu(AppContext* ctx) {
         RecentFile* rf = (RecentFile*)iter->data;
         FormatHandler* handler;
         gchar* basename;
-        uint8_t header[64];
+        uint8_t header[FILE_HEADER_PROBE_SIZE];
         size_t header_size = 0;
         FILE* file;
         gboolean file_exists;
@@ -428,7 +431,7 @@ void on_file_open_response(GtkNativeDialog* dialog, gint response_id, gpointer u
         if (file_path) {
             /* Check if a plugin can handle this file format */
             FormatHandler* handler = NULL;
-            uint8_t header[64];
+            uint8_t header[FILE_HEADER_PROBE_SIZE];
             size_t header_size = 0;
             FILE* file = g_fopen(file_path, "rb");
             if (file) {

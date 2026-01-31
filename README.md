@@ -22,6 +22,7 @@ A full-featured image editor written in C.
 | DEEP — TVPaint IFF DEEP Image | `.deep` | Read only | RGB, RGBA |
 | HDR — Radiance RGBE | `.hdr`, `.rgbe`, `.zyze`, `.pic` | Read only | HDR RGB (no alpha) |
 | FITS — Flexible Image Transport System | `.fits`, `.fit`, `.fts` | Read only | HDR / grayscale (scientific) |
+| DICOM — Digital Imaging and Communications in Medicine | `.dcm`, `.dicom` | Read only | Grayscale, RGB, palette, YBR; RLE/JPEG compressed; multi-frame (as layers) |
 
 ## Features
 

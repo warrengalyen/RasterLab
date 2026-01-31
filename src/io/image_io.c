@@ -57,6 +57,8 @@ const char* image_io_get_error_message(PluginError error, const char* filename) 
             return "Out of memory. The file is too large to load.";
         case PLUGIN_ERROR_UNSUPPORTED_FEATURE:
             return "Unsupported feature. The file uses features that are not supported.";
+        case PLUGIN_ERROR_UNSUPPORTED_COMPRESSION:
+            return "JPEG compression is not supported.";
         case PLUGIN_ERROR_UNKNOWN:
         default:
             return "An unknown error occurred while loading the file.";
@@ -68,9 +70,12 @@ const char* image_io_get_error_message(PluginError error, const char* filename) 
  * Returns TRUE on success, FALSE on failure.
  * If error_out is provided, it will be set to the plugin error code.
  */
+/* Header probe size: must be at least 132 for DICOM (128-byte preamble + "DICM") */
+#define IMAGE_IO_HEADER_PROBE_SIZE 256
+
 gboolean image_io_load(ImageDocument* doc, const char* filename, PluginError* error_out) {
     FormatHandler* handler;
-    uint8_t header[64];
+    uint8_t header[IMAGE_IO_HEADER_PROBE_SIZE];
     size_t header_size = 0;
     PluginError error = PLUGIN_ERROR_NONE;
 

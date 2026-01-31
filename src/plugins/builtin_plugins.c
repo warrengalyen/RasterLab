@@ -18,6 +18,7 @@
 #include "plugins/plugin_xpm.h"
 #include "plugins/plugin_hdr.h"
 #include "plugins/plugin_fits.h"
+#include "plugins/plugin_dicom.h"
 #include <glib.h>
 
 /**
@@ -42,6 +43,7 @@ void builtin_plugins_register(void) {
     ImageFormatPlugin tiff_plugin;
     ImageFormatPlugin hdr_plugin;
     ImageFormatPlugin fits_plugin;
+    ImageFormatPlugin dicom_plugin;
 
     /* Register PNG plugin (using libpng) */
 #ifdef HAVE_LIBPNG
@@ -249,5 +251,17 @@ void builtin_plugins_register(void) {
         }
     } else {
         g_message("Failed to initialize FITS plugin");
+    }
+
+    /* Register DICOM plugin */
+    g_message("Registering built-in DICOM plugin");
+    if (plugin_init_dicom(host_api, &dicom_plugin)) {
+        if (format_registry_register_builtin(&dicom_plugin)) {
+            g_message("Successfully registered DICOM plugin");
+        } else {
+            g_message("Failed to register DICOM plugin with format registry");
+        }
+    } else {
+        g_message("Failed to initialize DICOM plugin");
     }
 }
