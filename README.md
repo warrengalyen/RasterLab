@@ -2,11 +2,32 @@
 
 A full-featured image editor written in C.
 
+## Supported File Formats
+
+| Format | Extensions | Read/Write | Color / notes |
+|--------|------------|------------|----------------|
+| PNG — Portable Network Graphic | `.png` | Read, Write | RGB, RGBA |
+| JPEG — Joint Photographic Experts Group | `.jpg`, `.jpeg` | Read, Write | RGB only (no alpha) |
+| BMP — Windows Bitmap | `.bmp` | Read, Write | RGB, RGBA |
+| WebP — Google WebP Image | `.webp` | Read, Write | RGB, RGBA; animated (read as layers, save static only) |
+| TIFF — Tagged Image File Format | `.tif`, `.tiff` | Read, Write | RGB, RGBA |
+| Netpbm — Portable Pixmap/Graymap/Bitmap/Arbitrary | `.ppm`, `.pgm`, `.pbm`, `.pam`, `.pnm` | Read only | PBM (1-bit), PGM (grayscale), PPM (RGB), PAM (RGBA) |
+| TGA — True Vision Targa | `.tga` | Read only | RGB, RGBA |
+| SGI — Silicon Graphics Image | `.rgb`, `.rgba`, `.sgi`, `.bw`, `.int`, `.inta` | Read only | RGB, RGBA, grayscale |
+| RAS — Sun Raster Image | `.ras`, `.sun` | Read only | RGB, RGBA |
+| PCX — ZSoft Paintbrush | `.pcx` | Read only | RGB (no alpha) |
+| XPM — X PixMap | `.xpm` | Read only | RGB, RGBA (indexed) |
+| XBM — X Bitmap | `.xbm`, `.h` | Read only | 1-bit monochrome |
+| CUT — Dr. Halo | `.cut` | Read only | RGB (no alpha) |
+| DEEP — TVPaint IFF DEEP Image | `.deep` | Read only | RGB, RGBA |
+| HDR — Radiance RGBE | `.hdr`, `.rgbe`, `.zyze`, `.pic` | Read only | HDR RGB (no alpha) |
+| FITS — Flexible Image Transport System | `.fits`, `.fit`, `.fts` | Read only | HDR / grayscale (scientific) |
+
 ## Features
 
 ### File Operations
 
-- Open and save images (PNG, JPEG, BMP)
+- Open and save images in the formats listed above
 - Multi-document support with tabbed interface
 - Autosave functionality
 - Recent files tracking
