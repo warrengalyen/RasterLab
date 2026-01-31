@@ -57,7 +57,7 @@ static bool can_load_fits(const char* filename, const uint8_t* header, size_t he
     }
 
     /* FITS files start with "SIMPLE" or "XTENSION" in first 8 characters */
-    if (strncmp((const char*)header, "SIMPLE", 6) == 0 || 
+    if (strncmp((const char*)header, "SIMPLE", 6) == 0 ||
         strncmp((const char*)header, "XTENSION", 8) == 0) {
         return true;
     }
@@ -381,12 +381,12 @@ static bool read_fits_header(FILE* file, FitsHeader* header, bool* is_extension)
         g_warning("FITS plugin: Missing NAXIS keyword");
         return false;
     }
-    
+
     /* If NAXIS = 0, this is an empty HDU - we need to skip to an extension */
     if (naxis == 0) {
         return false; /* Signal to caller to skip to next HDU */
     }
-    
+
     /* For image HDUs, we need NAXIS1 and NAXIS2 */
     if (naxis >= 1 && !found_naxis1) {
         g_warning("FITS plugin: Missing NAXIS1 keyword");
@@ -454,6 +454,14 @@ static uint8_t fits_to_8bit(double value, double min_val, double max_val) {
     return (uint8_t)(normalized * 255.0);
 }
 
+static inline uint8_t clamp_u8(int v) {
+    if (v < 0)
+        return 0;
+    if (v > 255)
+        return 255;
+    return (uint8_t)v;
+}
+
 /**
  * Load FITS image
  */
@@ -466,91 +474,105 @@ static PluginError load_fits(ImageDocument* doc, const char* filename) {
     guchar* surface_data;
     int surface_stride;
     bool needs_byte_swap;
+
     double min_val = 0.0, max_val = 0.0;
     bool min_max_calculated = false;
+
+    /* Per-channel min/max for RGB (only used when we must normalize RGB) */
+    double rgb_min[3] = {0.0, 0.0, 0.0};
+    double rgb_max[3] = {0.0, 0.0, 0.0};
+    bool rgb_min_max_calculated = false;
 
     if (!doc || !filename) {
         return PLUGIN_ERROR_INVALID_PARAMETERS;
     }
 
-    /* Open FITS file */
     infile = g_fopen(filename, "rb");
     if (!infile) {
         return PLUGIN_ERROR_FILE_NOT_FOUND;
     }
 
     /* Read FITS header - try primary HDU first, then extensions if needed */
-    bool is_extension = false;
-    bool header_found = false;
-    int hdu_count = 0;
-    const int max_hdus = 10; /* Limit number of HDUs to check */
-    
-    while (!header_found && hdu_count < max_hdus) {
-        long hdu_start = ftell(infile);
-        
-        bool header_parsed = read_fits_header(infile, &header, &is_extension);
-        
-        if (!header_parsed) {
-            /* Header parsing failed - could be empty HDU (NAXIS=0) or parse error */
-            /* read_fits_header already positioned us at end of header block */
-            /* For empty HDUs (NAXIS=0), there's no data to skip, so we're ready for next HDU */
-            if (hdu_count > 0) {
-                g_warning("FITS plugin: Failed to parse header from %s (HDU %d)", filename, hdu_count);
-                fclose(infile);
-                return PLUGIN_ERROR_CORRUPT_FILE;
+    {
+        bool is_extension = false;
+        bool header_found = false;
+        int hdu_count = 0;
+        const int max_hdus = 10;
+
+        while (!header_found && hdu_count < max_hdus) {
+            bool header_parsed = read_fits_header(infile, &header, &is_extension);
+
+            if (!header_parsed) {
+                /* If we fail after the first HDU, treat as corrupt */
+                if (hdu_count > 0) {
+                    g_warning("FITS plugin: Failed to parse header from %s (HDU %d)", filename, hdu_count);
+                    fclose(infile);
+                    return PLUGIN_ERROR_CORRUPT_FILE;
+                }
+                hdu_count++;
+                continue;
             }
-            hdu_count++;
-            continue;
-        }
-        
-        /* Check if this HDU has image data (NAXIS > 0 and NAXIS1/NAXIS2 found) */
-        if (header.naxis > 0 && header.naxis1 > 0 && header.naxis2 > 0) {
-            header_found = true;
-        } else {
-            /* This HDU doesn't have image data, skip to next */
-            long pos = ftell(infile);
-            long block_end = ((pos + FITS_BLOCK_SIZE - 1) / FITS_BLOCK_SIZE) * FITS_BLOCK_SIZE;
-            fseek(infile, block_end, SEEK_SET);
-            
-            /* Calculate data size if there was any */
-            if (header.naxis > 0) {
-                size_t pixel_count = 1;
-                for (int i = 1; i <= header.naxis; i++) {
-                    int32_t naxis_val = 0;
-                    if (i == 1) naxis_val = header.naxis1;
-                    else if (i == 2) naxis_val = header.naxis2;
-                    else if (i == 3) naxis_val = header.naxis3;
-                    if (naxis_val > 0) {
-                        pixel_count *= (size_t)naxis_val;
+
+            if (header.naxis > 0 && header.naxis1 > 0 && header.naxis2 > 0) {
+                header_found = true;
+            } else {
+                /* This HDU doesn't have image data, skip to next */
+                long pos = ftell(infile);
+                long block_end = ((pos + FITS_BLOCK_SIZE - 1) / FITS_BLOCK_SIZE) * FITS_BLOCK_SIZE;
+                fseek(infile, block_end, SEEK_SET);
+
+                if (header.naxis > 0) {
+                    size_t pixel_count = 1;
+                    int i;
+
+                    for (i = 1; i <= header.naxis; i++) {
+                        int32_t naxis_val = 0;
+                        if (i == 1)
+                            naxis_val = header.naxis1;
+                        else if (i == 2)
+                            naxis_val = header.naxis2;
+                        else if (i == 3)
+                            naxis_val = header.naxis3;
+
+                        if (naxis_val > 0) {
+                            pixel_count *= (size_t)naxis_val;
+                        }
+                    }
+
+                    {
+                        size_t bytes_per_pixel = (size_t)(abs(header.bitpix) / 8);
+                        size_t data_size;
+                        long data_end;
+
+                        if (bytes_per_pixel == 0) {
+                            bytes_per_pixel = 1;
+                        }
+
+                        data_size = pixel_count * bytes_per_pixel;
+                        data_end = (long)(((data_size + FITS_BLOCK_SIZE - 1) / FITS_BLOCK_SIZE) * FITS_BLOCK_SIZE);
+                        fseek(infile, data_end, SEEK_CUR);
                     }
                 }
-                size_t bytes_per_pixel = abs(header.bitpix) / 8;
-                if (bytes_per_pixel == 0) bytes_per_pixel = 1;
-                size_t data_size = pixel_count * bytes_per_pixel;
-                long data_end = ((data_size + FITS_BLOCK_SIZE - 1) / FITS_BLOCK_SIZE) * FITS_BLOCK_SIZE;
-                fseek(infile, data_end, SEEK_CUR);
+
+                hdu_count++;
             }
-            
-            hdu_count++;
+        }
+
+        if (!header_found) {
+            g_warning("FITS plugin: No image data found in any HDU in %s", filename);
+            fclose(infile);
+            return PLUGIN_ERROR_CORRUPT_FILE;
         }
     }
-    
-    if (!header_found) {
-        g_warning("FITS plugin: No image data found in any HDU in %s", filename);
-        fclose(infile);
-        return PLUGIN_ERROR_CORRUPT_FILE;
-    }
 
-
-    /* Determine if byte swapping is needed */
     needs_byte_swap = (header.is_big_endian != is_big_endian());
 
     /* Set document metadata */
     doc->width = (uint32_t)header.naxis1;
     doc->height = (uint32_t)header.naxis2;
-    doc->channels = 4; /* Always RGBA internally */
+    doc->channels = 4;
     doc->bit_depth = 8;
-    doc->has_alpha = false; /* FITS doesn't support alpha */
+    doc->has_alpha = false;
 
     /* Free old layers */
     for (GList* iter = doc->layers; iter; iter = iter->next) {
@@ -567,7 +589,6 @@ static PluginError load_fits(ImageDocument* doc, const char* filename) {
         return PLUGIN_ERROR_OUT_OF_MEMORY;
     }
 
-    /* Get surface data */
     temp_surface = base_layer->surface;
     if (!temp_surface) {
         layer_free(base_layer);
@@ -585,228 +606,376 @@ static PluginError load_fits(ImageDocument* doc, const char* filename) {
         return PLUGIN_ERROR_OUT_OF_MEMORY;
     }
 
-    /* Calculate data size */
-    size_t pixel_count = (size_t)header.naxis1 * (size_t)header.naxis2;
-    size_t bytes_per_pixel = 0;
+    /* Determine layout and allocation sizes */
+    {
+        const bool is_rgb_3d = (header.naxis == 3 && header.naxis3 == 3);
+        const size_t plane_pixels = (size_t)header.naxis1 * (size_t)header.naxis2;
+        const size_t pixel_count = is_rgb_3d ? (plane_pixels * 3u) : plane_pixels;
 
-    switch (header.bitpix) {
-        case FITS_BITPIX_INT8:
-        case -8: /* Our flag for unsigned 8-bit */
-            bytes_per_pixel = 1;
-            break;
-        case FITS_BITPIX_INT16:
-            bytes_per_pixel = 2;
-            break;
-        case FITS_BITPIX_INT32:
-            bytes_per_pixel = 4;
-            break;
-        case FITS_BITPIX_FLOAT32:
-            bytes_per_pixel = 4;
-            break;
-        default:
+        size_t bytes_per_pixel = 0;
+        size_t data_size;
+
+        switch (header.bitpix) {
+            case FITS_BITPIX_INT8:
+            case -8: /* your unsigned-flag */
+                bytes_per_pixel = 1;
+                break;
+            case FITS_BITPIX_INT16:
+                bytes_per_pixel = 2;
+                break;
+            case FITS_BITPIX_INT32:
+            case FITS_BITPIX_FLOAT32:
+                bytes_per_pixel = 4;
+                break;
+            default:
+                layer_free(base_layer);
+                fclose(infile);
+                return PLUGIN_ERROR_UNSUPPORTED_FORMAT;
+        }
+
+        data_size = pixel_count * bytes_per_pixel;
+        image_data = (uint8_t*)g_malloc(data_size);
+        if (!image_data) {
             layer_free(base_layer);
             fclose(infile);
-            return PLUGIN_ERROR_UNSUPPORTED_FORMAT;
-    }
-
-    size_t data_size = pixel_count * bytes_per_pixel;
-    image_data = g_malloc(data_size);
-    if (!image_data) {
-        layer_free(base_layer);
-        fclose(infile);
-        return PLUGIN_ERROR_OUT_OF_MEMORY;
-    }
-
-    /* Read image data */
-    if (fread(image_data, 1, data_size, infile) != data_size) {
-        g_free(image_data);
-        layer_free(base_layer);
-        fclose(infile);
-        return PLUGIN_ERROR_FILE_READ_ERROR;
-    }
-
-    /* Swap bytes if needed (FITS is big-endian, swap if system is little-endian) */
-    if (needs_byte_swap && bytes_per_pixel > 1) {
-        uint8_t* bytes = (uint8_t*)image_data;
-        for (size_t i = 0; i < pixel_count; i++) {
-            if (bytes_per_pixel == 2) {
-                /* 16-bit swap */
-                uint8_t tmp = bytes[i * 2];
-                bytes[i * 2] = bytes[i * 2 + 1];
-                bytes[i * 2 + 1] = tmp;
-            } else if (bytes_per_pixel == 4) {
-                /* 32-bit swap */
-                uint8_t tmp0 = bytes[i * 4];
-                uint8_t tmp1 = bytes[i * 4 + 1];
-                bytes[i * 4] = bytes[i * 4 + 3];
-                bytes[i * 4 + 1] = bytes[i * 4 + 2];
-                bytes[i * 4 + 2] = tmp1;
-                bytes[i * 4 + 3] = tmp0;
-            }
+            return PLUGIN_ERROR_OUT_OF_MEMORY;
         }
-    }
 
-    /* Calculate min/max for normalization (first pass) */
-    if (!min_max_calculated) {
-        min_val = DBL_MAX;
-        max_val = -DBL_MAX;
+        if (fread(image_data, 1, data_size, infile) != data_size) {
+            g_free(image_data);
+            layer_free(base_layer);
+            fclose(infile);
+            return PLUGIN_ERROR_FILE_READ_ERROR;
+        }
 
-        for (size_t i = 0; i < pixel_count; i++) {
-            double value = 0.0;
+        /* Swap bytes if needed */
+        if (needs_byte_swap && bytes_per_pixel > 1) {
+            uint8_t* bytes = (uint8_t*)image_data;
+            size_t i;
 
-            switch (header.bitpix) {
-                case FITS_BITPIX_INT8: {
-                    /* For 8-bit, read as byte - will check later if it's unsigned */
-                    uint8_t* data = (uint8_t*)image_data;
-                    int8_t signed_val = (int8_t)data[i];
-                    value = (double)signed_val;
-                    break;
+            for (i = 0; i < pixel_count; i++) {
+                if (bytes_per_pixel == 2) {
+                    uint8_t tmp = bytes[i * 2];
+                    bytes[i * 2] = bytes[i * 2 + 1];
+                    bytes[i * 2 + 1] = tmp;
+                } else if (bytes_per_pixel == 4) {
+                    uint8_t tmp0 = bytes[i * 4];
+                    uint8_t tmp1 = bytes[i * 4 + 1];
+                    bytes[i * 4] = bytes[i * 4 + 3];
+                    bytes[i * 4 + 1] = bytes[i * 4 + 2];
+                    bytes[i * 4 + 2] = tmp1;
+                    bytes[i * 4 + 3] = tmp0;
                 }
-                case FITS_BITPIX_INT16: {
-                    int16_t* data = (int16_t*)image_data;
-                    value = (double)data[i];
-                    break;
-                }
-                case FITS_BITPIX_INT32: {
-                    int32_t* data = (int32_t*)image_data;
-                    value = (double)data[i];
-                    break;
-                }
-                case FITS_BITPIX_FLOAT32: {
-                    float* data = (float*)image_data;
-                    value = (double)data[i];
-                    break;
-                }
-            }
-
-            /* Apply BSCALE and BZERO (defaults: BSCALE=1.0, BZERO=0.0) */
-            value = value * header.bscale + header.bzero;
-
-            if (value < min_val) {
-                min_val = value;
-            }
-            if (value > max_val) {
-                max_val = value;
             }
         }
 
-        min_max_calculated = true;
-        
-        /* For 8-bit signed data, check if it might actually be unsigned */
-        /* Many FITS files use BITPIX=8 but store unsigned data (0-255) as signed bytes */
-        /* If we see values >= 128 interpreted as negative, the data is likely unsigned */
-        if (header.bitpix == FITS_BITPIX_INT8 && min_val < 0 && max_val <= 127) {
-            /* Sample pixels to see if negative values represent unsigned data */
-            int negative_count = 0;
-            int high_byte_count = 0; /* Count bytes >= 0x80 (128) */
-            for (size_t i = 0; i < pixel_count && i < 1000; i++) {
-                uint8_t* data = (uint8_t*)image_data;
-                uint8_t byte_val = data[i];
-                int8_t signed_val = (int8_t)byte_val;
-                if (signed_val < 0) negative_count++;
-                if (byte_val >= 0x80) high_byte_count++;
-            }
-            
-            /* If we have many high bytes (>=128), the data is likely unsigned */
-            /* In that case, we should treat it as unsigned: value = byte_val (0-255) */
-            if (high_byte_count > negative_count * 0.5) {
-                /* Recalculate min/max treating data as unsigned */
-                min_val = DBL_MAX;
-                max_val = -DBL_MAX;
-                for (size_t i = 0; i < pixel_count; i++) {
-                    uint8_t* data = (uint8_t*)image_data;
-                    double unsigned_value = (double)data[i]; /* Treat as unsigned 0-255 */
-                    unsigned_value = unsigned_value * header.bscale + header.bzero;
-                    if (unsigned_value < min_val) min_val = unsigned_value;
-                    if (unsigned_value > max_val) max_val = unsigned_value;
+        /* ------------------------------------------------------------
+         * Min/max calculation
+         * ------------------------------------------------------------ */
+
+        if (is_rgb_3d) {
+            /* RGB cube: never compute a single global min/max across all channels.
+             * Use direct copy for common 8-bit display RGB (BSCALE=1, BZERO=0).
+             * Otherwise compute per-channel min/max for normalization.
+             */
+            const bool rgb_direct =
+                ((header.bitpix == FITS_BITPIX_INT8 || header.bitpix == -8) &&
+                 header.bscale == 1.0 && header.bzero == 0.0);
+
+            if (!rgb_direct) {
+                size_t p;
+
+                rgb_min[0] = DBL_MAX;
+                rgb_max[0] = -DBL_MAX;
+                rgb_min[1] = DBL_MAX;
+                rgb_max[1] = -DBL_MAX;
+                rgb_min[2] = DBL_MAX;
+                rgb_max[2] = -DBL_MAX;
+
+                for (p = 0; p < plane_pixels; p++) {
+                    double vr = 0.0, vg = 0.0, vb = 0.0;
+
+                    if (header.bitpix == FITS_BITPIX_INT8 || header.bitpix == -8) {
+                        uint8_t* d = (uint8_t*)image_data;
+
+                        if (header.bitpix == -8) {
+                            vr = (double)d[p] * header.bscale + header.bzero;
+                            vg = (double)d[plane_pixels + p] * header.bscale + header.bzero;
+                            vb = (double)d[2 * plane_pixels + p] * header.bscale + header.bzero;
+                        } else {
+                            vr = (double)(int8_t)d[p] * header.bscale + header.bzero;
+                            vg = (double)(int8_t)d[plane_pixels + p] * header.bscale + header.bzero;
+                            vb = (double)(int8_t)d[2 * plane_pixels + p] * header.bscale + header.bzero;
+                        }
+                    } else if (header.bitpix == FITS_BITPIX_INT16) {
+                        int16_t* d = (int16_t*)image_data;
+                        vr = (double)d[p] * header.bscale + header.bzero;
+                        vg = (double)d[plane_pixels + p] * header.bscale + header.bzero;
+                        vb = (double)d[2 * plane_pixels + p] * header.bscale + header.bzero;
+                    } else if (header.bitpix == FITS_BITPIX_INT32) {
+                        int32_t* d = (int32_t*)image_data;
+                        vr = (double)d[p] * header.bscale + header.bzero;
+                        vg = (double)d[plane_pixels + p] * header.bscale + header.bzero;
+                        vb = (double)d[2 * plane_pixels + p] * header.bscale + header.bzero;
+                    } else {
+                        float* d = (float*)image_data;
+                        vr = (double)d[p] * header.bscale + header.bzero;
+                        vg = (double)d[plane_pixels + p] * header.bscale + header.bzero;
+                        vb = (double)d[2 * plane_pixels + p] * header.bscale + header.bzero;
+                    }
+
+                    if (vr < rgb_min[0])
+                        rgb_min[0] = vr;
+                    if (vr > rgb_max[0])
+                        rgb_max[0] = vr;
+
+                    if (vg < rgb_min[1])
+                        rgb_min[1] = vg;
+                    if (vg > rgb_max[1])
+                        rgb_max[1] = vg;
+
+                    if (vb < rgb_min[2])
+                        rgb_min[2] = vb;
+                    if (vb > rgb_max[2])
+                        rgb_max[2] = vb;
                 }
-                /* Mark that we should use unsigned interpretation */
-                header.bitpix = -8; /* Use negative value as flag for unsigned 8-bit */
-            }
-        }
-    }
 
-    /* Convert to ARGB32 format (second pass) */
-    /* FITS stores data in row-major order. The first pixel (1,1) is at lower-left in */
-    /* astronomical convention. When reading as an array, the first row (y=0) corresponds */
-    /* to the bottom of the image. We need to flip vertically so the first row is at the top. */
-    for (uint32_t y = 0; y < doc->height; y++) {
-        guchar* row = surface_data + y * surface_stride;
-        /* FITS: row 0 is at bottom, so we read from top row (height - 1 - y) */
-        uint32_t fits_y = doc->height - 1 - y;
-        for (uint32_t x = 0; x < doc->width; x++) {
-            /* FITS data is stored row-major: row fits_y, column x */
-            /* Index calculation: row fits_y starts at fits_y * naxis1, then add column x */
-            size_t idx = (size_t)fits_y * (size_t)header.naxis1 + (size_t)x;
-            
-            /* Bounds check */
-            if (idx >= pixel_count) {
-                g_warning("FITS plugin: Pixel index %zu out of bounds (max %zu) at [%u,%u]", 
-                          idx, pixel_count, x, y);
-                row[x * 4 + 0] = 0; /* B */
-                row[x * 4 + 1] = 0; /* G */
-                row[x * 4 + 2] = 0; /* R */
-                row[x * 4 + 3] = 255; /* A */
-                continue;
+                rgb_min_max_calculated = true;
             }
-            double value = 0.0;
+        } else {
+            /* Grayscale: keep your existing behavior: global min/max for the plane */
+            size_t i;
 
-            switch (header.bitpix) {
-                case FITS_BITPIX_INT8:
-                case -8: { /* -8 is our flag for unsigned 8-bit stored as signed */
-                    uint8_t* data = (uint8_t*)image_data;
-                    uint8_t byte_val = data[idx];
+            min_val = DBL_MAX;
+            max_val = -DBL_MAX;
+
+            for (i = 0; i < plane_pixels; i++) {
+                double value = 0.0;
+
+                if (header.bitpix == FITS_BITPIX_INT8 || header.bitpix == -8) {
+                    uint8_t* d = (uint8_t*)image_data;
+                    uint8_t byte_val = d[i];
+
                     if (header.bitpix == -8) {
-                        /* Treat as unsigned 8-bit (0-255) */
                         value = (double)byte_val;
                     } else {
-                        /* Treat as signed 8-bit (-128 to 127) */
-                        int8_t signed_val = (int8_t)byte_val;
-                        value = (double)signed_val;
+                        value = (double)(int8_t)byte_val;
                     }
-                    break;
+                } else if (header.bitpix == FITS_BITPIX_INT16) {
+                    int16_t* d = (int16_t*)image_data;
+                    value = (double)d[i];
+                } else if (header.bitpix == FITS_BITPIX_INT32) {
+                    int32_t* d = (int32_t*)image_data;
+                    value = (double)d[i];
+                } else {
+                    float* d = (float*)image_data;
+                    value = (double)d[i];
                 }
-                case FITS_BITPIX_INT16: {
-                    int16_t* data = (int16_t*)image_data;
-                    value = (double)data[idx];
-                    break;
-                }
-                case FITS_BITPIX_INT32: {
-                    int32_t* data = (int32_t*)image_data;
-                    value = (double)data[idx];
-                    break;
-                }
-                case FITS_BITPIX_FLOAT32: {
-                    float* data = (float*)image_data;
-                    value = (double)data[idx];
-                    break;
-                }
+
+                value = value * header.bscale + header.bzero;
+
+                if (value < min_val)
+                    min_val = value;
+                if (value > max_val)
+                    max_val = value;
             }
 
-            /* Apply BSCALE and BZERO (defaults: BSCALE=1.0, BZERO=0.0) */
-            value = value * header.bscale + header.bzero;
+            min_max_calculated = true;
 
-            /* Convert to 8-bit grayscale */
-            uint8_t gray = fits_to_8bit(value, min_val, max_val);
+            /* Preserve your "detect unsigned 8-bit" heuristic for grayscale */
+            if (header.bitpix == FITS_BITPIX_INT8 && min_val < 0 && max_val <= 127) {
+                int negative_count = 0;
+                int high_byte_count = 0;
+                size_t s;
+                size_t sample_n = plane_pixels < 1000 ? plane_pixels : 1000;
 
-            /* Convert to Cairo ARGB32 (BGRA in memory) */
-            row[x * 4 + 0] = gray; /* B */
-            row[x * 4 + 1] = gray; /* G */
-            row[x * 4 + 2] = gray; /* R */
-            row[x * 4 + 3] = 255;  /* A */
+                for (s = 0; s < sample_n; s++) {
+                    uint8_t* d = (uint8_t*)image_data;
+                    uint8_t byte_val = d[s];
+                    int8_t signed_val = (int8_t)byte_val;
+                    if (signed_val < 0)
+                        negative_count++;
+                    if (byte_val >= 0x80)
+                        high_byte_count++;
+                }
+
+                if (high_byte_count > (int)(negative_count * 0.5)) {
+                    /* Recompute grayscale min/max treating as unsigned */
+                    min_val = DBL_MAX;
+                    max_val = -DBL_MAX;
+
+                    for (i = 0; i < plane_pixels; i++) {
+                        uint8_t* d = (uint8_t*)image_data;
+                        double v = (double)d[i];
+                        v = v * header.bscale + header.bzero;
+
+                        if (v < min_val)
+                            min_val = v;
+                        if (v > max_val)
+                            max_val = v;
+                    }
+
+                    header.bitpix = -8; /* mark unsigned */
+                }
+            }
+        }
+
+        /* ------------------------------------------------------------
+         * Convert to Cairo BGRA
+         * ------------------------------------------------------------ */
+        {
+            uint32_t y, x;
+            const bool is_rgb_3d2 = is_rgb_3d; /* keep name stable */
+            const bool rgb_direct =
+                (is_rgb_3d2 &&
+                 (header.bitpix == FITS_BITPIX_INT8 || header.bitpix == -8) &&
+                 header.bscale == 1.0 && header.bzero == 0.0);
+
+            for (y = 0; y < doc->height; y++) {
+                guchar* row = surface_data + y * surface_stride;
+                uint32_t fits_y = doc->height - 1 - y;
+
+                for (x = 0; x < doc->width; x++) {
+                    size_t p = (size_t)fits_y * (size_t)header.naxis1 + (size_t)x;
+
+                    if (p >= plane_pixels) {
+                        row[x * 4 + 0] = 0;
+                        row[x * 4 + 1] = 0;
+                        row[x * 4 + 2] = 0;
+                        row[x * 4 + 3] = 255;
+                        continue;
+                    }
+
+                    if (is_rgb_3d2) {
+                        /* Planar RGB: plane0=R, plane1=G, plane2=B */
+                        if (rgb_direct) {
+                            uint8_t* d = (uint8_t*)image_data;
+                            uint8_t r, g, b;
+
+                            if (header.bitpix == -8) {
+                                r = d[p];
+                                g = d[plane_pixels + p];
+                                b = d[2 * plane_pixels + p];
+                            } else {
+                                /* If someone stored signed bytes, keep same mapping but clamp via cast */
+                                r = (uint8_t)((int8_t)d[p]);
+                                g = (uint8_t)((int8_t)d[plane_pixels + p]);
+                                b = (uint8_t)((int8_t)d[2 * plane_pixels + p]);
+                            }
+
+                            row[x * 4 + 0] = b;
+                            row[x * 4 + 1] = g;
+                            row[x * 4 + 2] = r;
+                            row[x * 4 + 3] = 255;
+                        } else {
+                            double vr = 0.0, vg = 0.0, vb = 0.0;
+
+                            if (header.bitpix == FITS_BITPIX_INT8 || header.bitpix == -8) {
+                                uint8_t* d = (uint8_t*)image_data;
+
+                                if (header.bitpix == -8) {
+                                    vr = (double)d[p] * header.bscale + header.bzero;
+                                    vg = (double)d[plane_pixels + p] * header.bscale + header.bzero;
+                                    vb = (double)d[2 * plane_pixels + p] * header.bscale + header.bzero;
+                                } else {
+                                    vr = (double)(int8_t)d[p] * header.bscale + header.bzero;
+                                    vg = (double)(int8_t)d[plane_pixels + p] * header.bscale + header.bzero;
+                                    vb = (double)(int8_t)d[2 * plane_pixels + p] * header.bscale + header.bzero;
+                                }
+                            } else if (header.bitpix == FITS_BITPIX_INT16) {
+                                int16_t* d = (int16_t*)image_data;
+                                vr = (double)d[p] * header.bscale + header.bzero;
+                                vg = (double)d[plane_pixels + p] * header.bscale + header.bzero;
+                                vb = (double)d[2 * plane_pixels + p] * header.bscale + header.bzero;
+                            } else if (header.bitpix == FITS_BITPIX_INT32) {
+                                int32_t* d = (int32_t*)image_data;
+                                vr = (double)d[p] * header.bscale + header.bzero;
+                                vg = (double)d[plane_pixels + p] * header.bscale + header.bzero;
+                                vb = (double)d[2 * plane_pixels + p] * header.bscale + header.bzero;
+                            } else {
+                                float* d = (float*)image_data;
+                                vr = (double)d[p] * header.bscale + header.bzero;
+                                vg = (double)d[plane_pixels + p] * header.bscale + header.bzero;
+                                vb = (double)d[2 * plane_pixels + p] * header.bscale + header.bzero;
+                            }
+
+                            /* Per-channel normalization */
+                            if (rgb_min_max_calculated) {
+                                row[x * 4 + 2] = fits_to_8bit(vr, rgb_min[0], rgb_max[0]); /* R */
+                                row[x * 4 + 1] = fits_to_8bit(vg, rgb_min[1], rgb_max[1]); /* G */
+                                row[x * 4 + 0] = fits_to_8bit(vb, rgb_min[2], rgb_max[2]); /* B */
+                            } else {
+                                /* Fallback: clamp after scaling into [0..255] if possible */
+                                int rr = (int)(vr + 0.5);
+                                int gg = (int)(vg + 0.5);
+                                int bb = (int)(vb + 0.5);
+                                if (rr < 0)
+                                    rr = 0;
+                                else if (rr > 255)
+                                    rr = 255;
+                                if (gg < 0)
+                                    gg = 0;
+                                else if (gg > 255)
+                                    gg = 255;
+                                if (bb < 0)
+                                    bb = 0;
+                                else if (bb > 255)
+                                    bb = 255;
+                                row[x * 4 + 2] = (guchar)rr;
+                                row[x * 4 + 1] = (guchar)gg;
+                                row[x * 4 + 0] = (guchar)bb;
+                            }
+
+                            row[x * 4 + 3] = 255;
+                        }
+                    } else {
+                        /* Grayscale */
+                        double v = 0.0;
+
+                        if (header.bitpix == FITS_BITPIX_INT8 || header.bitpix == -8) {
+                            uint8_t* d = (uint8_t*)image_data;
+                            uint8_t byte_val = d[p];
+
+                            if (header.bitpix == -8) {
+                                v = (double)byte_val;
+                            } else {
+                                v = (double)(int8_t)byte_val;
+                            }
+                        } else if (header.bitpix == FITS_BITPIX_INT16) {
+                            int16_t* d = (int16_t*)image_data;
+                            v = (double)d[p];
+                        } else if (header.bitpix == FITS_BITPIX_INT32) {
+                            int32_t* d = (int32_t*)image_data;
+                            v = (double)d[p];
+                        } else {
+                            float* d = (float*)image_data;
+                            v = (double)d[p];
+                        }
+
+                        v = v * header.bscale + header.bzero;
+
+                        {
+                            uint8_t gray = 0;
+                            if (min_max_calculated) {
+                                gray = fits_to_8bit(v, min_val, max_val);
+                            }
+                            row[x * 4 + 0] = gray;
+                            row[x * 4 + 1] = gray;
+                            row[x * 4 + 2] = gray;
+                            row[x * 4 + 3] = 255;
+                        }
+                    }
+                }
+            }
         }
     }
 
     g_free(image_data);
     fclose(infile);
 
-    /* Mark surface as modified */
     cairo_surface_mark_dirty(temp_surface);
 
-    /* Add layer to document */
     doc->layers = g_list_append(doc->layers, base_layer);
-
-    /* Render composite */
     document_render_composite(doc);
 
     return PLUGIN_ERROR_NONE;
@@ -829,7 +998,7 @@ bool plugin_init_fits(const ImageFormatHostAPI* host, ImageFormatPlugin* out_plu
     out_plugin->format_info.extensions = "fits,fit,fts";
     out_plugin->format_info.supports_alpha = false;
     out_plugin->format_info.supports_layers = false;
-    out_plugin->format_info.supports_hdr = true; /* FITS supports HDR data */
+    out_plugin->format_info.supports_hdr = true;
     out_plugin->format_info.priority = 80;
 
     out_plugin->callbacks.can_load = can_load_fits;
