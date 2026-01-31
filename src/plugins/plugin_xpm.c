@@ -581,7 +581,7 @@ bool plugin_init_xpm(const ImageFormatHostAPI* host, ImageFormatPlugin* out_plug
     memset(out_plugin, 0, sizeof(ImageFormatPlugin));
 
     out_plugin->plugin_version = 1;
-    out_plugin->format_info.name = "XPM - X Window PixMap";
+    out_plugin->format_info.name = "XPM - X PixMap";
     out_plugin->format_info.extensions = "xpm";
     out_plugin->format_info.supports_alpha = true;
     out_plugin->format_info.supports_layers = false;

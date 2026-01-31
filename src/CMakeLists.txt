@@ -60,6 +60,7 @@ set(SOURCES
     plugins/plugin_sgi.c
     plugins/plugin_tga.c
     plugins/plugin_tiff.c
+    plugins/plugin_xbm.c
     plugins/plugin_xpm.c
     plugins/plugin_cut.c
     plugins/plugin_deep.c
