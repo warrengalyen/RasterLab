@@ -10,6 +10,7 @@
 #include "plugins/plugin_pcx.h"
 #include "plugins/plugin_png.h"
 #include "plugins/plugin_ras.h"
+#include "plugins/plugin_sgi.h"
 #include "plugins/plugin_tga.h"
 #include "plugins/plugin_tiff.h"
 #include "plugins/plugin_webp.h"
@@ -33,6 +34,7 @@ void builtin_plugins_register(void) {
     ImageFormatPlugin xpm_plugin;
     ImageFormatPlugin cut_plugin;
     ImageFormatPlugin ras_plugin;
+    ImageFormatPlugin sgi_plugin;
     ImageFormatPlugin deep_plugin;
     ImageFormatPlugin webp_plugin;
     ImageFormatPlugin tiff_plugin;
@@ -153,6 +155,18 @@ void builtin_plugins_register(void) {
         }
     } else {
         g_message("Failed to initialize RAS plugin");
+    }
+
+    /* Register SGI plugin */
+    g_message("Registering built-in SGI plugin");
+    if (plugin_init_sgi(host_api, &sgi_plugin)) {
+        if (format_registry_register_builtin(&sgi_plugin)) {
+            g_message("Successfully registered SGI plugin");
+        } else {
+            g_message("Failed to register SGI plugin with format registry");
+        }
+    } else {
+        g_message("Failed to initialize SGI plugin");
     }
 
     /* Register DEEP plugin */

@@ -57,6 +57,7 @@ set(SOURCES
     plugins/plugin_pcx.c
     plugins/plugin_png.c
     plugins/plugin_ras.c
+    plugins/plugin_sgi.c
     plugins/plugin_tga.c
     plugins/plugin_tiff.c
     plugins/plugin_xpm.c
