@@ -55,6 +55,7 @@ set(SOURCES
     plugins/plugin_loader.c
     plugins/plugin_netpbm.c
     plugins/plugin_pcx.c
+    plugins/plugin_pcd.c
     plugins/plugin_png.c
     plugins/plugin_ras.c
     plugins/plugin_sgi.c

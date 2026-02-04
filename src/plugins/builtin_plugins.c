@@ -7,6 +7,7 @@
 #include "plugins/plugin_jpeg.h"
 #include "plugins/plugin_loader.h"
 #include "plugins/plugin_netpbm.h"
+#include "plugins/plugin_pcd.h"
 #include "plugins/plugin_pcx.h"
 #include "plugins/plugin_png.h"
 #include "plugins/plugin_ras.h"
@@ -44,6 +45,7 @@ void builtin_plugins_register(void) {
     ImageFormatPlugin hdr_plugin;
     ImageFormatPlugin fits_plugin;
     ImageFormatPlugin dicom_plugin;
+    ImageFormatPlugin pcd_plugin;
 
     /* Register PNG plugin (using libpng) */
 #ifdef HAVE_LIBPNG
@@ -263,5 +265,17 @@ void builtin_plugins_register(void) {
         }
     } else {
         g_message("Failed to initialize DICOM plugin");
+    }
+
+    /* Register PCD plugin */
+    g_message("Registering built-in PCD plugin");
+    if (plugin_init_pcd(host_api, &pcd_plugin)) {
+        if (format_registry_register_builtin(&pcd_plugin)) {
+            g_message("Successfully registered PCD plugin");
+        } else {
+            g_message("Failed to register PCD plugin with format registry");
+        }
+    } else {
+        g_message("Failed to initialize PCD plugin");
     }
 }
