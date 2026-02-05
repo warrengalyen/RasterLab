@@ -447,6 +447,46 @@ else()
     target_compile_definitions(rasterlab PRIVATE HAVE_LIBWEBP=0)
 endif()
 
+# Link libheif if available
+if(LIBHEIF_FOUND)
+    if(LIBHEIF_TARGET AND TARGET ${LIBHEIF_TARGET})
+        get_target_property(HEIF_INCLUDE_DIRS ${LIBHEIF_TARGET} INTERFACE_INCLUDE_DIRECTORIES)
+        if(HEIF_INCLUDE_DIRS)
+            target_include_directories(rasterlab PRIVATE BEFORE SYSTEM ${HEIF_INCLUDE_DIRS})
+            message(STATUS "Using libheif include directories (BEFORE SYSTEM): ${HEIF_INCLUDE_DIRS}")
+        endif()
+        target_link_libraries(rasterlab ${LIBHEIF_TARGET})
+        message(STATUS "Linking against libheif target: ${LIBHEIF_TARGET}")
+        
+        if(TARGET libheif_external)
+            add_dependencies(rasterlab libheif_external)
+        endif()
+        
+        message(STATUS "libheif shared library will be copied to: ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
+    elseif(LIBHEIF_LIBRARIES)
+        target_link_libraries(rasterlab ${LIBHEIF_LIBRARIES})
+        target_compile_options(rasterlab PRIVATE ${LIBHEIF_CFLAGS_OTHER})
+        message(STATUS "Linking against system libheif: ${LIBHEIF_LIBRARIES}")
+    else()
+        find_library(HEIF_LIB
+            NAMES heif libheif
+            PATHS "${CMAKE_SOURCE_DIR}/lib/libheif"
+                  /usr/lib
+                  /usr/local/lib
+                  /opt/local/lib
+        )
+        if(HEIF_LIB)
+            target_link_libraries(rasterlab ${HEIF_LIB})
+            message(STATUS "Linking against libheif: ${HEIF_LIB}")
+        else()
+            message(WARNING "libheif library not found, but headers were found. HEIF/AVIF plugin may not work.")
+        endif()
+    endif()
+    target_compile_definitions(rasterlab PRIVATE HAVE_LIBHEIF=1)
+else()
+    target_compile_definitions(rasterlab PRIVATE HAVE_LIBHEIF=0)
+endif()
+
 # Link libtiff if available
 if(LIBTIFF_FOUND)
     if(LIBTIFF_TARGET AND TARGET ${LIBTIFF_TARGET})

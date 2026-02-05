@@ -13,3 +13,9 @@
 [submodule "lib/libtiff"]
 	path = lib/libtiff
 	url = https://gitlab.com/libtiff/libtiff.git
+[submodule "lib/libheif"]
+	path = lib/libheif
+	url = https://github.com/strukturag/libheif.git
+[submodule "lib/libde265"]
+	path = lib/libde265
+	url = https://github.com/strukturag/libde265.git

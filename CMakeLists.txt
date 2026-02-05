@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.10)
 project(RasterLab C)
 
-# Option: build only the application, use system libs (skip building libjpeg, libpng, libtiff, libwebp, zlib from lib/)
-option(RASTERLAB_APP_ONLY "Only build the application; skip building libraries in lib/ (use system libjpeg, libpng, libtiff, libwebp, zlib)" ON)
+# Option: build only the application, use system libs (skip building libjpeg, libpng, libtiff, libwebp, libheif, libde265, zlib from lib/)
+option(RASTERLAB_APP_ONLY "Only build the application; skip building libraries in lib/ (use system libjpeg, libpng, libtiff, libwebp, libheif, libde265, zlib)" ON)
 if(RASTERLAB_APP_ONLY)
     message(STATUS "RASTERLAB_APP_ONLY=ON: skipping build of lib/ deps, using system libraries")
 endif()
@@ -886,6 +886,269 @@ if(LIBTIFF_FOUND)
     set(HAVE_LIBTIFF 1)
 else()
     set(HAVE_LIBTIFF 0)
+endif()
+
+# Check if libde265 submodule exists (HEVC decoder for libheif HEIC support)
+set(LIBDE265_FOUND FALSE)
+set(LIBDE265_TARGET "")
+
+# Skip building libde265 from source when APP_ONLY
+if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/libde265/CMakeLists.txt")
+    message(STATUS "libde265 submodule found, building from source for HEIC support")
+    
+    set(LIBDE265_BUILD_DIR "${CMAKE_BINARY_DIR}/libde265_build")
+    set(LIBDE265_INSTALL_DIR "${CMAKE_BINARY_DIR}/libde265_install")
+    
+    if(WIN32)
+        set(LIBDE265_DLL_NAME "libde265.dll")
+        set(LIBDE265_DLL_PATH "${LIBDE265_INSTALL_DIR}/bin/${LIBDE265_DLL_NAME}")
+        if(MINGW)
+            set(LIBDE265_IMPLIB_NAME "libde265.dll.a")
+        else()
+            set(LIBDE265_IMPLIB_NAME "de265.lib")
+        endif()
+        set(LIBDE265_IMPLIB_PATH "${LIBDE265_INSTALL_DIR}/lib/${LIBDE265_IMPLIB_NAME}")
+    else()
+        set(LIBDE265_LIB_NAME "libde265${CMAKE_SHARED_LIBRARY_SUFFIX}")
+        set(LIBDE265_LIB_PATH "${LIBDE265_INSTALL_DIR}/lib/${LIBDE265_LIB_NAME}")
+    endif()
+    
+    set(LIBDE265_CMAKE_ARGS
+        -DCMAKE_INSTALL_PREFIX=${LIBDE265_INSTALL_DIR}
+        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+        -DBUILD_SHARED_LIBS=ON
+        -DENABLE_DECODER=ON
+        -DENABLE_ENCODER=OFF
+        -DENABLE_SDL=OFF
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+    )
+    
+    ExternalProject_Add(
+        libde265_external
+        SOURCE_DIR "${CMAKE_SOURCE_DIR}/lib/libde265"
+        BINARY_DIR "${LIBDE265_BUILD_DIR}"
+        INSTALL_DIR "${LIBDE265_INSTALL_DIR}"
+        CMAKE_ARGS ${LIBDE265_CMAKE_ARGS}
+        BUILD_ALWAYS FALSE
+    )
+    
+    set(LIBDE265_INCLUDE_DIRS "${LIBDE265_INSTALL_DIR}/include")
+    set(LIBDE265_FOUND TRUE)
+    set(LIBDE265_TARGET de265)
+    
+    message(STATUS "Building libde265 from source as shared library")
+    message(STATUS "libde265 include dirs: ${LIBDE265_INCLUDE_DIRS}")
+else()
+    pkg_check_modules(LIBDE265 libde265)
+    if(LIBDE265_FOUND)
+        set(LIBDE265_INCLUDE_DIRS ${LIBDE265_INCLUDE_DIRS})
+        message(STATUS "Using system libde265: ${LIBDE265_INCLUDE_DIRS}")
+    endif()
+endif()
+
+# Check if libheif submodule exists
+set(LIBHEIF_FOUND FALSE)
+set(LIBHEIF_LIBRARIES "")
+set(LIBHEIF_TARGET "")
+
+# Skip building libheif from source when APP_ONLY
+if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/libheif/CMakeLists.txt")
+    message(STATUS "libheif submodule found, building from source")
+    
+    # Set up paths for ExternalProject
+    set(LIBHEIF_BUILD_DIR "${CMAKE_BINARY_DIR}/libheif_build")
+    set(LIBHEIF_INSTALL_DIR "${CMAKE_BINARY_DIR}/libheif_install")
+    
+    # Determine library name based on platform
+    if(WIN32)
+        # On Windows, MinGW uses lib prefix, MSVC does not
+        if(MINGW)
+            set(LIBHEIF_DLL_NAME "libheif.dll")
+        else()
+            set(LIBHEIF_DLL_NAME "heif.dll")
+        endif()
+        set(LIBHEIF_DLL_PATH "${LIBHEIF_INSTALL_DIR}/bin/${LIBHEIF_DLL_NAME}")
+        
+        if(MINGW)
+            set(LIBHEIF_IMPLIB_NAME "libheif.dll.a")
+        else()
+            set(LIBHEIF_IMPLIB_NAME "heif.lib")
+        endif()
+        set(LIBHEIF_IMPLIB_PATH "${LIBHEIF_INSTALL_DIR}/lib/${LIBHEIF_IMPLIB_NAME}")
+    else()
+        set(LIBHEIF_LIB_NAME "libheif${CMAKE_SHARED_LIBRARY_SUFFIX}")
+        set(LIBHEIF_LIB_PATH "${LIBHEIF_INSTALL_DIR}/lib/${LIBHEIF_LIB_NAME}")
+    endif()
+    
+    # Configure CMake arguments for libheif (minimal build: no examples, tests, docs)
+    set(LIBHEIF_CMAKE_ARGS
+        -DCMAKE_INSTALL_PREFIX=${LIBHEIF_INSTALL_DIR}
+        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+        -DBUILD_SHARED_LIBS=ON
+        -DWITH_EXAMPLES=OFF
+        -DWITH_EXAMPLE_HEIF_THUMB=OFF
+        -DWITH_EXAMPLE_HEIF_VIEW=OFF
+        -DWITH_GDK_PIXBUF=OFF
+        -DBUILD_DOCUMENTATION=OFF
+        -DBUILD_TESTING=OFF
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+    )
+    
+    # Pass zlib to libheif if building from source
+    set(LIBHEIF_CMAKE_PREFIX_PATH "")
+    if(ZLIB_TARGET AND TARGET ${ZLIB_TARGET})
+        list(APPEND LIBHEIF_CMAKE_PREFIX_PATH ${ZLIB_INSTALL_DIR})
+        if(WIN32)
+            list(APPEND LIBHEIF_CMAKE_ARGS
+                -DZLIB_ROOT=${ZLIB_INSTALL_DIR}
+                -DZLIB_INCLUDE_DIR=${ZLIB_INSTALL_DIR}/include
+                -DZLIB_LIBRARY=${ZLIB_IMPLIB_PATH}
+            )
+        else()
+            list(APPEND LIBHEIF_CMAKE_ARGS
+                -DZLIB_ROOT=${ZLIB_INSTALL_DIR}
+                -DZLIB_INCLUDE_DIR=${ZLIB_INSTALL_DIR}/include
+                -DZLIB_LIBRARY=${ZLIB_LIB_PATH}
+            )
+        endif()
+    endif()
+    
+    # Pass libde265 to libheif for HEIC support
+    if(LIBDE265_FOUND AND LIBDE265_TARGET)
+        list(APPEND LIBHEIF_CMAKE_PREFIX_PATH ${LIBDE265_INSTALL_DIR})
+        list(APPEND LIBHEIF_CMAKE_ARGS
+            -DWITH_LIBDE265=ON
+            -DWITH_LIBDE265_PLUGIN=OFF
+        )
+    endif()
+    if(LIBHEIF_CMAKE_PREFIX_PATH)
+        list(APPEND LIBHEIF_CMAKE_ARGS -DCMAKE_PREFIX_PATH="${LIBHEIF_CMAKE_PREFIX_PATH}")
+    endif()
+    
+    # Collect dependencies for libheif
+    set(LIBHEIF_DEPENDS "")
+    if(ZLIB_TARGET AND TARGET zlib_external)
+        list(APPEND LIBHEIF_DEPENDS zlib_external)
+    endif()
+    if(LIBDE265_TARGET AND TARGET libde265_external)
+        list(APPEND LIBHEIF_DEPENDS libde265_external)
+    endif()
+    
+    # Add ExternalProject to build libheif
+    if(LIBHEIF_DEPENDS)
+        ExternalProject_Add(
+            libheif_external
+            SOURCE_DIR "${CMAKE_SOURCE_DIR}/lib/libheif"
+            BINARY_DIR "${LIBHEIF_BUILD_DIR}"
+            INSTALL_DIR "${LIBHEIF_INSTALL_DIR}"
+            CMAKE_ARGS ${LIBHEIF_CMAKE_ARGS}
+            BUILD_ALWAYS FALSE
+            DEPENDS ${LIBHEIF_DEPENDS}
+        )
+    else()
+        ExternalProject_Add(
+            libheif_external
+            SOURCE_DIR "${CMAKE_SOURCE_DIR}/lib/libheif"
+            BINARY_DIR "${LIBHEIF_BUILD_DIR}"
+            INSTALL_DIR "${LIBHEIF_INSTALL_DIR}"
+            CMAKE_ARGS ${LIBHEIF_CMAKE_ARGS}
+            BUILD_ALWAYS FALSE
+        )
+    endif()
+    
+    # Generate heif_version.h (required by libheif headers, normally built by libheif)
+    set(LIBHEIF_VERSION_MAJOR 1)
+    set(LIBHEIF_VERSION_MINOR 21)
+    set(LIBHEIF_VERSION_PATCH 2)
+    set(LIBHEIF_INCLUDE_GEN_DIR "${CMAKE_BINARY_DIR}/libheif_include")
+    file(MAKE_DIRECTORY "${LIBHEIF_INCLUDE_GEN_DIR}/libheif")
+    configure_file(
+        "${CMAKE_SOURCE_DIR}/cmake/heif_version.h.in"
+        "${LIBHEIF_INCLUDE_GEN_DIR}/libheif/heif_version.h"
+        @ONLY
+    )
+    # Include: source api (libheif/heif.h etc) + generated (libheif/heif_version.h)
+    set(LIBHEIF_INCLUDE_DIRS
+        "${CMAKE_SOURCE_DIR}/lib/libheif/libheif/api"
+        "${LIBHEIF_INCLUDE_GEN_DIR}"
+    )
+    
+    include_directories(${LIBHEIF_INCLUDE_DIRS})
+    
+    # Create imported target for linking
+    add_library(heif SHARED IMPORTED GLOBAL)
+    
+    # Set properties
+    if(WIN32)
+        set_target_properties(heif PROPERTIES
+            INTERFACE_INCLUDE_DIRECTORIES "${LIBHEIF_INCLUDE_DIRS}"
+            IMPORTED_LOCATION "${LIBHEIF_DLL_PATH}"
+            IMPORTED_IMPLIB "${LIBHEIF_IMPLIB_PATH}"
+        )
+        
+        add_custom_command(TARGET libheif_external POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${LIBHEIF_DLL_PATH}"
+                "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/"
+            COMMENT "Copying libheif DLL to bin directory"
+        )
+        if(LIBDE265_FOUND AND DEFINED LIBDE265_DLL_PATH)
+            add_custom_command(TARGET libheif_external POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${LIBDE265_DLL_PATH}"
+                    "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/"
+                COMMENT "Copying libde265 DLL to bin directory (HEIC runtime dependency)"
+            )
+        endif()
+    else()
+        set_target_properties(heif PROPERTIES
+            INTERFACE_INCLUDE_DIRECTORIES "${LIBHEIF_INCLUDE_DIRS}"
+            IMPORTED_LOCATION "${LIBHEIF_LIB_PATH}"
+        )
+        
+        add_custom_command(TARGET libheif_external POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${LIBHEIF_LIB_PATH}"
+                "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/"
+            COMMENT "Copying libheif shared library to bin directory"
+        )
+        if(LIBDE265_FOUND AND DEFINED LIBDE265_LIB_PATH)
+            add_custom_command(TARGET libheif_external POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${LIBDE265_LIB_PATH}"
+                    "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/"
+                COMMENT "Copying libde265 shared library to bin directory (HEIC runtime dependency)"
+            )
+        endif()
+    endif()
+    
+    set(LIBHEIF_FOUND TRUE)
+    set(LIBHEIF_TARGET heif)
+    
+    message(STATUS "Building libheif from source as shared library")
+    message(STATUS "libheif include dirs: ${LIBHEIF_INCLUDE_DIRS}")
+else()
+    # Fallback to system libheif via pkg-config
+    message(STATUS "libheif submodule not found, trying system libheif")
+    pkg_check_modules(LIBHEIF libheif)
+    
+    if(LIBHEIF_FOUND)
+        include_directories(${LIBHEIF_INCLUDE_DIRS})
+        message(STATUS "Using system libheif: ${LIBHEIF_INCLUDE_DIRS}")
+    else()
+        message(WARNING "libheif not found. HEIF/AVIF plugin will not be available.")
+        message(WARNING "To add libheif as submodule, run:")
+        message(WARNING "  git submodule add https://github.com/strukturag/libheif.git lib/libheif")
+        message(WARNING "  git submodule update --init --recursive")
+    endif()
+endif()
+
+if(LIBHEIF_FOUND)
+    set(HAVE_LIBHEIF 1)
+else()
+    set(HAVE_LIBHEIF 0)
 endif()
 
 # Find GTK3, GdkPixbuf, libxml2, and LZ4 using pkg-config
