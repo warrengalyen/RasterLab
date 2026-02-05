@@ -40,7 +40,8 @@ typedef enum {
     PLUGIN_ERROR_CORRUPT_FILE = 6,
     PLUGIN_ERROR_OUT_OF_MEMORY = 7,
     PLUGIN_ERROR_UNSUPPORTED_FEATURE = 8,
-    PLUGIN_ERROR_UNSUPPORTED_COMPRESSION = 9,  /* e.g. DICOM with JPEG compression */
+    PLUGIN_ERROR_UNSUPPORTED_COMPRESSION = 9, /* e.g. DICOM with JPEG compression */
+    PLUGIN_ERROR_USER_CANCELLED = 10,         /* User cancelled dialog (e.g. resolution, tone mapping) */
     PLUGIN_ERROR_UNKNOWN = 99
 } PluginError;
 

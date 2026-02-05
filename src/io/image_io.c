@@ -57,6 +57,8 @@ const char* image_io_get_error_message(PluginError error, const char* filename) 
             return "Out of memory. The file is too large to load.";
         case PLUGIN_ERROR_UNSUPPORTED_FEATURE:
             return "Unsupported feature. The file uses features that are not supported.";
+        case PLUGIN_ERROR_USER_CANCELLED:
+            return "Load cancelled.";
         case PLUGIN_ERROR_UNSUPPORTED_COMPRESSION:
             return "JPEG compression is not supported.";
         case PLUGIN_ERROR_UNKNOWN:
@@ -110,7 +112,8 @@ gboolean image_io_load(ImageDocument* doc, const char* filename, PluginError* er
     error = handler->plugin->callbacks.load(doc, filename);
 
     if (error != PLUGIN_ERROR_NONE) {
-        g_warning("Plugin failed to load file %s: error %d", filename, error);
+        if (error != PLUGIN_ERROR_USER_CANCELLED)
+            g_warning("Plugin failed to load file %s: error %d", filename, error);
         if (error_out) {
             *error_out = error;
         }

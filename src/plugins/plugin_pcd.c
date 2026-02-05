@@ -5,6 +5,7 @@
 #include "render/compositor.h"
 #include "render/layer.h"
 #include "render/render_utils.h"
+#include "ui.h"
 #include <glib.h>
 #include <glib/gstdio.h>
 #include <gtk/gtk.h>
@@ -14,9 +15,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* Set to 1 to trace Base/4Base/16Base decode failures to stderr */
 #ifndef PCD_DEBUG
-#define PCD_DEBUG 1
+#define PCD_DEBUG 0
 #endif
 #define PCD_DBG(...)                              \
     do {                                          \
@@ -59,6 +59,8 @@ static const PCDResolutionInfo pcd_resolutions[] = {
     {"16Base", "6144×4096", 6144, 4096, false}};
 
 #define PCD_NUM_LEVELS (sizeof(pcd_resolutions) / sizeof(pcd_resolutions[0]))
+/* Sentinel for "user cancelled resolution dialog" */
+#define PCD_RES_CANCELLED ((PCDResolutionLevel)-1)
 
 /* ========================================================================
  * PhotoYCC to RGB — libpcd LUT-based conversion (github.com/kraxel/libpcd)
@@ -498,7 +500,7 @@ static int pcd_read_htable(const uint8_t* src, uint8_t** pseq, uint8_t** pbits) 
     return i;
 }
 
-/* Decode Huffman residual stream (run=1: Base 1536×1024; run=2: 4Base 3072×2048). */
+/* Decode Huffman residual stream (run=1: Base 1536×1024; run=2: 4Base 3072×2048; run=3: 16Base 6144×4096). */
 static int pcd_un_huff(const uint8_t* start, size_t stream_size,
                        int run, uint32_t width, uint32_t height,
                        uint8_t* luma, uint8_t* cb, uint8_t* cr,
@@ -508,9 +510,11 @@ static int pcd_un_huff(const uint8_t* start, size_t stream_size,
     const uint8_t* stream = start;
     const uint8_t* stream_end = start + stream_size;
     int shiftreg, bit = 0;
-    uint32_t h = (run == 1) ? 1024u : 2048u;
+    uint32_t h = (run == 1) ? 1024u : (run == 2) ? 2048u
+                                                 : 4096u;
     uint32_t y1 = 0, y2 = h;
-    uint32_t num_lines = (run == 1) ? (1024u + 512u + 512u) : (2048u + 1024u + 1024u);
+    uint32_t num_lines = (run == 1) ? (1024u + 512u + 512u) : (run == 2) ? (2048u + 1024u + 1024u)
+                                                                         : (4096u + 2048u + 2048u);
     uint32_t line_count = 0;
 
     (void)height;
@@ -583,8 +587,9 @@ static int pcd_un_huff(const uint8_t* start, size_t stream_size,
         }
         shiftreg = (int)(pcd_peek24(stream, stream_end) >> (8 - bit));
         {
-            /* yy: 11 bits for run=1 (2048 lines), 12 bits for run=2 (4096 lines) */
-            uint32_t yy_bits = (run == 1) ? 11u : 12u;
+            /* yy: 11 bits run=1 (2048 lines), 12 bits run=2 (4096), 13 bits run=3 (8192) */
+            uint32_t yy_bits = (run == 1) ? 11u : (run == 2) ? 12u
+                                                             : 13u;
             uint32_t yy_mask = (1u << yy_bits) - 1u;
             int yy = (int)((shiftreg >> 1) & yy_mask);
             int type = (shiftreg >> (1 + yy_bits)) & 3;
@@ -611,22 +616,24 @@ static int pcd_un_huff(const uint8_t* start, size_t stream_size,
                     seq = seq2;
                     bits = len2;
                     shift = 1;
-                    data = cb + ((yy - y1) >> shift) * (width >> shift);
+                    data = cb ? cb + ((yy - y1) >> shift) * (width >> shift) : NULL;
                 } else if (type == 3) {
                     seq = seq3;
                     bits = len3;
                     shift = 1;
-                    data = cr + ((yy - y1) >> shift) * (width >> shift);
+                    data = cr ? cr + ((yy - y1) >> shift) * (width >> shift) : NULL;
                 } else {
-                    data = luma + (yy - y1) * width;
+                    data = luma ? luma + (yy - y1) * width : NULL;
                 }
 
                 x2 = (int)(width >> shift);
                 for (x = 0; x < x2 && stream < stream_end; x++) {
                     if (shiftreg >= PCD_HTABLE_MAX)
                         break;
-                    int sum = (int)data[x] + (signed char)seq[shiftreg];
-                    data[x] = (uint8_t)pcd_lut_range[PCD_YCC_RANGE + sum];
+                    if (data) {
+                        int sum = (int)data[x] + (signed char)seq[shiftreg];
+                        data[x] = (uint8_t)pcd_lut_range[PCD_YCC_RANGE + sum];
+                    }
                     bit += bits[shiftreg];
                     stream += bit >> 3;
                     bit &= 7;
@@ -868,11 +875,8 @@ static bool decode_4base_with_huffman(FILE* f, uint8_t** out_buffer, uint32_t* o
         goto fail_buf;
     }
     if ((size_t)pos + 4096 > buf_size) {
-        /* Not enough data for 4Base residual (e.g. file only has Base); use Base upsampled to 4Base */
-        PCD_DBG("decode_4base_with_huffman: not enough for 4Base residual (%zu left), using Base upsampled\n", buf_size - (size_t)pos);
-        g_free(buf);
-        buf = NULL;
-        goto do_bgra_4base;
+        PCD_DBG("decode_4base_with_huffman: not enough for 4Base residual (%zu left)\n", buf_size - (size_t)pos);
+        goto fail_buf;
     }
     rc = pcd_read_htable(buf + pos, &seq1, &len1);
     if (rc < 0) {
@@ -904,8 +908,56 @@ static bool decode_4base_with_huffman(FILE* f, uint8_t** out_buffer, uint32_t* o
         goto fail_buf;
     }
 
-do_bgra_4base : {
-    uint8_t* bgra = planar_to_bgra(luma, cb, cr, 3072, 2048);
+    {
+        uint8_t* bgra = planar_to_bgra(luma, cb, cr, 3072, 2048);
+        g_free(luma);
+        g_free(cb);
+        g_free(cr);
+        g_free(seq1);
+        g_free(len1);
+        g_free(seq2);
+        g_free(len2);
+        g_free(seq3);
+        g_free(len3);
+        g_free(buf);
+        if (!bgra)
+            return false;
+        if (orientation != 0) {
+            uint32_t rot_w = (orientation == 1 || orientation == 3) ? 2048u : 3072u;
+            uint32_t rot_h = (orientation == 1 || orientation == 3) ? 3072u : 2048u;
+            uint8_t* rot = g_malloc(rot_w * rot_h * 4);
+            if (!rot) {
+                g_free(bgra);
+                return false;
+            }
+            uint32_t x, y;
+            for (y = 0; y < 2048; y++)
+                for (x = 0; x < 3072; x++) {
+                    uint8_t* src = bgra + y * 3072 * 4 + x * 4;
+                    uint8_t* dst = NULL;
+                    if (orientation == 1)
+                        dst = rot + x * rot_w * 4 + (rot_w - 1 - y) * 4;
+                    else if (orientation == 2)
+                        dst = rot + (rot_h - 1 - y) * rot_w * 4 + (rot_w - 1 - x) * 4;
+                    else if (orientation == 3)
+                        dst = rot + (rot_h - 1 - x) * rot_w * 4 + y * 4;
+                    if (dst)
+                        memcpy(dst, src, 4);
+                }
+            g_free(bgra);
+            bgra = rot;
+            *out_stride = rot_w * 4;
+        } else
+            *out_stride = 3072 * 4;
+        *out_buffer = bgra;
+    }
+    PCD_DBG("decode_4base_with_huffman: ok\n");
+    return true;
+
+fail_buf:
+    PCD_DBG("decode_4base_with_huffman: fail_buf\n");
+    g_free(buf);
+fail_planar:
     g_free(luma);
     g_free(cb);
     g_free(cr);
@@ -915,43 +967,144 @@ do_bgra_4base : {
     g_free(len2);
     g_free(seq3);
     g_free(len3);
-    g_free(buf);
-    if (!bgra)
-        return false;
-    if (orientation != 0) {
-        uint32_t rot_w = (orientation == 1 || orientation == 3) ? 2048u : 3072u;
-        uint32_t rot_h = (orientation == 1 || orientation == 3) ? 3072u : 2048u;
-        uint8_t* rot = g_malloc(rot_w * rot_h * 4);
-        if (!rot) {
-            g_free(bgra);
-            return false;
-        }
-        uint32_t x, y;
-        for (y = 0; y < 2048; y++)
-            for (x = 0; x < 3072; x++) {
-                uint8_t* src = bgra + y * 3072 * 4 + x * 4;
-                uint8_t* dst = NULL;
-                if (orientation == 1)
-                    dst = rot + x * rot_w * 4 + (rot_w - 1 - y) * 4;
-                else if (orientation == 2)
-                    dst = rot + (rot_h - 1 - y) * rot_w * 4 + (rot_w - 1 - x) * 4;
-                else if (orientation == 3)
-                    dst = rot + (rot_h - 1 - x) * rot_w * 4 + y * 4;
-                if (dst)
-                    memcpy(dst, src, 4);
-            }
-        g_free(bgra);
-        bgra = rot;
-        *out_stride = rot_w * 4;
-    } else
-        *out_stride = 3072 * 4;
-    *out_buffer = bgra;
+    return false;
 }
-    PCD_DBG("decode_4base_with_huffman: ok\n");
+
+/* 16Base (6144×4096) with Huffman residual (PhotoCD Pro optional). */
+static bool decode_16base_with_huffman(FILE* f, uint8_t** out_buffer, uint32_t* out_stride,
+                                       uint8_t orientation) {
+    uint8_t *luma = NULL, *cb = NULL, *cr = NULL;
+    uint32_t w = 768, h = 512;
+    uint8_t *seq1 = NULL, *len1 = NULL, *seq2 = NULL, *len2 = NULL, *seq3 = NULL, *len3 = NULL;
+    uint8_t* buf = NULL;
+    size_t buf_size;
+    long file_end;
+    int pos, rc;
+
+    PCD_DBG("decode_16base_with_huffman: start\n");
+    if (!decode_strip_to_planar(f, PCD_RES_BASE4, &luma, &cb, &cr, &w, &h))
+        return false;
+    if (!upsample_planar_2x(luma, cb, cr, w, h, &luma, &cb, &cr, &w, &h))
+        return false;
+    if (fseek(f, 0, SEEK_END) != 0)
+        goto fail_planar;
+    file_end = ftell(f);
+    if (file_end < (long)(PCD_HUFF1 + 262144))
+        goto fail_planar;
+    buf_size = (size_t)(file_end - PCD_HUFF1);
+    buf = g_malloc(buf_size);
+    if (!buf || fseek(f, PCD_HUFF1, SEEK_SET) != 0 || fread(buf, 1, buf_size, f) != buf_size)
+        goto fail_planar;
+
+    pcd_ycc_lut_init();
+    pos = pcd_read_htable(buf, &seq1, &len1);
+    if (pos < 0)
+        goto fail_buf;
+    pos = (pos + 2047) & ~0x3ff;
+    rc = pcd_un_huff(buf + pos, buf_size - (size_t)pos, 1, 1536, 1024,
+                     luma, cb, cr, seq1, len1, seq1, len1, seq1, len1);
+    if (rc < 0)
+        goto fail_buf;
+    pos += rc;
+    if (!upsample_planar_2x(luma, cb, cr, 1536, 1024, &luma, &cb, &cr, &w, &h))
+        goto fail_buf;
+    if ((size_t)pos + 4096 > buf_size)
+        goto fail_buf;
+    rc = pcd_read_htable(buf + pos, &seq1, &len1);
+    if (rc < 0)
+        goto fail_buf;
+    pos += rc;
+    rc = pcd_read_htable(buf + pos, &seq2, &len2);
+    if (rc < 0)
+        goto fail_buf;
+    pos += rc;
+    rc = pcd_read_htable(buf + pos, &seq3, &len3);
+    if (rc < 0)
+        goto fail_buf;
+    pos += rc;
+    pos = (pos + 2047) & ~0x3ff;
+    if ((size_t)pos >= buf_size)
+        goto fail_buf;
+    rc = pcd_un_huff(buf + pos, buf_size - (size_t)pos, 2, 3072, 2048,
+                     luma, cb, cr, seq1, len1, seq2, len2, seq3, len3);
+    if (rc < 0)
+        goto fail_buf;
+    pos += rc;
+    if (!upsample_planar_2x(luma, cb, cr, 3072, 2048, &luma, &cb, &cr, &w, &h))
+        goto fail_buf;
+    if ((size_t)pos + 4096 > buf_size) {
+        PCD_DBG("decode_16base_with_huffman: not enough for 16Base residual\n");
+        goto fail_buf;
+    }
+    rc = pcd_read_htable(buf + pos, &seq1, &len1);
+    if (rc < 0)
+        goto fail_buf;
+    pos += rc;
+    rc = pcd_read_htable(buf + pos, &seq2, &len2);
+    if (rc < 0)
+        goto fail_buf;
+    pos += rc;
+    rc = pcd_read_htable(buf + pos, &seq3, &len3);
+    if (rc < 0)
+        goto fail_buf;
+    pos += rc;
+    pos = (pos + 2047) & ~0x3ff;
+    if ((size_t)pos >= buf_size)
+        goto fail_buf;
+    rc = pcd_un_huff(buf + pos, buf_size - (size_t)pos, 3, 6144, 4096,
+                     luma, cb, cr, seq1, len1, seq2, len2, seq3, len3);
+    if (rc < 0) {
+        PCD_DBG("decode_16base_with_huffman: un_huff(16Base) failed rc=%d\n", rc);
+        goto fail_buf;
+    }
+
+    {
+        uint8_t* bgra = planar_to_bgra(luma, cb, cr, 6144, 4096);
+        g_free(luma);
+        g_free(cb);
+        g_free(cr);
+        g_free(seq1);
+        g_free(len1);
+        g_free(seq2);
+        g_free(len2);
+        g_free(seq3);
+        g_free(len3);
+        g_free(buf);
+        if (!bgra)
+            return false;
+        if (orientation != 0) {
+            uint32_t rot_w = (orientation == 1 || orientation == 3) ? 4096u : 6144u;
+            uint32_t rot_h = (orientation == 1 || orientation == 3) ? 6144u : 4096u;
+            uint8_t* rot = g_malloc(rot_w * rot_h * 4);
+            if (!rot) {
+                g_free(bgra);
+                return false;
+            }
+            uint32_t x, y;
+            for (y = 0; y < 4096; y++)
+                for (x = 0; x < 6144; x++) {
+                    uint8_t* src = bgra + y * 6144 * 4 + x * 4;
+                    uint8_t* dst = NULL;
+                    if (orientation == 1)
+                        dst = rot + x * rot_w * 4 + (rot_w - 1 - y) * 4;
+                    else if (orientation == 2)
+                        dst = rot + (rot_h - 1 - y) * rot_w * 4 + (rot_w - 1 - x) * 4;
+                    else if (orientation == 3)
+                        dst = rot + (rot_h - 1 - x) * rot_w * 4 + y * 4;
+                    if (dst)
+                        memcpy(dst, src, 4);
+                }
+            g_free(bgra);
+            bgra = rot;
+            *out_stride = rot_w * 4;
+        } else
+            *out_stride = 6144 * 4;
+        *out_buffer = bgra;
+    }
+    PCD_DBG("decode_16base_with_huffman: ok\n");
     return true;
 
 fail_buf:
-    PCD_DBG("decode_4base_with_huffman: fail_buf\n");
     g_free(buf);
 fail_planar:
     g_free(luma);
@@ -987,6 +1140,14 @@ static bool decode_highres_level(FILE* f, PCDResolutionLevel level,
         PCD_DBG("decode_highres_level: 4BASE file_sz=%ld need=%ld\n", sz, (long)(PCD_HUFF1 + 262144));
         if (sz >= (long)(PCD_HUFF1 + 262144))
             return decode_4base_with_huffman(f, out_buffer, out_stride, orientation);
+    }
+    if (level == PCD_RES_16BASE) {
+        long sz = 0;
+        if (fseek(f, 0, SEEK_END) == 0)
+            sz = ftell(f);
+        PCD_DBG("decode_highres_level: 16BASE file_sz=%ld\n", sz);
+        if (sz >= (long)(PCD_HUFF1 + 524288))
+            return decode_16base_with_huffman(f, out_buffer, out_stride, orientation);
     }
 
     PCD_DBG("decode_highres_level: fallback upsample from lower\n");
@@ -1084,10 +1245,57 @@ static bool detect_available_resolutions(FILE* f, bool* available) {
     available[PCD_RES_BASE16] = (file_size >= 196608);  /* 47104 + 128*1152 */
     available[PCD_RES_BASE4] = (file_size >= 786432);   /* 196608 + 256*2304 */
 
-    /* Base / 4Base / 16Base: we decode by upsampling from next-lower; no extra file data. */
-    available[PCD_RES_BASE] = available[PCD_RES_BASE4];
-    available[PCD_RES_4BASE] = available[PCD_RES_BASE4];
-    available[PCD_RES_16BASE] = available[PCD_RES_BASE4];
+    /* Base: only if file has Huffman block (strip BASE4 + Huffman residual). */
+    available[PCD_RES_BASE] = (available[PCD_RES_BASE4] && file_size >= (long)(PCD_HUFF1 + 65536));
+
+    /* 4Base / 16Base: measure Base and optionally 4Base stream consumption (PhotoCD Pro has 16Base). */
+    available[PCD_RES_4BASE] = false;
+    available[PCD_RES_16BASE] = false;
+    if (available[PCD_RES_BASE] && file_size >= (long)(PCD_HUFF1 + 131072)) {
+        size_t buf_size = (size_t)(file_size - PCD_HUFF1);
+        uint8_t* buf = g_malloc(buf_size);
+        uint8_t *seq1 = NULL, *len1 = NULL, *seq2 = NULL, *len2 = NULL, *seq3 = NULL, *len3 = NULL;
+        if (buf && fseek(f, PCD_HUFF1, SEEK_SET) == 0 && fread(buf, 1, buf_size, f) == buf_size) {
+            int pos = pcd_read_htable(buf, &seq1, &len1);
+            if (pos >= 0) {
+                pos = (pos + 2047) & ~0x3ff;
+                if ((size_t)pos < buf_size) {
+                    int rc = pcd_un_huff(buf + pos, buf_size - (size_t)pos, 1, 1536, 1024,
+                                         NULL, NULL, NULL, seq1, len1, seq1, len1, seq1, len1);
+                    if (rc >= 0 && (size_t)pos + (size_t)rc + 4096 <= buf_size) {
+                        available[PCD_RES_4BASE] = true;
+                        pos += rc;
+                        rc = pcd_read_htable(buf + pos, &seq1, &len1);
+                        if (rc >= 0) {
+                            pos += rc;
+                            rc = pcd_read_htable(buf + pos, &seq2, &len2);
+                            if (rc >= 0) {
+                                pos += rc;
+                                rc = pcd_read_htable(buf + pos, &seq3, &len3);
+                                if (rc >= 0) {
+                                    pos += rc;
+                                    pos = (pos + 2047) & ~0x3ff;
+                                    if ((size_t)pos < buf_size) {
+                                        rc = pcd_un_huff(buf + pos, buf_size - (size_t)pos, 2, 3072, 2048,
+                                                         NULL, NULL, NULL, seq1, len1, seq2, len2, seq3, len3);
+                                        if (rc >= 0 && (size_t)pos + (size_t)rc + 4096 <= buf_size)
+                                            available[PCD_RES_16BASE] = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            g_free(seq1);
+            g_free(len1);
+            g_free(seq2);
+            g_free(len2);
+            g_free(seq3);
+            g_free(len3);
+        }
+        g_free(buf);
+    }
 
     return true;
 }
@@ -1110,15 +1318,20 @@ static void on_radio_toggled(GtkToggleButton* button, gpointer user_data) {
     }
 }
 
-static PCDResolutionLevel show_resolution_dialog(bool* available) {
+static PCDResolutionLevel show_resolution_dialog(GtkWindow* parent, bool* available) {
     PCDResolutionDialog dlg;
     dlg.selected = PCD_RES_BASE4;
     dlg.available = available;
 
     dlg.dialog = gtk_dialog_new_with_buttons(
-        "Select PhotoCD Resolution", NULL,
+        "Select PhotoCD Resolution", parent,
         GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
         "_Cancel", GTK_RESPONSE_CANCEL, "_OK", GTK_RESPONSE_OK, NULL);
+
+    if (parent) {
+        gtk_window_set_transient_for(GTK_WINDOW(dlg.dialog), parent);
+        gtk_window_set_position(GTK_WINDOW(dlg.dialog), GTK_WIN_POS_CENTER_ON_PARENT);
+    }
 
     GtkWidget* content = gtk_dialog_get_content_area(GTK_DIALOG(dlg.dialog));
     GtkWidget* vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
@@ -1150,7 +1363,7 @@ static PCDResolutionLevel show_resolution_dialog(bool* available) {
     }
 
     GtkWidget* info = gtk_label_new(
-        "\nNote: Higher resolutions may require more processing time.\nBase and higher use upsampling from Base/4.");
+        "\nNote: Only resolutions actually stored in the file are shown.");
     gtk_label_set_line_wrap(GTK_LABEL(info), TRUE);
     gtk_widget_set_sensitive(info, FALSE);
     gtk_box_pack_start(GTK_BOX(vbox), info, FALSE, FALSE, 5);
@@ -1161,12 +1374,12 @@ static PCDResolutionLevel show_resolution_dialog(bool* available) {
     gtk_widget_destroy(dlg.dialog);
 
     if (result != GTK_RESPONSE_OK)
-        return default_selection >= 0 ? (PCDResolutionLevel)default_selection : PCD_RES_BASE4;
+        return PCD_RES_CANCELLED;
 
     return selected;
 }
 
-static PCDResolutionLevel select_resolution(FILE* f) {
+static PCDResolutionLevel select_resolution(FILE* f, GtkWindow* parent) {
     bool available[6] = {false};
     if (!detect_available_resolutions(f, available))
         return PCD_RES_BASE4;
@@ -1183,7 +1396,7 @@ static PCDResolutionLevel select_resolution(FILE* f) {
         return PCD_RES_BASE4;
     }
 
-    return show_resolution_dialog(available);
+    return show_resolution_dialog(parent, available);
 }
 
 /* ========================================================================
@@ -1229,8 +1442,20 @@ static PluginError load_pcd(ImageDocument* doc, const char* filename) {
     /* Read orientation */
     uint8_t orientation = read_orientation(f);
 
+    /* Get parent window for resolution dialog (center + cancel = abort load) */
+    GtkWindow* parent = NULL;
+    if (doc->drawing_area) {
+        AppContext* ctx = (AppContext*)g_object_get_data(G_OBJECT(doc->drawing_area), "app_context");
+        if (ctx && ctx->window)
+            parent = GTK_WINDOW(ctx->window);
+    }
+
     /* Select resolution (will show dialog if multiple available) */
-    PCDResolutionLevel selected_res = select_resolution(f);
+    PCDResolutionLevel selected_res = select_resolution(f, parent);
+    if (selected_res == PCD_RES_CANCELLED) {
+        fclose(f);
+        return PLUGIN_ERROR_USER_CANCELLED;
+    }
 
     pcd_ycc_lut_init();
 

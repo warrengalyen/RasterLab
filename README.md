@@ -23,7 +23,7 @@ A full-featured image editor written in C.
 | HDR — Radiance RGBE | `.hdr`, `.rgbe`, `.zyze`, `.pic` | Read only | HDR RGB (no alpha) |
 | FITS — Flexible Image Transport System | `.fits`, `.fit`, `.fts` | Read only | RGB / grayscale |
 | DICOM — Digital Imaging and Communications in Medicine | `.dcm`, `.dicom` | Read only | Grayscale, RGB, palette, YBR; RLE/JPEG compressed; multi-frame (as layers) |
-| PCD — Kodak Photo CD | `.pcd` | Read only | All resolutions, automatic orientation detection and correction, Huffman decoding for higher resolutions, resolution selection dialog |
+| PCD — Kodak Photo CD | `.pcd` | Read only | All resolutions |
 
 ## Features
 

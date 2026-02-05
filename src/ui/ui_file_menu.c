@@ -95,6 +95,11 @@ void on_recent_file_activate(GtkMenuItem* menu_item, gpointer user_data) {
         gboolean load_result = image_io_load(doc, file_path, &load_error);
 
         if (!load_result) {
+            if (load_error == PLUGIN_ERROR_USER_CANCELLED) {
+                document_free(doc);
+                g_free(basename);
+                return;
+            }
             /* Get user-friendly error message */
             const char* error_message = image_io_get_error_message(load_error, file_path);
 
@@ -467,6 +472,13 @@ void on_file_open_response(GtkNativeDialog* dialog, gint response_id, gpointer u
                 gboolean load_result = image_io_load(doc, file_path, &load_error);
 
                 if (!load_result) {
+                    if (load_error == PLUGIN_ERROR_USER_CANCELLED) {
+                        document_free(doc);
+                        g_free(basename);
+                        g_free(file_path);
+                        g_object_unref(dialog);
+                        return;
+                    }
                     /* Get user-friendly error message */
                     const char* error_message = image_io_get_error_message(load_error, file_path);
 

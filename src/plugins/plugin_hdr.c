@@ -514,7 +514,7 @@ static PluginError load_hdr(ImageDocument* doc, const char* filename) {
         /* If dialog was canceled, cancel loading without modifying document */
         if (dialog_response != GTK_RESPONSE_OK) {
             g_free(rgbe_data);
-            return PLUGIN_ERROR_UNSUPPORTED_FEATURE; /* User canceled */
+            return PLUGIN_ERROR_USER_CANCELLED;
         }
     } else {
         /* Auto apply is enabled - use saved settings without showing dialog */
