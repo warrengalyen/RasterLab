@@ -3,6 +3,10 @@
 #include "plugins/plugin_bmp.h"
 #include "plugins/plugin_cut.h"
 #include "plugins/plugin_deep.h"
+#include "plugins/plugin_dicom.h"
+#include "plugins/plugin_fits.h"
+#include "plugins/plugin_hdr.h"
+#include "plugins/plugin_heic.h"
 #include "plugins/plugin_host_api.h"
 #include "plugins/plugin_jpeg.h"
 #include "plugins/plugin_loader.h"
@@ -17,9 +21,6 @@
 #include "plugins/plugin_webp.h"
 #include "plugins/plugin_xbm.h"
 #include "plugins/plugin_xpm.h"
-#include "plugins/plugin_hdr.h"
-#include "plugins/plugin_fits.h"
-#include "plugins/plugin_dicom.h"
 #include <glib.h>
 
 /**
@@ -46,6 +47,7 @@ void builtin_plugins_register(void) {
     ImageFormatPlugin fits_plugin;
     ImageFormatPlugin dicom_plugin;
     ImageFormatPlugin pcd_plugin;
+    ImageFormatPlugin heic_plugin;
 
     /* Register PNG plugin (using libpng) */
 #ifdef HAVE_LIBPNG
@@ -278,4 +280,20 @@ void builtin_plugins_register(void) {
     } else {
         g_message("Failed to initialize PCD plugin");
     }
+
+    /* Register HEIC/AVIF plugin (using libheif) */
+#ifdef HAVE_LIBHEIF
+    g_message("Registering built-in HEIC/AVIF plugin");
+    if (plugin_init_heic(host_api, &heic_plugin)) {
+        if (format_registry_register_builtin(&heic_plugin)) {
+            g_message("Successfully registered HEIC/AVIF plugin");
+        } else {
+            g_message("Failed to register HEIC/AVIF plugin with format registry");
+        }
+    } else {
+        g_message("Failed to initialize HEIC/AVIF plugin (libheif may not be available)");
+    }
+#else
+    g_message("HEIC/AVIF plugin not available (HAVE_LIBHEIF not defined)");
+#endif
 }

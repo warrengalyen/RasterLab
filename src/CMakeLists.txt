@@ -69,6 +69,7 @@ set(SOURCES
     plugins/plugin_fits.c
     plugins/plugin_dicom.c
     plugins/plugin_webp.c
+    plugins/plugin_heic.c
     render/compositor.c
     render/dirty.c
     render/layer.c
@@ -108,6 +109,7 @@ set(SOURCES
     ui/dialogs/formats/bmp_options_dialog.c
     ui/dialogs/formats/jpeg_options_dialog.c
     ui/dialogs/formats/png_options_dialog.c
+    ui/dialogs/formats/heic_options_dialog.c
     ui/dialogs/formats/tiff_options_dialog.c
     ui/dialogs/formats/webp_options_dialog.c
     ui/dialogs/gamma_dialog.c
