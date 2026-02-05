@@ -6,24 +6,24 @@ A full-featured image editor written in C.
 
 | Format | Extensions | Read/Write | Color / notes |
 |--------|------------|------------|----------------|
-| PNG — Portable Network Graphic | `.png` | Read, Write | RGB, RGBA |
-| JPEG — Joint Photographic Experts Group | `.jpg`, `.jpeg` | Read, Write | RGB only (no alpha) |
-| BMP — Windows Bitmap | `.bmp` | Read, Write | RGB, RGBA |
-| WebP — Google WebP Image | `.webp` | Read, Write | RGB, RGBA; animated (read as layers, save static only) |
-| TIFF — Tagged Image File Format | `.tif`, `.tiff` | Read, Write | RGB, RGBA |
-| Netpbm — Portable Pixmap/Graymap/Bitmap/Arbitrary | `.ppm`, `.pgm`, `.pbm`, `.pam`, `.pnm` | Read only | PBM (1-bit), PGM (grayscale), PPM (RGB), PAM (RGBA) |
-| TGA — True Vision Targa | `.tga` | Read only | RGB, RGBA |
-| SGI — Silicon Graphics Image | `.rgb`, `.rgba`, `.sgi`, `.bw`, `.int`, `.inta` | Read only | RGB, RGBA, grayscale |
-| RAS — Sun Raster Image | `.ras`, `.sun` | Read only | RGB, RGBA |
-| PCX — ZSoft Paintbrush | `.pcx` | Read only | RGB (no alpha) |
-| XPM — X PixMap | `.xpm` | Read only | RGB, RGBA (indexed) |
-| XBM — X Bitmap | `.xbm`, `.h` | Read only | 1-bit monochrome |
-| CUT — Dr. Halo | `.cut` | Read only | RGB (no alpha) |
-| DEEP — TVPaint IFF DEEP Image | `.deep` | Read only | RGB, RGBA |
-| HDR — Radiance RGBE | `.hdr`, `.rgbe`, `.zyze`, `.pic` | Read only | HDR RGB (no alpha) |
-| FITS — Flexible Image Transport System | `.fits`, `.fit`, `.fts` | Read only | RGB / grayscale |
-| DICOM — Digital Imaging and Communications in Medicine | `.dcm`, `.dicom` | Read only | Grayscale, RGB, palette, YBR; RLE/JPEG compressed; multi-frame (as layers) |
-| PCD — Kodak Photo CD | `.pcd` | Read only | All resolutions |
+| Portable Network Graphic | `.png` | Read, Write | RGB, RGBA |
+| Joint Photographic Experts Group | `.jpg`, `.jpeg` | Read, Write | RGB only (no alpha) |
+| Windows Bitmap | `.bmp` | Read, Write | RGB, RGBA |
+| Google WebP Image | `.webp` | Read, Write | RGB, RGBA; animated (read as layers, save static only) |
+| Tagged Image File Format | `.tif`, `.tiff` | Read, Write | RGB, RGBA |
+| Netpbm - Portable Pixmap/Graymap/Bitmap/Arbitrary | `.ppm`, `.pgm`, `.pbm`, `.pam`, `.pnm` | Read only | PBM (1-bit), PGM (grayscale), PPM (RGB), PAM (RGBA) |
+| True Vision Targa | `.tga` | Read only | RGB, RGBA |
+| Silicon Graphics Image | `.rgb`, `.rgba`, `.sgi`, `.bw`, `.int`, `.inta` | Read only | RGB, RGBA, grayscale |
+| Sun Raster Image | `.ras`, `.sun` | Read only | RGB, RGBA |
+| ZSoft Paintbrush | `.pcx` | Read only | RGB (no alpha) |
+| X PixMap | `.xpm` | Read only | RGB, RGBA (indexed) |
+| X Bitmap | `.xbm`, `.h` | Read only | 1-bit monochrome |
+| Dr. Halo | `.cut` | Read only | RGB (no alpha) |
+| TVPaint IFF DEEP Image | `.deep` | Read only | RGB, RGBA |
+| Radiance RGBE | `.hdr`, `.rgbe`, `.zyze`, `.pic` | Read only | HDR RGB (no alpha) |
+| Flexible Image Transport System | `.fits`, `.fit`, `.fts` | Read only | RGB / grayscale |
+| Digital Imaging and Communications in Medicine | `.dcm`, `.dicom` | Read only | Grayscale, RGB, palette, YBR; RLE/JPEG compressed; multi-frame (as layers) |
+| Kodak Photo CD | `.pcd` | Read only | All resolutions |
 
 ## Features
 

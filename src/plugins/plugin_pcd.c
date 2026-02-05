@@ -51,19 +51,19 @@ typedef struct {
 } PCDResolutionInfo;
 
 static const PCDResolutionInfo pcd_resolutions[] = {
-    {"Overview", "192×128", 192, 128, true},
-    {"Base/16", "384×256", 384, 256, true},
-    {"Base/4", "768×512", 768, 512, true},
-    {"Base", "1536×1024", 1536, 1024, false},
-    {"4Base", "3072×2048", 3072, 2048, false},
-    {"16Base", "6144×4096", 6144, 4096, false}};
+    {"Overview", "192x128", 192, 128, true},
+    {"Base/16", "384x256", 384, 256, true},
+    {"Base/4", "768x512", 768, 512, true},
+    {"Base", "1536x1024", 1536, 1024, false},
+    {"4Base", "3072x2048", 3072, 2048, false},
+    {"16Base", "6144x4096", 6144, 4096, false}};
 
 #define PCD_NUM_LEVELS (sizeof(pcd_resolutions) / sizeof(pcd_resolutions[0]))
 /* Sentinel for "user cancelled resolution dialog" */
 #define PCD_RES_CANCELLED ((PCDResolutionLevel)-1)
 
 /* ========================================================================
- * PhotoYCC to RGB — libpcd LUT-based conversion (github.com/kraxel/libpcd)
+ * PhotoYCC to RGB - LUT-based conversion
  * ======================================================================== */
 
 #define PCD_YCC_RANGE 320
@@ -108,7 +108,6 @@ static void pcd_ycc_lut_init(void) {
         pcd_lut_range[i] = 255;
 }
 
-/* libpcd: R = range[RANGE + gray + LUT_red[Cr]], G = range[RANGE + gray + green1[Cr] + green2[Cb]], B = range[RANGE + gray + LUT_blue[Cb]] */
 static inline void photoycc_to_rgb(uint8_t Y, uint8_t Cb, uint8_t Cr,
                                    uint8_t* r, uint8_t* g, uint8_t* b) {
     int gray = pcd_lut_gray[Y];
@@ -159,11 +158,11 @@ static uint8_t read_orientation(FILE* f) {
 }
 
 /* ========================================================================
- * File Offset Calculation (libpcd layout: file.c pcd_img_start[])
+ * File Offset Calculation
  * ======================================================================== */
 
 static uint32_t pcd_data_offset_for_level(int level) {
-    /* libpcd: res 1 at 8192, res 2 at 47104, res 3 at 196608 */
+    /* res 1 at 8192, res 2 at 47104, res 3 at 196608 */
     static const uint32_t pcd_strip_start[] = {8192, 47104, 196608};
 
     if (level <= 2)
@@ -178,7 +177,7 @@ static uint32_t pcd_data_offset_for_level(int level) {
  * Strip Decoder (Overview / Base/16 / Base/4)
  * ======================================================================== */
 
-/* Strip layout per libpcd (inter.c, file.c): per 2-line strip:
+/* Strip layout: per 2-line strip:
  *   luma line0 (width bytes), luma line1 (width bytes),
  *   Cb (width/2 bytes), Cr (width/2 bytes) — chroma planar, not interleaved. */
 static bool decode_strip_level(FILE* f, const PCDResolutionInfo* res,
@@ -451,7 +450,7 @@ static bool upsample_planar_2x(uint8_t* luma, uint8_t* cb, uint8_t* cr,
 }
 
 /* ========================================================================
- * Huffman decode (libpcd huff.c)
+ * Huffman decode
  * HUFF1 = 0xc2000; stream after table is (pos+2047)&~0x3ff; next block +0x6000 aligned
  * ======================================================================== */
 #define PCD_HUFF1 0xc2000
@@ -1205,10 +1204,6 @@ static bool decode_highres_level(FILE* f, PCDResolutionLevel level,
     }
 }
 
-/* ========================================================================
- * Unified Load Function
- * ======================================================================== */
-
 static bool load_pcd_image(FILE* f, PCDResolutionLevel level, uint8_t orientation,
                            uint8_t** out_buffer, uint32_t* out_stride) {
     const PCDResolutionInfo* res = &pcd_resolutions[level];
@@ -1221,17 +1216,13 @@ static bool load_pcd_image(FILE* f, PCDResolutionLevel level, uint8_t orientatio
         return decode_strip_level(f, res, out_buffer, out_stride, orientation);
     }
 
-    /* Base / 4Base / 16Base: decode next-lower resolution and upsample (libpcd-style) */
+    /* Base / 4Base / 16Base */
     if (!decode_highres_level(f, level, out_buffer, out_stride, orientation)) {
         PCD_DBG("load_pcd_image: decode_highres_level failed level=%d\n", (int)level);
         return false;
     }
     return true;
 }
-
-/* ========================================================================
- * Resolution Detection & GTK Dialog
- * ======================================================================== */
 
 static bool detect_available_resolutions(FILE* f, bool* available) {
     if (fseek(f, 0, SEEK_END) != 0)
@@ -1240,7 +1231,7 @@ static bool detect_available_resolutions(FILE* f, bool* available) {
     if (file_size < 0)
         return false;
 
-    /* Strip levels: need enough file for that resolution's data (libpcd layout). */
+    /* Strip levels: need enough file for that resolution's data . */
     available[PCD_RES_OVERVIEW] = (file_size >= 49152); /* 8192 + 64*576 */
     available[PCD_RES_BASE16] = (file_size >= 196608);  /* 47104 + 128*1152 */
     available[PCD_RES_BASE4] = (file_size >= 786432);   /* 196608 + 256*2304 */
