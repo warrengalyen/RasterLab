@@ -265,8 +265,8 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
         } else {
             /* At 100% zoom, use tiles for performance */
             if (doc->tile_grid) {
-                /* Composite dirty tiles before drawing */
-                tile_grid_composite(doc, doc->tile_grid);
+                gboolean has_pending_tiles = FALSE;
+                gboolean need_sync_composite = FALSE;
 
                 /* Calculate which tiles are visible in viewport */
                 tile_grid_pixel_to_tile(doc->tile_grid, viewport_x, viewport_y, &start_tile_x, &start_tile_y);
@@ -282,18 +282,64 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
                 if (end_tile_y >= doc->tile_grid->tiles_y)
                     end_tile_y = doc->tile_grid->tiles_y - 1;
 
-                /* Draw each visible tile */
+                /* First pass: Enqueue dirty tiles to worker pool */
+                if (doc->tile_worker_pool) {
+                    for (ty = start_tile_y; ty <= end_tile_y; ty++) {
+                        for (tx = start_tile_x; tx <= end_tile_x; tx++) {
+                            tile = tile_grid_get_tile(doc->tile_grid, tx, ty);
+
+                            if (!tile) {
+                                continue;
+                            }
+
+                            if (tile->dirty) {
+                                if (tile_worker_pool_enqueue(doc->tile_worker_pool, doc, tile, tx, ty)) {
+                                    has_pending_tiles = TRUE;
+                                } else if (tile->state == TILE_QUEUED || tile->state == TILE_RENDERING) {
+                                    /* Already in pipeline, wait for it */
+                                    has_pending_tiles = TRUE;
+                                }
+                                /* Note: If enqueue fails and not already queued, tile stays dirty
+                                 * and will be drawn with stale content (progressive rendering) */
+                            }
+                        }
+                    }
+                } else {
+                    /* No worker pool - check if any tiles need sync compositing */
+                    for (ty = start_tile_y; ty <= end_tile_y && !need_sync_composite; ty++) {
+                        for (tx = start_tile_x; tx <= end_tile_x && !need_sync_composite; tx++) {
+                            tile = tile_grid_get_tile(doc->tile_grid, tx, ty);
+                            if (tile && tile->dirty) {
+                                need_sync_composite = TRUE;
+                            }
+                        }
+                    }
+
+                    /* Fallback: synchronous compositing when no worker pool */
+                    if (need_sync_composite) {
+                        tile_grid_composite(doc, doc->tile_grid);
+                    }
+                }
+
+                /* Second pass: Draw all visible tiles (including stale content for pending tiles) */
                 for (ty = start_tile_y; ty <= end_tile_y; ty++) {
                     for (tx = start_tile_x; tx <= end_tile_x; tx++) {
                         tile = tile_grid_get_tile(doc->tile_grid, tx, ty);
 
                         if (tile && tile->surface) {
-                            /* Draw tile at its document pixel position */
                             cairo_set_source_surface(cr, tile->surface, tile->px, tile->py);
                             cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
                             cairo_paint(cr);
                         }
                     }
+                }
+
+                /* If there are pending tiles, schedule a redraw to show updates */
+                if (has_pending_tiles) {
+                    /* Use idle callback to avoid excessive redraws during rapid updates */
+                    g_idle_add_full(G_PRIORITY_LOW,
+                                    (GSourceFunc)gtk_widget_queue_draw,
+                                    widget, NULL);
                 }
             }
         }

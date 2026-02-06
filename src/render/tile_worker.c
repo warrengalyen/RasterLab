@@ -100,6 +100,12 @@ gboolean tile_worker_composite_pixels(ImageDocument* doc,
             continue;
         }
 
+        /* Get layer opacity (0.0 - 1.0), convert to 0-255 */
+        guint8 layer_opacity = (guint8)(layer->opacity * 255.0);
+        if (layer_opacity == 0) {
+            continue;
+        }
+
         /* Composite layer pixels into tile pixels */
         for (gint y = 0; y < src_height; y++) {
             guint32* layer_row = (guint32*)(layer_data + (src_y + y) * layer_stride) + src_x;
@@ -109,28 +115,39 @@ gboolean tile_worker_composite_pixels(ImageDocument* doc,
                 guint32 src_pixel = layer_row[x];
                 guint32 dst_pixel = tile_row[x];
 
-                /* Simple OVER blend for ARGB32 */
+                /* Extract source components (premultiplied alpha format) */
                 guint8 src_a = (src_pixel >> 24) & 0xFF;
                 guint8 src_r = (src_pixel >> 16) & 0xFF;
                 guint8 src_g = (src_pixel >> 8) & 0xFF;
                 guint8 src_b = src_pixel & 0xFF;
+
+                /* Apply layer opacity to source alpha */
+                src_a = (guint8)(((guint32)src_a * layer_opacity) / 255);
+
+                /* Skip fully transparent pixels */
+                if (src_a == 0) {
+                    continue;
+                }
+
+                /* Apply layer opacity to premultiplied RGB components */
+                if (layer_opacity < 255) {
+                    src_r = (guint8)(((guint32)src_r * layer_opacity) / 255);
+                    src_g = (guint8)(((guint32)src_g * layer_opacity) / 255);
+                    src_b = (guint8)(((guint32)src_b * layer_opacity) / 255);
+                }
 
                 guint8 dst_a = (dst_pixel >> 24) & 0xFF;
                 guint8 dst_r = (dst_pixel >> 16) & 0xFF;
                 guint8 dst_g = (dst_pixel >> 8) & 0xFF;
                 guint8 dst_b = dst_pixel & 0xFF;
 
-                /* Alpha blend */
-                guint8 out_a = src_a + (guint8)(((guint32)dst_a * (255 - src_a)) / 255);
-                guint8 out_r, out_g, out_b;
-
-                if (out_a > 0) {
-                    out_r = (guint8)(((guint32)src_r * src_a + (guint32)dst_r * dst_a * (255 - src_a) / 255) / out_a);
-                    out_g = (guint8)(((guint32)src_g * src_a + (guint32)dst_g * dst_a * (255 - src_a) / 255) / out_a);
-                    out_b = (guint8)(((guint32)src_b * src_a + (guint32)dst_b * dst_a * (255 - src_a) / 255) / out_a);
-                } else {
-                    out_r = out_g = out_b = 0;
-                }
+                /* OVER blend for premultiplied alpha:
+                 * out = src + dst * (1 - src_a) */
+                guint8 inv_src_a = 255 - src_a;
+                guint8 out_a = src_a + (guint8)(((guint32)dst_a * inv_src_a) / 255);
+                guint8 out_r = src_r + (guint8)(((guint32)dst_r * inv_src_a) / 255);
+                guint8 out_g = src_g + (guint8)(((guint32)dst_g * inv_src_a) / 255);
+                guint8 out_b = src_b + (guint8)(((guint32)dst_b * inv_src_a) / 255);
 
                 tile_row[x] = (out_a << 24) | (out_r << 16) | (out_g << 8) | out_b;
             }
@@ -145,17 +162,34 @@ gboolean tile_worker_composite_pixels(ImageDocument* doc,
  */
 static void tile_worker_thread_func(gpointer data, gpointer user_data) {
     WorkerJob* job = (WorkerJob*)data;
+    TileWorkerPool* pool = (TileWorkerPool*)user_data;
 
-    if (!job) {
+    if (!job || !pool) {
+        g_free(job);
         return;
     }
+
+    /* Check generation_id BEFORE compositing to avoid wasted work */
+    guint expected_gen = job->tile->generation_id;
 
     /* Composite pixels WITHOUT touching Cairo */
     if (job->tile && job->tile->pixel_buffer) {
         tile_worker_composite_pixels(job->doc, job->tile, job->tile_x, job->tile_y);
 
-        /* Mark tile as ready for upload */
-        job->tile->pending_upload = TRUE;
+        /* Lock and add to pending uploads queue (only if not stale) */
+        g_mutex_lock(&pool->upload_mutex);
+
+        /* Check generation again - may have changed during compositing */
+        if (job->tile->generation_id == expected_gen) {
+            job->tile->pending_upload = TRUE;
+            job->tile->state = TILE_CLEAN; /* Mark as ready */
+            g_queue_push_tail(pool->pending_uploads, job->tile);
+        } else {
+            /* Tile was invalidated during compositing, discard result */
+            job->tile->state = TILE_CLEAN; /* Reset state for re-queue */
+        }
+
+        g_mutex_unlock(&pool->upload_mutex);
     }
 
     g_free(job);
@@ -190,9 +224,9 @@ TileWorkerPool* tile_worker_pool_create(guint num_workers) {
 
     g_mutex_init(&pool->upload_mutex);
 
-    /* Create thread pool */
+    /* Create thread pool with pool as user_data so workers can access queue */
     pool->thread_pool = g_thread_pool_new(tile_worker_thread_func,
-                                          NULL, /* user_data */
+                                          pool, /* user_data - pass pool for queue access */
                                           num_workers,
                                           FALSE, /* exclusive (don't wait for all) */
                                           NULL); /* error */
@@ -245,6 +279,16 @@ gboolean tile_worker_pool_enqueue(TileWorkerPool* pool,
         return FALSE;
     }
 
+    /* Skip if tile is already queued or being rendered */
+    if (tile->state == TILE_QUEUED || tile->state == TILE_RENDERING) {
+        return FALSE; /* Already in pipeline */
+    }
+
+    /* Skip if tile is not dirty */
+    if (!tile->dirty) {
+        return FALSE;
+    }
+
     /* Allocate pixel buffer if needed */
     if (!tile->pixel_buffer) {
         tile->stride = cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32, tile->w);
@@ -266,6 +310,10 @@ gboolean tile_worker_pool_enqueue(TileWorkerPool* pool,
     job->tile_x = tile_x;
     job->tile_y = tile_y;
 
+    /* Mark tile as queued and increment generation */
+    tile->state = TILE_QUEUED;
+    tile->generation_id++;
+
     g_thread_pool_push(pool->thread_pool, job, NULL);
 
     return TRUE;
@@ -285,31 +333,47 @@ guint tile_worker_pool_get_pending(TileWorkerPool* pool) {
 /**
  * Process completed tiles and upload to Cairo surfaces
  * MAIN THREAD ONLY - this updates Cairo surfaces
+ * @param pool Worker pool
+ * @return Number of tiles uploaded to Cairo
  */
 guint tile_worker_pool_process_uploads(TileWorkerPool* pool) {
     Tile* tile;
     guint count = 0;
+    GQueue* to_process;
 
     if (!pool) {
         return 0;
     }
 
+    /* Quick check without lock - if empty, nothing to do */
     g_mutex_lock(&pool->upload_mutex);
+    if (g_queue_is_empty(pool->pending_uploads)) {
+        g_mutex_unlock(&pool->upload_mutex);
+        return 0;
+    }
 
-    while (!g_queue_is_empty(pool->pending_uploads)) {
-        tile = (Tile*)g_queue_pop_head(pool->pending_uploads);
+    /* Swap queues to minimize lock time - this is the key optimization */
+    to_process = pool->pending_uploads;
+    pool->pending_uploads = g_queue_new();
+    g_mutex_unlock(&pool->upload_mutex);
 
-        if (!tile || !tile->pixel_buffer) {
+    /* Process all tiles outside the lock */
+    while (!g_queue_is_empty(to_process)) {
+        tile = (Tile*)g_queue_pop_head(to_process);
+
+        if (!tile || !tile->pixel_buffer || !tile->pending_upload) {
             continue;
         }
 
-        /* Destroy old Cairo surface */
+        /* Destroy old Cairo surface if it exists */
         if (tile->surface) {
             cairo_surface_destroy(tile->surface);
             tile->surface = NULL;
         }
 
-        /* Create new Cairo surface from pixel buffer (main thread safe) */
+        /* Create new Cairo surface from pixel buffer (main thread safe)
+         * Note: cairo_image_surface_create_for_data does NOT copy the data,
+         * it uses the provided buffer directly, so we must keep pixel_buffer alive */
         tile->surface = cairo_image_surface_create_for_data(
             tile->pixel_buffer,
             CAIRO_FORMAT_ARGB32,
@@ -322,13 +386,13 @@ guint tile_worker_pool_process_uploads(TileWorkerPool* pool) {
             tile->pending_upload = FALSE;
             count++;
         } else {
-            g_warning("Failed to create Cairo surface for tile");
+            g_warning("Failed to create Cairo surface for tile (%d, %d)", tile->x, tile->y);
             cairo_surface_destroy(tile->surface);
             tile->surface = NULL;
         }
     }
 
-    g_mutex_unlock(&pool->upload_mutex);
+    g_queue_free(to_process);
 
     return count;
 }
