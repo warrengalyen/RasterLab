@@ -7,6 +7,7 @@
 #include "plugins/plugin_fits.h"
 #include "plugins/plugin_hdr.h"
 #include "plugins/plugin_heic.h"
+#include "plugins/plugin_avif.h"
 #include "plugins/plugin_host_api.h"
 #include "plugins/plugin_jpeg.h"
 #include "plugins/plugin_loader.h"
@@ -48,6 +49,7 @@ void builtin_plugins_register(void) {
     ImageFormatPlugin dicom_plugin;
     ImageFormatPlugin pcd_plugin;
     ImageFormatPlugin heic_plugin;
+    ImageFormatPlugin avif_plugin;
 
     /* Register PNG plugin (using libpng) */
 #ifdef HAVE_LIBPNG
@@ -281,19 +283,35 @@ void builtin_plugins_register(void) {
         g_message("Failed to initialize PCD plugin");
     }
 
-    /* Register HEIC/AVIF plugin (using libheif) */
+    /* Register HEIC plugin (using libheif + libde265) */
 #ifdef HAVE_LIBHEIF
-    g_message("Registering built-in HEIC/AVIF plugin");
+    g_message("Registering built-in HEIC plugin");
     if (plugin_init_heic(host_api, &heic_plugin)) {
         if (format_registry_register_builtin(&heic_plugin)) {
-            g_message("Successfully registered HEIC/AVIF plugin");
+            g_message("Successfully registered HEIC plugin");
         } else {
-            g_message("Failed to register HEIC/AVIF plugin with format registry");
+            g_message("Failed to register HEIC plugin with format registry");
         }
     } else {
-        g_message("Failed to initialize HEIC/AVIF plugin (libheif may not be available)");
+        g_message("Failed to initialize HEIC plugin (libheif may not be available)");
     }
 #else
-    g_message("HEIC/AVIF plugin not available (HAVE_LIBHEIF not defined)");
+    g_message("HEIC plugin not available (HAVE_LIBHEIF not defined)");
+#endif
+
+    /* Register AVIF plugin (using libheif + libaom) */
+#if HAVE_LIBHEIF && HAVE_LIBAOM
+    g_message("Registering built-in AVIF plugin");
+    if (plugin_init_avif(host_api, &avif_plugin)) {
+        if (format_registry_register_builtin(&avif_plugin)) {
+            g_message("Successfully registered AVIF plugin");
+        } else {
+            g_message("Failed to register AVIF plugin with format registry");
+        }
+    } else {
+        g_message("Failed to initialize AVIF plugin (libaom may not be available)");
+    }
+#else
+    g_message("AVIF plugin not available (requires HAVE_LIBHEIF and HAVE_LIBAOM)");
 #endif
 }

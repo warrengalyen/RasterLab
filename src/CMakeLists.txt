@@ -70,6 +70,7 @@ set(SOURCES
     plugins/plugin_dicom.c
     plugins/plugin_webp.c
     plugins/plugin_heic.c
+    plugins/plugin_avif.c
     render/compositor.c
     render/dirty.c
     render/layer.c
@@ -110,6 +111,7 @@ set(SOURCES
     ui/dialogs/formats/jpeg_options_dialog.c
     ui/dialogs/formats/png_options_dialog.c
     ui/dialogs/formats/heic_options_dialog.c
+    ui/dialogs/formats/avif_options_dialog.c
     ui/dialogs/formats/tiff_options_dialog.c
     ui/dialogs/formats/webp_options_dialog.c
     ui/dialogs/gamma_dialog.c
@@ -487,6 +489,13 @@ if(LIBHEIF_FOUND)
     target_compile_definitions(rasterlab PRIVATE HAVE_LIBHEIF=1)
 else()
     target_compile_definitions(rasterlab PRIVATE HAVE_LIBHEIF=0)
+endif()
+
+# HAVE_LIBAOM: set in root CMakeLists.txt when libaom is built for AVIF support
+if(HAVE_LIBAOM)
+    target_compile_definitions(rasterlab PRIVATE HAVE_LIBAOM=1)
+else()
+    target_compile_definitions(rasterlab PRIVATE HAVE_LIBAOM=0)
 endif()
 
 # Link libtiff if available

@@ -5,6 +5,7 @@
 #include "ui/dialogs/formats/png_options_dialog.h"
 #include "ui/dialogs/formats/tiff_options_dialog.h"
 #include "ui/dialogs/formats/heic_options_dialog.h"
+#include "ui/dialogs/formats/avif_options_dialog.h"
 #include "ui/dialogs/formats/webp_options_dialog.h"
 #include <glib.h>
 #include <gtk/gtk.h>
@@ -52,6 +53,9 @@ gboolean save_options_dialog_show(GtkWindow* parent, const char* filename, SaveO
     }
     if (g_ascii_strcasecmp(ext, "heic") == 0 || g_ascii_strcasecmp(ext, "heif") == 0) {
         return heic_options_dialog_show(parent, opts, doc);
+    }
+    if (g_ascii_strcasecmp(ext, "avif") == 0 || g_ascii_strcasecmp(ext, "avifs") == 0) {
+        return avif_options_dialog_show(parent, opts);
     }
 
     /* No dialog for this format */

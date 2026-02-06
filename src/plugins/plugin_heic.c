@@ -138,7 +138,8 @@ static void rgb_to_cairo_argb32(const uint8_t* src, uint8_t* dst,
  */
 static PluginError load_heif_image_handle_sdr(ImageDocument* doc, heif_context* ctx,
                                               heif_image_handle* handle, const char* layer_name,
-                                              int has_alpha, int is_premultiplied) {
+                                              int has_alpha, int is_premultiplied,
+                                              int expected_w, int expected_h) {
     heif_image* img = NULL;
     heif_error err;
     heif_decoding_options* opts = NULL;
@@ -149,9 +150,6 @@ static PluginError load_heif_image_handle_sdr(ImageDocument* doc, heif_context* 
     cairo_surface_t* surface = NULL;
     guchar* surface_data;
     int surface_stride;
-
-    width = heif_image_handle_get_width(handle);
-    height = heif_image_handle_get_height(handle);
 
     opts = heif_decoding_options_alloc();
     if (opts) {
@@ -165,6 +163,15 @@ static PluginError load_heif_image_handle_sdr(ImageDocument* doc, heif_context* 
         heif_decoding_options_free(opts);
     }
     if (err.code != heif_error_Ok) {
+        return PLUGIN_ERROR_UNSUPPORTED_FORMAT;
+    }
+
+    width = heif_image_get_width(img, heif_channel_interleaved);
+    height = heif_image_get_height(img, heif_channel_interleaved);
+
+    /* Skip truncated/incomplete decodes: decoded size must match expected dimensions */
+    if (expected_w > 0 && expected_h > 0 && (width != expected_w || height != expected_h)) {
+        heif_image_release(img);
         return PLUGIN_ERROR_UNSUPPORTED_FORMAT;
     }
 
@@ -208,11 +215,12 @@ static PluginError load_heif_image_handle_sdr(ImageDocument* doc, heif_context* 
  */
 static PluginError load_heif_image_handle(ImageDocument* doc, heif_context* ctx,
                                           heif_image_handle* handle, const char* layer_name,
-                                          bool is_background) {
+                                          bool is_background, int expected_w, int expected_h) {
     int has_alpha = heif_image_handle_has_alpha_channel(handle);
     int is_premultiplied = heif_image_handle_is_premultiplied_alpha(handle);
 
-    return load_heif_image_handle_sdr(doc, ctx, handle, layer_name, has_alpha, is_premultiplied);
+    return load_heif_image_handle_sdr(doc, ctx, handle, layer_name, has_alpha, is_premultiplied,
+                                      expected_w, expected_h);
 }
 
 /**
@@ -221,11 +229,10 @@ static PluginError load_heif_image_handle(ImageDocument* doc, heif_context* ctx,
 static PluginError load_heic(ImageDocument* doc, const char* filename) {
     heif_context* ctx = NULL;
     heif_error err;
-    heif_image_handle* primary_handle = NULL;
     heif_item_id* ids = NULL;
     int num_images = 0;
     int i;
-    bool has_primary = false;
+    int loaded_count = 0;
     char layer_name[64];
 
     if (!doc || !filename) {
@@ -251,83 +258,55 @@ static PluginError load_heic(ImageDocument* doc, const char* filename) {
     doc->layers = NULL;
 
     num_images = heif_context_get_number_of_top_level_images(ctx);
-    err = heif_context_get_primary_image_handle(ctx, &primary_handle);
-    if (err.code == heif_error_Ok && primary_handle) {
-        int w = heif_image_handle_get_width(primary_handle);
-        int h = heif_image_handle_get_height(primary_handle);
-        doc->width = (guint)w;
-        doc->height = (guint)h;
-        doc->channels = 4;
-        doc->bit_depth = 8;
-        doc->has_alpha = heif_image_handle_has_alpha_channel(primary_handle) != 0;
-
-        const char* first_name = (num_images > 1) ? "Frame 1" : "Background";
-        if (load_heif_image_handle(doc, ctx, primary_handle, first_name, true) != PLUGIN_ERROR_NONE) {
-            heif_context_free(ctx);
-            return PLUGIN_ERROR_CORRUPT_FILE;
-        }
-        has_primary = true;
-    } else if (num_images > 0) {
-        ids = g_malloc(sizeof(heif_item_id) * (size_t)num_images);
-        if (ids) {
-            int filled = heif_context_get_list_of_top_level_image_IDs(ctx, ids, num_images);
-            if (filled > 0) {
-                err = heif_context_get_image_handle(ctx, ids[0], &primary_handle);
-                if (err.code == heif_error_Ok && primary_handle) {
-                    int w = heif_image_handle_get_width(primary_handle);
-                    int h = heif_image_handle_get_height(primary_handle);
-                    doc->width = (guint)w;
-                    doc->height = (guint)h;
-                    doc->channels = 4;
-                    doc->bit_depth = 8;
-                    doc->has_alpha = heif_image_handle_has_alpha_channel(primary_handle) != 0;
-                    const char* first_name = (num_images > 1) ? "Frame 1" : "Background";
-                    if (load_heif_image_handle(doc, ctx, primary_handle, first_name, true) == PLUGIN_ERROR_NONE) {
-                        has_primary = true;
-                    } else {
-                        heif_image_handle_release(primary_handle);
-                    }
-                }
-            }
-            g_free(ids);
-        }
+    if (num_images <= 0) {
+        heif_context_free(ctx);
+        g_warning("HEIC plugin: No top-level images");
+        return PLUGIN_ERROR_UNSUPPORTED_FORMAT;
     }
 
-    if (has_primary && num_images > 1) {
-        ids = g_malloc(sizeof(heif_item_id) * (size_t)num_images);
-        if (ids) {
-            int filled = heif_context_get_list_of_top_level_image_IDs(ctx, ids, num_images);
-            heif_item_id primary_id;
-            heif_error err_primary_id = heif_context_get_primary_image_ID(ctx, &primary_id);
-            gboolean primary_id_ok = (err_primary_id.code == heif_error_Ok);
-
-            for (i = 0; i < filled; i++) {
-                if (primary_id_ok && ids[i] == primary_id) {
-                    continue;
-                }
-                if (!primary_id_ok && i == 0) {
-                    continue;
-                }
-
-                heif_image_handle* handle = NULL;
-                err = heif_context_get_image_handle(ctx, ids[i], &handle);
-                if (err.code != heif_error_Ok || !handle) {
-                    continue;
-                }
-
-                g_snprintf(layer_name, sizeof(layer_name), "Frame %d", i + 1);
-                if (load_heif_image_handle(doc, ctx, handle, layer_name, false) != PLUGIN_ERROR_NONE) {
-                    heif_image_handle_release(handle);
-                }
-            }
-            g_free(ids);
-        }
+    ids = g_malloc(sizeof(heif_item_id) * (size_t)num_images);
+    if (!ids) {
+        heif_context_free(ctx);
+        return PLUGIN_ERROR_OUT_OF_MEMORY;
     }
 
+    int filled = heif_context_get_list_of_top_level_image_IDs(ctx, ids, num_images);
+
+    /* Iterate all top-level images; use first decodable for dimensions.
+     * Skip images that fail to decode (e.g. incomplete elementary streams).
+     * Other applications may handle such files by trying alternatives. */
+    for (i = 0; i < filled; i++) {
+        heif_image_handle* handle = NULL;
+        err = heif_context_get_image_handle(ctx, ids[i], &handle);
+        if (err.code != heif_error_Ok || !handle)
+            continue;
+
+        const char* name = (filled > 1) ? (loaded_count == 0 ? "Frame 1" : NULL) : "Background";
+        if (name != NULL)
+            g_snprintf(layer_name, sizeof(layer_name), "%s", name);
+        else
+            g_snprintf(layer_name, sizeof(layer_name), "Frame %d", loaded_count + 1);
+
+        int expected_w = (loaded_count > 0) ? (int)doc->width : 0;
+        int expected_h = (loaded_count > 0) ? (int)doc->height : 0;
+        if (load_heif_image_handle(doc, ctx, handle, layer_name, (loaded_count == 0), expected_w, expected_h) == PLUGIN_ERROR_NONE) {
+            if (loaded_count == 0) {
+                doc->width = (guint)heif_image_handle_get_width(handle);
+                doc->height = (guint)heif_image_handle_get_height(handle);
+                doc->channels = 4;
+                doc->bit_depth = 8;
+                doc->has_alpha = heif_image_handle_has_alpha_channel(handle) != 0;
+            }
+            loaded_count++;
+        }
+        heif_image_handle_release(handle);
+    }
+
+    g_free(ids);
     heif_context_free(ctx);
 
-    if (!has_primary || doc->layers == NULL) {
-        g_warning("HEIC plugin: No valid image found");
+    if (loaded_count == 0 || doc->layers == NULL) {
+        g_warning("HEIC plugin: No decodable image found (incomplete/corrupt streams skipped)");
         return PLUGIN_ERROR_UNSUPPORTED_FORMAT;
     }
 

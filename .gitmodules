@@ -19,3 +19,6 @@
 [submodule "lib/libde265"]
 	path = lib/libde265
 	url = https://github.com/strukturag/libde265.git
+[submodule "lib/libaom"]
+	path = lib/libaom
+	url = https://aomedia.googlesource.com/aom

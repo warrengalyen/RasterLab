@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.10)
 project(RasterLab C)
 
 # Option: build only the application, use system libs (skip building libjpeg, libpng, libtiff, libwebp, libheif, libde265, zlib from lib/)
-option(RASTERLAB_APP_ONLY "Only build the application; skip building libraries in lib/ (use system libjpeg, libpng, libtiff, libwebp, libheif, libde265, zlib)" ON)
+option(RASTERLAB_APP_ONLY "Only build the application; skip building libraries in lib/ (use system libjpeg, libpng, libtiff, libwebp, libheif, libde265, libaom, zlib)" ON)
 if(RASTERLAB_APP_ONLY)
     message(STATUS "RASTERLAB_APP_ONLY=ON: skipping build of lib/ deps, using system libraries")
 endif()
@@ -946,6 +946,60 @@ else()
     endif()
 endif()
 
+# Check if libaom submodule exists (AV1 decoder for libheif AVIF support)
+set(LIBAOM_FOUND FALSE)
+set(LIBAOM_TARGET "")
+set(HAVE_LIBAOM FALSE)
+
+if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/libaom/CMakeLists.txt")
+    message(STATUS "libaom submodule found, building from source for AVIF support")
+
+    set(LIBAOM_BUILD_DIR "${CMAKE_BINARY_DIR}/libaom_build")
+    set(LIBAOM_INSTALL_DIR "${CMAKE_BINARY_DIR}/libaom_install")
+
+    if(WIN32)
+        if(MINGW)
+            set(LIBAOM_DLL_NAME "libaom.dll")
+        else()
+            set(LIBAOM_DLL_NAME "aom.dll")
+        endif()
+        set(LIBAOM_DLL_PATH "${LIBAOM_INSTALL_DIR}/bin/${LIBAOM_DLL_NAME}")
+        if(MINGW)
+            set(LIBAOM_IMPLIB_NAME "libaom.dll.a")
+        else()
+            set(LIBAOM_IMPLIB_NAME "aom.lib")
+        endif()
+        set(LIBAOM_IMPLIB_PATH "${LIBAOM_INSTALL_DIR}/lib/${LIBAOM_IMPLIB_NAME}")
+    else()
+        set(LIBAOM_LIB_NAME "libaom${CMAKE_SHARED_LIBRARY_SUFFIX}")
+        set(LIBAOM_LIB_PATH "${LIBAOM_INSTALL_DIR}/lib/${LIBAOM_LIB_NAME}")
+    endif()
+
+    set(LIBAOM_CMAKE_ARGS
+        -DCMAKE_INSTALL_PREFIX=${LIBAOM_INSTALL_DIR}
+        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+        -DBUILD_SHARED_LIBS=ON
+        -DENABLE_TESTS=OFF
+        -DENABLE_EXAMPLES=OFF
+        -DENABLE_TOOLS=OFF
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+    )
+
+    ExternalProject_Add(
+        libaom_external
+        SOURCE_DIR "${CMAKE_SOURCE_DIR}/lib/libaom"
+        BINARY_DIR "${LIBAOM_BUILD_DIR}"
+        INSTALL_DIR "${LIBAOM_INSTALL_DIR}"
+        CMAKE_ARGS ${LIBAOM_CMAKE_ARGS}
+        BUILD_ALWAYS FALSE
+    )
+
+    set(LIBAOM_FOUND TRUE)
+    set(LIBAOM_TARGET aom)
+    set(HAVE_LIBAOM TRUE)
+    message(STATUS "Building libaom from source as shared library for AVIF support")
+endif()
+
 # Check if libheif submodule exists
 set(LIBHEIF_FOUND FALSE)
 set(LIBHEIF_LIBRARIES "")
@@ -1021,10 +1075,20 @@ if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/libheif/CMakeLists
             -DWITH_LIBDE265_PLUGIN=OFF
         )
     endif()
+
+    # Pass libaom to libheif for AVIF support (decoder only)
+    if(LIBAOM_FOUND AND LIBAOM_TARGET AND TARGET libaom_external)
+        list(APPEND LIBHEIF_CMAKE_PREFIX_PATH ${LIBAOM_INSTALL_DIR})
+        list(APPEND LIBHEIF_CMAKE_ARGS
+            -DWITH_AOM_DECODER=ON
+            -DWITH_AOM_ENCODER=ON
+            -DWITH_AOM_DECODER_PLUGIN=OFF
+        )
+    endif()
     if(LIBHEIF_CMAKE_PREFIX_PATH)
         list(APPEND LIBHEIF_CMAKE_ARGS -DCMAKE_PREFIX_PATH="${LIBHEIF_CMAKE_PREFIX_PATH}")
     endif()
-    
+
     # Collect dependencies for libheif
     set(LIBHEIF_DEPENDS "")
     if(ZLIB_TARGET AND TARGET zlib_external)
@@ -1032,6 +1096,9 @@ if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/libheif/CMakeLists
     endif()
     if(LIBDE265_TARGET AND TARGET libde265_external)
         list(APPEND LIBHEIF_DEPENDS libde265_external)
+    endif()
+    if(LIBAOM_TARGET AND TARGET libaom_external)
+        list(APPEND LIBHEIF_DEPENDS libaom_external)
     endif()
     
     # Add ExternalProject to build libheif
@@ -1101,6 +1168,14 @@ if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/libheif/CMakeLists
                 COMMENT "Copying libde265 DLL to bin directory (HEIC runtime dependency)"
             )
         endif()
+        if(LIBAOM_FOUND AND DEFINED LIBAOM_DLL_PATH)
+            add_custom_command(TARGET libheif_external POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${LIBAOM_DLL_PATH}"
+                    "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/"
+                COMMENT "Copying libaom DLL to bin directory (AVIF runtime dependency)"
+            )
+        endif()
     else()
         set_target_properties(heif PROPERTIES
             INTERFACE_INCLUDE_DIRECTORIES "${LIBHEIF_INCLUDE_DIRS}"
@@ -1122,8 +1197,16 @@ if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/libheif/CMakeLists
                 COMMENT "Copying libde265 shared library to bin directory (HEIC runtime dependency)"
             )
         endif()
+        if(LIBAOM_FOUND AND DEFINED LIBAOM_LIB_PATH)
+            add_custom_command(TARGET libheif_external POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${LIBAOM_LIB_PATH}"
+                    "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/"
+                COMMENT "Copying libaom shared library to bin directory (AVIF runtime dependency)"
+            )
+        endif()
     endif()
-    
+
     set(LIBHEIF_FOUND TRUE)
     set(LIBHEIF_TARGET heif)
     
