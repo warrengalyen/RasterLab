@@ -425,11 +425,20 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
 static gboolean on_viewport_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     ImageDocument* doc = (ImageDocument*)user_data;
     GtkAllocation drawing_area_alloc;
+    gdouble scroll_x = 0, scroll_y = 0;
 
     (void)widget; /* Unused */
 
     if (!doc || !doc->drawing_area) {
         return FALSE;
+    }
+
+    /* Get scroll position from adjustments */
+    if (doc->scrolled_window && GTK_IS_SCROLLED_WINDOW(doc->scrolled_window)) {
+        GtkAdjustment* hadj = gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(doc->scrolled_window));
+        GtkAdjustment* vadj = gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(doc->scrolled_window));
+        if (hadj) scroll_x = gtk_adjustment_get_value(hadj);
+        if (vadj) scroll_y = gtk_adjustment_get_value(vadj);
     }
 
     /* Get drawing area allocation to find its position in viewport */
@@ -438,8 +447,10 @@ static gboolean on_viewport_draw(GtkWidget* widget, cairo_t* cr, gpointer user_d
     /* Save cairo state */
     cairo_save(cr);
 
-    /* Translate to drawing area position within viewport */
-    cairo_translate(cr, drawing_area_alloc.x, drawing_area_alloc.y);
+    /* Translate to drawing area position within viewport, accounting for scroll offset.
+     * The drawing_area_alloc gives position relative to bin_window, but we're drawing
+     * on the view_window. Subtract scroll offset to get correct view_window coordinates. */
+    cairo_translate(cr, drawing_area_alloc.x - scroll_x, drawing_area_alloc.y - scroll_y);
 
     /* Draw move tool outline overlay (in drawing area coordinates) */
     tool_move_draw_preview(doc, cr, doc->zoom_factor);
