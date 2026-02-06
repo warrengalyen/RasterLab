@@ -282,50 +282,87 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
                 if (end_tile_y >= doc->tile_grid->tiles_y)
                     end_tile_y = doc->tile_grid->tiles_y - 1;
 
-                /* First pass: Enqueue dirty tiles to worker pool */
+                /* Check for dirty visible tiles and composite them SYNCHRONOUSLY.
+                 * This prevents flickering during layer movement where stale tile content
+                 * would briefly show the layer at its old position before async compositing
+                 * completes. The worker pool is used for prefetching off-screen tiles only. */
+                for (ty = start_tile_y; ty <= end_tile_y && !need_sync_composite; ty++) {
+                    for (tx = start_tile_x; tx <= end_tile_x && !need_sync_composite; tx++) {
+                        tile = tile_grid_get_tile(doc->tile_grid, tx, ty);
+                        if (tile && tile->dirty) {
+                            need_sync_composite = TRUE;
+                        }
+                    }
+                }
+
+                /* Synchronous compositing for visible dirty tiles to prevent flicker */
+                if (need_sync_composite) {
+                    for (ty = start_tile_y; ty <= end_tile_y; ty++) {
+                        for (tx = start_tile_x; tx <= end_tile_x; tx++) {
+                            tile = tile_grid_get_tile(doc->tile_grid, tx, ty);
+                            if (tile && tile->dirty) {
+                                /* Composite pixels synchronously */
+                                if (tile_worker_composite_pixels(doc, tile, tx, ty)) {
+                                    /* Upload pixel buffer to Cairo surface */
+                                    if (tile->surface) {
+                                        cairo_surface_destroy(tile->surface);
+                                        tile->surface = NULL;
+                                    }
+                                    
+                                    if (tile->pixel_buffer) {
+                                        tile->surface = cairo_image_surface_create_for_data(
+                                            tile->pixel_buffer,
+                                            CAIRO_FORMAT_ARGB32,
+                                            tile->w,
+                                            tile->h,
+                                            tile->stride);
+                                        
+                                        if (cairo_surface_status(tile->surface) == CAIRO_STATUS_SUCCESS) {
+                                            tile->dirty = FALSE;
+                                            tile->pending_upload = FALSE;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                /* Enqueue OFF-SCREEN dirty tiles to worker pool for prefetching */
                 if (doc->tile_worker_pool) {
-                    /* Set viewport center for priority queue - tiles closer to center
-                     * will be composited first for better perceived performance */
+                    /* Set viewport center for priority queue */
                     gint viewport_center_x = viewport_x + viewport_w / 2;
                     gint viewport_center_y = viewport_y + viewport_h / 2;
                     tile_worker_pool_set_viewport_center(doc->tile_worker_pool,
                                                          viewport_center_x,
                                                          viewport_center_y);
 
-                    for (ty = start_tile_y; ty <= end_tile_y; ty++) {
-                        for (tx = start_tile_x; tx <= end_tile_x; tx++) {
-                            tile = tile_grid_get_tile(doc->tile_grid, tx, ty);
+                    /* Prefetch tiles around the visible area */
+                    gint prefetch_start_x = start_tile_x - 1;
+                    gint prefetch_start_y = start_tile_y - 1;
+                    gint prefetch_end_x = end_tile_x + 1;
+                    gint prefetch_end_y = end_tile_y + 1;
+                    
+                    if (prefetch_start_x < 0) prefetch_start_x = 0;
+                    if (prefetch_start_y < 0) prefetch_start_y = 0;
+                    if (prefetch_end_x >= doc->tile_grid->tiles_x) prefetch_end_x = doc->tile_grid->tiles_x - 1;
+                    if (prefetch_end_y >= doc->tile_grid->tiles_y) prefetch_end_y = doc->tile_grid->tiles_y - 1;
 
-                            if (!tile) {
+                    for (ty = prefetch_start_y; ty <= prefetch_end_y; ty++) {
+                        for (tx = prefetch_start_x; tx <= prefetch_end_x; tx++) {
+                            /* Skip tiles that are already visible (handled synchronously above) */
+                            if (tx >= start_tile_x && tx <= end_tile_x &&
+                                ty >= start_tile_y && ty <= end_tile_y) {
                                 continue;
                             }
-
-                            if (tile->dirty) {
-                                if (tile_worker_pool_enqueue(doc->tile_worker_pool, doc, tile, tx, ty)) {
-                                    has_pending_tiles = TRUE;
-                                } else if (tile->state == TILE_QUEUED || tile->state == TILE_RENDERING) {
-                                    /* Already in pipeline, wait for it */
-                                    has_pending_tiles = TRUE;
-                                }
-                                /* Note: If enqueue fails and not already queued, tile stays dirty
-                                 * and will be drawn with stale content (progressive rendering) */
-                            }
-                        }
-                    }
-                } else {
-                    /* No worker pool - check if any tiles need sync compositing */
-                    for (ty = start_tile_y; ty <= end_tile_y && !need_sync_composite; ty++) {
-                        for (tx = start_tile_x; tx <= end_tile_x && !need_sync_composite; tx++) {
+                            
                             tile = tile_grid_get_tile(doc->tile_grid, tx, ty);
                             if (tile && tile->dirty) {
-                                need_sync_composite = TRUE;
+                                if (tile_worker_pool_enqueue(doc->tile_worker_pool, doc, tile, tx, ty)) {
+                                    has_pending_tiles = TRUE;
+                                }
                             }
                         }
-                    }
-
-                    /* Fallback: synchronous compositing when no worker pool */
-                    if (need_sync_composite) {
-                        tile_grid_composite(doc, doc->tile_grid);
                     }
                 }
 
