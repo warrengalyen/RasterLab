@@ -49,14 +49,27 @@ TileWorkerPool* tile_worker_pool_create(guint num_workers);
 void tile_worker_pool_destroy(TileWorkerPool* pool);
 
 /**
- * Enqueue a tile for background compositing
- * Thread-safe - can be called from any thread
+ * Set the viewport center for priority calculation
+ * Tiles closer to this point will be composited first (priority queue)
+ * Call this before enqueueing tiles for best results
+ * @param pool Worker pool
+ * @param center_x Viewport center X in document pixel coordinates
+ * @param center_y Viewport center Y in document pixel coordinates
+ */
+void tile_worker_pool_set_viewport_center(TileWorkerPool* pool,
+                                          gint center_x,
+                                          gint center_y);
+
+/**
+ * Enqueue a tile for background compositing with priority
+ * Tiles closer to viewport center (set via tile_worker_pool_set_viewport_center)
+ * are processed first. Thread-safe - can be called from any thread.
  * @param pool Worker pool
  * @param doc Document
  * @param tile Tile with allocated pixel_buffer
  * @param tile_x Tile X coordinate
  * @param tile_y Tile Y coordinate
- * @return TRUE if enqueued, FALSE if pool shutdown
+ * @return TRUE if enqueued, FALSE if pool shutdown or tile already queued
  */
 gboolean tile_worker_pool_enqueue(TileWorkerPool* pool,
                                   ImageDocument* doc,

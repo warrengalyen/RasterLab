@@ -12,16 +12,22 @@ struct TileWorkerPool {
     GQueue* pending_uploads; /* Tiles ready for Cairo surface upload */
     GMutex upload_mutex;
     guint num_workers;
+
+    /* Viewport center for priority calculation (in document pixel coordinates) */
+    gint viewport_center_x;
+    gint viewport_center_y;
+    GMutex viewport_mutex;
 };
 
 /**
- * Job data structure for thread pool
+ * Job data structure for thread pool with priority
  */
 typedef struct {
     ImageDocument* doc;
     Tile* tile;
     gint tile_x;
     gint tile_y;
+    gint priority;  /* Lower = higher priority (distance squared from viewport center) */
 } WorkerJob;
 
 /**
@@ -158,6 +164,24 @@ gboolean tile_worker_composite_pixels(ImageDocument* doc,
 }
 
 /**
+ * Priority comparison function for thread pool
+ * Jobs with lower priority value (closer to viewport center) are processed first
+ * Returns: negative if a < b (a should come first), positive if a > b, 0 if equal
+ */
+static gint tile_worker_priority_compare(gconstpointer a, gconstpointer b, gpointer user_data) {
+    const WorkerJob* job_a = (const WorkerJob*)a;
+    const WorkerJob* job_b = (const WorkerJob*)b;
+
+    /* Lower priority value = higher priority (process first) */
+    if (job_a->priority < job_b->priority) {
+        return -1;
+    } else if (job_a->priority > job_b->priority) {
+        return 1;
+    }
+    return 0;
+}
+
+/**
  * Worker thread main function
  */
 static void tile_worker_thread_func(gpointer data, gpointer user_data) {
@@ -222,7 +246,12 @@ TileWorkerPool* tile_worker_pool_create(guint num_workers) {
     pool->num_workers = num_workers;
     pool->pending_uploads = g_queue_new();
 
+    /* Initialize viewport center to 0,0 (will be updated when drawing) */
+    pool->viewport_center_x = 0;
+    pool->viewport_center_y = 0;
+
     g_mutex_init(&pool->upload_mutex);
+    g_mutex_init(&pool->viewport_mutex);
 
     /* Create thread pool with pool as user_data so workers can access queue */
     pool->thread_pool = g_thread_pool_new(tile_worker_thread_func,
@@ -234,11 +263,17 @@ TileWorkerPool* tile_worker_pool_create(guint num_workers) {
     if (!pool->thread_pool) {
         g_queue_free(pool->pending_uploads);
         g_mutex_clear(&pool->upload_mutex);
+        g_mutex_clear(&pool->viewport_mutex);
         g_free(pool);
         return NULL;
     }
 
-    g_message("Created tile worker pool with %u threads", num_workers);
+    /* Set priority sort function - tiles closer to viewport center are processed first */
+    g_thread_pool_set_sort_function(pool->thread_pool,
+                                    tile_worker_priority_compare,
+                                    NULL);
+
+    g_message("Created tile worker pool with %u threads (priority queue enabled)", num_workers);
 
     return pool;
 }
@@ -262,11 +297,65 @@ void tile_worker_pool_destroy(TileWorkerPool* pool) {
     }
 
     g_mutex_clear(&pool->upload_mutex);
+    g_mutex_clear(&pool->viewport_mutex);
     g_free(pool);
 }
 
 /**
- * Enqueue a tile for compositing
+ * Set the viewport center for priority calculation
+ * Tiles closer to this point will be composited first
+ * @param pool Worker pool
+ * @param center_x Viewport center X in document pixel coordinates
+ * @param center_y Viewport center Y in document pixel coordinates
+ */
+void tile_worker_pool_set_viewport_center(TileWorkerPool* pool,
+                                          gint center_x,
+                                          gint center_y) {
+    if (!pool) {
+        return;
+    }
+
+    g_mutex_lock(&pool->viewport_mutex);
+    pool->viewport_center_x = center_x;
+    pool->viewport_center_y = center_y;
+    g_mutex_unlock(&pool->viewport_mutex);
+}
+
+/**
+ * Calculate priority (distance squared from viewport center)
+ * Lower value = higher priority
+ */
+static gint calculate_tile_priority(TileWorkerPool* pool, Tile* tile) {
+    gint tile_center_x, tile_center_y;
+    gint dx, dy;
+    gint viewport_cx, viewport_cy;
+
+    /* Get tile center in document coordinates */
+    tile_center_x = tile->px + tile->w / 2;
+    tile_center_y = tile->py + tile->h / 2;
+
+    /* Get viewport center (lock for thread safety) */
+    g_mutex_lock(&pool->viewport_mutex);
+    viewport_cx = pool->viewport_center_x;
+    viewport_cy = pool->viewport_center_y;
+    g_mutex_unlock(&pool->viewport_mutex);
+
+    /* Calculate distance squared (avoid sqrt for performance) */
+    dx = tile_center_x - viewport_cx;
+    dy = tile_center_y - viewport_cy;
+
+    /* Use distance squared as priority - closer tiles have lower values */
+    /* Clamp to avoid overflow for very distant tiles */
+    gint64 dist_sq = (gint64)dx * dx + (gint64)dy * dy;
+    if (dist_sq > G_MAXINT) {
+        return G_MAXINT;
+    }
+    return (gint)dist_sq;
+}
+
+/**
+ * Enqueue a tile for compositing with priority
+ * Tiles closer to viewport center are processed first
  */
 gboolean tile_worker_pool_enqueue(TileWorkerPool* pool,
                                   ImageDocument* doc,
@@ -309,6 +398,9 @@ gboolean tile_worker_pool_enqueue(TileWorkerPool* pool,
     job->tile = tile;
     job->tile_x = tile_x;
     job->tile_y = tile_y;
+
+    /* Calculate priority based on distance from viewport center */
+    job->priority = calculate_tile_priority(pool, tile);
 
     /* Mark tile as queued and increment generation */
     tile->state = TILE_QUEUED;

@@ -284,6 +284,14 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
 
                 /* First pass: Enqueue dirty tiles to worker pool */
                 if (doc->tile_worker_pool) {
+                    /* Set viewport center for priority queue - tiles closer to center
+                     * will be composited first for better perceived performance */
+                    gint viewport_center_x = viewport_x + viewport_w / 2;
+                    gint viewport_center_y = viewport_y + viewport_h / 2;
+                    tile_worker_pool_set_viewport_center(doc->tile_worker_pool,
+                                                         viewport_center_x,
+                                                         viewport_center_y);
+
                     for (ty = start_tile_y; ty <= end_tile_y; ty++) {
                         for (tx = start_tile_x; tx <= end_tile_x; tx++) {
                             tile = tile_grid_get_tile(doc->tile_grid, tx, ty);

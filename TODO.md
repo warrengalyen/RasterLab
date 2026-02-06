@@ -4,6 +4,10 @@
 - [x] **Background-threaded tile compositing** - Worker threads composite dirty tiles
       into pixel buffers while main thread handles Cairo surfaces (thread-safe design)
 
+- [x] **Tile priority queue** - Tiles closest to viewport center are composited first
+      using `g_thread_pool_set_sort_function()`. Priority = distance² from viewport center.
+      Improves perceived performance during scrolling - users see central content first.
+
 ## Future Optimizations
 
 ### High Priority
@@ -23,9 +27,6 @@
       ```
 
 ### Medium Priority
-- [ ] **Tile priority queue** - Prioritize visible tiles over off-screen tiles.
-      Use distance from viewport center as priority.
-
 - [ ] **Dirty region coalescing** - Combine multiple small dirty regions into
       larger rectangles to reduce per-tile overhead.
 
