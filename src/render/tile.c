@@ -75,6 +75,10 @@ TileGrid* tile_grid_create(gint width, gint height, gint tile_size) {
                 tile->mipmaps[m] = NULL;
             }
             tile->mipmaps_dirty = TRUE;
+            
+            /* Initialize layer intersection cache */
+            tile->layer_intersection_cache = g_hash_table_new_full(
+                g_direct_hash, g_direct_equal, NULL, g_free);
         }
     }
 
@@ -113,6 +117,9 @@ void tile_grid_free(TileGrid* grid) {
 
                     /* Free mipmaps */
                     tile_free_mipmaps(tile);
+                    
+                    /* Free layer intersection cache */
+                    tile_free_intersection_cache(tile);
                 }
                 g_free(grid->tiles[y]);
                 grid->tiles[y] = NULL; /* Set to NULL after freeing */
@@ -201,15 +208,14 @@ void tile_grid_pixel_to_tile(TileGrid* grid, gint px, gint py, gint* tile_x, gin
 
 /**
  * Composite a single tile by rendering all layers that intersect it
- * This replaces the old full-surface compositing for this tile region
+ * This replaces the old full-surface compositing for this tile region.
+ * Uses cached layer-tile intersection geometry to avoid recomputing bounds.
  */
 static gboolean tile_composite(ImageDocument* doc, Tile* tile) {
     cairo_t* cr;
     GList* iter;
     ImageLayer* layer;
-    gint layer_x, layer_y, layer_right, layer_bottom;
-    gint tile_right, tile_bottom;
-    gint intersect_left, intersect_top, intersect_right, intersect_bottom;
+    const LayerTileIntersection* intersection;
     gboolean is_first_visible_layer = TRUE;
 
     if (!doc || !tile || !tile->surface) {
@@ -221,9 +227,6 @@ static gboolean tile_composite(ImageDocument* doc, Tile* tile) {
     cairo_set_operator(cr, CAIRO_OPERATOR_CLEAR);
     cairo_paint(cr);
     cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
-
-    tile_right = tile->px + tile->w;
-    tile_bottom = tile->py + tile->h;
 
     /* Safety check: if document is being freed (layers is NULL), don't composite */
     if (!doc->layers) {
@@ -239,31 +242,17 @@ static gboolean tile_composite(ImageDocument* doc, Tile* tile) {
             continue;
         }
 
-        /* Calculate layer bounds in document coordinates */
-        layer_x = layer->offset_x;
-        layer_y = layer->offset_y;
-        layer_right = layer_x + layer->width;
-        layer_bottom = layer_y + layer->height;
-
-        /* Check if layer intersects tile */
-        intersect_left = (layer_x > tile->px) ? layer_x : tile->px;
-        intersect_top = (layer_y > tile->py) ? layer_y : tile->py;
-        intersect_right = (layer_right < tile_right) ? layer_right : tile_right;
-        intersect_bottom = (layer_bottom < tile_bottom) ? layer_bottom : tile_bottom;
-
-        if (intersect_left >= intersect_right || intersect_top >= intersect_bottom) {
+        /* Get cached intersection (computes if not cached or invalidated) */
+        intersection = tile_get_layer_intersection(tile, layer);
+        
+        if (!intersection || !intersection->intersects) {
             continue; /* No intersection */
         }
 
-        /* Calculate intersection in tile-local coordinates */
-        gint tile_local_x = intersect_left - tile->px;
-        gint tile_local_y = intersect_top - tile->py;
-        gint tile_local_w = intersect_right - intersect_left;
-        gint tile_local_h = intersect_bottom - intersect_top;
-
-        /* Clip to tile bounds */
+        /* Clip to tile bounds using cached coordinates */
         cairo_save(cr);
-        cairo_rectangle(cr, tile_local_x, tile_local_y, tile_local_w, tile_local_h);
+        cairo_rectangle(cr, intersection->tile_local_x, intersection->tile_local_y,
+                        intersection->tile_local_w, intersection->tile_local_h);
         cairo_clip(cr);
 
         /* Set operator based on layer's blend mode
@@ -287,8 +276,8 @@ static gboolean tile_composite(ImageDocument* doc, Tile* tile) {
             /* Use source surface directly with opacity - no cache needed for this render */
             /* Translate to position layer correctly relative to tile */
             cairo_set_source_surface(cr, layer->surface,
-                                     layer_x - tile->px,
-                                     layer_y - tile->py);
+                                     layer->offset_x - tile->px,
+                                     layer->offset_y - tile->py);
             /* Set nearest filter to prevent edge artifacts at tile boundaries */
             // cairo_pattern_t* pattern = cairo_get_source(cr);
             // cairo_pattern_set_filter(pattern, CAIRO_FILTER_NEAREST);
@@ -305,8 +294,8 @@ static gboolean tile_composite(ImageDocument* doc, Tile* tile) {
             }
             /* Translate to position cached layer correctly relative to tile */
             cairo_set_source_surface(cr, layer->cache_surface,
-                                     layer_x - tile->px,
-                                     layer_y - tile->py);
+                                     layer->offset_x - tile->px,
+                                     layer->offset_y - tile->py);
             /* Set nearest filter to prevent edge artifacts at tile boundaries */
             // cairo_pattern_t* pattern = cairo_get_source(cr);
             // cairo_pattern_set_filter(pattern, CAIRO_FILTER_NEAREST);
@@ -528,6 +517,173 @@ cairo_surface_t* tile_get_mipmap_for_zoom(Tile* tile, gdouble zoom_factor, gdoub
     if (out_scale) *out_scale = 1.0;
     return tile->surface;
 }
+
+/* ============================================================================
+ * Layer-Tile Intersection Cache Implementation
+ * ============================================================================ */
+
+/**
+ * Compute the intersection between a layer and a tile.
+ * Internal helper function that always computes (doesn't check cache).
+ */
+static void compute_layer_tile_intersection(Tile* tile, ImageLayer* layer,
+                                            LayerTileIntersection* result) {
+    gint layer_x, layer_y, layer_right, layer_bottom;
+    gint tile_right, tile_bottom;
+    
+    if (!tile || !layer || !result) {
+        if (result) {
+            result->valid = FALSE;
+            result->intersects = FALSE;
+        }
+        return;
+    }
+    
+    /* Initialize result */
+    result->valid = TRUE;
+    result->cached_layer_offset_x = layer->offset_x;
+    result->cached_layer_offset_y = layer->offset_y;
+    result->cached_layer_width = layer->width;
+    result->cached_layer_height = layer->height;
+    
+    /* Calculate layer bounds in document coordinates */
+    layer_x = layer->offset_x;
+    layer_y = layer->offset_y;
+    layer_right = layer_x + layer->width;
+    layer_bottom = layer_y + layer->height;
+    
+    /* Calculate tile bounds */
+    tile_right = tile->px + tile->w;
+    tile_bottom = tile->py + tile->h;
+    
+    /* Calculate intersection */
+    result->intersect_left = (layer_x > tile->px) ? layer_x : tile->px;
+    result->intersect_top = (layer_y > tile->py) ? layer_y : tile->py;
+    result->intersect_right = (layer_right < tile_right) ? layer_right : tile_right;
+    result->intersect_bottom = (layer_bottom < tile_bottom) ? layer_bottom : tile_bottom;
+    
+    /* Check if there's a valid intersection */
+    if (result->intersect_left >= result->intersect_right ||
+        result->intersect_top >= result->intersect_bottom) {
+        result->intersects = FALSE;
+        return;
+    }
+    
+    result->intersects = TRUE;
+    
+    /* Calculate intersection in tile-local coordinates */
+    result->tile_local_x = result->intersect_left - tile->px;
+    result->tile_local_y = result->intersect_top - tile->py;
+    result->tile_local_w = result->intersect_right - result->intersect_left;
+    result->tile_local_h = result->intersect_bottom - result->intersect_top;
+    
+    /* Calculate source region in layer coordinates */
+    result->src_x = result->intersect_left - layer_x;
+    result->src_y = result->intersect_top - layer_y;
+    result->src_width = result->tile_local_w;
+    result->src_height = result->tile_local_h;
+}
+
+/**
+ * Check if a cached intersection is still valid for the given layer.
+ */
+static gboolean is_intersection_cache_valid(const LayerTileIntersection* cached,
+                                            const ImageLayer* layer) {
+    if (!cached || !cached->valid || !layer) {
+        return FALSE;
+    }
+    
+    /* Check if layer position/size has changed since caching */
+    return (cached->cached_layer_offset_x == layer->offset_x &&
+            cached->cached_layer_offset_y == layer->offset_y &&
+            cached->cached_layer_width == layer->width &&
+            cached->cached_layer_height == layer->height);
+}
+
+/**
+ * Get or compute the intersection between a layer and a tile.
+ * Returns cached result if valid, otherwise computes and caches it.
+ */
+const LayerTileIntersection* tile_get_layer_intersection(Tile* tile, ImageLayer* layer) {
+    LayerTileIntersection* cached;
+    
+    if (!tile || !layer) {
+        return NULL;
+    }
+    
+    /* Ensure cache exists */
+    if (!tile->layer_intersection_cache) {
+        tile->layer_intersection_cache = g_hash_table_new_full(
+            g_direct_hash, g_direct_equal, NULL, g_free);
+    }
+    
+    /* Look up in cache */
+    cached = (LayerTileIntersection*)g_hash_table_lookup(
+        tile->layer_intersection_cache, layer);
+    
+    /* Check if cached value is still valid */
+    if (cached && is_intersection_cache_valid(cached, layer)) {
+        return cached;
+    }
+    
+    /* Need to compute (either not cached or invalidated) */
+    if (!cached) {
+        cached = g_new(LayerTileIntersection, 1);
+        g_hash_table_insert(tile->layer_intersection_cache, layer, cached);
+    }
+    
+    compute_layer_tile_intersection(tile, layer, cached);
+    return cached;
+}
+
+/**
+ * Invalidate all layer intersection cache entries for a tile.
+ */
+void tile_invalidate_intersection_cache(Tile* tile) {
+    if (!tile || !tile->layer_intersection_cache) {
+        return;
+    }
+    
+    g_hash_table_remove_all(tile->layer_intersection_cache);
+}
+
+/**
+ * Invalidate intersection cache entries for a specific layer across all tiles.
+ */
+void tile_grid_invalidate_layer_cache(TileGrid* grid, ImageLayer* layer) {
+    gint x, y;
+    
+    if (!grid || !layer) {
+        return;
+    }
+    
+    for (y = 0; y < grid->tiles_y; y++) {
+        for (x = 0; x < grid->tiles_x; x++) {
+            Tile* tile = &grid->tiles[y][x];
+            if (tile->layer_intersection_cache) {
+                g_hash_table_remove(tile->layer_intersection_cache, layer);
+            }
+        }
+    }
+}
+
+/**
+ * Free the layer intersection cache for a tile.
+ */
+void tile_free_intersection_cache(Tile* tile) {
+    if (!tile) {
+        return;
+    }
+    
+    if (tile->layer_intersection_cache) {
+        g_hash_table_destroy(tile->layer_intersection_cache);
+        tile->layer_intersection_cache = NULL;
+    }
+}
+
+/* ============================================================================
+ * Tile Snapshot Helpers
+ * ============================================================================ */
 
 /**
  * Tile snapshot helpers for delta-based undo system

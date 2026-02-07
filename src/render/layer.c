@@ -2,6 +2,7 @@
 #include "document.h"
 #include "render/compositor.h"
 #include "render/mipmap.h"
+#include "render/tile.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -367,6 +368,12 @@ gboolean document_delete_layer(ImageDocument* doc, ImageLayer* layer) {
 
     /* Remove layer from list FIRST to prevent any code from accessing it */
     doc->layers = g_list_remove(doc->layers, layer);
+
+    /* Invalidate layer intersection cache BEFORE freeing the layer
+     * This removes stale cache entries that would point to freed memory */
+    if (doc->tile_grid) {
+        tile_grid_invalidate_layer_cache(doc->tile_grid, layer);
+    }
 
     /* Destroy composite surface to ensure no references to layer surface remain */
     /* This must happen after removing from list but before freeing the layer */

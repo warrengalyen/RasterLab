@@ -42,8 +42,13 @@
 
 ### Medium Priority
 
-- [ ] **Layer surface caching per tile** - Cache layer->tile intersection
-      surfaces to avoid recomputing geometry every frame.
+- [x] **Layer surface caching per tile** - Cache layer->tile intersection
+      geometry to avoid recomputing bounds every frame. Implemented via
+      `LayerTileIntersection` structure stored in per-tile hash table:
+      - Caches intersection rectangle in document, tile-local, and layer coordinates
+      - Self-invalidating: validates cached layer position/size before use
+      - Automatically removes stale entries when layers are deleted
+      - Used by main-thread `tile_composite()` (worker threads compute inline)
 
 - [ ] **Blend mode support in worker threads** - Currently worker threads only
       support OVER blend. Add SIMD-optimized implementations for Multiply,
