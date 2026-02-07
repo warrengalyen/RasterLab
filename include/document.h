@@ -135,7 +135,8 @@ typedef struct ImageDocument {
     ImageLayer* selected_layer;         /* Currently selected layer for tools */
     cairo_surface_t* composite_surface; /* Cached composite surface (legacy, may be NULL with tiles) */
     gboolean composite_dirty;           /* Does composite need re-rendering? */
-    DirtyRect dirty_region;             /* Accumulated dirty rectangle region */
+    DirtyRect dirty_region;             /* Accumulated dirty rectangle region (legacy, for compatibility) */
+    DirtyRegionList* dirty_region_list; /* Coalesced dirty region list for optimized tile invalidation */
     TileGrid* tile_grid;                /* Tile-based rendering grid (replaces full-surface rendering) */
     TileThreadPool* tile_thread_pool;   /* Thread pool for asynchronous tile compositing (deprecated) */
     TileWorkerPool* tile_worker_pool;   /* Cairo-safe worker pool for pixel buffer compositing */

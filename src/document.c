@@ -1049,6 +1049,7 @@ ImageDocument* document_new(const gchar* filename, gboolean create_worker_pool, 
     doc->composite_surface = NULL;
     doc->composite_dirty = TRUE;
     dirty_rect_init(&doc->dirty_region);
+    doc->dirty_region_list = dirty_region_list_create(); /* Coalescing for optimized tile invalidation */
     doc->tile_grid = NULL;        /* Will be created when image is loaded */
     doc->tile_thread_pool = NULL; /* Will be created when image is loaded */
     doc->zoom_factor = 1.0;
@@ -1129,6 +1130,12 @@ void document_free(ImageDocument* doc) {
         cairo_surface_flush(doc->composite_surface);
         cairo_surface_destroy(doc->composite_surface);
         doc->composite_surface = NULL;
+    }
+
+    /* Free dirty region list */
+    if (doc->dirty_region_list) {
+        dirty_region_list_free(doc->dirty_region_list);
+        doc->dirty_region_list = NULL;
     }
 
     /* Free tile grid */
