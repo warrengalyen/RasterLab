@@ -4,6 +4,189 @@
 #include <glib.h>
 #include <string.h>
 
+/* SIMD support via SIMDe (SIMD Everywhere) for cross-platform SSE2
+ * This provides portable SIMD that works on x86, ARM, etc. */
+#define SIMDE_ENABLE_NATIVE_ALIASES
+#include "simde/simde/x86/sse2.h"
+
+/* ============================================================================
+ * SIMD Alpha Blending Implementation
+ * ============================================================================
+ * Performs OVER blend for premultiplied alpha:
+ *   out = src + dst * (1 - src_a)
+ * 
+ * Processes 4 ARGB32 pixels at once using 128-bit SSE2 registers.
+ * Pixel format: 0xAARRGGBB (premultiplied alpha)
+ * ============================================================================ */
+
+/**
+ * Apply layer opacity to 4 pixels using SIMD
+ * Multiplies all components (ARGB) by opacity and divides by 255
+ * @param pixels 4 packed ARGB32 pixels
+ * @param opacity Layer opacity (0-255)
+ * @return 4 pixels with opacity applied
+ */
+static inline __m128i simd_apply_opacity(__m128i pixels, __m128i opacity_vec) {
+    /* Zero vector for unpacking */
+    __m128i zero = _mm_setzero_si128();
+    
+    /* Unpack lower 2 pixels (bytes 0-7) to 16-bit */
+    __m128i pixels_lo = _mm_unpacklo_epi8(pixels, zero);
+    /* Unpack upper 2 pixels (bytes 8-15) to 16-bit */
+    __m128i pixels_hi = _mm_unpackhi_epi8(pixels, zero);
+    
+    /* Multiply by opacity (16-bit multiplication) */
+    pixels_lo = _mm_mullo_epi16(pixels_lo, opacity_vec);
+    pixels_hi = _mm_mullo_epi16(pixels_hi, opacity_vec);
+    
+    /* Divide by 255 using the approximation: (x + 128) >> 8
+     * This is faster than actual division and accurate for blending */
+    __m128i round = _mm_set1_epi16(128);
+    pixels_lo = _mm_add_epi16(pixels_lo, round);
+    pixels_hi = _mm_add_epi16(pixels_hi, round);
+    pixels_lo = _mm_srli_epi16(pixels_lo, 8);
+    pixels_hi = _mm_srli_epi16(pixels_hi, 8);
+    
+    /* Pack back to 8-bit with unsigned saturation */
+    return _mm_packus_epi16(pixels_lo, pixels_hi);
+}
+
+/**
+ * Extract alpha channel from 4 ARGB pixels and broadcast to all components
+ * Memory layout (little-endian): [B0 G0 R0 A0 | B1 G1 R1 A1 | B2 G2 R2 A2 | B3 G3 R3 A3]
+ * Output: [A0 A0 A0 A0 | A1 A1 A1 A1 | A2 A2 A2 A2 | A3 A3 A3 A3]
+ */
+static inline __m128i simd_extract_alpha(__m128i pixels) {
+    /* Shift right by 24 bits to get alpha in lowest byte of each 32-bit element */
+    __m128i a = _mm_srli_epi32(pixels, 24);  /* [0 0 0 A0 | 0 0 0 A1 | ...] */
+    
+    /* Broadcast alpha to all bytes within each 32-bit element using shift+OR
+     * This is SSE2 compatible (no _mm_mullo_epi32 or SSSE3 shuffle needed) */
+    __m128i a8  = _mm_slli_epi32(a, 8);      /* [0 0 A0 0 | ...] */
+    __m128i a16 = _mm_slli_epi32(a, 16);     /* [0 A0 0 0 | ...] */
+    __m128i a24 = _mm_slli_epi32(a, 24);     /* [A0 0 0 0 | ...] */
+    
+    /* Combine: [A0 A0 A0 A0 | A1 A1 A1 A1 | ...] */
+    return _mm_or_si128(_mm_or_si128(a, a8), _mm_or_si128(a16, a24));
+}
+
+/**
+ * SIMD OVER blend for 4 premultiplied ARGB32 pixels
+ * Formula: out = src + dst * (255 - src_alpha) / 255
+ * 
+ * @param src 4 source pixels (with layer opacity already applied)
+ * @param dst 4 destination pixels
+ * @return 4 blended output pixels
+ */
+static inline __m128i simd_blend_over(__m128i src, __m128i dst) {
+    __m128i zero = _mm_setzero_si128();
+    
+    /* Extract source alpha and calculate inverse (255 - alpha) */
+    __m128i src_alpha = simd_extract_alpha(src);
+    __m128i inv_alpha = _mm_sub_epi8(_mm_set1_epi8((char)255), src_alpha);
+    
+    /* Unpack destination pixels to 16-bit for multiplication */
+    __m128i dst_lo = _mm_unpacklo_epi8(dst, zero);
+    __m128i dst_hi = _mm_unpackhi_epi8(dst, zero);
+    
+    /* Unpack inverse alpha to 16-bit */
+    __m128i inv_alpha_lo = _mm_unpacklo_epi8(inv_alpha, zero);
+    __m128i inv_alpha_hi = _mm_unpackhi_epi8(inv_alpha, zero);
+    
+    /* Multiply dst by inverse alpha */
+    dst_lo = _mm_mullo_epi16(dst_lo, inv_alpha_lo);
+    dst_hi = _mm_mullo_epi16(dst_hi, inv_alpha_hi);
+    
+    /* Divide by 255 using (x + 128) >> 8 approximation */
+    __m128i round = _mm_set1_epi16(128);
+    dst_lo = _mm_add_epi16(dst_lo, round);
+    dst_hi = _mm_add_epi16(dst_hi, round);
+    dst_lo = _mm_srli_epi16(dst_lo, 8);
+    dst_hi = _mm_srli_epi16(dst_hi, 8);
+    
+    /* Pack back to 8-bit */
+    __m128i dst_scaled = _mm_packus_epi16(dst_lo, dst_hi);
+    
+    /* Add source (out = src + dst * inv_alpha) */
+    return _mm_adds_epu8(src, dst_scaled);
+}
+
+/**
+ * Composite a row of pixels using SIMD
+ * Processes 4 pixels at a time, with scalar fallback for remaining pixels
+ * 
+ * @param src_row Source pixel row (layer pixels)
+ * @param dst_row Destination pixel row (tile pixels)
+ * @param width Number of pixels to composite
+ * @param layer_opacity Layer opacity (0-255)
+ */
+static void simd_composite_row(const guint32* src_row, guint32* dst_row,
+                               gint width, guint8 layer_opacity) {
+    gint x = 0;
+    
+    /* Process 4 pixels at a time with SIMD */
+    if (width >= 4) {
+        /* Create opacity vector (broadcast to all 16-bit lanes) */
+        __m128i opacity_vec = _mm_set1_epi16(layer_opacity);
+        
+        gint simd_width = width & ~3; /* Round down to multiple of 4 */
+        
+        for (; x < simd_width; x += 4) {
+            /* Load 4 source and destination pixels */
+            __m128i src = _mm_loadu_si128((const __m128i*)&src_row[x]);
+            __m128i dst = _mm_loadu_si128((const __m128i*)&dst_row[x]);
+            
+            /* Apply layer opacity to source pixels */
+            if (layer_opacity < 255) {
+                src = simd_apply_opacity(src, opacity_vec);
+            }
+            
+            /* Perform OVER blend */
+            __m128i result = simd_blend_over(src, dst);
+            
+            /* Store result */
+            _mm_storeu_si128((__m128i*)&dst_row[x], result);
+        }
+    }
+    
+    /* Scalar fallback for remaining pixels (0-3) */
+    for (; x < width; x++) {
+        guint32 src_pixel = src_row[x];
+        guint32 dst_pixel = dst_row[x];
+        
+        /* Extract source components */
+        guint8 src_a = (src_pixel >> 24) & 0xFF;
+        guint8 src_r = (src_pixel >> 16) & 0xFF;
+        guint8 src_g = (src_pixel >> 8) & 0xFF;
+        guint8 src_b = src_pixel & 0xFF;
+        
+        /* Apply layer opacity */
+        src_a = (guint8)(((guint32)src_a * layer_opacity + 128) >> 8);
+        if (src_a == 0) continue;
+        
+        if (layer_opacity < 255) {
+            src_r = (guint8)(((guint32)src_r * layer_opacity + 128) >> 8);
+            src_g = (guint8)(((guint32)src_g * layer_opacity + 128) >> 8);
+            src_b = (guint8)(((guint32)src_b * layer_opacity + 128) >> 8);
+        }
+        
+        /* Extract destination components */
+        guint8 dst_a = (dst_pixel >> 24) & 0xFF;
+        guint8 dst_r = (dst_pixel >> 16) & 0xFF;
+        guint8 dst_g = (dst_pixel >> 8) & 0xFF;
+        guint8 dst_b = dst_pixel & 0xFF;
+        
+        /* OVER blend */
+        guint8 inv_src_a = 255 - src_a;
+        guint8 out_a = src_a + (guint8)(((guint32)dst_a * inv_src_a + 128) >> 8);
+        guint8 out_r = src_r + (guint8)(((guint32)dst_r * inv_src_a + 128) >> 8);
+        guint8 out_g = src_g + (guint8)(((guint32)dst_g * inv_src_a + 128) >> 8);
+        guint8 out_b = src_b + (guint8)(((guint32)dst_b * inv_src_a + 128) >> 8);
+        
+        dst_row[x] = (out_a << 24) | (out_r << 16) | (out_g << 8) | out_b;
+    }
+}
+
 /**
  * Internal worker pool structure
  */
@@ -112,51 +295,13 @@ gboolean tile_worker_composite_pixels(ImageDocument* doc,
             continue;
         }
 
-        /* Composite layer pixels into tile pixels */
+        /* Composite layer pixels into tile pixels using SIMD
+         * This processes 4 pixels at a time with SSE2 intrinsics */
         for (gint y = 0; y < src_height; y++) {
             guint32* layer_row = (guint32*)(layer_data + (src_y + y) * layer_stride) + src_x;
             guint32* tile_row = (guint32*)(tile->pixel_buffer + (intersect_top - tile->py + y) * tile->stride) + (intersect_left - tile->px);
 
-            for (gint x = 0; x < src_width; x++) {
-                guint32 src_pixel = layer_row[x];
-                guint32 dst_pixel = tile_row[x];
-
-                /* Extract source components (premultiplied alpha format) */
-                guint8 src_a = (src_pixel >> 24) & 0xFF;
-                guint8 src_r = (src_pixel >> 16) & 0xFF;
-                guint8 src_g = (src_pixel >> 8) & 0xFF;
-                guint8 src_b = src_pixel & 0xFF;
-
-                /* Apply layer opacity to source alpha */
-                src_a = (guint8)(((guint32)src_a * layer_opacity) / 255);
-
-                /* Skip fully transparent pixels */
-                if (src_a == 0) {
-                    continue;
-                }
-
-                /* Apply layer opacity to premultiplied RGB components */
-                if (layer_opacity < 255) {
-                    src_r = (guint8)(((guint32)src_r * layer_opacity) / 255);
-                    src_g = (guint8)(((guint32)src_g * layer_opacity) / 255);
-                    src_b = (guint8)(((guint32)src_b * layer_opacity) / 255);
-                }
-
-                guint8 dst_a = (dst_pixel >> 24) & 0xFF;
-                guint8 dst_r = (dst_pixel >> 16) & 0xFF;
-                guint8 dst_g = (dst_pixel >> 8) & 0xFF;
-                guint8 dst_b = dst_pixel & 0xFF;
-
-                /* OVER blend for premultiplied alpha:
-                 * out = src + dst * (1 - src_a) */
-                guint8 inv_src_a = 255 - src_a;
-                guint8 out_a = src_a + (guint8)(((guint32)dst_a * inv_src_a) / 255);
-                guint8 out_r = src_r + (guint8)(((guint32)dst_r * inv_src_a) / 255);
-                guint8 out_g = src_g + (guint8)(((guint32)dst_g * inv_src_a) / 255);
-                guint8 out_b = src_b + (guint8)(((guint32)dst_b * inv_src_a) / 255);
-
-                tile_row[x] = (out_a << 24) | (out_r << 16) | (out_g << 8) | out_b;
-            }
+            simd_composite_row(layer_row, tile_row, src_width, layer_opacity);
         }
     }
 

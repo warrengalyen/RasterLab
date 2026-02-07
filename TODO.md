@@ -22,26 +22,6 @@
       - Auto-coalesces when list exceeds 32 rectangles
       - Minimizes over-invalidation by checking waste ratio before merging
 
-## Future Optimizations
-
-### High Priority
-
-- [ ] **SSE/AVX SIMD compositing** - Vectorize the pixel blending loop in
-      `tile_worker_composite_pixels()`. Process 4-8 pixels per iteration using
-      intrinsics for significant speedup on large images. Example:
-      ```c
-      // Process 4 pixels at once with SSE
-      __m128i src = _mm_loadu_si128((__m128i*)&layer_row[x]);
-      __m128i dst = _mm_loadu_si128((__m128i*)&tile_row[x]);
-      // ... SIMD alpha blending ...
-      _mm_storeu_si128((__m128i*)&tile_row[x], result);
-      ```
-
-      Consider using SIMD Everywhere library for cross-platform SIMD support:
-      https://github.com/simd-everywhere/simde
-
-### Medium Priority
-
 - [x] **Layer surface caching per tile** - Cache layer->tile intersection
       geometry to avoid recomputing bounds every frame. Implemented via
       `LayerTileIntersection` structure stored in per-tile hash table:
@@ -49,6 +29,24 @@
       - Self-invalidating: validates cached layer position/size before use
       - Automatically removes stale entries when layers are deleted
       - Used by main-thread `tile_composite()` (worker threads compute inline)
+
+- [x] **SSE/AVX SIMD compositing** - Vectorize the pixel blending loop in
+      `tile_worker_composite_pixels()`. Implemented via SIMDe library for
+      cross-platform SSE2 support:
+      - Processes 4 ARGB32 pixels per iteration using 128-bit registers
+      - `simd_apply_opacity()` - applies layer opacity to 4 pixels at once
+      - `simd_extract_alpha()` - broadcasts alpha channel to all components
+      - `simd_blend_over()` - performs OVER blend for premultiplied alpha
+      - `simd_composite_row()` - main entry point with scalar fallback for
+        remaining 0-3 pixels
+      - Uses `(x + 128) >> 8` approximation for division by 255 (faster, accurate)
+      - SIMDe provides native SSE2 on x86 or portable fallback on other platforms
+
+## Future Optimizations
+
+### High Priority
+
+### Medium Priority
 
 - [ ] **Blend mode support in worker threads** - Currently worker threads only
       support OVER blend. Add SIMD-optimized implementations for Multiply,
