@@ -792,6 +792,13 @@ LayersPanel* create_layers_panel(AppContext* ctx) {
 
     /* Set up blend mode combo box */
     if (layers_panel->combo_blend) {
+        /* Use list-style popup (same as zoom dropdown) to avoid empty space when
+         * near screen edge */
+        ui_apply_list_combobox_style(layers_panel->combo_blend);
+        gtk_combo_box_set_popup_fixed_width(GTK_COMBO_BOX(layers_panel->combo_blend), TRUE);
+        g_signal_connect(layers_panel->combo_blend, "notify::popup-shown",
+                         G_CALLBACK(ui_combo_popup_shown_fix), NULL);
+
         /* Create list store for blend modes */
         GtkListStore* blend_store = gtk_list_store_new(1, G_TYPE_STRING);
         GtkTreeIter iter;

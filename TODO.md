@@ -45,7 +45,8 @@
 - [x] **Blend mode support in worker threads** - All blend modes now have
       SIMD-optimized implementations in worker threads via `simd_composite_row_blend()`:
       - All 27 Photoshop-compatible blend modes are supported
-      - HSL-based component modes (Hue, Saturation, Color, Luminosity) use scalar implementations for accuracy since the RGB-to-HSL conversions are complex.
+      - HSL-based component modes (Hue, Saturation, Color, Luminosity) use scalar
+        implementations for accuracy since the RGB-to-HSL conversions are complex.
       - Each blend mode has both SIMD (4 pixels at once) and scalar fallback
       - `simd_composite_with_alpha()` handles alpha compositing for all modes
       - First visible layer always uses OVER blend (same as Cairo compositor)
