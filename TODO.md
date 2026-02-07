@@ -42,6 +42,15 @@
       - Uses `(x + 128) >> 8` approximation for division by 255 (faster, accurate)
       - SIMDe provides native SSE2 on x86 or portable fallback on other platforms
 
+- [x] **Blend mode support in worker threads** - All blend modes now have
+      SIMD-optimized implementations in worker threads via `simd_composite_row_blend()`:
+      - All 27 Photoshop-compatible blend modes are supported
+      - HSL-based component modes (Hue, Saturation, Color, Luminosity) use scalar implementations for accuracy since the RGB-to-HSL conversions are complex.
+      - Each blend mode has both SIMD (4 pixels at once) and scalar fallback
+      - `simd_composite_with_alpha()` handles alpha compositing for all modes
+      - First visible layer always uses OVER blend (same as Cairo compositor)
+      - Scalar fallbacks use exact formulas for precision on remaining pixels
+
 ## Future Optimizations
 
 ### High Priority
@@ -61,10 +70,6 @@
         over the composite of layers below it. Complex but potentially very fast.
       - **Mipmap-based preview**: Use existing tile mipmaps for faster preview
         compositing during drag
-
-- [ ] **Blend mode support in worker threads** - Currently worker threads only
-      support OVER blend. Add SIMD-optimized implementations for Multiply,
-      Screen, Overlay, etc.
 
 ### Lower Priority  
 

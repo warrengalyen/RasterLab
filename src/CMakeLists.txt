@@ -71,6 +71,7 @@ set(SOURCES
     plugins/plugin_webp.c
     plugins/plugin_heic.c
     plugins/plugin_avif.c
+    render/blend.c
     render/compositor.c
     render/dirty.c
     render/layer.c

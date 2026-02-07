@@ -37,20 +37,60 @@ typedef struct SelectionMask SelectionMask;
 typedef struct _UndoJournal UndoJournal;
 
 /**
- * Blend modes for layers
+ * Blend modes for layers (Photoshop-compatible, all 27 modes)
+ * 
+ * Organized by category:
+ * - Normal modes: Normal, Dissolve
+ * - Darken modes: Darken, Multiply, Color Burn, Linear Burn, Darker Color
+ * - Lighten modes: Lighten, Screen, Color Dodge, Linear Dodge (Add), Lighter Color
+ * - Contrast modes: Overlay, Soft Light, Hard Light, Vivid Light, Linear Light, Pin Light, Hard Mix
+ * - Inversion modes: Difference, Exclusion
+ * - Cancellation modes: Subtract, Divide
+ * - Component modes: Hue, Saturation, Color, Luminosity
  */
 typedef enum {
+    /* Normal modes */
     BLEND_MODE_NORMAL = 0,
-    BLEND_MODE_DARKEN = 1,
-    BLEND_MODE_MULTIPLY = 2,
-    BLEND_MODE_COLOR_BURN = 3,
-    BLEND_MODE_LIGHTEN = 4,
-    BLEND_MODE_SCREEN = 5,
-    BLEND_MODE_COLOR_DODGE = 6,
-    BLEND_MODE_OVERLAY = 7,
-    BLEND_MODE_SOFT_LIGHT = 8,
-    BLEND_MODE_HARD_LIGHT = 9,
-    BLEND_MODE_DIFFERENCE = 10,
+    BLEND_MODE_DISSOLVE = 1,
+    
+    /* Darken modes */
+    BLEND_MODE_DARKEN = 2,
+    BLEND_MODE_MULTIPLY = 3,
+    BLEND_MODE_COLOR_BURN = 4,
+    BLEND_MODE_LINEAR_BURN = 5,
+    BLEND_MODE_DARKER_COLOR = 6,
+    
+    /* Lighten modes */
+    BLEND_MODE_LIGHTEN = 7,
+    BLEND_MODE_SCREEN = 8,
+    BLEND_MODE_COLOR_DODGE = 9,
+    BLEND_MODE_LINEAR_DODGE = 10,  /* Also known as "Add" */
+    BLEND_MODE_LIGHTER_COLOR = 11,
+    
+    /* Contrast modes */
+    BLEND_MODE_OVERLAY = 12,
+    BLEND_MODE_SOFT_LIGHT = 13,
+    BLEND_MODE_HARD_LIGHT = 14,
+    BLEND_MODE_VIVID_LIGHT = 15,
+    BLEND_MODE_LINEAR_LIGHT = 16,
+    BLEND_MODE_PIN_LIGHT = 17,
+    BLEND_MODE_HARD_MIX = 18,
+    
+    /* Inversion modes */
+    BLEND_MODE_DIFFERENCE = 19,
+    BLEND_MODE_EXCLUSION = 20,
+    
+    /* Cancellation modes */
+    BLEND_MODE_SUBTRACT = 21,
+    BLEND_MODE_DIVIDE = 22,
+    
+    /* Component (HSL) modes */
+    BLEND_MODE_HUE = 23,
+    BLEND_MODE_SATURATION = 24,
+    BLEND_MODE_COLOR = 25,
+    BLEND_MODE_LUMINOSITY = 26,
+    
+    BLEND_MODE_COUNT = 27  /* Total number of blend modes */
 } BlendMode;
 
 /**
