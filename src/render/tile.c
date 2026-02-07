@@ -69,6 +69,12 @@ TileGrid* tile_grid_create(gint width, gint height, gint tile_size) {
             tile->state = TILE_CLEAN;
             tile->generation_id = 0;
             tile->pending_upload = FALSE;
+
+            /* Initialize mipmaps to NULL */
+            for (int m = 0; m < TILE_MIPMAP_LEVELS; m++) {
+                tile->mipmaps[m] = NULL;
+            }
+            tile->mipmaps_dirty = TRUE;
         }
     }
 
@@ -104,6 +110,9 @@ void tile_grid_free(TileGrid* grid) {
                         g_free(tile->pixel_buffer);
                         tile->pixel_buffer = NULL;
                     }
+
+                    /* Free mipmaps */
+                    tile_free_mipmaps(tile);
                 }
                 g_free(grid->tiles[y]);
                 grid->tiles[y] = NULL; /* Set to NULL after freeing */
@@ -122,6 +131,7 @@ void tile_grid_free(TileGrid* grid) {
 void tile_mark_dirty(Tile* tile) {
     if (tile) {
         tile->dirty = TRUE;
+        tile->mipmaps_dirty = TRUE; /* Mipmaps also need regeneration */
     }
 }
 
@@ -311,6 +321,9 @@ static gboolean tile_composite(ImageDocument* doc, Tile* tile) {
     cairo_destroy(cr);
     tile->dirty = FALSE;
 
+    /* Generate mipmaps for fast zoom-out rendering */
+    tile_generate_mipmaps(tile);
+
     return TRUE;
 }
 
@@ -356,8 +369,9 @@ void tile_mark_dirty_for_thread_pool(Tile* tile) {
     }
 
     tile->dirty = TRUE;
-    tile->generation_id++;    /* Invalidate any pending work */
-    tile->state = TILE_CLEAN; /* Reset state for new work */
+    tile->mipmaps_dirty = TRUE; /* Mipmaps also need regeneration */
+    tile->generation_id++;      /* Invalidate any pending work */
+    tile->state = TILE_CLEAN;   /* Reset state for new work */
 }
 
 /**
@@ -385,6 +399,134 @@ gboolean tile_apply_completed_result(Tile* tile, cairo_surface_t* new_surface, g
     tile->state = TILE_CLEAN;
 
     return TRUE;
+}
+
+/**
+ * Free all mipmaps for a tile
+ */
+void tile_free_mipmaps(Tile* tile) {
+    if (!tile) {
+        return;
+    }
+
+    for (int i = 0; i < TILE_MIPMAP_LEVELS; i++) {
+        if (tile->mipmaps[i]) {
+            cairo_surface_destroy(tile->mipmaps[i]);
+            tile->mipmaps[i] = NULL;
+        }
+    }
+    tile->mipmaps_dirty = TRUE;
+}
+
+/**
+ * Generate mipmaps for a tile
+ * Creates downscaled versions at 50%, 25%, 12.5%, 6.25%
+ */
+gboolean tile_generate_mipmaps(Tile* tile) {
+    cairo_surface_t* source;
+    cairo_t* cr;
+    int level;
+    gdouble scale;
+    gint src_w, src_h;
+    gint mip_w, mip_h;
+
+    if (!tile || !tile->surface) {
+        return FALSE;
+    }
+
+    /* Get source dimensions */
+    src_w = tile->w;
+    src_h = tile->h;
+
+    /* Don't generate mipmaps for very small tiles */
+    if (src_w < 4 || src_h < 4) {
+        tile->mipmaps_dirty = FALSE;
+        return TRUE;
+    }
+
+    /* Free existing mipmaps before regenerating */
+    tile_free_mipmaps(tile);
+
+    /* Generate each mipmap level */
+    source = tile->surface;
+    scale = 0.5; /* Start at 50% */
+
+    for (level = 0; level < TILE_MIPMAP_LEVELS; level++) {
+        /* Calculate mipmap dimensions */
+        mip_w = (gint)(src_w * scale + 0.5);
+        mip_h = (gint)(src_h * scale + 0.5);
+
+        /* Stop if mipmap would be too small */
+        if (mip_w < 2 || mip_h < 2) {
+            break;
+        }
+
+        /* Create mipmap surface */
+        tile->mipmaps[level] = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, mip_w, mip_h);
+        if (cairo_surface_status(tile->mipmaps[level]) != CAIRO_STATUS_SUCCESS) {
+            cairo_surface_destroy(tile->mipmaps[level]);
+            tile->mipmaps[level] = NULL;
+            break;
+        }
+
+        /* Scale from original tile surface (not cascaded) for best quality */
+        cr = cairo_create(tile->mipmaps[level]);
+
+        /* Use bilinear filtering for smooth downscaling */
+        cairo_scale(cr, scale, scale);
+        cairo_set_source_surface(cr, tile->surface, 0, 0);
+
+        /* Set filter for quality downscaling */
+        cairo_pattern_t* pattern = cairo_get_source(cr);
+        cairo_pattern_set_filter(pattern, CAIRO_FILTER_BILINEAR);
+
+        cairo_paint(cr);
+        cairo_destroy(cr);
+
+        cairo_surface_flush(tile->mipmaps[level]);
+
+        /* Next level is half the previous */
+        scale *= 0.5;
+    }
+
+    tile->mipmaps_dirty = FALSE;
+    return TRUE;
+}
+
+/**
+ * Get the appropriate mipmap surface for a given zoom factor
+ * Returns the best matching mipmap or the full tile surface
+ */
+cairo_surface_t* tile_get_mipmap_for_zoom(Tile* tile, gdouble zoom_factor, gdouble* out_scale) {
+    int level;
+    gdouble level_scales[TILE_MIPMAP_LEVELS] = {0.5, 0.25, 0.125, 0.0625};
+
+    if (!tile || !tile->surface) {
+        if (out_scale) *out_scale = 1.0;
+        return NULL;
+    }
+
+    /* For zoom >= 1.0 or no mipmaps, use full resolution */
+    if (zoom_factor >= 1.0 || tile->mipmaps_dirty) {
+        if (out_scale) *out_scale = 1.0;
+        return tile->surface;
+    }
+
+    /* Find the best mipmap level for this zoom.
+     * We want the SMALLEST mipmap that's >= zoom so we only DOWNSAMPLE, never upscale.
+     * Upscaling mipmaps causes visible gaps between tiles due to interpolation artifacts.
+     * Iterate from smallest (level 3 = 6.25%) to largest (level 0 = 50%)
+     * and return the first one where mipmap_scale >= zoom. */
+    for (level = TILE_MIPMAP_LEVELS - 1; level >= 0; level--) {
+        if (tile->mipmaps[level] && level_scales[level] >= zoom_factor) {
+            if (out_scale) *out_scale = level_scales[level];
+            return tile->mipmaps[level];
+        }
+    }
+
+    /* No suitable mipmap found (zoom > 0.5), use full resolution */
+    if (out_scale) *out_scale = 1.0;
+    return tile->surface;
 }
 
 /**

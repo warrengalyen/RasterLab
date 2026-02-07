@@ -296,7 +296,7 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
         }
 
 /* DEBUG: Set to 1 to disable checkered background and use solid color. */
-#define DEBUG_SOLID_BACKGROUND 1
+#define DEBUG_SOLID_BACKGROUND 0
 
 #if DEBUG_SOLID_BACKGROUND
         /* Draw solid background for ENTIRE document area (0,0 to width,height).
@@ -309,9 +309,111 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
         draw_checkered_background_offset(cr, viewport_x, viewport_y, viewport_w, viewport_h);
 #endif
 
-        /* When zoomed, render layers directly to avoid tile boundary artifacts */
-        if (zoom != 1.0) {
+        /* Render based on zoom level */
+        if (zoom > 1.0) {
+            /* Zoomed IN: Use layer-based rendering for best quality */
             document_render_layers_at_zoom(doc, cr, viewport_x, viewport_y, viewport_w, viewport_h);
+        } else if (zoom < 1.0 && doc->tile_grid) {
+            /* Zoomed OUT: Use pre-computed tile mipmaps for fast rendering */
+            gint tile_size = doc->tile_grid->tile_size;
+
+            /* Calculate which tiles are visible at this zoom level */
+            start_tile_x = viewport_x / tile_size;
+            start_tile_y = viewport_y / tile_size;
+            end_tile_x = (viewport_x + viewport_w) / tile_size;
+            end_tile_y = (viewport_y + viewport_h) / tile_size;
+
+            /* Clamp to grid bounds */
+            if (start_tile_x < 0)
+                start_tile_x = 0;
+            if (start_tile_y < 0)
+                start_tile_y = 0;
+            if (end_tile_x >= doc->tile_grid->tiles_x)
+                end_tile_x = doc->tile_grid->tiles_x - 1;
+            if (end_tile_y >= doc->tile_grid->tiles_y)
+                end_tile_y = doc->tile_grid->tiles_y - 1;
+
+            /* Ensure tiles are composited (mipmaps generated during compositing) */
+            for (ty = start_tile_y; ty <= end_tile_y; ty++) {
+                for (tx = start_tile_x; tx <= end_tile_x; tx++) {
+                    tile = tile_grid_get_tile(doc->tile_grid, tx, ty);
+                    if (tile && tile->dirty) {
+                        /* Composite tile synchronously */
+                        if (tile_worker_composite_pixels(doc, tile, tx, ty)) {
+                            if (tile->surface) {
+                                cairo_surface_destroy(tile->surface);
+                                tile->surface = NULL;
+                            }
+                            if (tile->pixel_buffer) {
+                                tile->surface = cairo_image_surface_create_for_data(
+                                    tile->pixel_buffer,
+                                    CAIRO_FORMAT_ARGB32,
+                                    tile->w,
+                                    tile->h,
+                                    tile->stride);
+                                if (cairo_surface_status(tile->surface) == CAIRO_STATUS_SUCCESS) {
+                                    tile->dirty = FALSE;
+                                    tile->pending_upload = FALSE;
+                                    /* Generate mipmaps for this tile */
+                                    tile_generate_mipmaps(tile);
+                                }
+                            }
+                        }
+                    } else if (tile && tile->mipmaps_dirty && tile->surface) {
+                        /* Tile content is valid but mipmaps need regeneration */
+                        tile_generate_mipmaps(tile);
+                    }
+                }
+            }
+
+            /* Draw tiles using mipmaps */
+            for (ty = start_tile_y; ty <= end_tile_y; ty++) {
+                for (tx = start_tile_x; tx <= end_tile_x; tx++) {
+                    tile = tile_grid_get_tile(doc->tile_grid, tx, ty);
+                    if (tile) {
+                        cairo_surface_t* mip_surface = tile_get_mipmap_for_zoom(tile, zoom, NULL);
+
+                        if (mip_surface) {
+                            gint mip_w = cairo_image_surface_get_width(mip_surface);
+                            gint mip_h = cairo_image_surface_get_height(mip_surface);
+
+                            cairo_save(cr);
+
+                            /* Disable shape anti-aliasing to prevent semi-transparent
+                             * pixels at tile boundaries when rendering at fractional
+                             * screen coordinates. This eliminates visible gaps/seams. */
+                            cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
+
+                            /* Move to tile position in document coordinates */
+                            cairo_translate(cr, tile->px, tile->py);
+
+                            /* Set source surface at local origin */
+                            cairo_set_source_surface(cr, mip_surface, 0, 0);
+                            cairo_pattern_t* pattern = cairo_get_source(cr);
+                            cairo_pattern_set_filter(pattern, CAIRO_FILTER_BILINEAR);
+                            cairo_pattern_set_extend(pattern, CAIRO_EXTEND_PAD);
+
+                            /* Scale the pattern to stretch mipmap to fill tile area.
+                             * Pattern matrix transforms LOCAL user coords to pattern coords:
+                             * local (0,0) -> pattern (0,0)
+                             * local (tile->w, tile->h) -> pattern (mip_w, mip_h) */
+                            cairo_matrix_t matrix;
+                            gdouble scale_x = (gdouble)mip_w / (gdouble)tile->w;
+                            gdouble scale_y = (gdouble)mip_h / (gdouble)tile->h;
+                            cairo_matrix_init_scale(&matrix, scale_x, scale_y);
+                            cairo_pattern_set_matrix(pattern, &matrix);
+
+                            cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+
+                            /* Draw exact tile rectangle at local origin */
+                            cairo_rectangle(cr, 0, 0, tile->w, tile->h);
+                            cairo_fill(cr);
+
+                            cairo_restore(cr);
+                        }
+                    }
+                }
+            }
         } else {
             /* At 100% zoom, use tiles for performance */
             if (doc->tile_grid) {
@@ -1248,9 +1350,11 @@ GtkWidget* document_create_drawing_area(ImageDocument* doc) {
     /* IMPORTANT: Use START alignment (top-left) instead of CENTER.
      * Centering causes an offset between the drawing area and viewport origin,
      * which creates a mismatch between clip position and scroll position.
-     * This mismatch causes visible seams when GTK's scroll blitting is active. */
-    gtk_widget_set_halign(drawing_area, GTK_ALIGN_START);
-    gtk_widget_set_valign(drawing_area, GTK_ALIGN_START);
+     * This mismatch causes visible seams when GTK's scroll blitting is active.
+     * NOTE: setting GTK_ALIGN_START instead of GTK_ALIGN_CENTER breaks centering when 
+             zooming out, or using Fit zoom modes. */
+    gtk_widget_set_halign(drawing_area, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(drawing_area, GTK_ALIGN_CENTER);
 
     gtk_container_add(GTK_CONTAINER(viewport), drawing_area);
     gtk_widget_show(drawing_area);

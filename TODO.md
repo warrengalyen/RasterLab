@@ -9,13 +9,14 @@
       using `g_thread_pool_set_sort_function()`. Priority = distance² from viewport center.
       Improves perceived performance during scrolling - users see central content first.
 
+- [x] **Tile-based mipmapping for fast zoom** - Pre-computed downscaled tile versions at
+      50%, 25%, 12.5%, 6.25% stored in each Tile structure. Mipmaps auto-generated after
+      tile compositing. When zoomed out (<100%), rendering uses tile mipmaps instead of
+      expensive per-pixel layer scaling. `tile_get_mipmap_for_zoom()` selects best level.
+
 ## Future Optimizations
 
 ### High Priority
-
-- [ ] **Mipmapping for fast zoom** - Pre-compute downscaled tile versions at 50%, 25%, etc.
-      to avoid expensive per-pixel scaling during zoom. Store mipmaps in tile structure.
-      Use appropriate mipmap level based on current zoom factor.
 
 - [ ] **SSE/AVX SIMD compositing** - Vectorize the pixel blending loop in
       `tile_worker_composite_pixels()`. Process 4-8 pixels per iteration using

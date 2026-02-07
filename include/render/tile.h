@@ -14,7 +14,15 @@
  */
 
 /**
- * Tile state machine for thread pool coordination
+ * Maximum number of tile mipmap levels
+ * Level 0 = full resolution (the main tile surface)
+ * Level 1 = 50% (half size)
+ * Level 2 = 25% (quarter size)
+ * Level 3 = 12.5% (eighth size)
+ */
+#define TILE_MIPMAP_LEVELS 4
+
+/**
  */
 typedef enum {
     TILE_CLEAN,    /* Tile surface is valid and up-to-date */
@@ -41,6 +49,15 @@ typedef struct {
     /* Thread pool coordination (legacy - kept for compatibility) */
     TileState state;     /* Current state in render pipeline */
     guint generation_id; /* Incremented when tile marked dirty; prevents stale results */
+
+    /* Pre-computed mipmaps for fast zooming
+     * mipmap[0] = 50% (half size)
+     * mipmap[1] = 25% (quarter size)
+     * mipmap[2] = 12.5% (eighth size)
+     * mipmap[3] = 6.25% (sixteenth size)
+     * Generated after tile compositing for fast zoom-out rendering */
+    cairo_surface_t* mipmaps[TILE_MIPMAP_LEVELS];
+    gboolean mipmaps_dirty; /* Whether mipmaps need regeneration */
 } Tile;
 
 /**
@@ -127,6 +144,30 @@ void tile_mark_dirty_for_thread_pool(Tile* tile);
  * @return TRUE if result was applied, FALSE if stale
  */
 gboolean tile_apply_completed_result(Tile* tile, cairo_surface_t* new_surface, guint generation_id);
+
+/**
+ * Generate mipmaps for a tile
+ * Creates downscaled versions at 50%, 25%, 12.5%, 6.25% for fast zoom-out rendering.
+ * Should be called after tile compositing completes.
+ * @param tile Tile to generate mipmaps for
+ * @return TRUE on success, FALSE on error
+ */
+gboolean tile_generate_mipmaps(Tile* tile);
+
+/**
+ * Free all mipmaps for a tile
+ * @param tile Tile to free mipmaps for
+ */
+void tile_free_mipmaps(Tile* tile);
+
+/**
+ * Get the appropriate mipmap surface for a given zoom factor
+ * @param tile Tile to get mipmap from
+ * @param zoom_factor Zoom factor (1.0 = full resolution)
+ * @param out_scale Output: scale factor of the returned mipmap (e.g., 0.5 for 50%)
+ * @return Mipmap surface, or tile->surface if zoom >= 1.0 or mipmaps unavailable
+ */
+cairo_surface_t* tile_get_mipmap_for_zoom(Tile* tile, gdouble zoom_factor, gdouble* out_scale);
 
 /**
  * Tile snapshot helpers for delta-based undo system
