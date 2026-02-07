@@ -1,6 +1,7 @@
 # Tile-Based Rendering Performance Improvements
 
 ## Completed
+
 - [x] **Background-threaded tile compositing** - Worker threads composite dirty tiles
       into pixel buffers while main thread handles Cairo surfaces (thread-safe design)
 
@@ -11,6 +12,7 @@
 ## Future Optimizations
 
 ### High Priority
+
 - [ ] **Mipmapping for fast zoom** - Pre-compute downscaled tile versions at 50%, 25%, etc.
       to avoid expensive per-pixel scaling during zoom. Store mipmaps in tile structure.
       Use appropriate mipmap level based on current zoom factor.
@@ -26,7 +28,11 @@
       _mm_storeu_si128((__m128i*)&tile_row[x], result);
       ```
 
+      Consider using SIMD Everywhere library for cross-platform SIMD support:
+      https://github.com/simd-everywhere/simde
+
 ### Medium Priority
+
 - [ ] **Dirty region coalescing** - Combine multiple small dirty regions into
       larger rectangles to reduce per-tile overhead.
 
@@ -38,6 +44,7 @@
       Screen, Overlay, etc.
 
 ### Lower Priority  
+
 - [ ] **GPU-accelerated compositing** - Use OpenGL/Vulkan for tile compositing
       when available. Upload layer textures to GPU and composite in shaders.
 

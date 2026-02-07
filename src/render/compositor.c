@@ -557,7 +557,7 @@ void document_render_layers_at_zoom(ImageDocument* doc, cairo_t* cr,
         return;
     }
 
-    /* Clip to viewport */
+    /* Clip to viewport for efficiency */
     cairo_save(cr);
     cairo_rectangle(cr, viewport_x, viewport_y, viewport_w, viewport_h);
     cairo_clip(cr);
@@ -620,6 +620,13 @@ void document_render_layers_at_zoom(ImageDocument* doc, cairo_t* cr,
                         cairo_save(cr);
                         cairo_scale(cr, mip_scale, mip_scale);
                         cairo_set_source_surface(cr, level->surface, 0, 0);
+                        
+                        /* CRITICAL: Use NEAREST filter to prevent interpolation artifacts
+                         * that cause visible seams during scrolling */
+                        cairo_pattern_t* mip_pattern = cairo_get_source(cr);
+                        cairo_pattern_set_filter(mip_pattern, CAIRO_FILTER_NEAREST);
+                        /* Use PAD extend mode to prevent edge sampling artifacts */
+                        cairo_pattern_set_extend(mip_pattern, CAIRO_EXTEND_PAD);
 
                         /* Set operator based on layer's blend mode */
                         cairo_operator_t op;
@@ -631,8 +638,9 @@ void document_render_layers_at_zoom(ImageDocument* doc, cairo_t* cr,
                         }
                         cairo_set_operator(cr, op);
 
-                        /* Paint mipmap (opacity is already applied in cache_surface used for generation) */
-                        cairo_paint(cr);
+                        /* Use explicit rectangle + fill instead of paint() */
+                        cairo_rectangle(cr, 0, 0, level->width, level->height);
+                        cairo_fill(cr);
 
                         cairo_restore(cr);
                         continue;
@@ -648,17 +656,13 @@ void document_render_layers_at_zoom(ImageDocument* doc, cairo_t* cr,
             continue;
         }
 
-        /* Set source with appropriate filtering */
-        /* Use nearest filter when zoomed in to avoid sub-pixel artifacts that cause visible lines */
+        /* Set source with NEAREST filtering to prevent interpolation artifacts
+         * that cause visible seams during scrolling. This applies at all zoom levels. */
         cairo_set_source_surface(cr, layer->cache_surface, 0, 0);
         cairo_pattern_t* pattern = cairo_get_source(cr);
-        if (zoom_factor >= 1.0) {
-            /* When zoomed in, use nearest filter for pixel-perfect rendering */
-            cairo_pattern_set_filter(pattern, CAIRO_FILTER_NEAREST);
-        } else {
-            /* When zoomed out, use bilinear for smooth scaling */
-            cairo_pattern_set_filter(pattern, CAIRO_FILTER_BILINEAR);
-        }
+        cairo_pattern_set_filter(pattern, CAIRO_FILTER_NEAREST);
+        /* Use PAD extend mode to prevent edge sampling artifacts */
+        cairo_pattern_set_extend(pattern, CAIRO_EXTEND_PAD);
 
         /* Set operator based on layer's blend mode */
         cairo_operator_t op;
@@ -670,8 +674,9 @@ void document_render_layers_at_zoom(ImageDocument* doc, cairo_t* cr,
         }
         cairo_set_operator(cr, op);
 
-        /* Paint layer (opacity is already applied in cache) */
-        cairo_paint(cr);
+        /* Use explicit rectangle + fill instead of paint() to avoid clip edge artifacts */
+        cairo_rectangle(cr, 0, 0, layer->width, layer->height);
+        cairo_fill(cr);
 
         cairo_restore(cr);
     }

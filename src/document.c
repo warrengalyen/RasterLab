@@ -75,11 +75,26 @@ static gboolean on_selection_animation_timer(gpointer user_data) {
 static void on_scroll_adjustment_changed(GtkAdjustment* adjustment, gpointer user_data) {
     ImageDocument* doc = (ImageDocument*)user_data;
     LayersPanel* layers_panel;
+    GdkWindow* gdk_window;
 
     (void)adjustment; /* Unused */
 
     if (doc && doc->drawing_area && GTK_IS_WIDGET(doc->drawing_area)) {
-        /* Invalidate the entire drawing area to trigger redraw */
+        /* Invalidate the layout/viewport */
+        if (doc->viewport && GTK_IS_WIDGET(doc->viewport)) {
+            gdk_window = gtk_widget_get_window(doc->viewport);
+            if (gdk_window) {
+                gdk_window_invalidate_rect(gdk_window, NULL, TRUE);
+            }
+            gtk_widget_queue_draw(doc->viewport);
+        }
+
+        /* Invalidate the drawing area window */
+        gdk_window = gtk_widget_get_window(doc->drawing_area);
+        if (gdk_window) {
+            gdk_window_invalidate_rect(gdk_window, NULL, TRUE);
+        }
+
         gtk_widget_queue_draw(doc->drawing_area);
 
         /* Update overview widget selection rectangle when scrolling */
@@ -238,16 +253,41 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
     clip_width = (gint)(x2 - x1);
     clip_height = (gint)(y2 - y1);
 
+/* DEBUG: Set to 1 to detect and print when clip/scroll mismatch (seam condition) */
+#define DEBUG_PRINT_CLIP 0
+#if DEBUG_PRINT_CLIP
+    {
+        double dbg_scroll_x = 0, dbg_scroll_y = 0;
+        if (doc->scrolled_window && GTK_IS_SCROLLED_WINDOW(doc->scrolled_window)) {
+            GtkAdjustment* hadj = gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(doc->scrolled_window));
+            GtkAdjustment* vadj = gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(doc->scrolled_window));
+            if (hadj)
+                dbg_scroll_x = gtk_adjustment_get_value(hadj);
+            if (vadj)
+                dbg_scroll_y = gtk_adjustment_get_value(vadj);
+        }
+        /* Only print when clip and scroll diverge by more than 1 pixel */
+        double diff_x = x1 - dbg_scroll_x;
+        double diff_y = y1 - dbg_scroll_y;
+        if (diff_x < -1 || diff_x > 1 || diff_y < -1 || diff_y > 1) {
+            g_print("MISMATCH: clip=(%.0f,%.0f) scroll=(%.0f,%.0f) diff=(%.0f,%.0f)\n",
+                    x1, y1, dbg_scroll_x, dbg_scroll_y, diff_x, diff_y);
+        }
+    }
+#endif
+
     /* Draw the document if image is loaded */
     if (doc->layers && g_list_length(doc->layers) > 0) {
-        /* Calculate viewport in document coordinates (unscaled) with proper rounding */
-        /* Use proper rounding to avoid pixel misalignment that causes visible lines when scrolling */
-        viewport_x = (gint)(round(x1 / zoom));
-        viewport_y = (gint)(round(y1 / zoom));
-        viewport_w = (gint)(round((x2 - x1) / zoom));
-        viewport_h = (gint)(round((y2 - y1) / zoom));
+        /* CRITICAL: Use CLIP position for viewport calculation, not scroll position!
+         * Debug analysis revealed that clip.x/y often differs from scroll.x/y
+         * (clip can be offset when the drawing area is centered in the viewport).
+         * We must draw content for the CLIP region, which is what Cairo will actually show. */
+        viewport_x = (gint)floor(x1 / zoom);
+        viewport_y = (gint)floor(y1 / zoom);
+        viewport_w = (gint)ceil(clip_width / zoom) + 1;
+        viewport_h = (gint)ceil(clip_height / zoom) + 1;
 
-        /* Save Cairo state before applying zoom transform */
+        /* Save Cairo state before applying transforms */
         cairo_save(cr);
 
         /* Apply zoom transform */
@@ -255,9 +295,19 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
             cairo_scale(cr, zoom, zoom);
         }
 
-        /* Draw checkered background for visible area, starting from viewport position */
-        /* This ensures the pattern is continuous across the entire canvas when scrolling */
+/* DEBUG: Set to 1 to disable checkered background and use solid color. */
+#define DEBUG_SOLID_BACKGROUND 1
+
+#if DEBUG_SOLID_BACKGROUND
+        /* Draw solid background for ENTIRE document area (0,0 to width,height).
+         * This ensures complete coverage regardless of clip/scroll mismatch. */
+        cairo_set_source_rgb(cr, 0.5, 0.5, 0.5);
+        cairo_rectangle(cr, 0, 0, doc->width, doc->height);
+        cairo_fill(cr);
+#else
+        /* Draw checkered background for visible area */
         draw_checkered_background_offset(cr, viewport_x, viewport_y, viewport_w, viewport_h);
+#endif
 
         /* When zoomed, render layers directly to avoid tile boundary artifacts */
         if (zoom != 1.0) {
@@ -265,22 +315,16 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
         } else {
             /* At 100% zoom, use tiles for performance */
             if (doc->tile_grid) {
-                gboolean has_pending_tiles = FALSE;
                 gboolean need_sync_composite = FALSE;
 
-                /* Calculate which tiles are visible in viewport */
-                tile_grid_pixel_to_tile(doc->tile_grid, viewport_x, viewport_y, &start_tile_x, &start_tile_y);
-                tile_grid_pixel_to_tile(doc->tile_grid, viewport_x + viewport_w, viewport_y + viewport_h, &end_tile_x, &end_tile_y);
-
-                /* Clamp to grid bounds */
-                if (start_tile_x < 0)
-                    start_tile_x = 0;
-                if (start_tile_y < 0)
-                    start_tile_y = 0;
-                if (end_tile_x >= doc->tile_grid->tiles_x)
-                    end_tile_x = doc->tile_grid->tiles_x - 1;
-                if (end_tile_y >= doc->tile_grid->tiles_y)
-                    end_tile_y = doc->tile_grid->tiles_y - 1;
+                /* AGGRESSIVE FIX: Draw ALL tiles for the entire document.
+                 * This matches what we do for the background (which has no seam).
+                 * The clip will limit what's actually rendered, but all tile positions
+                 * will have correct content drawn, eliminating the seam. */
+                start_tile_x = 0;
+                start_tile_y = 0;
+                end_tile_x = doc->tile_grid->tiles_x - 1;
+                end_tile_y = doc->tile_grid->tiles_y - 1;
 
                 /* Check for dirty visible tiles and composite them SYNCHRONOUSLY.
                  * This prevents flickering during layer movement where stale tile content
@@ -308,7 +352,7 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
                                         cairo_surface_destroy(tile->surface);
                                         tile->surface = NULL;
                                     }
-                                    
+
                                     if (tile->pixel_buffer) {
                                         tile->surface = cairo_image_surface_create_for_data(
                                             tile->pixel_buffer,
@@ -316,7 +360,7 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
                                             tile->w,
                                             tile->h,
                                             tile->stride);
-                                        
+
                                         if (cairo_surface_status(tile->surface) == CAIRO_STATUS_SUCCESS) {
                                             tile->dirty = FALSE;
                                             tile->pending_upload = FALSE;
@@ -337,54 +381,73 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
                                                          viewport_center_x,
                                                          viewport_center_y);
 
-                    /* Prefetch tiles around the visible area */
-                    gint prefetch_start_x = start_tile_x - 1;
-                    gint prefetch_start_y = start_tile_y - 1;
-                    gint prefetch_end_x = end_tile_x + 1;
-                    gint prefetch_end_y = end_tile_y + 1;
-                    
-                    if (prefetch_start_x < 0) prefetch_start_x = 0;
-                    if (prefetch_start_y < 0) prefetch_start_y = 0;
-                    if (prefetch_end_x >= doc->tile_grid->tiles_x) prefetch_end_x = doc->tile_grid->tiles_x - 1;
-                    if (prefetch_end_y >= doc->tile_grid->tiles_y) prefetch_end_y = doc->tile_grid->tiles_y - 1;
+                    /* Enqueue tiles in a larger region around the viewport for prefetching */
+                    gint prefetch_margin = 2; /* tiles */
+                    gint pf_start_x = (start_tile_x > prefetch_margin) ? start_tile_x - prefetch_margin : 0;
+                    gint pf_start_y = (start_tile_y > prefetch_margin) ? start_tile_y - prefetch_margin : 0;
+                    gint pf_end_x = end_tile_x + prefetch_margin;
+                    gint pf_end_y = end_tile_y + prefetch_margin;
 
-                    for (ty = prefetch_start_y; ty <= prefetch_end_y; ty++) {
-                        for (tx = prefetch_start_x; tx <= prefetch_end_x; tx++) {
-                            /* Skip tiles that are already visible (handled synchronously above) */
+                    if (pf_end_x >= doc->tile_grid->tiles_x)
+                        pf_end_x = doc->tile_grid->tiles_x - 1;
+                    if (pf_end_y >= doc->tile_grid->tiles_y)
+                        pf_end_y = doc->tile_grid->tiles_y - 1;
+
+                    for (ty = pf_start_y; ty <= pf_end_y; ty++) {
+                        for (tx = pf_start_x; tx <= pf_end_x; tx++) {
+                            /* Skip visible tiles - already composited synchronously */
                             if (tx >= start_tile_x && tx <= end_tile_x &&
                                 ty >= start_tile_y && ty <= end_tile_y) {
                                 continue;
                             }
-                            
+
                             tile = tile_grid_get_tile(doc->tile_grid, tx, ty);
                             if (tile && tile->dirty) {
-                                if (tile_worker_pool_enqueue(doc->tile_worker_pool, doc, tile, tx, ty)) {
-                                    has_pending_tiles = TRUE;
-                                }
+                                tile_worker_pool_enqueue(doc->tile_worker_pool, doc, tile, tx, ty);
                             }
                         }
                     }
                 }
+
+/* DEBUG: Set to 1 to draw colored debug rectangles instead of tiles.
+                 * This helps identify if the seam is caused by tile content or coordinate issues. */
+#define DEBUG_TILE_COLORS 0
+
+                /* Reset clip to allow drawing full tile range (bypasses GTK's partial clip) */
+                cairo_reset_clip(cr);
+                cairo_rectangle(cr, 0, 0, doc->width, doc->height);
+                cairo_clip(cr);
 
                 /* Second pass: Draw all visible tiles (including stale content for pending tiles) */
                 for (ty = start_tile_y; ty <= end_tile_y; ty++) {
                     for (tx = start_tile_x; tx <= end_tile_x; tx++) {
                         tile = tile_grid_get_tile(doc->tile_grid, tx, ty);
 
-                        if (tile && tile->surface) {
-                            cairo_set_source_surface(cr, tile->surface, tile->px, tile->py);
-                            cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
-                            cairo_paint(cr);
+                        if (tile) {
+#if DEBUG_TILE_COLORS
+                            /* Debug mode: Draw colored rectangles based on tile position */
+                            double r = (double)((tx * 37) % 255) / 255.0;
+                            double g = (double)((ty * 73) % 255) / 255.0;
+                            double b = (double)(((tx + ty) * 53) % 255) / 255.0;
+                            cairo_set_source_rgb(cr, r, g, b);
+                            cairo_rectangle(cr, tile->px, tile->py, tile->w, tile->h);
+                            cairo_fill(cr);
+#else
+                            if (tile->surface) {
+                                cairo_set_source_surface(cr, tile->surface, tile->px, tile->py);
+                                /* Use NEAREST filter to prevent subpixel interpolation at tile edges. */
+                                cairo_pattern_t* tile_pattern = cairo_get_source(cr);
+                                cairo_pattern_set_filter(tile_pattern, CAIRO_FILTER_NEAREST);
+                                /* Use PAD extend mode to prevent edge sampling artifacts */
+                                cairo_pattern_set_extend(tile_pattern, CAIRO_EXTEND_PAD);
+                                cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+                                /* Use explicit rectangle + fill instead of paint() to avoid clip edge artifacts */
+                                cairo_rectangle(cr, tile->px, tile->py, tile->w, tile->h);
+                                cairo_fill(cr);
+                            }
+#endif
                         }
                     }
-                }
-
-                /* If there are pending tiles, schedule a redraw to show updates */
-                if (has_pending_tiles) {
-                    /* Use idle callback to avoid excessive redraws during rapid updates */
-                    g_idle_add_full(G_PRIORITY_LOW,
-                                    (GSourceFunc)gtk_widget_queue_draw,
-                                    widget, NULL);
                 }
             }
         }
@@ -406,14 +469,6 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
     if (doc->selection_mask && !selection_mask_is_empty(doc->selection_mask)) {
         selection_mask_render_outline(cr, doc->selection_mask,
                                       doc->selection_animation_phase, zoom);
-
-        /* TEMPORARY: Visualize selection mask for debugging feathered selections */
-        cairo_save(cr);
-        if (zoom != 1.0) {
-            cairo_scale(cr, zoom, zoom);
-        }
-        // render_utils_visualize_selection_mask(cr, doc->selection_mask);
-        cairo_restore(cr);
     }
 
     return FALSE;
@@ -437,8 +492,10 @@ static gboolean on_viewport_draw(GtkWidget* widget, cairo_t* cr, gpointer user_d
     if (doc->scrolled_window && GTK_IS_SCROLLED_WINDOW(doc->scrolled_window)) {
         GtkAdjustment* hadj = gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(doc->scrolled_window));
         GtkAdjustment* vadj = gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(doc->scrolled_window));
-        if (hadj) scroll_x = gtk_adjustment_get_value(hadj);
-        if (vadj) scroll_y = gtk_adjustment_get_value(vadj);
+        if (hadj)
+            scroll_x = gtk_adjustment_get_value(hadj);
+        if (vadj)
+            scroll_y = gtk_adjustment_get_value(vadj);
     }
 
     /* Get drawing area allocation to find its position in viewport */
@@ -1160,24 +1217,15 @@ GtkWidget* document_create_drawing_area(ImageDocument* doc) {
     gtk_scrolled_window_set_shadow_type(GTK_SCROLLED_WINDOW(scrolled_window),
                                         GTK_SHADOW_NONE);
 
-    /* Create a viewport to hold the drawing area (allows centering) */
+    /* Create viewport to hold the drawing area */
     viewport = gtk_viewport_new(NULL, NULL);
+    gtk_viewport_set_shadow_type(GTK_VIEWPORT(viewport), GTK_SHADOW_NONE);
 
-    /* Set a name on the viewport for CSS targeting */
+    /* Set app_paintable to take full control of drawing */
+    gtk_widget_set_app_paintable(viewport, TRUE);
+
+    /* Set a name for CSS targeting */
     gtk_widget_set_name(viewport, "canvas-viewport");
-
-    /* Set default canvas background color on viewport using CSS (will be updated when AppContext is available) */
-    gchar* css = g_strdup("#canvas-viewport { background-color: rgb(160, 160, 160); }");
-    GtkCssProvider* provider = gtk_css_provider_new();
-    gtk_css_provider_load_from_data(provider, css, -1, NULL);
-    g_free(css);
-
-    /* Store provider in widget data so it can be updated later */
-    g_object_set_data_full(G_OBJECT(viewport), "canvas_bg_provider", provider, g_object_unref);
-
-    GtkStyleContext* style_context = gtk_widget_get_style_context(viewport);
-    gtk_style_context_add_provider(style_context, GTK_STYLE_PROVIDER(provider),
-                                   GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
 
     /* Store viewport reference in document for later updates */
     doc->viewport = viewport;
@@ -1190,13 +1238,19 @@ GtkWidget* document_create_drawing_area(ImageDocument* doc) {
     /* Start with default size - will be updated when image loads */
     gtk_widget_set_size_request(drawing_area, 800, 600);
 
+    /* Set app_paintable to take full control of drawing */
+    gtk_widget_set_app_paintable(drawing_area, TRUE);
+
     /* Prevent drawing area from expanding to fill viewport */
     gtk_widget_set_hexpand(drawing_area, FALSE);
     gtk_widget_set_vexpand(drawing_area, FALSE);
 
-    /* Align to top-left corner */
-    gtk_widget_set_halign(drawing_area, GTK_ALIGN_CENTER);
-    gtk_widget_set_valign(drawing_area, GTK_ALIGN_CENTER);
+    /* IMPORTANT: Use START alignment (top-left) instead of CENTER.
+     * Centering causes an offset between the drawing area and viewport origin,
+     * which creates a mismatch between clip position and scroll position.
+     * This mismatch causes visible seams when GTK's scroll blitting is active. */
+    gtk_widget_set_halign(drawing_area, GTK_ALIGN_START);
+    gtk_widget_set_valign(drawing_area, GTK_ALIGN_START);
 
     gtk_container_add(GTK_CONTAINER(viewport), drawing_area);
     gtk_widget_show(drawing_area);

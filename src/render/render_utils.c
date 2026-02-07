@@ -1,5 +1,6 @@
 #include "render/render_utils.h"
 #include "selection/selection_mask.h"
+#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 
@@ -197,43 +198,95 @@ void draw_checkered_background(cairo_t* cr, gint image_width, gint image_height)
     }
 }
 
+/* Static pattern surface for checkered background - created once and reused */
+static cairo_surface_t* checkered_pattern_surface = NULL;
+static cairo_pattern_t* checkered_pattern = NULL;
+
+/**
+ * Create the checkered pattern surface (called once)
+ */
+static void ensure_checkered_pattern(void) {
+    const gint square_size = 10;
+    const gint pattern_size = square_size * 2; /* 2x2 squares for the repeating unit */
+    const double color1 = 0.85;  /* Light gray */
+    const double color2 = 0.95;  /* Lighter gray */
+    cairo_t* pattern_cr;
+
+    if (checkered_pattern != NULL) {
+        return; /* Already created */
+    }
+
+    /* Create a small surface with one repeating unit of the pattern */
+    checkered_pattern_surface = cairo_image_surface_create(CAIRO_FORMAT_RGB24, pattern_size, pattern_size);
+    pattern_cr = cairo_create(checkered_pattern_surface);
+
+    /* Draw the 2x2 checkerboard pattern */
+    /* Top-left: color1 */
+    cairo_set_source_rgb(pattern_cr, color1, color1, color1);
+    cairo_rectangle(pattern_cr, 0, 0, square_size, square_size);
+    cairo_fill(pattern_cr);
+
+    /* Top-right: color2 */
+    cairo_set_source_rgb(pattern_cr, color2, color2, color2);
+    cairo_rectangle(pattern_cr, square_size, 0, square_size, square_size);
+    cairo_fill(pattern_cr);
+
+    /* Bottom-left: color2 */
+    cairo_set_source_rgb(pattern_cr, color2, color2, color2);
+    cairo_rectangle(pattern_cr, 0, square_size, square_size, square_size);
+    cairo_fill(pattern_cr);
+
+    /* Bottom-right: color1 */
+    cairo_set_source_rgb(pattern_cr, color1, color1, color1);
+    cairo_rectangle(pattern_cr, square_size, square_size, square_size, square_size);
+    cairo_fill(pattern_cr);
+
+    cairo_destroy(pattern_cr);
+
+    /* Create a pattern from the surface */
+    checkered_pattern = cairo_pattern_create_for_surface(checkered_pattern_surface);
+    cairo_pattern_set_extend(checkered_pattern, CAIRO_EXTEND_REPEAT);
+    
+    /* Use nearest-neighbor filtering to avoid interpolation artifacts */
+    cairo_pattern_set_filter(checkered_pattern, CAIRO_FILTER_NEAREST);
+}
+
 /**
  * Draw a checkered background pattern starting from a specific offset
  * This is useful when drawing only a portion of the canvas (e.g., when zoomed/scrolled)
  */
 void draw_checkered_background_offset(cairo_t* cr, gint offset_x, gint offset_y, gint image_width, gint image_height) {
-    const gint square_size = 10; /* Size of each check square */
-    const double color1 = 0.85;  /* Light gray */
-    const double color2 = 0.95;  /* Lighter gray */
+    /* Ensure the pattern is created */
+    ensure_checkered_pattern();
 
-    /* Calculate starting cell position */
-    gint start_cell_x = offset_x / square_size;
-    gint start_cell_y = offset_y / square_size;
-
-    /* Calculate starting pixel position (aligned to grid) */
-    gint start_x = start_cell_x * square_size;
-    gint start_y = start_cell_y * square_size;
-
-    /* Calculate how many squares we need to draw */
-    gint end_x = offset_x + image_width;
-    gint end_y = offset_y + image_height;
-
-    /* Draw checkerboard pattern aligned to document origin */
-    for (gint y = start_y; y < end_y; y += square_size) {
-        for (gint x = start_x; x < end_x; x += square_size) {
-            /* Calculate which cell we're in (relative to document origin) */
-            gint cell_x = x / square_size;
-            gint cell_y = y / square_size;
-
-            /* Alternate colors in a checkerboard pattern */
-            double color = ((cell_x + cell_y) % 2 == 0) ? color1 : color2;
-
-            /* Draw this square */
-            cairo_set_source_rgb(cr, color, color, color);
-            cairo_rectangle(cr, x, y, square_size, square_size);
-            cairo_fill(cr);
-        }
+    if (!checkered_pattern) {
+        /* Fallback to solid gray if pattern creation failed */
+        cairo_save(cr);
+        cairo_set_source_rgb(cr, 0.9, 0.9, 0.9);
+        cairo_rectangle(cr, offset_x, offset_y, image_width, image_height);
+        cairo_fill(cr);
+        cairo_restore(cr);
+        return;
     }
+
+    cairo_save(cr);
+
+    /* Use SOURCE operator to completely replace destination pixels.
+     * This prevents any artifacts from partial alpha blending with old content. */
+    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+    
+    /* Set the pattern as source with NEAREST filtering to avoid interpolation artifacts */
+    cairo_set_source(cr, checkered_pattern);
+    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+
+    /* Draw rectangle at the viewport area */
+    cairo_rectangle(cr, offset_x, offset_y, image_width, image_height);
+    cairo_fill(cr);
+    
+    /* Reset operator to default OVER for subsequent drawing */
+    cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+
+    cairo_restore(cr);
 }
 
 /**
