@@ -189,8 +189,70 @@ static void on_blend_mode_changed(GtkComboBox* combo, gpointer user_data) {
     document_invalidate_region(layers_panel->current_doc, &dirty_rect);
 }
 
+/* Track whether we're currently dragging the opacity slider.
+ * During drag, canvas updates are deferred until release for responsiveness.
+ * 
+ * TODO: Investigate ways to provide live preview during drag without lag:
+ * - Low-resolution preview rendering during drag
+ * - GPU-accelerated compositing for real-time updates
+ * - Approximate opacity by adjusting layer surface alpha at draw time
+ *   (without full recomposite) - would need special handling in draw callback
+ * See TODO.md "Opacity slider live preview" for details.
+ */
+static gboolean opacity_slider_dragging = FALSE;
+
+/**
+ * Opacity scale button press callback
+ * Starts deferred update mode - no canvas updates during drag
+ */
+static gboolean on_opacity_scale_button_press(GtkWidget* widget, GdkEventButton* event,
+                                               gpointer user_data) {
+    (void)widget;
+    (void)event;
+    (void)user_data;
+
+    /* Mark that we're dragging - canvas updates will be deferred */
+    opacity_slider_dragging = TRUE;
+
+    return FALSE; /* Let event propagate */
+}
+
+/**
+ * Opacity scale button release callback
+ * Ends deferred mode and does the actual canvas update
+ */
+static gboolean on_opacity_scale_button_release(GtkWidget* widget, GdkEventButton* event,
+                                                 gpointer user_data) {
+    LayersPanel* layers_panel = (LayersPanel*)user_data;
+    ImageLayer* selected_layer;
+    (void)widget;
+    (void)event;
+
+    /* Mark that dragging has ended */
+    opacity_slider_dragging = FALSE;
+
+    if (!layers_panel || !layers_panel->current_doc) {
+        return FALSE;
+    }
+
+    selected_layer = layers_panel_get_selected_layer(layers_panel);
+    if (selected_layer) {
+        /* Now do the actual expensive update */
+        layer_invalidate_cache(selected_layer);
+        document_invalidate_composite(layers_panel->current_doc);
+
+        if (layers_panel->current_doc->drawing_area) {
+            gtk_widget_queue_draw(layers_panel->current_doc->drawing_area);
+        }
+    }
+
+    return FALSE; /* Let event propagate */
+}
+
 /**
  * Opacity scale changed callback
+ * During drag: only updates the value, no canvas redraw (deferred)
+ * After release: full update happens in button_release handler
  */
 static void on_opacity_scale_changed(GtkRange* range, gpointer user_data) {
     LayersPanel* layers_panel = (LayersPanel*)user_data;
@@ -206,11 +268,8 @@ static void on_opacity_scale_changed(GtkRange* range, gpointer user_data) {
         return;
     }
 
-    /* Update layer opacity (convert from 0-100 to 0.0-1.0) */
+    /* Update layer opacity value immediately (lightweight) */
     selected_layer->opacity = value / 100.0;
-
-    /* Invalidate layer cache since opacity affects rendering */
-    layer_invalidate_cache(selected_layer);
 
     /* Update spin button to stay in sync */
     if (layers_panel->spin_opacity) {
@@ -223,10 +282,15 @@ static void on_opacity_scale_changed(GtkRange* range, gpointer user_data) {
                                           layers_panel);
     }
 
-    /* Invalidate entire composite (opacity affects how layer composites) */
+    /* If we're dragging, defer the expensive canvas update until release */
+    if (opacity_slider_dragging) {
+        return; /* Skip redraw during drag - will update on release */
+    }
+
+    /* Not dragging (e.g., keyboard/scroll adjustment) - do immediate update */
+    layer_invalidate_cache(selected_layer);
     document_invalidate_composite(layers_panel->current_doc);
 
-    /* Queue redraw */
     if (layers_panel->current_doc->drawing_area) {
         gtk_widget_queue_draw(layers_panel->current_doc->drawing_area);
     }
@@ -727,8 +791,22 @@ LayersPanel* create_layers_panel(AppContext* ctx) {
     if (layers_panel->scale_opacity) {
         gtk_range_set_range(GTK_RANGE(layers_panel->scale_opacity), 0.0, 100.0);
         gtk_range_set_value(GTK_RANGE(layers_panel->scale_opacity), 100.0);
+
+        /* Enable button events for async compositing control */
+        gtk_widget_add_events(layers_panel->scale_opacity,
+                              GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK);
+
+        /* Connect value-changed for opacity updates */
         g_signal_connect(layers_panel->scale_opacity, "value-changed",
                          G_CALLBACK(on_opacity_scale_changed), layers_panel);
+
+        /* Connect button press/release for async compositing mode:
+         * - Press: enable async mode (allow stale tiles) for responsiveness
+         * - Release: disable async mode and do final sync update */
+        g_signal_connect(layers_panel->scale_opacity, "button-press-event",
+                         G_CALLBACK(on_opacity_scale_button_press), layers_panel);
+        g_signal_connect(layers_panel->scale_opacity, "button-release-event",
+                         G_CALLBACK(on_opacity_scale_button_release), layers_panel);
     }
 
     if (layers_panel->spin_opacity) {

@@ -48,6 +48,20 @@
 
 ### Medium Priority
 
+- [ ] **Opacity slider live preview** - Currently, canvas updates are deferred
+      until slider release for responsiveness on large images. Investigate ways
+      to provide live preview during drag without lag:
+      - **Low-resolution preview**: Render at 1/2 or 1/4 resolution during drag,
+        full resolution on release
+      - **GPU-accelerated compositing**: Real-time compositing via OpenGL/Vulkan
+        shaders would eliminate the bottleneck entirely
+      - **Draw-time opacity approximation**: Instead of recompositing all tiles,
+        adjust the layer's surface alpha during the draw callback. This would
+        require special handling to blend the layer surface with adjusted alpha
+        over the composite of layers below it. Complex but potentially very fast.
+      - **Mipmap-based preview**: Use existing tile mipmaps for faster preview
+        compositing during drag
+
 - [ ] **Blend mode support in worker threads** - Currently worker threads only
       support OVER blend. Add SIMD-optimized implementations for Multiply,
       Screen, Overlay, etc.
