@@ -606,6 +606,9 @@ void layer_invalidate_cache(ImageLayer* layer) {
     }
 
     layer->cache_dirty = TRUE;
+    
+    /* Increment content version to invalidate GPU texture cache */
+    layer->content_version++;
 
     /* Destroy old cache */
     if (layer->cache_surface) {

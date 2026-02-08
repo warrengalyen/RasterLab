@@ -642,7 +642,7 @@ LayersPanel* create_layers_panel(AppContext* ctx) {
         layers_panel->btn_opacity_reset = NULL;
         layers_panel->combo_blend = NULL;
         layers_panel->current_doc = NULL;
-        layers_panel->app_context = NULL;
+        layers_panel->app_context = ctx;  /* Store app context */
         return layers_panel;
     }
 
@@ -865,7 +865,7 @@ LayersPanel* create_layers_panel(AppContext* ctx) {
     }
 
     layers_panel->current_doc = NULL;
-    layers_panel->app_context = NULL;
+    layers_panel->app_context = ctx;  /* Store app context for GPU acceleration check */
 
     return layers_panel;
 }

@@ -107,6 +107,28 @@ gboolean tile_worker_composite_pixels(ImageDocument* doc,
                                       gint tile_x,
                                       gint tile_y);
 
+/**
+ * Composite a tile's pixel buffer using GPU acceleration
+ * MAIN THREAD ONLY - OpenGL context is thread-bound
+ * Falls back to CPU compositing if GPU is not available
+ * @param doc Document with GPU compositor
+ * @param tile Tile with pixel_buffer allocated
+ * @param tile_x Tile X coordinate
+ * @param tile_y Tile Y coordinate
+ * @return TRUE if GPU was used, FALSE if fell back to CPU
+ */
+gboolean tile_worker_composite_pixels_gpu(ImageDocument* doc,
+                                          Tile* tile,
+                                          gint tile_x,
+                                          gint tile_y);
+
+/**
+ * Check if GPU compositing is available for a document
+ * @param doc Document to check
+ * @return TRUE if GPU compositing can be used
+ */
+gboolean tile_worker_has_gpu_compositor(ImageDocument* doc);
+
 G_END_DECLS
 
 #endif /* TILE_WORKER_H */

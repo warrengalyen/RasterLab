@@ -32,6 +32,7 @@ typedef struct {
     /* View settings */
     gboolean show_layer_edges; /* Show outline when moving layers (default TRUE) */
     gboolean show_statusbar;   /* Show status bar (default TRUE) */
+    gboolean show_gpu_stats;   /* Show GPU compositor statistics overlay (default FALSE) */
 
     /* Tone mapping settings */
     gboolean tone_map_auto_apply;     /* Auto-apply tone mapping settings (bypass dialog) */
@@ -43,6 +44,10 @@ typedef struct {
     gdouble tone_map_intensity;        /* Intensity (-4.00-4.00, default 0.00, Reinhard only) */
     gdouble tone_map_adaptation;       /* Adaptation (0.00-1.00, default 1.00, Reinhard only) */
     gdouble tone_map_color_correction; /* Color correction (0.00-1.00, default 0.00, Reinhard only) */
+
+    /* GPU acceleration settings */
+    gboolean gpu_acceleration_enabled; /* Enable GPU-accelerated compositing (default TRUE) */
+    gchar* gpu_device_name;            /* GPU device name to use (NULL = system default) */
 } Settings;
 
 /**
@@ -224,6 +229,20 @@ void settings_set_show_statusbar(Settings* settings, gboolean show);
 gboolean settings_get_show_statusbar(Settings* settings);
 
 /**
+ * Set show GPU stats setting
+ * @param settings The settings structure
+ * @param show TRUE to show GPU stats overlay, FALSE to hide
+ */
+void settings_set_show_gpu_stats(Settings* settings, gboolean show);
+
+/**
+ * Get show GPU stats setting
+ * @param settings The settings structure
+ * @return TRUE if GPU stats overlay should be shown
+ */
+gboolean settings_get_show_gpu_stats(Settings* settings);
+
+/**
  * Tone mapping settings getters/setters
  */
 void settings_set_tone_map_auto_apply(Settings* settings, gboolean auto_apply);
@@ -244,5 +263,38 @@ void settings_set_tone_map_adaptation(Settings* settings, gdouble adaptation);
 gdouble settings_get_tone_map_adaptation(Settings* settings);
 void settings_set_tone_map_color_correction(Settings* settings, gdouble color_correction);
 gdouble settings_get_tone_map_color_correction(Settings* settings);
+
+/**
+ * GPU acceleration settings getters/setters
+ */
+
+/**
+ * Get GPU acceleration enabled setting
+ * @param settings The settings structure
+ * @return TRUE if GPU acceleration is enabled
+ */
+gboolean settings_get_gpu_acceleration_enabled(Settings* settings);
+
+/**
+ * Set GPU acceleration enabled setting
+ * @param settings The settings structure
+ * @param enabled TRUE to enable GPU acceleration, FALSE to disable
+ */
+void settings_set_gpu_acceleration_enabled(Settings* settings, gboolean enabled);
+
+/**
+ * Get GPU device name
+ * @param settings The settings structure
+ * @return GPU device name, or NULL for system default
+ *         String is owned by Settings, do not free
+ */
+const gchar* settings_get_gpu_device_name(Settings* settings);
+
+/**
+ * Set GPU device name
+ * @param settings The settings structure
+ * @param device_name GPU device name (NULL = use system default)
+ */
+void settings_set_gpu_device_name(Settings* settings, const gchar* device_name);
 
 #endif /* SETTINGS_H */

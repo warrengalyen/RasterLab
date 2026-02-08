@@ -25,6 +25,10 @@ typedef struct TileThreadPool TileThreadPool;
 struct TileWorkerPool;
 typedef struct TileWorkerPool TileWorkerPool;
 
+/* Forward declaration for GPU compositor */
+struct GPUCompositor;
+typedef struct GPUCompositor GPUCompositor;
+
 /* Forward declaration for old Selection (deprecated) */
 struct Selection;
 typedef struct Selection Selection;
@@ -150,6 +154,7 @@ typedef struct ImageLayer {
     gint offset_x;                  /* Layer offset X (horizontal translation) */
     gint offset_y;                  /* Layer offset Y (vertical translation) */
     MipmapPyramid* mipmap_pyramid;  /* Mipmap pyramid for fast zooming */
+    guint64 content_version;        /* Increments when surface content changes (for GPU cache) */
 } ImageLayer;
 
 /**
@@ -180,6 +185,7 @@ typedef struct ImageDocument {
     TileGrid* tile_grid;                /* Tile-based rendering grid (replaces full-surface rendering) */
     TileThreadPool* tile_thread_pool;   /* Thread pool for asynchronous tile compositing (deprecated) */
     TileWorkerPool* tile_worker_pool;   /* Cairo-safe worker pool for pixel buffer compositing */
+    GPUCompositor* gpu_compositor;      /* GPU-accelerated compositor (NULL if GPU disabled/unavailable) */
 
     /* Viewport and zoom */
     gdouble zoom_factor; /* Current zoom level (1.0 = 100%) */

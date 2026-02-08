@@ -74,6 +74,7 @@ set(SOURCES
     render/blend.c
     render/compositor.c
     render/dirty.c
+    render/gpu_compositor.c
     render/layer.c
     render/mipmap.c
     render/render_utils.c
@@ -256,13 +257,23 @@ target_link_libraries(rasterlab ${LIBXML2_LIBRARIES})
 # Link LZ4
 target_link_libraries(rasterlab ${LZ4_LIBRARIES})
 
-# Link GLFW (static, from lib/glfw)
+# Link GLFW (static, from lib/glfw) for GPU-accelerated compositing
 if(GLFW_FOUND AND GLFW_TARGET AND TARGET ${GLFW_TARGET})
     target_link_libraries(rasterlab ${GLFW_TARGET})
+    target_compile_definitions(rasterlab PRIVATE HAVE_GLFW=1)
     if(WIN32)
         target_link_libraries(rasterlab opengl32)
+    else()
+        # On Linux, link against GL
+        find_package(OpenGL)
+        if(OPENGL_FOUND)
+            target_link_libraries(rasterlab ${OPENGL_LIBRARIES})
+        endif()
     endif()
-    message(STATUS "Linking GLFW static library into rasterlab executable")
+    message(STATUS "Linking GLFW static library into rasterlab executable (GPU acceleration enabled)")
+else()
+    target_compile_definitions(rasterlab PRIVATE HAVE_GLFW=0)
+    message(STATUS "GLFW not available - GPU acceleration disabled")
 endif()
 
 # Link pthread for tile thread pool

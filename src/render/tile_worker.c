@@ -1,6 +1,7 @@
 #include "render/tile_worker.h"
 #include "render/blend.h"
 #include "render/compositor.h"
+#include "render/gpu_compositor.h"
 #include "render/layer.h"
 #include <glib.h>
 #include <string.h>
@@ -143,6 +144,93 @@ gboolean tile_worker_composite_pixels(ImageDocument* doc,
     }
 
     return TRUE;
+}
+
+/**
+ * Check if document uses only NORMAL blend mode
+ * GPU compositor only supports NORMAL blend mode efficiently.
+ * Non-normal blend modes require reading the destination framebuffer,
+ * which would need ping-pong rendering (not implemented).
+ */
+static gboolean document_uses_only_normal_blend(ImageDocument* doc) {
+    if (!doc || !doc->layers) {
+        return TRUE;
+    }
+    
+    gboolean first_visible = TRUE;
+    for (GList* iter = doc->layers; iter; iter = iter->next) {
+        ImageLayer* layer = (ImageLayer*)iter->data;
+        if (!layer || !layer->visible || layer->opacity <= 0.0) {
+            continue;
+        }
+        
+        /* First visible layer always uses NORMAL internally */
+        if (first_visible) {
+            first_visible = FALSE;
+            continue;
+        }
+        
+        /* Check if this layer uses a non-NORMAL blend mode */
+        if (layer->blend_mode != BLEND_MODE_NORMAL) {
+            return FALSE;
+        }
+    }
+    
+    return TRUE;
+}
+
+/**
+ * Composite tile pixels using GPU acceleration
+ * This must be called from the main thread (OpenGL context is thread-bound)
+ * Falls back to CPU compositing if GPU is not available or if document
+ * uses non-NORMAL blend modes (which GPU doesn't support yet)
+ * 
+ * @param doc Document containing layers and GPU compositor
+ * @param tile Tile with allocated pixel_buffer
+ * @param tile_x Tile X coordinate
+ * @param tile_y Tile Y coordinate
+ * @return TRUE if GPU compositing was used, FALSE if fell back to CPU
+ */
+gboolean tile_worker_composite_pixels_gpu(ImageDocument* doc,
+                                          Tile* tile,
+                                          gint tile_x,
+                                          gint tile_y) {
+    if (!doc || !tile || !tile->pixel_buffer) {
+        return FALSE;
+    }
+
+    /* Check if GPU compositor is available */
+    if (doc->gpu_compositor) {
+        if (gpu_compositor_is_ready(doc->gpu_compositor)) {
+            /* GPU only supports NORMAL blend mode - fall back to CPU for others */
+            if (!document_uses_only_normal_blend(doc)) {
+                tile_worker_composite_pixels(doc, tile, tile_x, tile_y);
+                return FALSE;
+            }
+            
+            /* Try GPU compositing */
+            if (gpu_compositor_composite_tile(doc->gpu_compositor, doc, tile, tile_x, tile_y)) {
+                return TRUE; /* GPU compositing successful */
+            }
+            /* GPU compositing failed, fall through to CPU */
+            g_warning("GPU compositing failed for tile (%d, %d), falling back to CPU", tile_x, tile_y);
+        } else {
+            g_debug("GPU compositor exists but is not ready");
+        }
+    }
+
+    /* Fall back to CPU compositing */
+    tile_worker_composite_pixels(doc, tile, tile_x, tile_y);
+    return FALSE;
+}
+
+/**
+ * Check if GPU compositing is available for a document
+ * @param doc Document to check
+ * @return TRUE if GPU compositing can be used
+ */
+gboolean tile_worker_has_gpu_compositor(ImageDocument* doc) {
+    return doc && doc->gpu_compositor && gpu_compositor_is_ready(doc->gpu_compositor);
 }
 
 /**

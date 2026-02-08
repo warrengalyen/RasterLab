@@ -3,6 +3,7 @@
 #include "command.h"
 #include "io/image_io.h"
 #include "render/compositor.h"
+#include "render/gpu_compositor.h"
 #include "render/layer.h"
 #include "render/render_utils.h"
 #include "render/tile.h"
@@ -178,6 +179,7 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
     gint tx, ty;
     Tile* tile;
     gdouble zoom;
+    gboolean use_gpu_compositing = FALSE;
 
     /* Safety check: if document is NULL or drawing_area is NULL,
      * the document is being closed, so just draw empty background */
@@ -187,6 +189,17 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
         clip_height = (gint)(y2 - y1);
         draw_checkered_background(cr, clip_width, clip_height);
         return FALSE;
+    }
+
+    /* Check if GPU compositing should be used based on settings */
+    if (doc->gpu_compositor && gpu_compositor_is_ready(doc->gpu_compositor)) {
+        gpointer ctx_data = g_object_get_data(G_OBJECT(widget), "app_context");
+        if (ctx_data) {
+            AppContext* ctx = (AppContext*)ctx_data;
+            if (ctx->settings && settings_get_gpu_acceleration_enabled(ctx->settings)) {
+                use_gpu_compositing = TRUE;
+            }
+        }
     }
 
     /* Process completed tiles from Cairo-safe worker pool
@@ -338,25 +351,28 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
                 for (tx = start_tile_x; tx <= end_tile_x; tx++) {
                     tile = tile_grid_get_tile(doc->tile_grid, tx, ty);
                     if (tile && tile->dirty) {
-                        /* Composite tile synchronously */
-                        if (tile_worker_composite_pixels(doc, tile, tx, ty)) {
-                            if (tile->surface) {
-                                cairo_surface_destroy(tile->surface);
-                                tile->surface = NULL;
-                            }
-                            if (tile->pixel_buffer) {
-                                tile->surface = cairo_image_surface_create_for_data(
-                                    tile->pixel_buffer,
-                                    CAIRO_FORMAT_ARGB32,
-                                    tile->w,
-                                    tile->h,
-                                    tile->stride);
-                                if (cairo_surface_status(tile->surface) == CAIRO_STATUS_SUCCESS) {
-                                    tile->dirty = FALSE;
-                                    tile->pending_upload = FALSE;
-                                    /* Generate mipmaps for this tile */
-                                    tile_generate_mipmaps(tile);
-                                }
+                        /* Composite tile - use GPU if enabled, otherwise CPU */
+                        if (use_gpu_compositing) {
+                            tile_worker_composite_pixels_gpu(doc, tile, tx, ty);
+                        } else {
+                            tile_worker_composite_pixels(doc, tile, tx, ty);
+                        }
+                        if (tile->surface) {
+                            cairo_surface_destroy(tile->surface);
+                            tile->surface = NULL;
+                        }
+                        if (tile->pixel_buffer) {
+                            tile->surface = cairo_image_surface_create_for_data(
+                                tile->pixel_buffer,
+                                CAIRO_FORMAT_ARGB32,
+                                tile->w,
+                                tile->h,
+                                tile->stride);
+                            if (cairo_surface_status(tile->surface) == CAIRO_STATUS_SUCCESS) {
+                                tile->dirty = FALSE;
+                                tile->pending_upload = FALSE;
+                                /* Generate mipmaps for this tile */
+                                tile_generate_mipmaps(tile);
                             }
                         }
                     } else if (tile && tile->mipmaps_dirty && tile->surface) {
@@ -447,26 +463,30 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
                         for (tx = start_tile_x; tx <= end_tile_x; tx++) {
                             tile = tile_grid_get_tile(doc->tile_grid, tx, ty);
                             if (tile && tile->dirty) {
-                                /* Composite pixels synchronously */
-                                if (tile_worker_composite_pixels(doc, tile, tx, ty)) {
-                                    /* Upload pixel buffer to Cairo surface */
-                                    if (tile->surface) {
-                                        cairo_surface_destroy(tile->surface);
-                                        tile->surface = NULL;
-                                    }
+                                /* Composite pixels - use GPU if enabled, otherwise CPU */
+                                if (use_gpu_compositing) {
+                                    tile_worker_composite_pixels_gpu(doc, tile, tx, ty);
+                                } else {
+                                    tile_worker_composite_pixels(doc, tile, tx, ty);
+                                }
 
-                                    if (tile->pixel_buffer) {
-                                        tile->surface = cairo_image_surface_create_for_data(
-                                            tile->pixel_buffer,
-                                            CAIRO_FORMAT_ARGB32,
-                                            tile->w,
-                                            tile->h,
-                                            tile->stride);
+                                /* Upload pixel buffer to Cairo surface */
+                                if (tile->surface) {
+                                    cairo_surface_destroy(tile->surface);
+                                    tile->surface = NULL;
+                                }
 
-                                        if (cairo_surface_status(tile->surface) == CAIRO_STATUS_SUCCESS) {
-                                            tile->dirty = FALSE;
-                                            tile->pending_upload = FALSE;
-                                        }
+                                if (tile->pixel_buffer) {
+                                    tile->surface = cairo_image_surface_create_for_data(
+                                        tile->pixel_buffer,
+                                        CAIRO_FORMAT_ARGB32,
+                                        tile->w,
+                                        tile->h,
+                                        tile->stride);
+
+                                    if (cairo_surface_status(tile->surface) == CAIRO_STATUS_SUCCESS) {
+                                        tile->dirty = FALSE;
+                                        tile->pending_upload = FALSE;
                                     }
                                 }
                             }
@@ -615,6 +635,88 @@ static gboolean on_viewport_draw(GtkWidget* widget, cairo_t* cr, gpointer user_d
     tool_move_draw_preview(doc, cr, doc->zoom_factor);
 
     cairo_restore(cr);
+
+    /* Draw GPU stats overlay if enabled */
+    if (doc->drawing_area) {
+        /* Get AppContext to check settings */
+        gpointer ctx_data = g_object_get_data(G_OBJECT(doc->drawing_area), "app_context");
+        if (ctx_data) {
+            AppContext* ctx = (AppContext*)ctx_data;
+            if (ctx->settings && settings_get_show_gpu_stats(ctx->settings)) {
+                /* Draw semi-transparent background */
+                cairo_save(cr);
+                cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.7);
+                cairo_rectangle(cr, 10, 10, 300, 110);
+                cairo_fill(cr);
+
+                /* Draw border */
+                cairo_set_source_rgba(cr, 0.3, 0.8, 0.3, 0.8);
+                cairo_set_line_width(cr, 1.0);
+                cairo_rectangle(cr, 10, 10, 300, 110);
+                cairo_stroke(cr);
+
+                /* Draw text */
+                cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
+                cairo_set_font_size(cr, 12);
+
+                if (doc->gpu_compositor) {
+                    guint64 tiles_composited = 0;
+                    guint textures_cached = 0;
+                    gsize memory_used = 0;
+
+                    gpu_compositor_get_stats(doc->gpu_compositor,
+                                             &tiles_composited,
+                                             &textures_cached,
+                                             &memory_used);
+
+                    const GPUDeviceInfo* gpu_info = gpu_compositor_get_active_device(doc->gpu_compositor);
+                    gboolean is_ready = gpu_compositor_is_ready(doc->gpu_compositor);
+
+                    cairo_set_source_rgba(cr, 0.3, 1.0, 0.3, 1.0);
+
+                    gchar* line1 = g_strdup_printf("GPU: %s", gpu_info ? gpu_info->name : "Unknown");
+                    gchar* line2 = g_strdup_printf("Status: %s", is_ready ? "Ready" : "Not Ready");
+                    gchar* line3 = g_strdup_printf("Tiles Composited: %" G_GUINT64_FORMAT, tiles_composited);
+                    gchar* line4 = g_strdup_printf("Textures Cached: %u", textures_cached);
+                    gchar* line5 = g_strdup_printf("GPU Memory: %.2f MB", (gdouble)memory_used / (1024.0 * 1024.0));
+
+                    cairo_move_to(cr, 18, 28);
+                    cairo_show_text(cr, line1);
+                    cairo_move_to(cr, 18, 46);
+                    cairo_show_text(cr, line2);
+                    cairo_move_to(cr, 18, 64);
+                    cairo_show_text(cr, line3);
+                    cairo_move_to(cr, 18, 82);
+                    cairo_show_text(cr, line4);
+                    cairo_move_to(cr, 18, 100);
+                    cairo_show_text(cr, line5);
+
+                    g_free(line1);
+                    g_free(line2);
+                    g_free(line3);
+                    g_free(line4);
+                    g_free(line5);
+                } else {
+                    /* GPU compositor is NULL - show why */
+                    cairo_set_source_rgba(cr, 1.0, 0.5, 0.3, 1.0); /* Orange for warning */
+
+                    gboolean gpu_available = gpu_compositor_is_available();
+
+                    cairo_move_to(cr, 18, 28);
+                    cairo_show_text(cr, "GPU Compositor: NOT INITIALIZED");
+                    cairo_move_to(cr, 18, 46);
+                    cairo_show_text(cr, gpu_available ? "GLFW/OpenGL: Available" : "GLFW/OpenGL: NOT Available");
+                    cairo_move_to(cr, 18, 64);
+                    cairo_show_text(cr, settings_get_gpu_acceleration_enabled(ctx->settings) 
+                                    ? "Setting: Enabled" : "Setting: DISABLED");
+                    cairo_move_to(cr, 18, 82);
+                    cairo_show_text(cr, "Check console for errors");
+                }
+
+                cairo_restore(cr);
+            }
+        }
+    }
 
     return FALSE; /* Let other handlers run */
 }
@@ -1071,6 +1173,9 @@ ImageDocument* document_new(const gchar* filename, gboolean create_worker_pool, 
         doc->tile_worker_pool = NULL;
     }
 
+    /* Initialize GPU compositor to NULL - will be created on demand based on settings */
+    doc->gpu_compositor = NULL;
+
     /* Initialize undo/redo stacks with configurable undo levels (0 = unlimited) */
     doc->undo_stack = command_stack_new(undo_levels > 0 ? undo_levels : 0);
     doc->redo_stack = command_stack_new(undo_levels > 0 ? undo_levels : 0);
@@ -1156,6 +1261,13 @@ void document_free(ImageDocument* doc) {
         g_message("Shutting down legacy tile thread pool...");
         tile_thread_pool_destroy(doc->tile_thread_pool);
         doc->tile_thread_pool = NULL;
+    }
+
+    /* Shutdown GPU compositor if enabled */
+    if (doc->gpu_compositor) {
+        g_message("Shutting down GPU compositor...");
+        gpu_compositor_destroy(doc->gpu_compositor);
+        doc->gpu_compositor = NULL;
     }
 
     /* Remove selection animation timer if it's still running */
@@ -1523,6 +1635,33 @@ gboolean document_init_rendering_structures(ImageDocument* doc) {
             g_warning("Failed to create tile worker pool, will use single-threaded compositing");
         } else {
             g_message("Tile compositing: Using worker threads (Cairo-safe pixel buffer approach)");
+        }
+    }
+
+    /* Initialize GPU compositor if enabled in settings and available */
+    if (!doc->gpu_compositor && gpu_compositor_is_available()) {
+        /* Get settings from global app settings (if available) */
+        gchar* exe_dir = settings_get_executable_dir();
+        Settings* app_settings = settings_load(exe_dir);
+        g_free(exe_dir);
+        
+        if (app_settings && settings_get_gpu_acceleration_enabled(app_settings)) {
+            const gchar* gpu_device = settings_get_gpu_device_name(app_settings);
+            doc->gpu_compositor = gpu_compositor_create(gpu_device);
+            if (doc->gpu_compositor) {
+                const GPUDeviceInfo* gpu_info = gpu_compositor_get_active_device(doc->gpu_compositor);
+                if (gpu_info) {
+                    g_message("GPU acceleration: Enabled (%s)", gpu_info->name);
+                }
+            } else {
+                g_warning("GPU compositor creation failed, falling back to CPU compositing");
+            }
+        } else {
+            g_message("GPU acceleration: Disabled by settings");
+        }
+        
+        if (app_settings) {
+            settings_free(app_settings);
         }
     }
 
