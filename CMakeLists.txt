@@ -1257,6 +1257,26 @@ link_directories(${GTK3_LIBRARY_DIRS})
 link_directories(${LIBXML2_LIBRARY_DIRS})
 link_directories(${LZ4_LIBRARY_DIRS})
 
+# ---------------------------------------------------------------------------
+# GLFW: add as static library
+# ---------------------------------------------------------------------------
+set(GLFW_FOUND FALSE)
+set(GLFW_TARGET "")
+if(EXISTS "${CMAKE_SOURCE_DIR}/lib/glfw/CMakeLists.txt")
+    message(STATUS "GLFW submodule found, building as static library")
+    set(GLFW_BUILD_DOCS OFF CACHE BOOL "Build GLFW documentation" FORCE)
+    set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "Build GLFW examples" FORCE)
+    set(GLFW_BUILD_TESTS OFF CACHE BOOL "Build GLFW tests" FORCE)
+    set(GLFW_INSTALL OFF CACHE BOOL "Generate GLFW install target" FORCE)
+    set(GLFW_LIBRARY_TYPE STATIC CACHE STRING "Build GLFW as static library" FORCE)
+    add_subdirectory(lib/glfw)
+    set(GLFW_FOUND TRUE)
+    set(GLFW_TARGET glfw)
+    message(STATUS "GLFW configured as static library")
+else()
+    message(STATUS "GLFW not found in lib/glfw")
+endif()
+
 # Add subdirectories
 add_subdirectory(src)
 

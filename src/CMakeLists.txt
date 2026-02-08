@@ -256,6 +256,15 @@ target_link_libraries(rasterlab ${LIBXML2_LIBRARIES})
 # Link LZ4
 target_link_libraries(rasterlab ${LZ4_LIBRARIES})
 
+# Link GLFW (static, from lib/glfw)
+if(GLFW_FOUND AND GLFW_TARGET AND TARGET ${GLFW_TARGET})
+    target_link_libraries(rasterlab ${GLFW_TARGET})
+    if(WIN32)
+        target_link_libraries(rasterlab opengl32)
+    endif()
+    message(STATUS "Linking GLFW static library into rasterlab executable")
+endif()
+
 # Link pthread for tile thread pool
 target_link_libraries(rasterlab pthread)
 

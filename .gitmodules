@@ -25,3 +25,6 @@
 [submodule "lib/simde"]
 	path = lib/simde
 	url = https://github.com/simd-everywhere/simde
+[submodule "lib/glfw"]
+	path = lib/glfw
+	url = https://github.com/glfw/glfw
