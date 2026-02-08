@@ -143,16 +143,21 @@ struct GPUCompositor {
     GPUDeviceInfo active_device;
     
     /* Shader programs */
-    GLuint shader_program;      /* Main compositing shader */
-    GLint u_texture_loc;        /* Texture sampler uniform location */
+    GLuint shader_program;      /* Main compositing shader with blend modes */
+    GLint u_texture_loc;        /* Source layer texture sampler */
+    GLint u_dst_texture_loc;    /* Destination texture sampler (for blend modes) */
     GLint u_opacity_loc;        /* Opacity uniform location */
     GLint u_tex_offset_loc;     /* Texture coordinate offset uniform */
     GLint u_tex_scale_loc;      /* Texture coordinate scale uniform */
+    GLint u_blend_mode_loc;     /* Blend mode uniform */
+    GLint u_is_first_layer_loc; /* First layer flag (skip blending) */
+    GLint u_tile_size_loc;      /* Tile dimensions for UV calculation */
     
-    /* Framebuffer for rendering */
-    GLuint fbo;                 /* Framebuffer object */
-    GLuint fbo_texture;         /* Texture attached to FBO */
+    /* Ping-pong framebuffers for blend mode compositing */
+    GLuint fbo[2];              /* Two framebuffer objects */
+    GLuint fbo_texture[2];      /* Textures attached to FBOs */
     gint fbo_width, fbo_height; /* Current FBO dimensions */
+    gint current_fbo;           /* Index of current write FBO (0 or 1) */
     
     /* Vertex array/buffer for fullscreen quad */
     GLuint vao;
@@ -189,35 +194,281 @@ static const char* VERTEX_SHADER_SOURCE =
     "    v_texcoord = a_texcoord * u_tex_scale + u_tex_offset;\n"
     "}\n";
 
-/* Fragment shader source - simplified for hardware blending
+/* Fragment shader source with full blend mode support
  * 
- * NOTE: This shader only outputs the source color with opacity applied.
- * OpenGL's hardware blending (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA) handles
- * the actual Porter-Duff OVER compositing. This approach:
- * - Works correctly for NORMAL blend mode
- * - Is simpler and more efficient
- * - Avoids the complexity of ping-pong rendering needed for other blend modes
+ * Uses ping-pong rendering: reads from destination texture to apply blend modes,
+ * then writes to the alternate FBO. This allows proper Porter-Duff compositing
+ * with all Photoshop-compatible blend modes.
  * 
- * For non-NORMAL blend modes, the tile_worker falls back to CPU compositing.
+ * Blend mode constants must match BlendMode enum in document.h
  */
 static const char* FRAGMENT_SHADER_SOURCE =
     "#version 120\n"
-    "uniform sampler2D u_texture;\n"
+    "uniform sampler2D u_texture;\n"      /* Source layer texture */
+    "uniform sampler2D u_dst_texture;\n"  /* Destination (accumulated result) */
     "uniform float u_opacity;\n"
+    "uniform int u_blend_mode;\n"
+    "uniform bool u_is_first_layer;\n"
+    "uniform vec2 u_tile_size;\n"         /* Tile dimensions for UV calculation */
     "varying vec2 v_texcoord;\n"
     "\n"
+    "/* Blend mode constants - must match BlendMode enum */\n"
+    "const int BLEND_NORMAL = 0;\n"
+    "const int BLEND_DISSOLVE = 1;\n"
+    "const int BLEND_DARKEN = 2;\n"
+    "const int BLEND_MULTIPLY = 3;\n"
+    "const int BLEND_COLOR_BURN = 4;\n"
+    "const int BLEND_LINEAR_BURN = 5;\n"
+    "const int BLEND_DARKER_COLOR = 6;\n"
+    "const int BLEND_LIGHTEN = 7;\n"
+    "const int BLEND_SCREEN = 8;\n"
+    "const int BLEND_COLOR_DODGE = 9;\n"
+    "const int BLEND_LINEAR_DODGE = 10;\n"
+    "const int BLEND_LIGHTER_COLOR = 11;\n"
+    "const int BLEND_OVERLAY = 12;\n"
+    "const int BLEND_SOFT_LIGHT = 13;\n"
+    "const int BLEND_HARD_LIGHT = 14;\n"
+    "const int BLEND_VIVID_LIGHT = 15;\n"
+    "const int BLEND_LINEAR_LIGHT = 16;\n"
+    "const int BLEND_PIN_LIGHT = 17;\n"
+    "const int BLEND_HARD_MIX = 18;\n"
+    "const int BLEND_DIFFERENCE = 19;\n"
+    "const int BLEND_EXCLUSION = 20;\n"
+    "const int BLEND_SUBTRACT = 21;\n"
+    "const int BLEND_DIVIDE = 22;\n"
+    "const int BLEND_HUE = 23;\n"
+    "const int BLEND_SATURATION = 24;\n"
+    "const int BLEND_COLOR = 25;\n"
+    "const int BLEND_LUMINOSITY = 26;\n"
+    "\n"
+    "/* Helper: luminosity of RGB */\n"
+    "float lum(vec3 c) {\n"
+    "    return 0.3 * c.r + 0.59 * c.g + 0.11 * c.b;\n"
+    "}\n"
+    "\n"
+    "/* Helper: saturation of RGB */\n"
+    "float sat(vec3 c) {\n"
+    "    return max(max(c.r, c.g), c.b) - min(min(c.r, c.g), c.b);\n"
+    "}\n"
+    "\n"
+    "/* Helper: clip color to valid range while preserving luminosity */\n"
+    "vec3 clipColor(vec3 c) {\n"
+    "    float l = lum(c);\n"
+    "    float n = min(min(c.r, c.g), c.b);\n"
+    "    float x = max(max(c.r, c.g), c.b);\n"
+    "    if (n < 0.0) c = l + (c - l) * l / (l - n);\n"
+    "    if (x > 1.0) c = l + (c - l) * (1.0 - l) / (x - l);\n"
+    "    return c;\n"
+    "}\n"
+    "\n"
+    "/* Helper: set luminosity */\n"
+    "vec3 setLum(vec3 c, float l) {\n"
+    "    float d = l - lum(c);\n"
+    "    return clipColor(c + d);\n"
+    "}\n"
+    "\n"
+    "/* Helper: set saturation (complex - reorders components) */\n"
+    "vec3 setSat(vec3 c, float s) {\n"
+    "    float cmin = min(min(c.r, c.g), c.b);\n"
+    "    float cmax = max(max(c.r, c.g), c.b);\n"
+    "    float cmid;\n"
+    "    vec3 result;\n"
+    "    if (cmax == cmin) return vec3(0.0);\n"
+    "    /* Find and set mid value */\n"
+    "    if (c.r == cmax) {\n"
+    "        if (c.g == cmin) { cmid = c.b; result = vec3(s, 0.0, (cmid - cmin) * s / (cmax - cmin)); }\n"
+    "        else { cmid = c.g; result = vec3(s, (cmid - cmin) * s / (cmax - cmin), 0.0); }\n"
+    "    } else if (c.g == cmax) {\n"
+    "        if (c.r == cmin) { cmid = c.b; result = vec3(0.0, s, (cmid - cmin) * s / (cmax - cmin)); }\n"
+    "        else { cmid = c.r; result = vec3((cmid - cmin) * s / (cmax - cmin), s, 0.0); }\n"
+    "    } else {\n"
+    "        if (c.r == cmin) { cmid = c.g; result = vec3(0.0, (cmid - cmin) * s / (cmax - cmin), s); }\n"
+    "        else { cmid = c.r; result = vec3((cmid - cmin) * s / (cmax - cmin), 0.0, s); }\n"
+    "    }\n"
+    "    return result;\n"
+    "}\n"
+    "\n"
+    "/* Apply blend mode to get blended RGB (non-premultiplied inputs) */\n"
+    "vec3 applyBlendMode(vec3 src, vec3 dst, int mode) {\n"
+    "    vec3 result;\n"
+    "    \n"
+    "    if (mode == BLEND_NORMAL || mode == BLEND_DISSOLVE) {\n"
+    "        result = src;\n"
+    "    }\n"
+    "    /* Darken modes */\n"
+    "    else if (mode == BLEND_DARKEN) {\n"
+    "        result = min(src, dst);\n"
+    "    }\n"
+    "    else if (mode == BLEND_MULTIPLY) {\n"
+    "        result = src * dst;\n"
+    "    }\n"
+    "    else if (mode == BLEND_COLOR_BURN) {\n"
+    "        result = vec3(\n"
+    "            src.r == 0.0 ? 0.0 : max(0.0, 1.0 - (1.0 - dst.r) / src.r),\n"
+    "            src.g == 0.0 ? 0.0 : max(0.0, 1.0 - (1.0 - dst.g) / src.g),\n"
+    "            src.b == 0.0 ? 0.0 : max(0.0, 1.0 - (1.0 - dst.b) / src.b)\n"
+    "        );\n"
+    "    }\n"
+    "    else if (mode == BLEND_LINEAR_BURN) {\n"
+    "        result = max(vec3(0.0), src + dst - 1.0);\n"
+    "    }\n"
+    "    else if (mode == BLEND_DARKER_COLOR) {\n"
+    "        result = lum(src) < lum(dst) ? src : dst;\n"
+    "    }\n"
+    "    /* Lighten modes */\n"
+    "    else if (mode == BLEND_LIGHTEN) {\n"
+    "        result = max(src, dst);\n"
+    "    }\n"
+    "    else if (mode == BLEND_SCREEN) {\n"
+    "        result = 1.0 - (1.0 - src) * (1.0 - dst);\n"
+    "    }\n"
+    "    else if (mode == BLEND_COLOR_DODGE) {\n"
+    "        result = vec3(\n"
+    "            src.r == 1.0 ? 1.0 : min(1.0, dst.r / (1.0 - src.r)),\n"
+    "            src.g == 1.0 ? 1.0 : min(1.0, dst.g / (1.0 - src.g)),\n"
+    "            src.b == 1.0 ? 1.0 : min(1.0, dst.b / (1.0 - src.b))\n"
+    "        );\n"
+    "    }\n"
+    "    else if (mode == BLEND_LINEAR_DODGE) {\n"
+    "        result = min(vec3(1.0), src + dst);\n"
+    "    }\n"
+    "    else if (mode == BLEND_LIGHTER_COLOR) {\n"
+    "        result = lum(src) > lum(dst) ? src : dst;\n"
+    "    }\n"
+    "    /* Contrast modes */\n"
+    "    else if (mode == BLEND_OVERLAY) {\n"
+    "        result = vec3(\n"
+    "            dst.r < 0.5 ? 2.0 * src.r * dst.r : 1.0 - 2.0 * (1.0 - src.r) * (1.0 - dst.r),\n"
+    "            dst.g < 0.5 ? 2.0 * src.g * dst.g : 1.0 - 2.0 * (1.0 - src.g) * (1.0 - dst.g),\n"
+    "            dst.b < 0.5 ? 2.0 * src.b * dst.b : 1.0 - 2.0 * (1.0 - src.b) * (1.0 - dst.b)\n"
+    "        );\n"
+    "    }\n"
+    "    else if (mode == BLEND_SOFT_LIGHT) {\n"
+    "        /* W3C formula */\n"
+    "        vec3 d = vec3(\n"
+    "            dst.r <= 0.25 ? ((16.0 * dst.r - 12.0) * dst.r + 4.0) * dst.r : sqrt(dst.r),\n"
+    "            dst.g <= 0.25 ? ((16.0 * dst.g - 12.0) * dst.g + 4.0) * dst.g : sqrt(dst.g),\n"
+    "            dst.b <= 0.25 ? ((16.0 * dst.b - 12.0) * dst.b + 4.0) * dst.b : sqrt(dst.b)\n"
+    "        );\n"
+    "        result = vec3(\n"
+    "            src.r <= 0.5 ? dst.r - (1.0 - 2.0 * src.r) * dst.r * (1.0 - dst.r) : dst.r + (2.0 * src.r - 1.0) * (d.r - dst.r),\n"
+    "            src.g <= 0.5 ? dst.g - (1.0 - 2.0 * src.g) * dst.g * (1.0 - dst.g) : dst.g + (2.0 * src.g - 1.0) * (d.g - dst.g),\n"
+    "            src.b <= 0.5 ? dst.b - (1.0 - 2.0 * src.b) * dst.b * (1.0 - dst.b) : dst.b + (2.0 * src.b - 1.0) * (d.b - dst.b)\n"
+    "        );\n"
+    "    }\n"
+    "    else if (mode == BLEND_HARD_LIGHT) {\n"
+    "        result = vec3(\n"
+    "            src.r < 0.5 ? 2.0 * src.r * dst.r : 1.0 - 2.0 * (1.0 - src.r) * (1.0 - dst.r),\n"
+    "            src.g < 0.5 ? 2.0 * src.g * dst.g : 1.0 - 2.0 * (1.0 - src.g) * (1.0 - dst.g),\n"
+    "            src.b < 0.5 ? 2.0 * src.b * dst.b : 1.0 - 2.0 * (1.0 - src.b) * (1.0 - dst.b)\n"
+    "        );\n"
+    "    }\n"
+    "    else if (mode == BLEND_VIVID_LIGHT) {\n"
+    "        result = vec3(\n"
+    "            src.r <= 0.5 ? (src.r == 0.0 ? 0.0 : max(0.0, 1.0 - (1.0 - dst.r) / (2.0 * src.r))) : (src.r == 1.0 ? 1.0 : min(1.0, dst.r / (2.0 * (1.0 - src.r)))),\n"
+    "            src.g <= 0.5 ? (src.g == 0.0 ? 0.0 : max(0.0, 1.0 - (1.0 - dst.g) / (2.0 * src.g))) : (src.g == 1.0 ? 1.0 : min(1.0, dst.g / (2.0 * (1.0 - src.g)))),\n"
+    "            src.b <= 0.5 ? (src.b == 0.0 ? 0.0 : max(0.0, 1.0 - (1.0 - dst.b) / (2.0 * src.b))) : (src.b == 1.0 ? 1.0 : min(1.0, dst.b / (2.0 * (1.0 - src.b))))\n"
+    "        );\n"
+    "    }\n"
+    "    else if (mode == BLEND_LINEAR_LIGHT) {\n"
+    "        result = clamp(dst + 2.0 * src - 1.0, 0.0, 1.0);\n"
+    "    }\n"
+    "    else if (mode == BLEND_PIN_LIGHT) {\n"
+    "        result = vec3(\n"
+    "            src.r > 0.5 ? max(dst.r, 2.0 * (src.r - 0.5)) : min(dst.r, 2.0 * src.r),\n"
+    "            src.g > 0.5 ? max(dst.g, 2.0 * (src.g - 0.5)) : min(dst.g, 2.0 * src.g),\n"
+    "            src.b > 0.5 ? max(dst.b, 2.0 * (src.b - 0.5)) : min(dst.b, 2.0 * src.b)\n"
+    "        );\n"
+    "    }\n"
+    "    else if (mode == BLEND_HARD_MIX) {\n"
+    "        result = vec3(\n"
+    "            src.r + dst.r >= 1.0 ? 1.0 : 0.0,\n"
+    "            src.g + dst.g >= 1.0 ? 1.0 : 0.0,\n"
+    "            src.b + dst.b >= 1.0 ? 1.0 : 0.0\n"
+    "        );\n"
+    "    }\n"
+    "    /* Inversion modes */\n"
+    "    else if (mode == BLEND_DIFFERENCE) {\n"
+    "        result = abs(src - dst);\n"
+    "    }\n"
+    "    else if (mode == BLEND_EXCLUSION) {\n"
+    "        result = src + dst - 2.0 * src * dst;\n"
+    "    }\n"
+    "    /* Arithmetic modes */\n"
+    "    else if (mode == BLEND_SUBTRACT) {\n"
+    "        result = max(vec3(0.0), dst - src);\n"
+    "    }\n"
+    "    else if (mode == BLEND_DIVIDE) {\n"
+    "        result = vec3(\n"
+    "            src.r == 0.0 ? 1.0 : min(1.0, dst.r / src.r),\n"
+    "            src.g == 0.0 ? 1.0 : min(1.0, dst.g / src.g),\n"
+    "            src.b == 0.0 ? 1.0 : min(1.0, dst.b / src.b)\n"
+    "        );\n"
+    "    }\n"
+    "    /* HSL component modes */\n"
+    "    else if (mode == BLEND_HUE) {\n"
+    "        result = setLum(setSat(src, sat(dst)), lum(dst));\n"
+    "    }\n"
+    "    else if (mode == BLEND_SATURATION) {\n"
+    "        result = setLum(setSat(dst, sat(src)), lum(dst));\n"
+    "    }\n"
+    "    else if (mode == BLEND_COLOR) {\n"
+    "        result = setLum(src, lum(dst));\n"
+    "    }\n"
+    "    else if (mode == BLEND_LUMINOSITY) {\n"
+    "        result = setLum(dst, lum(src));\n"
+    "    }\n"
+    "    else {\n"
+    "        result = src; /* Fallback to normal */\n"
+    "    }\n"
+    "    \n"
+    "    return result;\n"
+    "}\n"
+    "\n"
     "void main() {\n"
-    "    /* Discard fragments outside valid texture range (layer doesn't cover this part of tile) */\n"
+    "    /* Discard fragments outside valid texture range */\n"
     "    if (v_texcoord.x < 0.0 || v_texcoord.x > 1.0 || v_texcoord.y < 0.0 || v_texcoord.y > 1.0) {\n"
     "        discard;\n"
     "    }\n"
     "    \n"
-    "    vec4 src = texture2D(u_texture, v_texcoord);\n"
+    "    /* Sample source layer (premultiplied alpha from Cairo) */\n"
+    "    vec4 src_pm = texture2D(u_texture, v_texcoord);\n"
     "    \n"
-    "    /* Apply layer opacity to alpha channel */\n"
-    "    /* Output premultiplied alpha for correct GL blending */\n"
-    "    float final_alpha = src.a * u_opacity;\n"
-    "    gl_FragColor = vec4(src.rgb * u_opacity, final_alpha);\n"
+    "    /* Convert to straight alpha for blend calculations */\n"
+    "    vec3 src_rgb = src_pm.a > 0.0 ? src_pm.rgb / src_pm.a : vec3(0.0);\n"
+    "    float src_a = src_pm.a * u_opacity;\n"
+    "    \n"
+    "    /* For first layer or fully transparent source, just output the source */\n"
+    "    if (u_is_first_layer || src_a <= 0.0) {\n"
+    "        /* Output premultiplied alpha */\n"
+    "        gl_FragColor = vec4(src_rgb * src_a, src_a);\n"
+    "        return;\n"
+    "    }\n"
+    "    \n"
+    "    /* Sample destination (premultiplied alpha) */\n"
+    "    vec2 dst_uv = gl_FragCoord.xy / u_tile_size;\n"
+    "    vec4 dst_pm = texture2D(u_dst_texture, dst_uv);\n"
+    "    \n"
+    "    /* Convert destination to straight alpha */\n"
+    "    vec3 dst_rgb = dst_pm.a > 0.0 ? dst_pm.rgb / dst_pm.a : vec3(0.0);\n"
+    "    float dst_a = dst_pm.a;\n"
+    "    \n"
+    "    /* Apply blend mode to get blended color */\n"
+    "    vec3 blended = applyBlendMode(src_rgb, dst_rgb, u_blend_mode);\n"
+    "    \n"
+    "    /* Porter-Duff OVER compositing with blended color */\n"
+    "    /* result_a = src_a + dst_a * (1 - src_a) */\n"
+    "    /* result_rgb = (blended * src_a + dst_rgb * dst_a * (1 - src_a)) / result_a */\n"
+    "    float result_a = src_a + dst_a * (1.0 - src_a);\n"
+    "    vec3 result_rgb;\n"
+    "    if (result_a > 0.0) {\n"
+    "        result_rgb = (blended * src_a + dst_rgb * dst_a * (1.0 - src_a)) / result_a;\n"
+    "    } else {\n"
+    "        result_rgb = vec3(0.0);\n"
+    "    }\n"
+    "    \n"
+    "    /* Output premultiplied alpha */\n"
+    "    gl_FragColor = vec4(result_rgb * result_a, result_a);\n"
     "}\n";
 
 /* Fullscreen quad vertices (position + texcoord) */
@@ -558,9 +809,13 @@ GPUCompositor* gpu_compositor_create(const gchar* device_name) {
     
     /* Get uniform locations */
     compositor->u_texture_loc = glGetUniformLocation(compositor->shader_program, "u_texture");
+    compositor->u_dst_texture_loc = glGetUniformLocation(compositor->shader_program, "u_dst_texture");
     compositor->u_opacity_loc = glGetUniformLocation(compositor->shader_program, "u_opacity");
     compositor->u_tex_offset_loc = glGetUniformLocation(compositor->shader_program, "u_tex_offset");
     compositor->u_tex_scale_loc = glGetUniformLocation(compositor->shader_program, "u_tex_scale");
+    compositor->u_blend_mode_loc = glGetUniformLocation(compositor->shader_program, "u_blend_mode");
+    compositor->u_is_first_layer_loc = glGetUniformLocation(compositor->shader_program, "u_is_first_layer");
+    compositor->u_tile_size_loc = glGetUniformLocation(compositor->shader_program, "u_tile_size");
     
     /* Create VAO and VBO for fullscreen quad */
     if (glGenVertexArrays) {
@@ -582,11 +837,12 @@ GPUCompositor* gpu_compositor_create(const gchar* device_name) {
     compositor->texture_cache = g_hash_table_new_full(g_direct_hash, g_direct_equal,
                                                        NULL, texture_cache_entry_free);
     
-    /* Create initial FBO (will be resized as needed) */
-    glGenFramebuffers(1, &compositor->fbo);
-    glGenTextures(1, &compositor->fbo_texture);
+    /* Create two FBOs for ping-pong rendering (blend modes need to read destination) */
+    glGenFramebuffers(2, compositor->fbo);
+    glGenTextures(2, compositor->fbo_texture);
     compositor->fbo_width = 0;
     compositor->fbo_height = 0;
+    compositor->current_fbo = 0;
     
     compositor->initialized = TRUE;
     compositor->tiles_composited = 0;
@@ -613,12 +869,13 @@ void gpu_compositor_destroy(GPUCompositor* compositor) {
             glDeleteProgram(compositor->shader_program);
         }
         
-        if (compositor->fbo) {
-            glDeleteFramebuffers(1, &compositor->fbo);
+        /* Delete both ping-pong FBOs */
+        if (compositor->fbo[0] || compositor->fbo[1]) {
+            glDeleteFramebuffers(2, compositor->fbo);
         }
         
-        if (compositor->fbo_texture) {
-            glDeleteTextures(1, &compositor->fbo_texture);
+        if (compositor->fbo_texture[0] || compositor->fbo_texture[1]) {
+            glDeleteTextures(2, compositor->fbo_texture);
         }
         
         if (compositor->vao && glDeleteVertexArrays) {
@@ -670,30 +927,32 @@ const GPUDeviceInfo* gpu_compositor_get_active_device(GPUCompositor* compositor)
 }
 
 /**
- * Ensure FBO is the right size for the tile
+ * Ensure both FBOs are the right size for the tile (ping-pong rendering)
  */
 static gboolean ensure_fbo_size(GPUCompositor* compositor, gint width, gint height) {
     if (compositor->fbo_width == width && compositor->fbo_height == height) {
         return TRUE;
     }
     
-    /* Resize FBO texture */
-    glBindTexture(GL_TEXTURE_2D, compositor->fbo_texture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_BGRA, GL_UNSIGNED_BYTE, NULL);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    
-    /* Attach texture to FBO */
-    glBindFramebuffer(GL_FRAMEBUFFER, compositor->fbo);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, compositor->fbo_texture, 0);
-    
-    /* Check FBO status */
-    GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-    if (status != GL_FRAMEBUFFER_COMPLETE) {
-        g_warning("GPU Compositor: Framebuffer incomplete: 0x%x", status);
-        return FALSE;
+    /* Resize both FBO textures for ping-pong rendering */
+    for (int i = 0; i < 2; i++) {
+        glBindTexture(GL_TEXTURE_2D, compositor->fbo_texture[i]);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_BGRA, GL_UNSIGNED_BYTE, NULL);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        
+        /* Attach texture to FBO */
+        glBindFramebuffer(GL_FRAMEBUFFER, compositor->fbo[i]);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, compositor->fbo_texture[i], 0);
+        
+        /* Check FBO status */
+        GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+        if (status != GL_FRAMEBUFFER_COMPLETE) {
+            g_warning("GPU Compositor: Framebuffer %d incomplete: 0x%x", i, status);
+            return FALSE;
+        }
     }
     
     compositor->fbo_width = width;
@@ -784,25 +1043,21 @@ gboolean gpu_compositor_composite_tile(GPUCompositor* compositor,
     
     glfwMakeContextCurrent(compositor->window);
     
-    /* Ensure FBO is correct size */
+    /* Ensure both FBOs are correct size */
     if (!ensure_fbo_size(compositor, tile->w, tile->h)) {
         g_mutex_unlock(&compositor->mutex);
         return FALSE;
     }
     
-    /* Bind FBO and set viewport */
-    glBindFramebuffer(GL_FRAMEBUFFER, compositor->fbo);
-    glViewport(0, 0, tile->w, tile->h);
-    
-    /* Clear to transparent */
+    /* Clear both FBOs to transparent */
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
+    for (int i = 0; i < 2; i++) {
+        glBindFramebuffer(GL_FRAMEBUFFER, compositor->fbo[i]);
+        glClear(GL_COLOR_BUFFER_BIT);
+    }
     
-    /* Enable blending for premultiplied alpha (Cairo's format)
-     * GL_ONE: use source RGB as-is (already premultiplied)
-     * GL_ONE_MINUS_SRC_ALPHA: blend with destination using (1 - src_alpha) */
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    /* Disable OpenGL blending - we handle blending in the shader */
+    glDisable(GL_BLEND);
     
     /* Use shader program */
     glUseProgram(compositor->shader_program);
@@ -812,13 +1067,23 @@ gboolean gpu_compositor_composite_tile(GPUCompositor* compositor,
         glBindVertexArray(compositor->vao);
     }
     
+    /* Set viewport */
+    glViewport(0, 0, tile->w, tile->h);
+    
+    /* Set tile size uniform for destination UV calculation */
+    glUniform2f(compositor->u_tile_size_loc, (GLfloat)tile->w, (GLfloat)tile->h);
+    
     /* Calculate tile bounds in document coordinates */
     gint tile_left = tile->px;
     gint tile_top = tile->py;
     gint tile_right = tile->px + tile->w;
     gint tile_bottom = tile->py + tile->h;
     
-    /* Composite each visible layer */
+    /* Reset ping-pong state */
+    compositor->current_fbo = 0;
+    gboolean is_first_visible_layer = TRUE;
+    
+    /* Composite each visible layer using ping-pong rendering */
     for (GList* iter = doc->layers; iter; iter = iter->next) {
         ImageLayer* layer = (ImageLayer*)iter->data;
         
@@ -854,10 +1119,21 @@ gboolean gpu_compositor_composite_tile(GPUCompositor* compositor,
         GLfloat tex_scale_x = (GLfloat)tile->w / (GLfloat)layer->width;
         GLfloat tex_scale_y = (GLfloat)tile->h / (GLfloat)layer->height;
         
-        /* Bind layer texture */
+        /* Ping-pong: bind current FBO for writing, previous FBO texture for reading */
+        gint write_fbo = compositor->current_fbo;
+        gint read_fbo = 1 - write_fbo;
+        
+        glBindFramebuffer(GL_FRAMEBUFFER, compositor->fbo[write_fbo]);
+        
+        /* Bind source layer texture to unit 0 */
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, layer_texture);
         glUniform1i(compositor->u_texture_loc, 0);
+        
+        /* Bind destination (previous result) texture to unit 1 */
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, compositor->fbo_texture[read_fbo]);
+        glUniform1i(compositor->u_dst_texture_loc, 1);
         
         /* Set texture coordinate transformation */
         glUniform2f(compositor->u_tex_offset_loc, tex_offset_x, tex_offset_y);
@@ -866,9 +1142,23 @@ gboolean gpu_compositor_composite_tile(GPUCompositor* compositor,
         /* Set opacity */
         glUniform1f(compositor->u_opacity_loc, (GLfloat)layer->opacity);
         
+        /* Set blend mode (first layer always uses NORMAL internally) */
+        glUniform1i(compositor->u_blend_mode_loc, is_first_visible_layer ? 0 : (gint)layer->blend_mode);
+        glUniform1i(compositor->u_is_first_layer_loc, is_first_visible_layer ? 1 : 0);
+        
         /* Draw fullscreen quad */
         glDrawArrays(GL_TRIANGLES, 0, 6);
+        
+        /* Swap FBOs for next layer */
+        compositor->current_fbo = read_fbo;
+        is_first_visible_layer = FALSE;
     }
+    
+    /* Result is in the FBO we last wrote to (which is now current_fbo after the swap) */
+    gint result_fbo = 1 - compositor->current_fbo;
+    
+    /* Bind result FBO for reading */
+    glBindFramebuffer(GL_FRAMEBUFFER, compositor->fbo[result_fbo]);
     
     /* Read back pixels to tile buffer
      * 

@@ -52,30 +52,28 @@
       - First visible layer always uses OVER blend (same as Cairo compositor)
       - Scalar fallbacks use exact formulas for precision on remaining pixels
 
+- [x] **GPU-accelerated compositing** - OpenGL-based tile compositing using GLFW
+      for context management. Provides significant speedup for opacity changes and
+      live preview on large images:
+      - Hidden GLFW window creates OpenGL context for off-screen rendering
+      - Layer surfaces uploaded to GPU textures with smart caching (invalidated
+        via `content_version` tracking when layer content changes)
+      - Fragment shader with full blend mode support (all 27 Photoshop-compatible modes)
+      - Ping-pong FBO rendering for blend modes that need destination pixel access
+      - Uses premultiplied alpha throughout for correct Porter-Duff OVER compositing
+      - HSL component modes (Hue, Saturation, Color, Luminosity) implemented in shader
+      - Configurable via app settings: enable/disable GPU acceleration,
+        select GPU device
+      - Debug overlay shows GPU compositor statistics (tiles composited,
+        memory usage, etc.)
+
 ## Future Optimizations
 
 ### High Priority
 
 ### Medium Priority
 
-- [ ] **Opacity slider live preview** - Currently, canvas updates are deferred
-      until slider release for responsiveness on large images. Investigate ways
-      to provide live preview during drag without lag:
-      - **Low-resolution preview**: Render at 1/2 or 1/4 resolution during drag,
-        full resolution on release
-      - **GPU-accelerated compositing**: Real-time compositing via OpenGL/Vulkan
-        shaders would eliminate the bottleneck entirely
-      - **Draw-time opacity approximation**: Instead of recompositing all tiles,
-        adjust the layer's surface alpha during the draw callback. This would
-        require special handling to blend the layer surface with adjusted alpha
-        over the composite of layers below it. Complex but potentially very fast.
-      - **Mipmap-based preview**: Use existing tile mipmaps for faster preview
-        compositing during drag
-
 ### Lower Priority  
-
-- [ ] **GPU-accelerated compositing** - Use OpenGL/Vulkan for tile compositing
-      when available. Upload layer textures to GPU and composite in shaders.
 
 - [ ] **Progressive loading** - Load tiles on-demand as viewport scrolls,
       showing low-res preview first then full resolution.
