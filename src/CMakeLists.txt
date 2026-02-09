@@ -120,6 +120,7 @@ set(SOURCES
     ui/dialogs/palettize_dialog.c
     ui/dialogs/recovery_dialog.c
     ui/dialogs/retinex_dialog.c
+    ui/dialogs/settings_dialog.c
     ui/dialogs/rotate_dialog.c
     ui/dialogs/save_options_dialog.c
     ui/dialogs/selection_radius_dialog.c
@@ -216,6 +217,7 @@ set(SOURCES
     ui/ui_image_menu.c
     ui/ui_layer_menu.c
     ui/ui_select_menu.c
+    ui/ui_tools_menu.c
     ui/ui_utils.c
     ui/ui_view_menu.c
     ui/widgets/accordion.c

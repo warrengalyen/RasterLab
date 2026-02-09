@@ -1358,6 +1358,18 @@
       </row>
     </data>
   </object>
+  <object class="GtkMenu" id="tools_menu">
+    <property name="visible">True</property>
+    <property name="can-focus">False</property>
+    <child>
+      <object class="GtkMenuItem" id="tools_menu_settings">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Settings...</property>
+        <property name="use-underline">True</property>
+      </object>
+    </child>
+  </object>
   <object class="GtkMenu" id="view_menu">
     <property name="visible">True</property>
     <property name="can-focus">False</property>
@@ -1687,6 +1699,14 @@
                 <property name="visible">True</property>
                 <property name="can-focus">False</property>
                 <property name="label" translatable="yes">_Effects</property>
+                <property name="use-underline">True</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkMenuItem" id="tools_menu_item">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">_Tools</property>
                 <property name="use-underline">True</property>
               </object>
             </child>

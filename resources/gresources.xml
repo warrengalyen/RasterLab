@@ -78,6 +78,7 @@
     <file>ui/heic_options_dialog.glade</file>
     <file>ui/avif_options_dialog.glade</file>
     <file>ui/hdr_image_dialog.glade</file>
+    <file>ui/settings_dialog.glade</file>
     <file>ui/main_window.glade</file>
   </gresource>
 </gresources>
