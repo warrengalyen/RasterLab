@@ -18,7 +18,7 @@ typedef struct {
     /* Recent files list (most recent first) */
     GList* recent_files; /* List of RecentFile* entries (includes path and timestamp) */
 
-    /* Maximum number of recent files */
+    /* Maximum number of recent files to track */
     guint max_recent_files;
 
     /* Undo/redo disk settings */
@@ -37,9 +37,9 @@ typedef struct {
     gboolean show_statusbar;   /* Show status bar (default TRUE) */
 
     /* Tone mapping settings */
-    gboolean tone_map_auto_apply;     /* Auto-apply tone mapping settings (bypass dialog) */
+    gboolean tone_map_auto_apply;      /* Auto-apply tone mapping settings (bypass dialog) */
     gint tone_map_operator;            /* Tone mapping operator (0=linear, 1=filmic, 2=drago, 3=reinhard) */
-    gint tone_map_normalize;          /* Normalization mode (0=none, 1=visible, 2=full) */
+    gint tone_map_normalize;           /* Normalization mode (0=none, 1=visible, 2=full) */
     gdouble tone_map_gamma;            /* Gamma value (1.00-5.00, default 2.20) */
     gdouble tone_map_exposure;         /* Exposure value (0.01-8.00, default varies) */
     gdouble tone_map_white_point;      /* White point (1.00-40.00, default 11.20, Filmic only) */
@@ -211,6 +211,20 @@ gint settings_get_file_recovery_interval_seconds(Settings* settings);
  * @param seconds Interval in seconds (clamped to 30-2700)
  */
 void settings_set_file_recovery_interval_seconds(Settings* settings, gint seconds);
+
+/**
+ * Get maximum number of recent files to track
+ * @param settings The settings structure
+ * @return Max recent files (1-32)
+ */
+guint settings_get_max_recent_files(Settings* settings);
+
+/**
+ * Set maximum number of recent files to track
+ * @param settings The settings structure
+ * @param max_count Maximum count (clamped to 1-32)
+ */
+void settings_set_max_recent_files(Settings* settings, guint max_count);
 
 /**
  * Set show layer edges setting

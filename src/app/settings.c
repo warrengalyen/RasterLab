@@ -22,6 +22,8 @@
 #define DEFAULT_CANVAS_BG_G (160.0 / 255.0)
 #define DEFAULT_CANVAS_BG_B (160.0 / 255.0)
 #define DEFAULT_MAX_RECENT_FILES 10
+#define MIN_MAX_RECENT_FILES 1
+#define MAX_MAX_RECENT_FILES 32
 #define DEFAULT_UNDO_COMPRESSION_LEVEL 1           /* LZ4 fast compression */
 #define DEFAULT_UNDO_LEVELS 10                     /* Number of undo levels */
 #define DEFAULT_WORKER_THREADS 4                   /* Number of worker threads */
@@ -294,6 +296,14 @@ static void settings_save_tone_mapping(xmlTextWriterPtr writer, Settings* settin
  * Stores RecentFile* entries in Settings->recent_files (includes path and timestamp)
  */
 static void settings_load_recent_files(Settings* settings, xmlNode* recent_files_node) {
+    /* Load max attribute if present (1-32) */
+    xmlChar* max_attr = xmlGetProp(recent_files_node, (const xmlChar*)"max");
+    if (max_attr) {
+        gint max_val = (gint)strtol((const char*)max_attr, NULL, 10);
+        settings_set_max_recent_files(settings, (guint)max_val);
+        xmlFree(max_attr);
+    }
+
     /* Iterate through file nodes */
     for (xmlNode* file_node = recent_files_node->children; file_node; file_node = file_node->next) {
         if (file_node->type != XML_ELEMENT_NODE || xmlStrcmp(file_node->name, (const xmlChar*)"file") != 0) {
@@ -704,6 +714,11 @@ static void settings_save_tools(xmlTextWriterPtr writer, Settings* settings) {
  */
 static void settings_save_recent_files(xmlTextWriterPtr writer, Settings* settings) {
     xmlTextWriterStartElement(writer, (const xmlChar*)"recent_files");
+
+    /* Write max attribute */
+    gchar max_str[16];
+    g_snprintf(max_str, sizeof(max_str), "%u", settings->max_recent_files);
+    xmlTextWriterWriteAttribute(writer, (const xmlChar*)"max", (const xmlChar*)max_str);
 
     /* Write files in order (most recent first) */
     for (GList* iter = settings->recent_files; iter; iter = iter->next) {
@@ -1165,6 +1180,26 @@ void settings_set_file_recovery_interval_seconds(Settings* settings, gint second
         return;
     }
     settings->file_recovery_interval_seconds = max(30, min(2700, seconds));
+}
+
+/**
+ * Get maximum number of recent files
+ */
+guint settings_get_max_recent_files(Settings* settings) {
+    if (!settings) {
+        return DEFAULT_MAX_RECENT_FILES;
+    }
+    return settings->max_recent_files;
+}
+
+/**
+ * Set maximum number of recent files
+ */
+void settings_set_max_recent_files(Settings* settings, guint max_count) {
+    if (!settings) {
+        return;
+    }
+    settings->max_recent_files = (guint)max(MIN_MAX_RECENT_FILES, min(MAX_MAX_RECENT_FILES, (gint)max_count));
 }
 
 /**

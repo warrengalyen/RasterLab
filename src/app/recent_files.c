@@ -188,8 +188,9 @@ void recent_files_add_with_timestamp(const gchar* filepath, time_t timestamp, gb
     /* Add to front (most recent first) */
     g_recent_files = g_list_prepend(g_recent_files, existing);
 
-    /* Limit to MAX_RECENT_FILES */
-    if (g_list_length(g_recent_files) > MAX_RECENT_FILES) {
+    /* Limit to max recent files (from settings if available, else default) */
+    guint max_count = g_settings ? settings_get_max_recent_files(g_settings) : MAX_RECENT_FILES;
+    while (g_list_length(g_recent_files) > max_count) {
         GList* last = g_list_last(g_recent_files);
         RecentFile* rf = (RecentFile*)last->data;
         g_recent_files = g_list_remove_link(g_recent_files, last);
