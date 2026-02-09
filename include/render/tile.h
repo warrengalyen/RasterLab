@@ -14,7 +14,50 @@
  */
 
 /**
- * Tile state machine for thread pool coordination
+ * Maximum number of tile mipmap levels
+ * Level 0 = full resolution (the main tile surface)
+ * Level 1 = 50% (half size)
+ * Level 2 = 25% (quarter size)
+ * Level 3 = 12.5% (eighth size)
+ */
+#define TILE_MIPMAP_LEVELS 4
+
+/**
+ * Cached layer-tile intersection geometry
+ * Avoids recomputing intersection bounds every frame during compositing.
+ * Intersection is computed once and cached until layer position/size changes.
+ */
+typedef struct {
+    gboolean valid;           /* Is this cache entry valid? */
+    gboolean intersects;      /* Does layer intersect this tile? */
+    
+    /* Intersection rectangle in document coordinates */
+    gint intersect_left;
+    gint intersect_top;
+    gint intersect_right;
+    gint intersect_bottom;
+    
+    /* Intersection rectangle in tile-local coordinates */
+    gint tile_local_x;
+    gint tile_local_y;
+    gint tile_local_w;
+    gint tile_local_h;
+    
+    /* Source region in layer coordinates */
+    gint src_x;
+    gint src_y;
+    gint src_width;
+    gint src_height;
+    
+    /* Cache validation - stores layer position/size when cached */
+    gint cached_layer_offset_x;
+    gint cached_layer_offset_y;
+    guint cached_layer_width;
+    guint cached_layer_height;
+} LayerTileIntersection;
+
+/**
+ * Tile state for thread pool coordination
  */
 typedef enum {
     TILE_CLEAN,    /* Tile surface is valid and up-to-date */
@@ -41,6 +84,20 @@ typedef struct {
     /* Thread pool coordination (legacy - kept for compatibility) */
     TileState state;     /* Current state in render pipeline */
     guint generation_id; /* Incremented when tile marked dirty; prevents stale results */
+
+    /* Pre-computed mipmaps for fast zooming
+     * mipmap[0] = 50% (half size)
+     * mipmap[1] = 25% (quarter size)
+     * mipmap[2] = 12.5% (eighth size)
+     * mipmap[3] = 6.25% (sixteenth size)
+     * Generated after tile compositing for fast zoom-out rendering */
+    cairo_surface_t* mipmaps[TILE_MIPMAP_LEVELS];
+    gboolean mipmaps_dirty; /* Whether mipmaps need regeneration */
+    
+    /* Layer-tile intersection cache
+     * Maps ImageLayer* -> LayerTileIntersection*
+     * Caches intersection geometry to avoid recomputing every frame */
+    GHashTable* layer_intersection_cache;
 } Tile;
 
 /**
@@ -127,6 +184,69 @@ void tile_mark_dirty_for_thread_pool(Tile* tile);
  * @return TRUE if result was applied, FALSE if stale
  */
 gboolean tile_apply_completed_result(Tile* tile, cairo_surface_t* new_surface, guint generation_id);
+
+/**
+ * Generate mipmaps for a tile
+ * Creates downscaled versions at 50%, 25%, 12.5%, 6.25% for fast zoom-out rendering.
+ * Should be called after tile compositing completes.
+ * @param tile Tile to generate mipmaps for
+ * @return TRUE on success, FALSE on error
+ */
+gboolean tile_generate_mipmaps(Tile* tile);
+
+/**
+ * Free all mipmaps for a tile
+ * @param tile Tile to free mipmaps for
+ */
+void tile_free_mipmaps(Tile* tile);
+
+/**
+ * Get the appropriate mipmap surface for a given zoom factor
+ * @param tile Tile to get mipmap from
+ * @param zoom_factor Zoom factor (1.0 = full resolution)
+ * @param out_scale Output: scale factor of the returned mipmap (e.g., 0.5 for 50%)
+ * @return Mipmap surface, or tile->surface if zoom >= 1.0 or mipmaps unavailable
+ */
+cairo_surface_t* tile_get_mipmap_for_zoom(Tile* tile, gdouble zoom_factor, gdouble* out_scale);
+
+/* ============================================================================
+ * Layer-Tile Intersection Cache
+ * ============================================================================
+ * Caches the intersection geometry between layers and tiles to avoid
+ * recomputing bounds on every frame. Cache entries are automatically
+ * invalidated when layer position or size changes.
+ * ============================================================================ */
+
+/**
+ * Get or compute the intersection between a layer and a tile.
+ * Returns cached result if valid, otherwise computes and caches it.
+ * @param tile Tile to check intersection with
+ * @param layer Layer to check intersection with
+ * @return Pointer to cached intersection data (do not free)
+ */
+const LayerTileIntersection* tile_get_layer_intersection(Tile* tile, ImageLayer* layer);
+
+/**
+ * Invalidate all layer intersection cache entries for a tile.
+ * Call when tile position/size changes (rare).
+ * @param tile Tile to invalidate cache for
+ */
+void tile_invalidate_intersection_cache(Tile* tile);
+
+/**
+ * Invalidate intersection cache entries for a specific layer across all tiles.
+ * Call when layer position, size, or visibility changes.
+ * @param grid Tile grid containing all tiles
+ * @param layer Layer whose cache entries should be invalidated
+ */
+void tile_grid_invalidate_layer_cache(TileGrid* grid, ImageLayer* layer);
+
+/**
+ * Free the layer intersection cache for a tile.
+ * Called during tile cleanup.
+ * @param tile Tile to free cache for
+ */
+void tile_free_intersection_cache(Tile* tile);
 
 /**
  * Tile snapshot helpers for delta-based undo system

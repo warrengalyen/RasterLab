@@ -49,14 +49,27 @@ TileWorkerPool* tile_worker_pool_create(guint num_workers);
 void tile_worker_pool_destroy(TileWorkerPool* pool);
 
 /**
- * Enqueue a tile for background compositing
- * Thread-safe - can be called from any thread
+ * Set the viewport center for priority calculation
+ * Tiles closer to this point will be composited first (priority queue)
+ * Call this before enqueueing tiles for best results
+ * @param pool Worker pool
+ * @param center_x Viewport center X in document pixel coordinates
+ * @param center_y Viewport center Y in document pixel coordinates
+ */
+void tile_worker_pool_set_viewport_center(TileWorkerPool* pool,
+                                          gint center_x,
+                                          gint center_y);
+
+/**
+ * Enqueue a tile for background compositing with priority
+ * Tiles closer to viewport center (set via tile_worker_pool_set_viewport_center)
+ * are processed first. Thread-safe - can be called from any thread.
  * @param pool Worker pool
  * @param doc Document
  * @param tile Tile with allocated pixel_buffer
  * @param tile_x Tile X coordinate
  * @param tile_y Tile Y coordinate
- * @return TRUE if enqueued, FALSE if pool shutdown
+ * @return TRUE if enqueued, FALSE if pool shutdown or tile already queued
  */
 gboolean tile_worker_pool_enqueue(TileWorkerPool* pool,
                                   ImageDocument* doc,
@@ -93,6 +106,28 @@ gboolean tile_worker_composite_pixels(ImageDocument* doc,
                                       Tile* tile,
                                       gint tile_x,
                                       gint tile_y);
+
+/**
+ * Composite a tile's pixel buffer using GPU acceleration
+ * MAIN THREAD ONLY - OpenGL context is thread-bound
+ * Falls back to CPU compositing if GPU is not available
+ * @param doc Document with GPU compositor
+ * @param tile Tile with pixel_buffer allocated
+ * @param tile_x Tile X coordinate
+ * @param tile_y Tile Y coordinate
+ * @return TRUE if GPU was used, FALSE if fell back to CPU
+ */
+gboolean tile_worker_composite_pixels_gpu(ImageDocument* doc,
+                                          Tile* tile,
+                                          gint tile_x,
+                                          gint tile_y);
+
+/**
+ * Check if GPU compositing is available for a document
+ * @param doc Document to check
+ * @return TRUE if GPU compositing can be used
+ */
+gboolean tile_worker_has_gpu_compositor(ImageDocument* doc);
 
 G_END_DECLS
 

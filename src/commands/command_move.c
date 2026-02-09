@@ -1,5 +1,7 @@
 #include "commands/command_move.h"
 #include "document.h"
+#include "render/compositor.h"
+#include "render/dirty.h"
 #include "render/layer.h"
 #include "selection/selection_mask.h"
 #include "selection/selection_render.h"
@@ -26,6 +28,7 @@ typedef struct {
  */
 static void move_command_apply(Command* cmd, struct ImageDocument* doc) {
     MoveCommandData* data;
+    DirtyRect old_rect, new_rect;
 
     if (!cmd || !cmd->user_data || !doc) {
         return;
@@ -37,12 +40,21 @@ static void move_command_apply(Command* cmd, struct ImageDocument* doc) {
         return;
     }
 
+    /* Invalidate tiles at OLD position (where layer was) */
+    dirty_rect_set(&old_rect, data->layer->offset_x, data->layer->offset_y,
+                   data->layer->width, data->layer->height);
+    document_invalidate_region(doc, &old_rect);
+
     /* Apply new position */
     data->layer->offset_x = data->new_offset_x;
     data->layer->offset_y = data->new_offset_y;
 
-    /* Mark composite as dirty and queue redraw */
-    doc->composite_dirty = TRUE;
+    /* Invalidate tiles at NEW position (where layer now is) */
+    dirty_rect_set(&new_rect, data->new_offset_x, data->new_offset_y,
+                   data->layer->width, data->layer->height);
+    document_invalidate_region(doc, &new_rect);
+
+    /* Queue redraw */
     if (doc->drawing_area) {
         gtk_widget_queue_draw(doc->drawing_area);
     }
@@ -53,6 +65,7 @@ static void move_command_apply(Command* cmd, struct ImageDocument* doc) {
  */
 static void move_command_revert(Command* cmd, struct ImageDocument* doc) {
     MoveCommandData* data;
+    DirtyRect old_rect, new_rect;
 
     if (!cmd || !cmd->user_data || !doc) {
         return;
@@ -64,12 +77,21 @@ static void move_command_revert(Command* cmd, struct ImageDocument* doc) {
         return;
     }
 
+    /* Invalidate tiles at current (new) position */
+    dirty_rect_set(&new_rect, data->layer->offset_x, data->layer->offset_y,
+                   data->layer->width, data->layer->height);
+    document_invalidate_region(doc, &new_rect);
+
     /* Restore old position */
     data->layer->offset_x = data->old_offset_x;
     data->layer->offset_y = data->old_offset_y;
 
-    /* Mark composite as dirty and queue redraw */
-    doc->composite_dirty = TRUE;
+    /* Invalidate tiles at restored (old) position */
+    dirty_rect_set(&old_rect, data->old_offset_x, data->old_offset_y,
+                   data->layer->width, data->layer->height);
+    document_invalidate_region(doc, &old_rect);
+
+    /* Queue redraw */
     if (doc->drawing_area) {
         gtk_widget_queue_draw(doc->drawing_area);
     }

@@ -3,6 +3,7 @@
 #include "command.h"
 #include "io/image_io.h"
 #include "render/compositor.h"
+#include "render/gpu_compositor.h"
 #include "render/layer.h"
 #include "render/render_utils.h"
 #include "render/tile.h"
@@ -75,11 +76,26 @@ static gboolean on_selection_animation_timer(gpointer user_data) {
 static void on_scroll_adjustment_changed(GtkAdjustment* adjustment, gpointer user_data) {
     ImageDocument* doc = (ImageDocument*)user_data;
     LayersPanel* layers_panel;
+    GdkWindow* gdk_window;
 
     (void)adjustment; /* Unused */
 
     if (doc && doc->drawing_area && GTK_IS_WIDGET(doc->drawing_area)) {
-        /* Invalidate the entire drawing area to trigger redraw */
+        /* Invalidate the layout/viewport */
+        if (doc->viewport && GTK_IS_WIDGET(doc->viewport)) {
+            gdk_window = gtk_widget_get_window(doc->viewport);
+            if (gdk_window) {
+                gdk_window_invalidate_rect(gdk_window, NULL, TRUE);
+            }
+            gtk_widget_queue_draw(doc->viewport);
+        }
+
+        /* Invalidate the drawing area window */
+        gdk_window = gtk_widget_get_window(doc->drawing_area);
+        if (gdk_window) {
+            gdk_window_invalidate_rect(gdk_window, NULL, TRUE);
+        }
+
         gtk_widget_queue_draw(doc->drawing_area);
 
         /* Update overview widget selection rectangle when scrolling */
@@ -163,6 +179,7 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
     gint tx, ty;
     Tile* tile;
     gdouble zoom;
+    gboolean use_gpu_compositing = FALSE;
 
     /* Safety check: if document is NULL or drawing_area is NULL,
      * the document is being closed, so just draw empty background */
@@ -172,6 +189,17 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
         clip_height = (gint)(y2 - y1);
         draw_checkered_background(cr, clip_width, clip_height);
         return FALSE;
+    }
+
+    /* Check if GPU compositing should be used based on settings */
+    if (doc->gpu_compositor && gpu_compositor_is_ready(doc->gpu_compositor)) {
+        gpointer ctx_data = g_object_get_data(G_OBJECT(widget), "app_context");
+        if (ctx_data) {
+            AppContext* ctx = (AppContext*)ctx_data;
+            if (ctx->settings && settings_get_gpu_acceleration_enabled(ctx->settings)) {
+                use_gpu_compositing = TRUE;
+            }
+        }
     }
 
     /* Process completed tiles from Cairo-safe worker pool
@@ -238,16 +266,41 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
     clip_width = (gint)(x2 - x1);
     clip_height = (gint)(y2 - y1);
 
+/* DEBUG: Set to 1 to detect and print when clip/scroll mismatch (seam condition) */
+#define DEBUG_PRINT_CLIP 0
+#if DEBUG_PRINT_CLIP
+    {
+        double dbg_scroll_x = 0, dbg_scroll_y = 0;
+        if (doc->scrolled_window && GTK_IS_SCROLLED_WINDOW(doc->scrolled_window)) {
+            GtkAdjustment* hadj = gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(doc->scrolled_window));
+            GtkAdjustment* vadj = gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(doc->scrolled_window));
+            if (hadj)
+                dbg_scroll_x = gtk_adjustment_get_value(hadj);
+            if (vadj)
+                dbg_scroll_y = gtk_adjustment_get_value(vadj);
+        }
+        /* Only print when clip and scroll diverge by more than 1 pixel */
+        double diff_x = x1 - dbg_scroll_x;
+        double diff_y = y1 - dbg_scroll_y;
+        if (diff_x < -1 || diff_x > 1 || diff_y < -1 || diff_y > 1) {
+            g_print("MISMATCH: clip=(%.0f,%.0f) scroll=(%.0f,%.0f) diff=(%.0f,%.0f)\n",
+                    x1, y1, dbg_scroll_x, dbg_scroll_y, diff_x, diff_y);
+        }
+    }
+#endif
+
     /* Draw the document if image is loaded */
     if (doc->layers && g_list_length(doc->layers) > 0) {
-        /* Calculate viewport in document coordinates (unscaled) with proper rounding */
-        /* Use proper rounding to avoid pixel misalignment that causes visible lines when scrolling */
-        viewport_x = (gint)(round(x1 / zoom));
-        viewport_y = (gint)(round(y1 / zoom));
-        viewport_w = (gint)(round((x2 - x1) / zoom));
-        viewport_h = (gint)(round((y2 - y1) / zoom));
+        /* CRITICAL: Use CLIP position for viewport calculation, not scroll position!
+         * Debug analysis revealed that clip.x/y often differs from scroll.x/y
+         * (clip can be offset when the drawing area is centered in the viewport).
+         * We must draw content for the CLIP region, which is what Cairo will actually show. */
+        viewport_x = (gint)floor(x1 / zoom);
+        viewport_y = (gint)floor(y1 / zoom);
+        viewport_w = (gint)ceil(clip_width / zoom) + 1;
+        viewport_h = (gint)ceil(clip_height / zoom) + 1;
 
-        /* Save Cairo state before applying zoom transform */
+        /* Save Cairo state before applying transforms */
         cairo_save(cr);
 
         /* Apply zoom transform */
@@ -255,43 +308,266 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
             cairo_scale(cr, zoom, zoom);
         }
 
-        /* Draw checkered background for visible area, starting from viewport position */
-        /* This ensures the pattern is continuous across the entire canvas when scrolling */
-        draw_checkered_background_offset(cr, viewport_x, viewport_y, viewport_w, viewport_h);
+/* DEBUG: Set to 1 to disable checkered background and use solid color. */
+#define DEBUG_SOLID_BACKGROUND 0
 
-        /* When zoomed, render layers directly to avoid tile boundary artifacts */
-        if (zoom != 1.0) {
+#if DEBUG_SOLID_BACKGROUND
+        /* Draw solid background for ENTIRE document area (0,0 to width,height).
+         * This ensures complete coverage regardless of clip/scroll mismatch. */
+        cairo_set_source_rgb(cr, 0.5, 0.5, 0.5);
+        cairo_rectangle(cr, 0, 0, doc->width, doc->height);
+        cairo_fill(cr);
+#else
+        /* Draw checkered background for visible area */
+        draw_checkered_background_offset(cr, viewport_x, viewport_y, viewport_w, viewport_h);
+#endif
+
+        /* Render based on zoom level */
+        if (zoom > 1.0) {
+            /* Zoomed IN: Use layer-based rendering for best quality */
             document_render_layers_at_zoom(doc, cr, viewport_x, viewport_y, viewport_w, viewport_h);
+        } else if (zoom < 1.0 && doc->tile_grid) {
+            /* Zoomed OUT: Use pre-computed tile mipmaps for fast rendering */
+            gint tile_size = doc->tile_grid->tile_size;
+
+            /* Calculate which tiles are visible at this zoom level */
+            start_tile_x = viewport_x / tile_size;
+            start_tile_y = viewport_y / tile_size;
+            end_tile_x = (viewport_x + viewport_w) / tile_size;
+            end_tile_y = (viewport_y + viewport_h) / tile_size;
+
+            /* Clamp to grid bounds */
+            if (start_tile_x < 0)
+                start_tile_x = 0;
+            if (start_tile_y < 0)
+                start_tile_y = 0;
+            if (end_tile_x >= doc->tile_grid->tiles_x)
+                end_tile_x = doc->tile_grid->tiles_x - 1;
+            if (end_tile_y >= doc->tile_grid->tiles_y)
+                end_tile_y = doc->tile_grid->tiles_y - 1;
+
+            /* Ensure tiles are composited (mipmaps generated during compositing) */
+            for (ty = start_tile_y; ty <= end_tile_y; ty++) {
+                for (tx = start_tile_x; tx <= end_tile_x; tx++) {
+                    tile = tile_grid_get_tile(doc->tile_grid, tx, ty);
+                    if (tile && tile->dirty) {
+                        /* Composite tile - use GPU if enabled, otherwise CPU */
+                        if (use_gpu_compositing) {
+                            tile_worker_composite_pixels_gpu(doc, tile, tx, ty);
+                        } else {
+                            tile_worker_composite_pixels(doc, tile, tx, ty);
+                        }
+                        if (tile->surface) {
+                            cairo_surface_destroy(tile->surface);
+                            tile->surface = NULL;
+                        }
+                        if (tile->pixel_buffer) {
+                            tile->surface = cairo_image_surface_create_for_data(
+                                tile->pixel_buffer,
+                                CAIRO_FORMAT_ARGB32,
+                                tile->w,
+                                tile->h,
+                                tile->stride);
+                            if (cairo_surface_status(tile->surface) == CAIRO_STATUS_SUCCESS) {
+                                tile->dirty = FALSE;
+                                tile->pending_upload = FALSE;
+                                /* Generate mipmaps for this tile */
+                                tile_generate_mipmaps(tile);
+                            }
+                        }
+                    } else if (tile && tile->mipmaps_dirty && tile->surface) {
+                        /* Tile content is valid but mipmaps need regeneration */
+                        tile_generate_mipmaps(tile);
+                    }
+                }
+            }
+
+            /* Draw tiles using mipmaps */
+            for (ty = start_tile_y; ty <= end_tile_y; ty++) {
+                for (tx = start_tile_x; tx <= end_tile_x; tx++) {
+                    tile = tile_grid_get_tile(doc->tile_grid, tx, ty);
+                    if (tile) {
+                        cairo_surface_t* mip_surface = tile_get_mipmap_for_zoom(tile, zoom, NULL);
+
+                        if (mip_surface) {
+                            gint mip_w = cairo_image_surface_get_width(mip_surface);
+                            gint mip_h = cairo_image_surface_get_height(mip_surface);
+
+                            cairo_save(cr);
+
+                            /* Disable shape anti-aliasing to prevent semi-transparent
+                             * pixels at tile boundaries when rendering at fractional
+                             * screen coordinates. This eliminates visible gaps/seams. */
+                            cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
+
+                            /* Move to tile position in document coordinates */
+                            cairo_translate(cr, tile->px, tile->py);
+
+                            /* Set source surface at local origin */
+                            cairo_set_source_surface(cr, mip_surface, 0, 0);
+                            cairo_pattern_t* pattern = cairo_get_source(cr);
+                            cairo_pattern_set_filter(pattern, CAIRO_FILTER_BILINEAR);
+                            cairo_pattern_set_extend(pattern, CAIRO_EXTEND_PAD);
+
+                            /* Scale the pattern to stretch mipmap to fill tile area.
+                             * Pattern matrix transforms LOCAL user coords to pattern coords:
+                             * local (0,0) -> pattern (0,0)
+                             * local (tile->w, tile->h) -> pattern (mip_w, mip_h) */
+                            cairo_matrix_t matrix;
+                            gdouble scale_x = (gdouble)mip_w / (gdouble)tile->w;
+                            gdouble scale_y = (gdouble)mip_h / (gdouble)tile->h;
+                            cairo_matrix_init_scale(&matrix, scale_x, scale_y);
+                            cairo_pattern_set_matrix(pattern, &matrix);
+
+                            cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+
+                            /* Draw exact tile rectangle at local origin */
+                            cairo_rectangle(cr, 0, 0, tile->w, tile->h);
+                            cairo_fill(cr);
+
+                            cairo_restore(cr);
+                        }
+                    }
+                }
+            }
         } else {
             /* At 100% zoom, use tiles for performance */
             if (doc->tile_grid) {
-                /* Composite dirty tiles before drawing */
-                tile_grid_composite(doc, doc->tile_grid);
+                gboolean need_sync_composite = FALSE;
 
-                /* Calculate which tiles are visible in viewport */
-                tile_grid_pixel_to_tile(doc->tile_grid, viewport_x, viewport_y, &start_tile_x, &start_tile_y);
-                tile_grid_pixel_to_tile(doc->tile_grid, viewport_x + viewport_w, viewport_y + viewport_h, &end_tile_x, &end_tile_y);
+                /* AGGRESSIVE FIX: Draw ALL tiles for the entire document.
+                 * This matches what we do for the background (which has no seam).
+                 * The clip will limit what's actually rendered, but all tile positions
+                 * will have correct content drawn, eliminating the seam. */
+                start_tile_x = 0;
+                start_tile_y = 0;
+                end_tile_x = doc->tile_grid->tiles_x - 1;
+                end_tile_y = doc->tile_grid->tiles_y - 1;
 
-                /* Clamp to grid bounds */
-                if (start_tile_x < 0)
-                    start_tile_x = 0;
-                if (start_tile_y < 0)
-                    start_tile_y = 0;
-                if (end_tile_x >= doc->tile_grid->tiles_x)
-                    end_tile_x = doc->tile_grid->tiles_x - 1;
-                if (end_tile_y >= doc->tile_grid->tiles_y)
-                    end_tile_y = doc->tile_grid->tiles_y - 1;
+                /* Check for dirty visible tiles and composite them SYNCHRONOUSLY.
+                 * This prevents flickering during layer movement where stale tile content
+                 * would briefly show the layer at its old position before async compositing
+                 * completes. The worker pool is used for prefetching off-screen tiles only. */
+                for (ty = start_tile_y; ty <= end_tile_y && !need_sync_composite; ty++) {
+                    for (tx = start_tile_x; tx <= end_tile_x && !need_sync_composite; tx++) {
+                        tile = tile_grid_get_tile(doc->tile_grid, tx, ty);
+                        if (tile && tile->dirty) {
+                            need_sync_composite = TRUE;
+                        }
+                    }
+                }
 
-                /* Draw each visible tile */
+                /* Synchronous compositing for visible dirty tiles to prevent flicker */
+                if (need_sync_composite) {
+                    for (ty = start_tile_y; ty <= end_tile_y; ty++) {
+                        for (tx = start_tile_x; tx <= end_tile_x; tx++) {
+                            tile = tile_grid_get_tile(doc->tile_grid, tx, ty);
+                            if (tile && tile->dirty) {
+                                /* Composite pixels - use GPU if enabled, otherwise CPU */
+                                if (use_gpu_compositing) {
+                                    tile_worker_composite_pixels_gpu(doc, tile, tx, ty);
+                                } else {
+                                    tile_worker_composite_pixels(doc, tile, tx, ty);
+                                }
+
+                                /* Upload pixel buffer to Cairo surface */
+                                if (tile->surface) {
+                                    cairo_surface_destroy(tile->surface);
+                                    tile->surface = NULL;
+                                }
+
+                                if (tile->pixel_buffer) {
+                                    tile->surface = cairo_image_surface_create_for_data(
+                                        tile->pixel_buffer,
+                                        CAIRO_FORMAT_ARGB32,
+                                        tile->w,
+                                        tile->h,
+                                        tile->stride);
+
+                                    if (cairo_surface_status(tile->surface) == CAIRO_STATUS_SUCCESS) {
+                                        tile->dirty = FALSE;
+                                        tile->pending_upload = FALSE;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                /* Enqueue OFF-SCREEN dirty tiles to worker pool for prefetching */
+                if (doc->tile_worker_pool) {
+                    /* Set viewport center for priority queue */
+                    gint viewport_center_x = viewport_x + viewport_w / 2;
+                    gint viewport_center_y = viewport_y + viewport_h / 2;
+                    tile_worker_pool_set_viewport_center(doc->tile_worker_pool,
+                                                         viewport_center_x,
+                                                         viewport_center_y);
+
+                    /* Enqueue tiles in a larger region around the viewport for prefetching */
+                    gint prefetch_margin = 2; /* tiles */
+                    gint pf_start_x = (start_tile_x > prefetch_margin) ? start_tile_x - prefetch_margin : 0;
+                    gint pf_start_y = (start_tile_y > prefetch_margin) ? start_tile_y - prefetch_margin : 0;
+                    gint pf_end_x = end_tile_x + prefetch_margin;
+                    gint pf_end_y = end_tile_y + prefetch_margin;
+
+                    if (pf_end_x >= doc->tile_grid->tiles_x)
+                        pf_end_x = doc->tile_grid->tiles_x - 1;
+                    if (pf_end_y >= doc->tile_grid->tiles_y)
+                        pf_end_y = doc->tile_grid->tiles_y - 1;
+
+                    for (ty = pf_start_y; ty <= pf_end_y; ty++) {
+                        for (tx = pf_start_x; tx <= pf_end_x; tx++) {
+                            /* Skip visible tiles - already composited synchronously */
+                            if (tx >= start_tile_x && tx <= end_tile_x &&
+                                ty >= start_tile_y && ty <= end_tile_y) {
+                                continue;
+                            }
+
+                            tile = tile_grid_get_tile(doc->tile_grid, tx, ty);
+                            if (tile && tile->dirty) {
+                                tile_worker_pool_enqueue(doc->tile_worker_pool, doc, tile, tx, ty);
+                            }
+                        }
+                    }
+                }
+
+/* DEBUG: Set to 1 to draw colored debug rectangles instead of tiles.
+                 * This helps identify if the seam is caused by tile content or coordinate issues. */
+#define DEBUG_TILE_COLORS 0
+
+                /* Reset clip to allow drawing full tile range (bypasses GTK's partial clip) */
+                cairo_reset_clip(cr);
+                cairo_rectangle(cr, 0, 0, doc->width, doc->height);
+                cairo_clip(cr);
+
+                /* Second pass: Draw all visible tiles (including stale content for pending tiles) */
                 for (ty = start_tile_y; ty <= end_tile_y; ty++) {
                     for (tx = start_tile_x; tx <= end_tile_x; tx++) {
                         tile = tile_grid_get_tile(doc->tile_grid, tx, ty);
 
-                        if (tile && tile->surface) {
-                            /* Draw tile at its document pixel position */
-                            cairo_set_source_surface(cr, tile->surface, tile->px, tile->py);
-                            cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
-                            cairo_paint(cr);
+                        if (tile) {
+#if DEBUG_TILE_COLORS
+                            /* Debug mode: Draw colored rectangles based on tile position */
+                            double r = (double)((tx * 37) % 255) / 255.0;
+                            double g = (double)((ty * 73) % 255) / 255.0;
+                            double b = (double)(((tx + ty) * 53) % 255) / 255.0;
+                            cairo_set_source_rgb(cr, r, g, b);
+                            cairo_rectangle(cr, tile->px, tile->py, tile->w, tile->h);
+                            cairo_fill(cr);
+#else
+                            if (tile->surface) {
+                                cairo_set_source_surface(cr, tile->surface, tile->px, tile->py);
+                                /* Use NEAREST filter to prevent subpixel interpolation at tile edges. */
+                                cairo_pattern_t* tile_pattern = cairo_get_source(cr);
+                                cairo_pattern_set_filter(tile_pattern, CAIRO_FILTER_NEAREST);
+                                /* Use PAD extend mode to prevent edge sampling artifacts */
+                                cairo_pattern_set_extend(tile_pattern, CAIRO_EXTEND_PAD);
+                                cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+                                /* Use explicit rectangle + fill instead of paint() to avoid clip edge artifacts */
+                                cairo_rectangle(cr, tile->px, tile->py, tile->w, tile->h);
+                                cairo_fill(cr);
+                            }
+#endif
                         }
                     }
                 }
@@ -315,14 +591,6 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
     if (doc->selection_mask && !selection_mask_is_empty(doc->selection_mask)) {
         selection_mask_render_outline(cr, doc->selection_mask,
                                       doc->selection_animation_phase, zoom);
-
-        /* TEMPORARY: Visualize selection mask for debugging feathered selections */
-        cairo_save(cr);
-        if (zoom != 1.0) {
-            cairo_scale(cr, zoom, zoom);
-        }
-        // render_utils_visualize_selection_mask(cr, doc->selection_mask);
-        cairo_restore(cr);
     }
 
     return FALSE;
@@ -334,11 +602,22 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
 static gboolean on_viewport_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     ImageDocument* doc = (ImageDocument*)user_data;
     GtkAllocation drawing_area_alloc;
+    gdouble scroll_x = 0, scroll_y = 0;
 
     (void)widget; /* Unused */
 
     if (!doc || !doc->drawing_area) {
         return FALSE;
+    }
+
+    /* Get scroll position from adjustments */
+    if (doc->scrolled_window && GTK_IS_SCROLLED_WINDOW(doc->scrolled_window)) {
+        GtkAdjustment* hadj = gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(doc->scrolled_window));
+        GtkAdjustment* vadj = gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(doc->scrolled_window));
+        if (hadj)
+            scroll_x = gtk_adjustment_get_value(hadj);
+        if (vadj)
+            scroll_y = gtk_adjustment_get_value(vadj);
     }
 
     /* Get drawing area allocation to find its position in viewport */
@@ -347,13 +626,97 @@ static gboolean on_viewport_draw(GtkWidget* widget, cairo_t* cr, gpointer user_d
     /* Save cairo state */
     cairo_save(cr);
 
-    /* Translate to drawing area position within viewport */
-    cairo_translate(cr, drawing_area_alloc.x, drawing_area_alloc.y);
+    /* Translate to drawing area position within viewport, accounting for scroll offset.
+     * The drawing_area_alloc gives position relative to bin_window, but we're drawing
+     * on the view_window. Subtract scroll offset to get correct view_window coordinates. */
+    cairo_translate(cr, drawing_area_alloc.x - scroll_x, drawing_area_alloc.y - scroll_y);
 
     /* Draw move tool outline overlay (in drawing area coordinates) */
     tool_move_draw_preview(doc, cr, doc->zoom_factor);
 
     cairo_restore(cr);
+
+    /* Draw GPU stats overlay if enabled */
+    if (doc->drawing_area) {
+        /* Get AppContext to check settings */
+        gpointer ctx_data = g_object_get_data(G_OBJECT(doc->drawing_area), "app_context");
+        if (ctx_data) {
+            AppContext* ctx = (AppContext*)ctx_data;
+            if (ctx->settings && settings_get_show_gpu_stats(ctx->settings)) {
+                /* Draw semi-transparent background */
+                cairo_save(cr);
+                cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.7);
+                cairo_rectangle(cr, 10, 10, 300, 110);
+                cairo_fill(cr);
+
+                /* Draw border */
+                cairo_set_source_rgba(cr, 0.3, 0.8, 0.3, 0.8);
+                cairo_set_line_width(cr, 1.0);
+                cairo_rectangle(cr, 10, 10, 300, 110);
+                cairo_stroke(cr);
+
+                /* Draw text */
+                cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
+                cairo_set_font_size(cr, 12);
+
+                if (doc->gpu_compositor) {
+                    guint64 tiles_composited = 0;
+                    guint textures_cached = 0;
+                    gsize memory_used = 0;
+
+                    gpu_compositor_get_stats(doc->gpu_compositor,
+                                             &tiles_composited,
+                                             &textures_cached,
+                                             &memory_used);
+
+                    const GPUDeviceInfo* gpu_info = gpu_compositor_get_active_device(doc->gpu_compositor);
+                    gboolean is_ready = gpu_compositor_is_ready(doc->gpu_compositor);
+
+                    cairo_set_source_rgba(cr, 0.3, 1.0, 0.3, 1.0);
+
+                    gchar* line1 = g_strdup_printf("GPU: %s", gpu_info ? gpu_info->name : "Unknown");
+                    gchar* line2 = g_strdup_printf("Status: %s", is_ready ? "Ready" : "Not Ready");
+                    gchar* line3 = g_strdup_printf("Tiles Composited: %" G_GUINT64_FORMAT, tiles_composited);
+                    gchar* line4 = g_strdup_printf("Textures Cached: %u", textures_cached);
+                    gchar* line5 = g_strdup_printf("GPU Memory: %.2f MB", (gdouble)memory_used / (1024.0 * 1024.0));
+
+                    cairo_move_to(cr, 18, 28);
+                    cairo_show_text(cr, line1);
+                    cairo_move_to(cr, 18, 46);
+                    cairo_show_text(cr, line2);
+                    cairo_move_to(cr, 18, 64);
+                    cairo_show_text(cr, line3);
+                    cairo_move_to(cr, 18, 82);
+                    cairo_show_text(cr, line4);
+                    cairo_move_to(cr, 18, 100);
+                    cairo_show_text(cr, line5);
+
+                    g_free(line1);
+                    g_free(line2);
+                    g_free(line3);
+                    g_free(line4);
+                    g_free(line5);
+                } else {
+                    /* GPU compositor is NULL - show why */
+                    cairo_set_source_rgba(cr, 1.0, 0.5, 0.3, 1.0); /* Orange for warning */
+
+                    gboolean gpu_available = gpu_compositor_is_available();
+
+                    cairo_move_to(cr, 18, 28);
+                    cairo_show_text(cr, "GPU Compositor: NOT INITIALIZED");
+                    cairo_move_to(cr, 18, 46);
+                    cairo_show_text(cr, gpu_available ? "GLFW/OpenGL: Available" : "GLFW/OpenGL: NOT Available");
+                    cairo_move_to(cr, 18, 64);
+                    cairo_show_text(cr, settings_get_gpu_acceleration_enabled(ctx->settings) 
+                                    ? "Setting: Enabled" : "Setting: DISABLED");
+                    cairo_move_to(cr, 18, 82);
+                    cairo_show_text(cr, "Check console for errors");
+                }
+
+                cairo_restore(cr);
+            }
+        }
+    }
 
     return FALSE; /* Let other handlers run */
 }
@@ -788,6 +1151,7 @@ ImageDocument* document_new(const gchar* filename, gboolean create_worker_pool, 
     doc->composite_surface = NULL;
     doc->composite_dirty = TRUE;
     dirty_rect_init(&doc->dirty_region);
+    doc->dirty_region_list = dirty_region_list_create(); /* Coalescing for optimized tile invalidation */
     doc->tile_grid = NULL;        /* Will be created when image is loaded */
     doc->tile_thread_pool = NULL; /* Will be created when image is loaded */
     doc->zoom_factor = 1.0;
@@ -808,6 +1172,9 @@ ImageDocument* document_new(const gchar* filename, gboolean create_worker_pool, 
     } else {
         doc->tile_worker_pool = NULL;
     }
+
+    /* Initialize GPU compositor to NULL - will be created on demand based on settings */
+    doc->gpu_compositor = NULL;
 
     /* Initialize undo/redo stacks with configurable undo levels (0 = unlimited) */
     doc->undo_stack = command_stack_new(undo_levels > 0 ? undo_levels : 0);
@@ -870,6 +1237,12 @@ void document_free(ImageDocument* doc) {
         doc->composite_surface = NULL;
     }
 
+    /* Free dirty region list */
+    if (doc->dirty_region_list) {
+        dirty_region_list_free(doc->dirty_region_list);
+        doc->dirty_region_list = NULL;
+    }
+
     /* Free tile grid */
     if (doc->tile_grid) {
         tile_grid_free(doc->tile_grid);
@@ -888,6 +1261,13 @@ void document_free(ImageDocument* doc) {
         g_message("Shutting down legacy tile thread pool...");
         tile_thread_pool_destroy(doc->tile_thread_pool);
         doc->tile_thread_pool = NULL;
+    }
+
+    /* Shutdown GPU compositor if enabled */
+    if (doc->gpu_compositor) {
+        g_message("Shutting down GPU compositor...");
+        gpu_compositor_destroy(doc->gpu_compositor);
+        doc->gpu_compositor = NULL;
     }
 
     /* Remove selection animation timer if it's still running */
@@ -1058,24 +1438,15 @@ GtkWidget* document_create_drawing_area(ImageDocument* doc) {
     gtk_scrolled_window_set_shadow_type(GTK_SCROLLED_WINDOW(scrolled_window),
                                         GTK_SHADOW_NONE);
 
-    /* Create a viewport to hold the drawing area (allows centering) */
+    /* Create viewport to hold the drawing area */
     viewport = gtk_viewport_new(NULL, NULL);
+    gtk_viewport_set_shadow_type(GTK_VIEWPORT(viewport), GTK_SHADOW_NONE);
 
-    /* Set a name on the viewport for CSS targeting */
+    /* Set app_paintable to take full control of drawing */
+    gtk_widget_set_app_paintable(viewport, TRUE);
+
+    /* Set a name for CSS targeting */
     gtk_widget_set_name(viewport, "canvas-viewport");
-
-    /* Set default canvas background color on viewport using CSS (will be updated when AppContext is available) */
-    gchar* css = g_strdup("#canvas-viewport { background-color: rgb(160, 160, 160); }");
-    GtkCssProvider* provider = gtk_css_provider_new();
-    gtk_css_provider_load_from_data(provider, css, -1, NULL);
-    g_free(css);
-
-    /* Store provider in widget data so it can be updated later */
-    g_object_set_data_full(G_OBJECT(viewport), "canvas_bg_provider", provider, g_object_unref);
-
-    GtkStyleContext* style_context = gtk_widget_get_style_context(viewport);
-    gtk_style_context_add_provider(style_context, GTK_STYLE_PROVIDER(provider),
-                                   GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
 
     /* Store viewport reference in document for later updates */
     doc->viewport = viewport;
@@ -1088,11 +1459,19 @@ GtkWidget* document_create_drawing_area(ImageDocument* doc) {
     /* Start with default size - will be updated when image loads */
     gtk_widget_set_size_request(drawing_area, 800, 600);
 
+    /* Set app_paintable to take full control of drawing */
+    gtk_widget_set_app_paintable(drawing_area, TRUE);
+
     /* Prevent drawing area from expanding to fill viewport */
     gtk_widget_set_hexpand(drawing_area, FALSE);
     gtk_widget_set_vexpand(drawing_area, FALSE);
 
-    /* Align to top-left corner */
+    /* IMPORTANT: Use START alignment (top-left) instead of CENTER.
+     * Centering causes an offset between the drawing area and viewport origin,
+     * which creates a mismatch between clip position and scroll position.
+     * This mismatch causes visible seams when GTK's scroll blitting is active.
+     * NOTE: setting GTK_ALIGN_START instead of GTK_ALIGN_CENTER breaks centering when 
+             zooming out, or using Fit zoom modes. */
     gtk_widget_set_halign(drawing_area, GTK_ALIGN_CENTER);
     gtk_widget_set_valign(drawing_area, GTK_ALIGN_CENTER);
 
@@ -1256,6 +1635,33 @@ gboolean document_init_rendering_structures(ImageDocument* doc) {
             g_warning("Failed to create tile worker pool, will use single-threaded compositing");
         } else {
             g_message("Tile compositing: Using worker threads (Cairo-safe pixel buffer approach)");
+        }
+    }
+
+    /* Initialize GPU compositor if enabled in settings and available */
+    if (!doc->gpu_compositor && gpu_compositor_is_available()) {
+        /* Get settings from global app settings (if available) */
+        gchar* exe_dir = settings_get_executable_dir();
+        Settings* app_settings = settings_load(exe_dir);
+        g_free(exe_dir);
+        
+        if (app_settings && settings_get_gpu_acceleration_enabled(app_settings)) {
+            const gchar* gpu_device = settings_get_gpu_device_name(app_settings);
+            doc->gpu_compositor = gpu_compositor_create(gpu_device);
+            if (doc->gpu_compositor) {
+                const GPUDeviceInfo* gpu_info = gpu_compositor_get_active_device(doc->gpu_compositor);
+                if (gpu_info) {
+                    g_message("GPU acceleration: Enabled (%s)", gpu_info->name);
+                }
+            } else {
+                g_warning("GPU compositor creation failed, falling back to CPU compositing");
+            }
+        } else {
+            g_message("GPU acceleration: Disabled by settings");
+        }
+        
+        if (app_settings) {
+            settings_free(app_settings);
         }
     }
 

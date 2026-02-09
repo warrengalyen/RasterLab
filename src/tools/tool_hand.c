@@ -173,14 +173,21 @@ static void hand_tool_mouse_move(Tool* tool, struct ImageDocument* doc, MouseEve
         }
     }
 
-    /* Get current mouse position in viewport coordinates */
+    /* Get current mouse position (NOTE: event coordinates are in IMAGE space,
+     * already divided by zoom factor via widget_to_image_coords) */
     gdouble current_x = (gdouble)event->x;
     gdouble current_y = (gdouble)event->y;
 
     /* Calculate delta from last mouse position (incremental approach) */
     /* This prevents jumps if something modifies scroll position between calls */
-    gdouble incremental_delta_x = state->last_x - current_x;
-    gdouble incremental_delta_y = state->last_y - current_y;
+    gdouble image_delta_x = state->last_x - current_x;
+    gdouble image_delta_y = state->last_y - current_y;
+
+    /* Convert image-space delta to screen-space delta for scrolling.
+     * The scroll adjustments work in screen pixels, but our coordinates
+     * are in image pixels. Multiply by zoom to get screen pixels. */
+    gdouble incremental_delta_x = image_delta_x * doc->zoom_factor;
+    gdouble incremental_delta_y = image_delta_y * doc->zoom_factor;
 
     /* Get current scroll position */
     gdouble current_hadj_value = gtk_adjustment_get_value(hadj);
@@ -225,9 +232,11 @@ static void hand_tool_mouse_move(Tool* tool, struct ImageDocument* doc, MouseEve
 
     /* Adjust last mouse position to match the actual scroll change */
     /* If scroll was clamped, we need to adjust last_x/y so the next delta calculation is correct */
-    /* The relationship is: mouse_delta = scroll_delta, so if scroll_delta != mouse_delta, adjust last_x */
-    state->last_x = current_x + actual_delta_h;
-    state->last_y = current_y + actual_delta_v;
+    /* Convert screen-space scroll delta back to image-space for our coordinates */
+    gdouble image_space_actual_h = actual_delta_h / doc->zoom_factor;
+    gdouble image_space_actual_v = actual_delta_v / doc->zoom_factor;
+    state->last_x = current_x + image_space_actual_h;
+    state->last_y = current_y + image_space_actual_v;
 }
 
 /**

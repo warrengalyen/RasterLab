@@ -72,18 +72,16 @@ static void on_statusbar_zoom_out(GtkWidget* widget, gpointer data);
 static void on_statusbar_zoom_in(GtkWidget* widget, gpointer data);
 static void on_statusbar_zoom_changed(GtkComboBox* combo, gpointer data);
 static void on_statusbar_size_unit_changed(GtkComboBox* combo, gpointer data);
-static void on_combo_notify_popup_shown(GObject* obj, GParamSpec* pspec, gpointer user_data);
 static gboolean combo_popup_fix_alignment_idle(gpointer user_data);
 static GtkWidget* find_descendant_tree_view(GtkWidget* widget);
 static GtkTreeModel* unwrap_combo_popup_model(GtkTreeModel* model);
-static void apply_statusbar_combobox_style(GtkWidget* combo);
 static void zoom_combo_cell_data_func(GtkCellLayout* layout,
                                       GtkCellRenderer* cell,
                                       GtkTreeModel* model,
                                       GtkTreeIter* iter,
                                       gpointer data);
 
-static void apply_statusbar_combobox_style(GtkWidget* combo) {
+void ui_apply_list_combobox_style(GtkWidget* combo) {
     if (!combo) {
         return;
     }
@@ -308,7 +306,7 @@ static gboolean combo_popup_fix_alignment_idle(gpointer user_data) {
     return G_SOURCE_REMOVE;
 }
 
-static void on_combo_notify_popup_shown(GObject* obj, GParamSpec* pspec, gpointer user_data) {
+void ui_combo_popup_shown_fix(GObject* obj, GParamSpec* pspec, gpointer user_data) {
     (void)pspec;
     (void)user_data;
 
@@ -553,13 +551,13 @@ AppContext* ui_create_main_window(void) {
                          G_CALLBACK(on_statusbar_zoom_in), ctx);
     }
     if (sb_zoom_combobox) {
-        apply_statusbar_combobox_style(sb_zoom_combobox);
+        ui_apply_list_combobox_style(sb_zoom_combobox);
 
         /* Keep popup width stable  */
         gtk_combo_box_set_popup_fixed_width(GTK_COMBO_BOX(sb_zoom_combobox), TRUE);
         /* Fix popup whitespace when opening above */
         g_signal_connect(sb_zoom_combobox, "notify::popup-shown",
-                         G_CALLBACK(on_combo_notify_popup_shown), NULL);
+                         G_CALLBACK(ui_combo_popup_shown_fix), NULL);
 
         /* Render “Separator” rows ourselves (darker + clearer than theme separators) */
         {
@@ -581,13 +579,13 @@ AppContext* ui_create_main_window(void) {
                          G_CALLBACK(on_statusbar_zoom_changed), ctx);
     }
     if (sb_size_unit_combobox) {
-        apply_statusbar_combobox_style(sb_size_unit_combobox);
+        ui_apply_list_combobox_style(sb_size_unit_combobox);
 
         /* Keep popup width stable */
         gtk_combo_box_set_popup_fixed_width(GTK_COMBO_BOX(sb_size_unit_combobox), TRUE);
         /* Fix popup whitespace when opening above (limited space below) */
         g_signal_connect(sb_size_unit_combobox, "notify::popup-shown",
-                         G_CALLBACK(on_combo_notify_popup_shown), NULL);
+                         G_CALLBACK(ui_combo_popup_shown_fix), NULL);
 
         /* Connect change signal */
         g_signal_connect(sb_size_unit_combobox, "changed",

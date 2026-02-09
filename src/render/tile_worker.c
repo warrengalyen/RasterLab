@@ -1,5 +1,7 @@
 #include "render/tile_worker.h"
+#include "render/blend.h"
 #include "render/compositor.h"
+#include "render/gpu_compositor.h"
 #include "render/layer.h"
 #include <glib.h>
 #include <string.h>
@@ -12,22 +14,33 @@ struct TileWorkerPool {
     GQueue* pending_uploads; /* Tiles ready for Cairo surface upload */
     GMutex upload_mutex;
     guint num_workers;
+
+    /* Viewport center for priority calculation (in document pixel coordinates) */
+    gint viewport_center_x;
+    gint viewport_center_y;
+    GMutex viewport_mutex;
 };
 
 /**
- * Job data structure for thread pool
+ * Job data structure for thread pool with priority
  */
 typedef struct {
     ImageDocument* doc;
     Tile* tile;
     gint tile_x;
     gint tile_y;
+    gint priority;  /* Lower = higher priority (distance squared from viewport center) */
 } WorkerJob;
 
 /**
  * Composite tile pixels without Cairo
  * Worker threads call this to fill tile->pixel_buffer
  * NO CAIRO CALLS - only raw pixel operations
+ * 
+ * Supports all blend modes via SIMD-optimized implementations:
+ * - Normal (OVER), Multiply, Screen, Overlay
+ * - Darken, Lighten, Color Burn, Color Dodge
+ * - Soft Light, Hard Light, Difference
  */
 gboolean tile_worker_composite_pixels(ImageDocument* doc,
                                       Tile* tile,
@@ -40,6 +53,7 @@ gboolean tile_worker_composite_pixels(ImageDocument* doc,
     gint tile_right, tile_bottom;
     gint intersect_left, intersect_top, intersect_right, intersect_bottom;
     gint src_x, src_y, src_width, src_height;
+    gboolean is_first_visible_layer = TRUE;
 
     if (!doc || !tile || !tile->pixel_buffer) {
         return FALSE;
@@ -100,40 +114,32 @@ gboolean tile_worker_composite_pixels(ImageDocument* doc,
             continue;
         }
 
-        /* Composite layer pixels into tile pixels */
+        /* Get layer opacity (0.0 - 1.0), convert to 0-255 */
+        guint8 layer_opacity = (guint8)(layer->opacity * 255.0);
+        if (layer_opacity == 0) {
+            continue;
+        }
+
+        /* Determine blend mode to use
+         * First visible layer always uses OVER to establish the base
+         * (same behavior as Cairo compositor) */
+        BlendMode effective_blend_mode;
+        if (is_first_visible_layer) {
+            effective_blend_mode = BLEND_MODE_NORMAL;
+            is_first_visible_layer = FALSE;
+        } else {
+            effective_blend_mode = layer->blend_mode;
+        }
+
+        /* Composite layer pixels into tile pixels using SIMD
+         * This processes 4 pixels at a time with SSE2 intrinsics
+         * All blend modes are SIMD-optimized for maximum performance */
         for (gint y = 0; y < src_height; y++) {
             guint32* layer_row = (guint32*)(layer_data + (src_y + y) * layer_stride) + src_x;
             guint32* tile_row = (guint32*)(tile->pixel_buffer + (intersect_top - tile->py + y) * tile->stride) + (intersect_left - tile->px);
 
-            for (gint x = 0; x < src_width; x++) {
-                guint32 src_pixel = layer_row[x];
-                guint32 dst_pixel = tile_row[x];
-
-                /* Simple OVER blend for ARGB32 */
-                guint8 src_a = (src_pixel >> 24) & 0xFF;
-                guint8 src_r = (src_pixel >> 16) & 0xFF;
-                guint8 src_g = (src_pixel >> 8) & 0xFF;
-                guint8 src_b = src_pixel & 0xFF;
-
-                guint8 dst_a = (dst_pixel >> 24) & 0xFF;
-                guint8 dst_r = (dst_pixel >> 16) & 0xFF;
-                guint8 dst_g = (dst_pixel >> 8) & 0xFF;
-                guint8 dst_b = dst_pixel & 0xFF;
-
-                /* Alpha blend */
-                guint8 out_a = src_a + (guint8)(((guint32)dst_a * (255 - src_a)) / 255);
-                guint8 out_r, out_g, out_b;
-
-                if (out_a > 0) {
-                    out_r = (guint8)(((guint32)src_r * src_a + (guint32)dst_r * dst_a * (255 - src_a) / 255) / out_a);
-                    out_g = (guint8)(((guint32)src_g * src_a + (guint32)dst_g * dst_a * (255 - src_a) / 255) / out_a);
-                    out_b = (guint8)(((guint32)src_b * src_a + (guint32)dst_b * dst_a * (255 - src_a) / 255) / out_a);
-                } else {
-                    out_r = out_g = out_b = 0;
-                }
-
-                tile_row[x] = (out_a << 24) | (out_r << 16) | (out_g << 8) | out_b;
-            }
+            /* Use blend-mode-aware compositing function */
+            blend_composite_row(layer_row, tile_row, src_width, layer_opacity, effective_blend_mode);
         }
     }
 
@@ -141,21 +147,105 @@ gboolean tile_worker_composite_pixels(ImageDocument* doc,
 }
 
 /**
+ * Composite tile pixels using GPU acceleration
+ * This must be called from the main thread (OpenGL context is thread-bound)
+ * Falls back to CPU compositing if GPU is not available.
+ * 
+ * GPU now supports all blend modes via ping-pong rendering.
+ * 
+ * @param doc Document containing layers and GPU compositor
+ * @param tile Tile with allocated pixel_buffer
+ * @param tile_x Tile X coordinate
+ * @param tile_y Tile Y coordinate
+ * @return TRUE if GPU compositing was used, FALSE if fell back to CPU
+ */
+gboolean tile_worker_composite_pixels_gpu(ImageDocument* doc,
+                                          Tile* tile,
+                                          gint tile_x,
+                                          gint tile_y) {
+    if (!doc || !tile || !tile->pixel_buffer) {
+        return FALSE;
+    }
+
+    /* Check if GPU compositor is available */
+    if (doc->gpu_compositor) {
+        if (gpu_compositor_is_ready(doc->gpu_compositor)) {
+            /* Try GPU compositing */
+            if (gpu_compositor_composite_tile(doc->gpu_compositor, doc, tile, tile_x, tile_y)) {
+                return TRUE; /* GPU compositing successful */
+            }
+            /* GPU compositing failed, fall through to CPU */
+            g_warning("GPU compositing failed for tile (%d, %d), falling back to CPU", tile_x, tile_y);
+        } else {
+            g_debug("GPU compositor exists but is not ready");
+        }
+    }
+
+    /* Fall back to CPU compositing */
+    tile_worker_composite_pixels(doc, tile, tile_x, tile_y);
+    return FALSE;
+}
+
+/**
+ * Check if GPU compositing is available for a document
+ * @param doc Document to check
+ * @return TRUE if GPU compositing can be used
+ */
+gboolean tile_worker_has_gpu_compositor(ImageDocument* doc) {
+    return doc && doc->gpu_compositor && gpu_compositor_is_ready(doc->gpu_compositor);
+}
+
+/**
+ * Priority comparison function for thread pool
+ * Jobs with lower priority value (closer to viewport center) are processed first
+ * Returns: negative if a < b (a should come first), positive if a > b, 0 if equal
+ */
+static gint tile_worker_priority_compare(gconstpointer a, gconstpointer b, gpointer user_data) {
+    const WorkerJob* job_a = (const WorkerJob*)a;
+    const WorkerJob* job_b = (const WorkerJob*)b;
+
+    /* Lower priority value = higher priority (process first) */
+    if (job_a->priority < job_b->priority) {
+        return -1;
+    } else if (job_a->priority > job_b->priority) {
+        return 1;
+    }
+    return 0;
+}
+
+/**
  * Worker thread main function
  */
 static void tile_worker_thread_func(gpointer data, gpointer user_data) {
     WorkerJob* job = (WorkerJob*)data;
+    TileWorkerPool* pool = (TileWorkerPool*)user_data;
 
-    if (!job) {
+    if (!job || !pool) {
+        g_free(job);
         return;
     }
+
+    /* Check generation_id BEFORE compositing to avoid wasted work */
+    guint expected_gen = job->tile->generation_id;
 
     /* Composite pixels WITHOUT touching Cairo */
     if (job->tile && job->tile->pixel_buffer) {
         tile_worker_composite_pixels(job->doc, job->tile, job->tile_x, job->tile_y);
 
-        /* Mark tile as ready for upload */
-        job->tile->pending_upload = TRUE;
+        /* Lock and add to pending uploads queue (only if not stale) */
+        g_mutex_lock(&pool->upload_mutex);
+
+        /* Check generation again - may have changed during compositing */
+        if (job->tile->generation_id == expected_gen) {
+            job->tile->pending_upload = TRUE;
+            job->tile->state = TILE_CLEAN; /* Mark as ready */
+            g_queue_push_tail(pool->pending_uploads, job->tile);
+        } else {
+            /* Tile was invalidated during compositing, discard result */
+            job->tile->state = TILE_CLEAN; /* Reset state for re-queue */
+        }
+
+        g_mutex_unlock(&pool->upload_mutex);
     }
 
     g_free(job);
@@ -188,11 +278,16 @@ TileWorkerPool* tile_worker_pool_create(guint num_workers) {
     pool->num_workers = num_workers;
     pool->pending_uploads = g_queue_new();
 
-    g_mutex_init(&pool->upload_mutex);
+    /* Initialize viewport center to 0,0 (will be updated when drawing) */
+    pool->viewport_center_x = 0;
+    pool->viewport_center_y = 0;
 
-    /* Create thread pool */
+    g_mutex_init(&pool->upload_mutex);
+    g_mutex_init(&pool->viewport_mutex);
+
+    /* Create thread pool with pool as user_data so workers can access queue */
     pool->thread_pool = g_thread_pool_new(tile_worker_thread_func,
-                                          NULL, /* user_data */
+                                          pool, /* user_data - pass pool for queue access */
                                           num_workers,
                                           FALSE, /* exclusive (don't wait for all) */
                                           NULL); /* error */
@@ -200,11 +295,17 @@ TileWorkerPool* tile_worker_pool_create(guint num_workers) {
     if (!pool->thread_pool) {
         g_queue_free(pool->pending_uploads);
         g_mutex_clear(&pool->upload_mutex);
+        g_mutex_clear(&pool->viewport_mutex);
         g_free(pool);
         return NULL;
     }
 
-    g_message("Created tile worker pool with %u threads", num_workers);
+    /* Set priority sort function - tiles closer to viewport center are processed first */
+    g_thread_pool_set_sort_function(pool->thread_pool,
+                                    tile_worker_priority_compare,
+                                    NULL);
+
+    g_message("Created tile worker pool with %u threads (priority queue enabled)", num_workers);
 
     return pool;
 }
@@ -228,11 +329,65 @@ void tile_worker_pool_destroy(TileWorkerPool* pool) {
     }
 
     g_mutex_clear(&pool->upload_mutex);
+    g_mutex_clear(&pool->viewport_mutex);
     g_free(pool);
 }
 
 /**
- * Enqueue a tile for compositing
+ * Set the viewport center for priority calculation
+ * Tiles closer to this point will be composited first
+ * @param pool Worker pool
+ * @param center_x Viewport center X in document pixel coordinates
+ * @param center_y Viewport center Y in document pixel coordinates
+ */
+void tile_worker_pool_set_viewport_center(TileWorkerPool* pool,
+                                          gint center_x,
+                                          gint center_y) {
+    if (!pool) {
+        return;
+    }
+
+    g_mutex_lock(&pool->viewport_mutex);
+    pool->viewport_center_x = center_x;
+    pool->viewport_center_y = center_y;
+    g_mutex_unlock(&pool->viewport_mutex);
+}
+
+/**
+ * Calculate priority (distance squared from viewport center)
+ * Lower value = higher priority
+ */
+static gint calculate_tile_priority(TileWorkerPool* pool, Tile* tile) {
+    gint tile_center_x, tile_center_y;
+    gint dx, dy;
+    gint viewport_cx, viewport_cy;
+
+    /* Get tile center in document coordinates */
+    tile_center_x = tile->px + tile->w / 2;
+    tile_center_y = tile->py + tile->h / 2;
+
+    /* Get viewport center (lock for thread safety) */
+    g_mutex_lock(&pool->viewport_mutex);
+    viewport_cx = pool->viewport_center_x;
+    viewport_cy = pool->viewport_center_y;
+    g_mutex_unlock(&pool->viewport_mutex);
+
+    /* Calculate distance squared (avoid sqrt for performance) */
+    dx = tile_center_x - viewport_cx;
+    dy = tile_center_y - viewport_cy;
+
+    /* Use distance squared as priority - closer tiles have lower values */
+    /* Clamp to avoid overflow for very distant tiles */
+    gint64 dist_sq = (gint64)dx * dx + (gint64)dy * dy;
+    if (dist_sq > G_MAXINT) {
+        return G_MAXINT;
+    }
+    return (gint)dist_sq;
+}
+
+/**
+ * Enqueue a tile for compositing with priority
+ * Tiles closer to viewport center are processed first
  */
 gboolean tile_worker_pool_enqueue(TileWorkerPool* pool,
                                   ImageDocument* doc,
@@ -242,6 +397,16 @@ gboolean tile_worker_pool_enqueue(TileWorkerPool* pool,
     WorkerJob* job;
 
     if (!pool || !pool->thread_pool || !tile) {
+        return FALSE;
+    }
+
+    /* Skip if tile is already queued or being rendered */
+    if (tile->state == TILE_QUEUED || tile->state == TILE_RENDERING) {
+        return FALSE; /* Already in pipeline */
+    }
+
+    /* Skip if tile is not dirty */
+    if (!tile->dirty) {
         return FALSE;
     }
 
@@ -266,6 +431,13 @@ gboolean tile_worker_pool_enqueue(TileWorkerPool* pool,
     job->tile_x = tile_x;
     job->tile_y = tile_y;
 
+    /* Calculate priority based on distance from viewport center */
+    job->priority = calculate_tile_priority(pool, tile);
+
+    /* Mark tile as queued and increment generation */
+    tile->state = TILE_QUEUED;
+    tile->generation_id++;
+
     g_thread_pool_push(pool->thread_pool, job, NULL);
 
     return TRUE;
@@ -285,31 +457,47 @@ guint tile_worker_pool_get_pending(TileWorkerPool* pool) {
 /**
  * Process completed tiles and upload to Cairo surfaces
  * MAIN THREAD ONLY - this updates Cairo surfaces
+ * @param pool Worker pool
+ * @return Number of tiles uploaded to Cairo
  */
 guint tile_worker_pool_process_uploads(TileWorkerPool* pool) {
     Tile* tile;
     guint count = 0;
+    GQueue* to_process;
 
     if (!pool) {
         return 0;
     }
 
+    /* Quick check without lock - if empty, nothing to do */
     g_mutex_lock(&pool->upload_mutex);
+    if (g_queue_is_empty(pool->pending_uploads)) {
+        g_mutex_unlock(&pool->upload_mutex);
+        return 0;
+    }
 
-    while (!g_queue_is_empty(pool->pending_uploads)) {
-        tile = (Tile*)g_queue_pop_head(pool->pending_uploads);
+    /* Swap queues to minimize lock time - this is the key optimization */
+    to_process = pool->pending_uploads;
+    pool->pending_uploads = g_queue_new();
+    g_mutex_unlock(&pool->upload_mutex);
 
-        if (!tile || !tile->pixel_buffer) {
+    /* Process all tiles outside the lock */
+    while (!g_queue_is_empty(to_process)) {
+        tile = (Tile*)g_queue_pop_head(to_process);
+
+        if (!tile || !tile->pixel_buffer || !tile->pending_upload) {
             continue;
         }
 
-        /* Destroy old Cairo surface */
+        /* Destroy old Cairo surface if it exists */
         if (tile->surface) {
             cairo_surface_destroy(tile->surface);
             tile->surface = NULL;
         }
 
-        /* Create new Cairo surface from pixel buffer (main thread safe) */
+        /* Create new Cairo surface from pixel buffer (main thread safe)
+         * Note: cairo_image_surface_create_for_data does NOT copy the data,
+         * it uses the provided buffer directly, so we must keep pixel_buffer alive */
         tile->surface = cairo_image_surface_create_for_data(
             tile->pixel_buffer,
             CAIRO_FORMAT_ARGB32,
@@ -322,13 +510,13 @@ guint tile_worker_pool_process_uploads(TileWorkerPool* pool) {
             tile->pending_upload = FALSE;
             count++;
         } else {
-            g_warning("Failed to create Cairo surface for tile");
+            g_warning("Failed to create Cairo surface for tile (%d, %d)", tile->x, tile->y);
             cairo_surface_destroy(tile->surface);
             tile->surface = NULL;
         }
     }
 
-    g_mutex_unlock(&pool->upload_mutex);
+    g_queue_free(to_process);
 
     return count;
 }

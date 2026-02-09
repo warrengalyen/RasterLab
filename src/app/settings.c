@@ -28,6 +28,7 @@
 #define DEFAULT_UNDO_LEVELS 10                     /* Number of undo levels */
 #define DEFAULT_WORKER_THREADS 4                   /* Number of worker threads */
 #define DEFAULT_FILE_RECOVERY_INTERVAL_SECONDS 300 /* File recovery save interval (30-2700) */
+#define DEFAULT_GPU_ACCELERATION TRUE              /* GPU acceleration enabled by default */
 
 /* Default tool option values */
 #define DEFAULT_TOOL_SIZE 5.0f              /* 5px brush size */
@@ -80,6 +81,7 @@ static Settings* settings_create_default(void) {
     settings->file_recovery_interval_seconds = DEFAULT_FILE_RECOVERY_INTERVAL_SECONDS;
     settings->show_layer_edges = TRUE; /* Show layer edges by default */
     settings->show_statusbar = TRUE;   /* Show status bar by default */
+    settings->show_gpu_stats = FALSE;  /* Hide GPU stats by default */
 
     /* Tone mapping defaults */
     settings->tone_map_auto_apply = FALSE;      /* Show dialog by default */
@@ -91,6 +93,10 @@ static Settings* settings_create_default(void) {
     settings->tone_map_intensity = 0.00;        /* Default intensity */
     settings->tone_map_adaptation = 1.00;       /* Default adaptation */
     settings->tone_map_color_correction = 0.00; /* Default color correction */
+
+    /* GPU acceleration defaults */
+    settings->gpu_acceleration_enabled = DEFAULT_GPU_ACCELERATION;
+    settings->gpu_device_name = NULL; /* NULL = use system default GPU */
 
     return settings;
 }
@@ -494,6 +500,32 @@ static void settings_load_performance(Settings* settings, xmlNode* performance_n
         xmlFree(recovery_attr);
     }
 
+    /* Load GPU acceleration attribute if present */
+    xmlChar* gpu_enabled_attr = xmlGetProp(performance_node, (const xmlChar*)"gpu_acceleration");
+    if (gpu_enabled_attr) {
+        if (xmlStrcmp(gpu_enabled_attr, (const xmlChar*)"true") == 0) {
+            settings->gpu_acceleration_enabled = TRUE;
+        } else {
+            settings->gpu_acceleration_enabled = FALSE;
+        }
+        xmlFree(gpu_enabled_attr);
+    }
+
+    /* Load GPU device name attribute if present */
+    xmlChar* gpu_device_attr = xmlGetProp(performance_node, (const xmlChar*)"gpu_device");
+    if (gpu_device_attr) {
+        if (settings->gpu_device_name) {
+            g_free(settings->gpu_device_name);
+        }
+        /* Empty string means system default */
+        if (xmlStrlen(gpu_device_attr) > 0) {
+            settings->gpu_device_name = g_strdup((const char*)gpu_device_attr);
+        } else {
+            settings->gpu_device_name = NULL;
+        }
+        xmlFree(gpu_device_attr);
+    }
+
     /* Iterate through child nodes */
     for (xmlNode* cur = performance_node->children; cur; cur = cur->next) {
         if (cur->type != XML_ELEMENT_NODE) {
@@ -526,6 +558,18 @@ static void settings_save_performance(xmlTextWriterPtr writer, Settings* setting
     gchar recovery_str[16];
     g_snprintf(recovery_str, sizeof(recovery_str), "%d", settings->file_recovery_interval_seconds);
     xmlTextWriterWriteAttribute(writer, (const xmlChar*)"file_recovery_interval", (const xmlChar*)recovery_str);
+
+    /* Save GPU acceleration as attribute */
+    xmlTextWriterWriteAttribute(writer, (const xmlChar*)"gpu_acceleration",
+                                (const xmlChar*)(settings->gpu_acceleration_enabled ? "true" : "false"));
+
+    /* Save GPU device name (empty string for system default) */
+    if (settings->gpu_device_name) {
+        xmlTextWriterWriteAttribute(writer, (const xmlChar*)"gpu_device",
+                                    (const xmlChar*)settings->gpu_device_name);
+    } else {
+        xmlTextWriterWriteAttribute(writer, (const xmlChar*)"gpu_device", (const xmlChar*)"");
+    }
 
     /* Save undo settings */
     settings_save_undo(writer, settings);
@@ -571,6 +615,18 @@ static void settings_load_view(Settings* settings, xmlNode* view_node) {
                 xmlFree(value_attr);
             }
         }
+        /* Load show_gpu_stats setting */
+        else if (xmlStrcmp(cur->name, (const xmlChar*)"show_gpu_stats") == 0) {
+            xmlChar* value_attr = xmlGetProp(cur, (const xmlChar*)"value");
+            if (value_attr) {
+                if (xmlStrcmp(value_attr, (const xmlChar*)"true") == 0) {
+                    settings->show_gpu_stats = TRUE;
+                } else if (xmlStrcmp(value_attr, (const xmlChar*)"false") == 0) {
+                    settings->show_gpu_stats = FALSE;
+                }
+                xmlFree(value_attr);
+            }
+        }
     }
 }
 
@@ -595,6 +651,12 @@ static void settings_save_view(xmlTextWriterPtr writer, Settings* settings) {
     xmlTextWriterWriteAttribute(writer, (const xmlChar*)"value",
                                 (const xmlChar*)(settings->show_statusbar ? "true" : "false"));
     xmlTextWriterEndElement(writer); /* show_statusbar */
+
+    /* Save show_gpu_stats setting */
+    xmlTextWriterStartElement(writer, (const xmlChar*)"show_gpu_stats");
+    xmlTextWriterWriteAttribute(writer, (const xmlChar*)"value",
+                                (const xmlChar*)(settings->show_gpu_stats ? "true" : "false"));
+    xmlTextWriterEndElement(writer); /* show_gpu_stats */
 
     xmlTextWriterEndElement(writer); /* view */
 }
@@ -832,6 +894,10 @@ void settings_free(Settings* settings) {
 
     if (settings->undo_temp_directory) {
         g_free(settings->undo_temp_directory);
+    }
+
+    if (settings->gpu_device_name) {
+        g_free(settings->gpu_device_name);
     }
 
     g_free(settings);
@@ -1243,6 +1309,26 @@ void settings_set_show_statusbar(Settings* settings, gboolean show) {
 }
 
 /**
+ * Get show GPU stats setting
+ */
+gboolean settings_get_show_gpu_stats(Settings* settings) {
+    if (!settings) {
+        return FALSE; /* Default to hiding GPU stats */
+    }
+    return settings->show_gpu_stats;
+}
+
+/**
+ * Set show GPU stats setting
+ */
+void settings_set_show_gpu_stats(Settings* settings, gboolean show) {
+    if (!settings) {
+        return;
+    }
+    settings->show_gpu_stats = show;
+}
+
+/**
  * Load tone mapping settings from XML
  */
 static void settings_load_tone_mapping(Settings* settings, xmlNode* tone_mapping_node) {
@@ -1542,4 +1628,47 @@ gdouble settings_get_tone_map_color_correction(Settings* settings) {
         return 0.00;
     }
     return settings->tone_map_color_correction;
+}
+
+/**
+ * Get GPU acceleration enabled setting
+ */
+gboolean settings_get_gpu_acceleration_enabled(Settings* settings) {
+    if (!settings) {
+        return DEFAULT_GPU_ACCELERATION;
+    }
+    return settings->gpu_acceleration_enabled;
+}
+
+/**
+ * Set GPU acceleration enabled setting
+ */
+void settings_set_gpu_acceleration_enabled(Settings* settings, gboolean enabled) {
+    if (!settings) {
+        return;
+    }
+    settings->gpu_acceleration_enabled = enabled;
+}
+
+/**
+ * Get GPU device name
+ */
+const gchar* settings_get_gpu_device_name(Settings* settings) {
+    if (!settings) {
+        return NULL;
+    }
+    return settings->gpu_device_name;
+}
+
+/**
+ * Set GPU device name
+ */
+void settings_set_gpu_device_name(Settings* settings, const gchar* device_name) {
+    if (!settings) {
+        return;
+    }
+    if (settings->gpu_device_name) {
+        g_free(settings->gpu_device_name);
+    }
+    settings->gpu_device_name = device_name ? g_strdup(device_name) : NULL;
 }

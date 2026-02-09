@@ -557,7 +557,7 @@ void document_render_layers_at_zoom(ImageDocument* doc, cairo_t* cr,
         return;
     }
 
-    /* Clip to viewport */
+    /* Clip to viewport for efficiency */
     cairo_save(cr);
     cairo_rectangle(cr, viewport_x, viewport_y, viewport_w, viewport_h);
     cairo_clip(cr);
@@ -621,6 +621,13 @@ void document_render_layers_at_zoom(ImageDocument* doc, cairo_t* cr,
                         cairo_scale(cr, mip_scale, mip_scale);
                         cairo_set_source_surface(cr, level->surface, 0, 0);
 
+                        /* CRITICAL: Use NEAREST filter to prevent interpolation artifacts
+                         * that cause visible seams during scrolling */
+                        cairo_pattern_t* mip_pattern = cairo_get_source(cr);
+                        cairo_pattern_set_filter(mip_pattern, CAIRO_FILTER_NEAREST);
+                        /* Use PAD extend mode to prevent edge sampling artifacts */
+                        cairo_pattern_set_extend(mip_pattern, CAIRO_EXTEND_PAD);
+
                         /* Set operator based on layer's blend mode */
                         cairo_operator_t op;
                         if (is_first_visible_layer) {
@@ -631,8 +638,9 @@ void document_render_layers_at_zoom(ImageDocument* doc, cairo_t* cr,
                         }
                         cairo_set_operator(cr, op);
 
-                        /* Paint mipmap (opacity is already applied in cache_surface used for generation) */
-                        cairo_paint(cr);
+                        /* Use explicit rectangle + fill instead of paint() */
+                        cairo_rectangle(cr, 0, 0, level->width, level->height);
+                        cairo_fill(cr);
 
                         cairo_restore(cr);
                         continue;
@@ -648,17 +656,13 @@ void document_render_layers_at_zoom(ImageDocument* doc, cairo_t* cr,
             continue;
         }
 
-        /* Set source with appropriate filtering */
-        /* Use nearest filter when zoomed in to avoid sub-pixel artifacts that cause visible lines */
+        /* Set source with NEAREST filtering to prevent interpolation artifacts
+         * that cause visible seams during scrolling. This applies at all zoom levels. */
         cairo_set_source_surface(cr, layer->cache_surface, 0, 0);
         cairo_pattern_t* pattern = cairo_get_source(cr);
-        if (zoom_factor >= 1.0) {
-            /* When zoomed in, use nearest filter for pixel-perfect rendering */
-            cairo_pattern_set_filter(pattern, CAIRO_FILTER_NEAREST);
-        } else {
-            /* When zoomed out, use bilinear for smooth scaling */
-            cairo_pattern_set_filter(pattern, CAIRO_FILTER_BILINEAR);
-        }
+        cairo_pattern_set_filter(pattern, CAIRO_FILTER_NEAREST);
+        /* Use PAD extend mode to prevent edge sampling artifacts */
+        cairo_pattern_set_extend(pattern, CAIRO_EXTEND_PAD);
 
         /* Set operator based on layer's blend mode */
         cairo_operator_t op;
@@ -670,8 +674,9 @@ void document_render_layers_at_zoom(ImageDocument* doc, cairo_t* cr,
         }
         cairo_set_operator(cr, op);
 
-        /* Paint layer (opacity is already applied in cache) */
-        cairo_paint(cr);
+        /* Use explicit rectangle + fill instead of paint() to avoid clip edge artifacts */
+        cairo_rectangle(cr, 0, 0, layer->width, layer->height);
+        cairo_fill(cr);
 
         cairo_restore(cr);
     }
@@ -732,9 +737,103 @@ void document_invalidate_composite(ImageDocument* doc) {
 }
 
 /**
+ * Helper function to process a single dirty region
+ * Marks tiles as dirty and enqueues them for compositing
+ */
+static void process_dirty_region_for_tiles(ImageDocument* doc, const DirtyRect* rect) {
+    if (!doc || !rect || !rect->valid || !doc->tile_grid) {
+        return;
+    }
+
+    /* Mark intersecting tiles as dirty */
+    tile_grid_mark_rect_dirty(doc->tile_grid,
+                              rect->x, rect->y,
+                              rect->width, rect->height);
+
+    /* Enqueue dirty tiles to Cairo-safe worker pool for pixel compositing */
+    if (doc->tile_worker_pool) {
+        gint tx, ty, start_tx, start_ty, end_tx, end_ty;
+        Tile* tile;
+
+        /* Calculate which tiles need recomposition */
+        start_tx = rect->x / doc->tile_grid->tile_size;
+        start_ty = rect->y / doc->tile_grid->tile_size;
+        end_tx = (rect->x + rect->width - 1) / doc->tile_grid->tile_size;
+        end_ty = (rect->y + rect->height - 1) / doc->tile_grid->tile_size;
+
+        /* Clamp to grid bounds */
+        if (start_tx < 0)
+            start_tx = 0;
+        if (start_ty < 0)
+            start_ty = 0;
+        if (end_tx >= doc->tile_grid->tiles_x)
+            end_tx = doc->tile_grid->tiles_x - 1;
+        if (end_ty >= doc->tile_grid->tiles_y)
+            end_ty = doc->tile_grid->tiles_y - 1;
+
+        /* Enqueue dirty tiles for worker pool */
+        for (ty = start_ty; ty <= end_ty; ty++) {
+            for (tx = start_tx; tx <= end_tx; tx++) {
+                tile = &doc->tile_grid->tiles[ty][tx];
+                if (tile && tile->dirty) {
+                    /* Worker threads will composite into pixel_buffer */
+                    if (!tile_worker_pool_enqueue(doc->tile_worker_pool,
+                                                  doc, tile, tx, ty)) {
+                        g_debug("Worker pool rejected tile (%d, %d), will fallback to main thread", tx, ty);
+                        /* Fallback: composite on main thread */
+                        if (tile_worker_composite_pixels(doc, tile, tx, ty)) {
+                            tile->pending_upload = TRUE;
+                        }
+                    }
+                }
+            }
+        }
+    } else {
+        /* Worker pool not available - composite on main thread (fallback) */
+        gint tx, ty, start_tx, start_ty, end_tx, end_ty;
+        Tile* tile;
+
+        start_tx = rect->x / doc->tile_grid->tile_size;
+        start_ty = rect->y / doc->tile_grid->tile_size;
+        end_tx = (rect->x + rect->width - 1) / doc->tile_grid->tile_size;
+        end_ty = (rect->y + rect->height - 1) / doc->tile_grid->tile_size;
+
+        if (start_tx < 0)
+            start_tx = 0;
+        if (start_ty < 0)
+            start_ty = 0;
+        if (end_tx >= doc->tile_grid->tiles_x)
+            end_tx = doc->tile_grid->tiles_x - 1;
+        if (end_ty >= doc->tile_grid->tiles_y)
+            end_ty = doc->tile_grid->tiles_y - 1;
+
+        for (ty = start_ty; ty <= end_ty; ty++) {
+            for (tx = start_tx; tx <= end_tx; tx++) {
+                tile = &doc->tile_grid->tiles[ty][tx];
+                if (tile && tile->dirty) {
+                    if (tile_worker_composite_pixels(doc, tile, tx, ty)) {
+                        tile->pending_upload = TRUE;
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Callback for dirty_region_list_foreach to process each coalesced region
+ */
+static void process_coalesced_region_callback(const DirtyRect* rect, gpointer user_data) {
+    ImageDocument* doc = (ImageDocument*)user_data;
+    process_dirty_region_for_tiles(doc, rect);
+}
+
+/**
  * Mark a specific region as dirty
  *
- * TILE-BASED: Now marks intersecting tiles as dirty instead of just tracking rectangle
+ * TILE-BASED: Uses dirty region coalescing to combine multiple small dirty
+ * regions into larger rectangles, reducing per-tile overhead while minimizing
+ * over-invalidation.
  */
 void document_invalidate_region(ImageDocument* doc, const DirtyRect* dirty_rect) {
     LayersPanel* layers_panel;
@@ -756,97 +855,48 @@ void document_invalidate_region(ImageDocument* doc, const DirtyRect* dirty_rect)
         return;
     }
 
-    /* Union with existing dirty region */
-    if (dirty_rect_is_empty(&doc->dirty_region)) {
-        doc->dirty_region = clamped_rect;
-    } else {
-        dirty_rect_union(&doc->dirty_region, &clamped_rect, &doc->dirty_region);
-    }
-
     doc->composite_dirty = TRUE;
 
-    /* TILE-BASED: Mark intersecting tiles as dirty - composite surface will be regenerated on-demand when needed */
-    /* Don't invalidate composite surface here - it's only created when actually needed (e.g., saving) */
+    /* Use dirty region coalescing if available */
+    if (doc->dirty_region_list) {
+        /* Add to coalescing list - will auto-coalesce when threshold reached */
+        dirty_region_list_add(doc->dirty_region_list, &clamped_rect);
 
-    /* Mark intersecting tiles as dirty for tile-based rendering */
-    if (doc->tile_grid) {
-        tile_grid_mark_rect_dirty(doc->tile_grid,
-                                  clamped_rect.x, clamped_rect.y,
-                                  clamped_rect.width, clamped_rect.height);
-
-        /* Enqueue dirty tiles to Cairo-safe worker pool for pixel compositing */
-        if (doc->tile_worker_pool) {
-            gint tx, ty, start_tx, start_ty, end_tx, end_ty;
-            Tile* tile;
-
-            /* Calculate which tiles need recomposition */
-            start_tx = clamped_rect.x / doc->tile_grid->tile_size;
-            start_ty = clamped_rect.y / doc->tile_grid->tile_size;
-            end_tx = (clamped_rect.x + clamped_rect.width - 1) / doc->tile_grid->tile_size;
-            end_ty = (clamped_rect.y + clamped_rect.height - 1) / doc->tile_grid->tile_size;
-
-            /* Clamp to grid bounds */
-            if (start_tx < 0)
-                start_tx = 0;
-            if (start_ty < 0)
-                start_ty = 0;
-            if (end_tx >= doc->tile_grid->tiles_x)
-                end_tx = doc->tile_grid->tiles_x - 1;
-            if (end_ty >= doc->tile_grid->tiles_y)
-                end_ty = doc->tile_grid->tiles_y - 1;
-
-            /* Enqueue dirty tiles for worker pool */
-            for (ty = start_ty; ty <= end_ty; ty++) {
-                for (tx = start_tx; tx <= end_tx; tx++) {
-                    tile = &doc->tile_grid->tiles[ty][tx];
-                    if (tile && tile->dirty) {
-                        /* Worker threads will composite into pixel_buffer */
-                        if (!tile_worker_pool_enqueue(doc->tile_worker_pool,
-                                                      doc, tile, tx, ty)) {
-                            g_debug("Worker pool rejected tile (%d, %d), will fallback to main thread", tx, ty);
-                            /* Fallback: composite on main thread */
-                            if (tile_worker_composite_pixels(doc, tile, tx, ty)) {
-                                tile->pending_upload = TRUE;
-                            }
-                        }
-                    }
-                }
-            }
+        /* Update legacy dirty_region for compatibility */
+        if (dirty_rect_is_empty(&doc->dirty_region)) {
+            doc->dirty_region = clamped_rect;
         } else {
-            /* Worker pool not available - composite on main thread (fallback) */
-            gint tx, ty, start_tx, start_ty, end_tx, end_ty;
-            Tile* tile;
-
-            start_tx = clamped_rect.x / doc->tile_grid->tile_size;
-            start_ty = clamped_rect.y / doc->tile_grid->tile_size;
-            end_tx = (clamped_rect.x + clamped_rect.width - 1) / doc->tile_grid->tile_size;
-            end_ty = (clamped_rect.y + clamped_rect.height - 1) / doc->tile_grid->tile_size;
-
-            if (start_tx < 0)
-                start_tx = 0;
-            if (start_ty < 0)
-                start_ty = 0;
-            if (end_tx >= doc->tile_grid->tiles_x)
-                end_tx = doc->tile_grid->tiles_x - 1;
-            if (end_ty >= doc->tile_grid->tiles_y)
-                end_ty = doc->tile_grid->tiles_y - 1;
-
-            for (ty = start_ty; ty <= end_ty; ty++) {
-                for (tx = start_tx; tx <= end_tx; tx++) {
-                    tile = &doc->tile_grid->tiles[ty][tx];
-                    if (tile && tile->dirty) {
-                        if (tile_worker_composite_pixels(doc, tile, tx, ty)) {
-                            tile->pending_upload = TRUE;
-                        }
-                    }
-                }
-            }
+            dirty_rect_union(&doc->dirty_region, &clamped_rect, &doc->dirty_region);
         }
 
-        /* Legacy thread pool support (disabled for Cairo safety) */
-        if (doc->tile_thread_pool) {
-            g_debug("Legacy tile_thread_pool is set but not used (Cairo-safe worker pool active)");
+        /* Process coalesced regions for tile-based rendering */
+        if (doc->tile_grid) {
+            /* Process each coalesced region individually for better tile targeting */
+            dirty_region_list_foreach(doc->dirty_region_list,
+                                      process_coalesced_region_callback,
+                                      doc);
+
+            /* Clear the list after processing */
+            dirty_region_list_clear(doc->dirty_region_list);
         }
+    } else {
+        /* Fallback to legacy behavior without coalescing */
+        /* Union with existing dirty region */
+        if (dirty_rect_is_empty(&doc->dirty_region)) {
+            doc->dirty_region = clamped_rect;
+        } else {
+            dirty_rect_union(&doc->dirty_region, &clamped_rect, &doc->dirty_region);
+        }
+
+        /* TILE-BASED: Mark intersecting tiles as dirty */
+        if (doc->tile_grid) {
+            process_dirty_region_for_tiles(doc, &clamped_rect);
+        }
+    }
+
+    /* Legacy thread pool support (disabled for Cairo safety) */
+    if (doc->tile_grid && doc->tile_thread_pool) {
+        g_debug("Legacy tile_thread_pool is set but not used (Cairo-safe worker pool active)");
     }
 
     /* Trigger redraw - use queue_draw instead of queue_draw_area for now

@@ -129,44 +129,11 @@ static void on_blend_mode_changed(GtkComboBox* combo, gpointer user_data) {
         return; /* No selection */
     }
 
-    /* Map combo box index to BlendMode enum */
-    switch (active) {
-        case 0:
-            blend_mode = BLEND_MODE_NORMAL;
-            break;
-        case 1:
-            blend_mode = BLEND_MODE_DARKEN;
-            break;
-        case 2:
-            blend_mode = BLEND_MODE_MULTIPLY;
-            break;
-        case 3:
-            blend_mode = BLEND_MODE_COLOR_BURN;
-            break;
-        case 4:
-            blend_mode = BLEND_MODE_LIGHTEN;
-            break;
-        case 5:
-            blend_mode = BLEND_MODE_SCREEN;
-            break;
-        case 6:
-            blend_mode = BLEND_MODE_COLOR_DODGE;
-            break;
-        case 7:
-            blend_mode = BLEND_MODE_OVERLAY;
-            break;
-        case 8:
-            blend_mode = BLEND_MODE_SOFT_LIGHT;
-            break;
-        case 9:
-            blend_mode = BLEND_MODE_HARD_LIGHT;
-            break;
-        case 10:
-            blend_mode = BLEND_MODE_DIFFERENCE;
-            break;
-        default:
-            blend_mode = BLEND_MODE_NORMAL;
-            break;
+    /* Combo box index maps directly to BlendMode enum value */
+    if (active >= 0 && active < BLEND_MODE_COUNT) {
+        blend_mode = (BlendMode)active;
+    } else {
+        blend_mode = BLEND_MODE_NORMAL;
     }
 
     selected_layer = layers_panel_get_selected_layer(layers_panel);
@@ -189,8 +156,70 @@ static void on_blend_mode_changed(GtkComboBox* combo, gpointer user_data) {
     document_invalidate_region(layers_panel->current_doc, &dirty_rect);
 }
 
+/* Track whether we're currently dragging the opacity slider.
+ * During drag, canvas updates are deferred until release for responsiveness.
+ * 
+ * TODO: Investigate ways to provide live preview during drag without lag:
+ * - Low-resolution preview rendering during drag
+ * - GPU-accelerated compositing for real-time updates
+ * - Approximate opacity by adjusting layer surface alpha at draw time
+ *   (without full recomposite) - would need special handling in draw callback
+ * See TODO.md "Opacity slider live preview" for details.
+ */
+static gboolean opacity_slider_dragging = FALSE;
+
+/**
+ * Opacity scale button press callback
+ * Starts deferred update mode - no canvas updates during drag
+ */
+static gboolean on_opacity_scale_button_press(GtkWidget* widget, GdkEventButton* event,
+                                               gpointer user_data) {
+    (void)widget;
+    (void)event;
+    (void)user_data;
+
+    /* Mark that we're dragging - canvas updates will be deferred */
+    opacity_slider_dragging = TRUE;
+
+    return FALSE; /* Let event propagate */
+}
+
+/**
+ * Opacity scale button release callback
+ * Ends deferred mode and does the actual canvas update
+ */
+static gboolean on_opacity_scale_button_release(GtkWidget* widget, GdkEventButton* event,
+                                                 gpointer user_data) {
+    LayersPanel* layers_panel = (LayersPanel*)user_data;
+    ImageLayer* selected_layer;
+    (void)widget;
+    (void)event;
+
+    /* Mark that dragging has ended */
+    opacity_slider_dragging = FALSE;
+
+    if (!layers_panel || !layers_panel->current_doc) {
+        return FALSE;
+    }
+
+    selected_layer = layers_panel_get_selected_layer(layers_panel);
+    if (selected_layer) {
+        /* Now do the actual expensive update */
+        layer_invalidate_cache(selected_layer);
+        document_invalidate_composite(layers_panel->current_doc);
+
+        if (layers_panel->current_doc->drawing_area) {
+            gtk_widget_queue_draw(layers_panel->current_doc->drawing_area);
+        }
+    }
+
+    return FALSE; /* Let event propagate */
+}
+
 /**
  * Opacity scale changed callback
+ * During drag: only updates the value, no canvas redraw (deferred)
+ * After release: full update happens in button_release handler
  */
 static void on_opacity_scale_changed(GtkRange* range, gpointer user_data) {
     LayersPanel* layers_panel = (LayersPanel*)user_data;
@@ -206,11 +235,8 @@ static void on_opacity_scale_changed(GtkRange* range, gpointer user_data) {
         return;
     }
 
-    /* Update layer opacity (convert from 0-100 to 0.0-1.0) */
+    /* Update layer opacity value immediately (lightweight) */
     selected_layer->opacity = value / 100.0;
-
-    /* Invalidate layer cache since opacity affects rendering */
-    layer_invalidate_cache(selected_layer);
 
     /* Update spin button to stay in sync */
     if (layers_panel->spin_opacity) {
@@ -223,10 +249,15 @@ static void on_opacity_scale_changed(GtkRange* range, gpointer user_data) {
                                           layers_panel);
     }
 
-    /* Invalidate entire composite (opacity affects how layer composites) */
+    /* If we're dragging, defer the expensive canvas update until release */
+    if (opacity_slider_dragging) {
+        return; /* Skip redraw during drag - will update on release */
+    }
+
+    /* Not dragging (e.g., keyboard/scroll adjustment) - do immediate update */
+    layer_invalidate_cache(selected_layer);
     document_invalidate_composite(layers_panel->current_doc);
 
-    /* Queue redraw */
     if (layers_panel->current_doc->drawing_area) {
         gtk_widget_queue_draw(layers_panel->current_doc->drawing_area);
     }
@@ -611,7 +642,7 @@ LayersPanel* create_layers_panel(AppContext* ctx) {
         layers_panel->btn_opacity_reset = NULL;
         layers_panel->combo_blend = NULL;
         layers_panel->current_doc = NULL;
-        layers_panel->app_context = NULL;
+        layers_panel->app_context = ctx;  /* Store app context */
         return layers_panel;
     }
 
@@ -727,8 +758,22 @@ LayersPanel* create_layers_panel(AppContext* ctx) {
     if (layers_panel->scale_opacity) {
         gtk_range_set_range(GTK_RANGE(layers_panel->scale_opacity), 0.0, 100.0);
         gtk_range_set_value(GTK_RANGE(layers_panel->scale_opacity), 100.0);
+
+        /* Enable button events for async compositing control */
+        gtk_widget_add_events(layers_panel->scale_opacity,
+                              GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK);
+
+        /* Connect value-changed for opacity updates */
         g_signal_connect(layers_panel->scale_opacity, "value-changed",
                          G_CALLBACK(on_opacity_scale_changed), layers_panel);
+
+        /* Connect button press/release for async compositing mode:
+         * - Press: enable async mode (allow stale tiles) for responsiveness
+         * - Release: disable async mode and do final sync update */
+        g_signal_connect(layers_panel->scale_opacity, "button-press-event",
+                         G_CALLBACK(on_opacity_scale_button_press), layers_panel);
+        g_signal_connect(layers_panel->scale_opacity, "button-release-event",
+                         G_CALLBACK(on_opacity_scale_button_release), layers_panel);
     }
 
     if (layers_panel->spin_opacity) {
@@ -747,26 +792,57 @@ LayersPanel* create_layers_panel(AppContext* ctx) {
 
     /* Set up blend mode combo box */
     if (layers_panel->combo_blend) {
+        /* Use list-style popup (same as zoom dropdown) to avoid empty space when
+         * near screen edge */
+        ui_apply_list_combobox_style(layers_panel->combo_blend);
+        gtk_combo_box_set_popup_fixed_width(GTK_COMBO_BOX(layers_panel->combo_blend), TRUE);
+        g_signal_connect(layers_panel->combo_blend, "notify::popup-shown",
+                         G_CALLBACK(ui_combo_popup_shown_fix), NULL);
+
         /* Create list store for blend modes */
         GtkListStore* blend_store = gtk_list_store_new(1, G_TYPE_STRING);
         GtkTreeIter iter;
 
-        /* Add blend mode options */
+        /* Add all 27 Photoshop-compatible blend mode options
+         * Order matches BlendMode enum in document.h */
         const char* blend_modes[] = {
-            "Normal",      /* 0 */
-            "Darken",      /* 1 */
-            "Multiply",    /* 2 */
-            "Color burn",  /* 3 */
-            "Lighten",     /* 4 */
-            "Screen",      /* 5 */
-            "Color dodge", /* 6 */
-            "Overlay",     /* 7 */
-            "Soft light",  /* 8 */
-            "Hard light",  /* 9 */
-            "Difference"   /* 10 */
+            /* Normal modes */
+            "Normal",           /* 0  - BLEND_MODE_NORMAL */
+            "Dissolve",         /* 1  - BLEND_MODE_DISSOLVE */
+            /* Darken modes */
+            "Darken",           /* 2  - BLEND_MODE_DARKEN */
+            "Multiply",         /* 3  - BLEND_MODE_MULTIPLY */
+            "Color Burn",       /* 4  - BLEND_MODE_COLOR_BURN */
+            "Linear Burn",      /* 5  - BLEND_MODE_LINEAR_BURN */
+            "Darker Color",     /* 6  - BLEND_MODE_DARKER_COLOR */
+            /* Lighten modes */
+            "Lighten",          /* 7  - BLEND_MODE_LIGHTEN */
+            "Screen",           /* 8  - BLEND_MODE_SCREEN */
+            "Color Dodge",      /* 9  - BLEND_MODE_COLOR_DODGE */
+            "Linear Dodge",     /* 10 - BLEND_MODE_LINEAR_DODGE (Add) */
+            "Lighter Color",    /* 11 - BLEND_MODE_LIGHTER_COLOR */
+            /* Contrast modes */
+            "Overlay",          /* 12 - BLEND_MODE_OVERLAY */
+            "Soft Light",       /* 13 - BLEND_MODE_SOFT_LIGHT */
+            "Hard Light",       /* 14 - BLEND_MODE_HARD_LIGHT */
+            "Vivid Light",      /* 15 - BLEND_MODE_VIVID_LIGHT */
+            "Linear Light",     /* 16 - BLEND_MODE_LINEAR_LIGHT */
+            "Pin Light",        /* 17 - BLEND_MODE_PIN_LIGHT */
+            "Hard Mix",         /* 18 - BLEND_MODE_HARD_MIX */
+            /* Inversion modes */
+            "Difference",       /* 19 - BLEND_MODE_DIFFERENCE */
+            "Exclusion",        /* 20 - BLEND_MODE_EXCLUSION */
+            /* Cancellation modes */
+            "Subtract",         /* 21 - BLEND_MODE_SUBTRACT */
+            "Divide",           /* 22 - BLEND_MODE_DIVIDE */
+            /* Component (HSL) modes */
+            "Hue",              /* 23 - BLEND_MODE_HUE */
+            "Saturation",       /* 24 - BLEND_MODE_SATURATION */
+            "Color",            /* 25 - BLEND_MODE_COLOR */
+            "Luminosity"        /* 26 - BLEND_MODE_LUMINOSITY */
         };
 
-        for (int i = 0; i < 11; i++) {
+        for (int i = 0; i < BLEND_MODE_COUNT; i++) {
             gtk_list_store_append(blend_store, &iter);
             gtk_list_store_set(blend_store, &iter, 0, blend_modes[i], -1);
         }
@@ -789,7 +865,7 @@ LayersPanel* create_layers_panel(AppContext* ctx) {
     }
 
     layers_panel->current_doc = NULL;
-    layers_panel->app_context = NULL;
+    layers_panel->app_context = ctx;  /* Store app context for GPU acceleration check */
 
     return layers_panel;
 }
@@ -1140,46 +1216,10 @@ void layers_panel_update_opacity_controls(LayersPanel* layers_panel) {
 
         /* Update blend mode combo box */
         if (layers_panel->combo_blend) {
-            gint blend_index = 0;
-
-            /* Map BlendMode enum to combo box index */
-            switch (selected_layer->blend_mode) {
-                case BLEND_MODE_NORMAL:
-                    blend_index = 0;
-                    break;
-                case BLEND_MODE_DARKEN:
-                    blend_index = 1;
-                    break;
-                case BLEND_MODE_MULTIPLY:
-                    blend_index = 2;
-                    break;
-                case BLEND_MODE_COLOR_BURN:
-                    blend_index = 3;
-                    break;
-                case BLEND_MODE_LIGHTEN:
-                    blend_index = 4;
-                    break;
-                case BLEND_MODE_SCREEN:
-                    blend_index = 5;
-                    break;
-                case BLEND_MODE_COLOR_DODGE:
-                    blend_index = 6;
-                    break;
-                case BLEND_MODE_OVERLAY:
-                    blend_index = 7;
-                    break;
-                case BLEND_MODE_SOFT_LIGHT:
-                    blend_index = 8;
-                    break;
-                case BLEND_MODE_HARD_LIGHT:
-                    blend_index = 9;
-                    break;
-                case BLEND_MODE_DIFFERENCE:
-                    blend_index = 10;
-                    break;
-                default:
-                    blend_index = 0;
-                    break;
+            /* BlendMode enum values map directly to combo box indices */
+            gint blend_index = (gint)selected_layer->blend_mode;
+            if (blend_index < 0 || blend_index >= BLEND_MODE_COUNT) {
+                blend_index = 0;  /* Default to Normal */
             }
 
             g_signal_handlers_block_by_func(layers_panel->combo_blend,

@@ -205,4 +205,18 @@ void ui_save_tool_options_to_settings(AppContext* ctx, ToolType tool_type);
  */
 void ui_save_all_tool_options_to_settings(AppContext* ctx);
 
+/**
+ * Apply list-style combobox appearance (avoids empty space when popup opens
+ * near screen edge). Use for zoom, blend mode, and similar dropdowns.
+ * @param combo GtkComboBox widget to style
+ */
+void ui_apply_list_combobox_style(GtkWidget* combo);
+
+/**
+ * Callback for notify::popup-shown to fix popup alignment (avoids top whitespace).
+ * Connect to combobox: g_signal_connect(combo, "notify::popup-shown",
+ *     G_CALLBACK(ui_combo_popup_shown_fix), NULL);
+ */
+void ui_combo_popup_shown_fix(GObject* obj, GParamSpec* pspec, gpointer user_data);
+
 #endif /* UI_H */
