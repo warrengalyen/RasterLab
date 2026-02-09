@@ -29,6 +29,9 @@ typedef struct {
     /* Performance settings */
     gint worker_threads; /* Number of worker threads for tile compositing (default 4, min 1, max CPU count) */
 
+    /* File recovery (autosave) interval in seconds (30-2700, default 300) */
+    gint file_recovery_interval_seconds;
+
     /* View settings */
     gboolean show_layer_edges; /* Show outline when moving layers (default TRUE) */
     gboolean show_statusbar;   /* Show status bar (default TRUE) */
@@ -194,6 +197,20 @@ gint settings_get_worker_threads(Settings* settings);
  * @param threads Number of worker threads (clamped to 1-CPU count)
  */
 void settings_set_worker_threads(Settings* settings, gint threads);
+
+/**
+ * Get file recovery (autosave) interval in seconds
+ * @param settings The settings structure
+ * @return Interval in seconds (30-2700)
+ */
+gint settings_get_file_recovery_interval_seconds(Settings* settings);
+
+/**
+ * Set file recovery (autosave) interval in seconds
+ * @param settings The settings structure
+ * @param seconds Interval in seconds (clamped to 30-2700)
+ */
+void settings_set_file_recovery_interval_seconds(Settings* settings, gint seconds);
 
 /**
  * Set show layer edges setting

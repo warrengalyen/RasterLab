@@ -11,14 +11,17 @@
 #include <time.h>
 
 /* Autosave configuration */
-#define AUTOSAVE_INTERVAL_SECONDS 45 /* Auto-save every 45 seconds */
-#define AUTOSAVE_MAGIC "IMGAUTOSAVE" /* Magic string to identify autosave files */
+#define AUTOSAVE_INTERVAL_MIN 30
+#define AUTOSAVE_INTERVAL_MAX 2700
+#define AUTOSAVE_INTERVAL_DEFAULT 300   /* Default interval when not set from settings */
+#define AUTOSAVE_MAGIC "IMGAUTOSAVE"    /* Magic string to identify autosave files */
 #define AUTOSAVE_VERSION 1           /* File format version */
 
 /* Internal storage */
-static GHashTable* g_document_map = NULL; /* Map ImageDocument* -> autosave_id */
-static GHashTable* g_id_map = NULL;       /* Map autosave_id -> ImageDocument* */
-static guint g_autosave_timer_id = 0;     /* GTK timer ID */
+static GHashTable* g_document_map = NULL;   /* Map ImageDocument* -> autosave_id */
+static GHashTable* g_id_map = NULL;         /* Map autosave_id -> ImageDocument* */
+static guint g_autosave_timer_id = 0;       /* GTK timer ID */
+static guint g_autosave_interval_seconds = AUTOSAVE_INTERVAL_DEFAULT; /* Current interval (30-2700) */
 static gboolean g_initialized = FALSE;
 
 /**
@@ -606,6 +609,34 @@ static gboolean autosave_timer_callback(gpointer user_data) {
 }
 
 /**
+ * Start or restart the autosave timer with the current interval
+ */
+static void autosave_restart_timer(void) {
+    if (g_autosave_timer_id != 0) {
+        g_source_remove(g_autosave_timer_id);
+        g_autosave_timer_id = 0;
+    }
+    g_autosave_timer_id = g_timeout_add_seconds(g_autosave_interval_seconds,
+                                               autosave_timer_callback,
+                                               NULL);
+}
+
+/**
+ * Set the file recovery save interval in seconds (30-2700)
+ */
+void autosave_set_interval(guint seconds) {
+    if (seconds < AUTOSAVE_INTERVAL_MIN) {
+        seconds = AUTOSAVE_INTERVAL_MIN;
+    } else if (seconds > AUTOSAVE_INTERVAL_MAX) {
+        seconds = AUTOSAVE_INTERVAL_MAX;
+    }
+    g_autosave_interval_seconds = seconds;
+    if (g_initialized && g_autosave_timer_id != 0) {
+        autosave_restart_timer();
+    }
+}
+
+/**
  * Initialize autosave system
  */
 void autosave_init(void) {
@@ -619,10 +650,8 @@ void autosave_init(void) {
     /* Ensure autosave directory exists */
     autosave_ensure_directory();
 
-    /* Start periodic autosave timer */
-    g_autosave_timer_id = g_timeout_add_seconds(AUTOSAVE_INTERVAL_SECONDS,
-                                                autosave_timer_callback,
-                                                NULL);
+    /* Start periodic autosave timer with current interval */
+    autosave_restart_timer();
 
     g_initialized = TRUE;
 }

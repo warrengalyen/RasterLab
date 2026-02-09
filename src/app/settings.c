@@ -22,9 +22,10 @@
 #define DEFAULT_CANVAS_BG_G (160.0 / 255.0)
 #define DEFAULT_CANVAS_BG_B (160.0 / 255.0)
 #define DEFAULT_MAX_RECENT_FILES 10
-#define DEFAULT_UNDO_COMPRESSION_LEVEL 1 /* LZ4 fast compression */
-#define DEFAULT_UNDO_LEVELS 10           /* Number of undo levels */
-#define DEFAULT_WORKER_THREADS 4         /* Number of worker threads */
+#define DEFAULT_UNDO_COMPRESSION_LEVEL 1           /* LZ4 fast compression */
+#define DEFAULT_UNDO_LEVELS 10                     /* Number of undo levels */
+#define DEFAULT_WORKER_THREADS 4                   /* Number of worker threads */
+#define DEFAULT_FILE_RECOVERY_INTERVAL_SECONDS 300 /* File recovery save interval (30-2700) */
 
 /* Default tool option values */
 #define DEFAULT_TOOL_SIZE 5.0f              /* 5px brush size */
@@ -74,18 +75,19 @@ static Settings* settings_create_default(void) {
     settings->undo_temp_directory = NULL; /* NULL = use system temp directory */
     settings->undo_levels = DEFAULT_UNDO_LEVELS;
     settings->worker_threads = DEFAULT_WORKER_THREADS;
+    settings->file_recovery_interval_seconds = DEFAULT_FILE_RECOVERY_INTERVAL_SECONDS;
     settings->show_layer_edges = TRUE; /* Show layer edges by default */
     settings->show_statusbar = TRUE;   /* Show status bar by default */
 
     /* Tone mapping defaults */
-    settings->tone_map_auto_apply = FALSE;     /* Show dialog by default */
-    settings->tone_map_operator = 0;           /* Linear operator */
-    settings->tone_map_normalize = 0;          /* No normalization */
-    settings->tone_map_gamma = 2.20;          /* Default gamma */
-    settings->tone_map_exposure = 2.00;       /* Default exposure */
-    settings->tone_map_white_point = 11.20;   /* Default white point */
-    settings->tone_map_intensity = 0.00;       /* Default intensity */
-    settings->tone_map_adaptation = 1.00;     /* Default adaptation */
+    settings->tone_map_auto_apply = FALSE;      /* Show dialog by default */
+    settings->tone_map_operator = 0;            /* Linear operator */
+    settings->tone_map_normalize = 0;           /* No normalization */
+    settings->tone_map_gamma = 2.20;            /* Default gamma */
+    settings->tone_map_exposure = 2.00;         /* Default exposure */
+    settings->tone_map_white_point = 11.20;     /* Default white point */
+    settings->tone_map_intensity = 0.00;        /* Default intensity */
+    settings->tone_map_adaptation = 1.00;       /* Default adaptation */
     settings->tone_map_color_correction = 0.00; /* Default color correction */
 
     return settings;
@@ -474,6 +476,14 @@ static void settings_load_performance(Settings* settings, xmlNode* performance_n
         xmlFree(threads_attr);
     }
 
+    /* Load file_recovery_interval attribute if present (seconds, 30-2700) */
+    xmlChar* recovery_attr = xmlGetProp(performance_node, (const xmlChar*)"file_recovery_interval");
+    if (recovery_attr) {
+        gint interval = (gint)strtol((const char*)recovery_attr, NULL, 10);
+        settings_set_file_recovery_interval_seconds(settings, interval);
+        xmlFree(recovery_attr);
+    }
+
     /* Iterate through child nodes */
     for (xmlNode* cur = performance_node->children; cur; cur = cur->next) {
         if (cur->type != XML_ELEMENT_NODE) {
@@ -501,6 +511,11 @@ static void settings_save_performance(xmlTextWriterPtr writer, Settings* setting
     gchar threads_str[16];
     g_snprintf(threads_str, sizeof(threads_str), "%d", settings->worker_threads);
     xmlTextWriterWriteAttribute(writer, (const xmlChar*)"worker_threads", (const xmlChar*)threads_str);
+
+    /* Save file recovery interval as attribute */
+    gchar recovery_str[16];
+    g_snprintf(recovery_str, sizeof(recovery_str), "%d", settings->file_recovery_interval_seconds);
+    xmlTextWriterWriteAttribute(writer, (const xmlChar*)"file_recovery_interval", (const xmlChar*)recovery_str);
 
     /* Save undo settings */
     settings_save_undo(writer, settings);
@@ -1133,6 +1148,26 @@ void settings_set_worker_threads(Settings* settings, gint threads) {
 }
 
 /**
+ * Get file recovery interval in seconds
+ */
+gint settings_get_file_recovery_interval_seconds(Settings* settings) {
+    if (!settings) {
+        return DEFAULT_FILE_RECOVERY_INTERVAL_SECONDS;
+    }
+    return settings->file_recovery_interval_seconds;
+}
+
+/**
+ * Set file recovery interval in seconds
+ */
+void settings_set_file_recovery_interval_seconds(Settings* settings, gint seconds) {
+    if (!settings) {
+        return;
+    }
+    settings->file_recovery_interval_seconds = max(30, min(2700, seconds));
+}
+
+/**
  * Get show layer edges setting
  */
 gboolean settings_get_show_layer_edges(Settings* settings) {
@@ -1350,7 +1385,7 @@ void settings_set_tone_map_operator(Settings* settings, gint operator) {
     if (!settings) {
         return;
     }
-    if (operator >= 0 && operator <= 3) {
+    if (operator>= 0 && operator<= 3) {
         settings->tone_map_operator = operator;
     }
 }

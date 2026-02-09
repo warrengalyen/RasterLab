@@ -30,6 +30,13 @@ void autosave_init(void);
 void autosave_shutdown(void);
 
 /**
+ * Set the file recovery save interval in seconds (30-2700)
+ * If the autosave timer is already running, it is restarted with the new interval
+ * @param seconds Interval in seconds (clamped to 30-2700)
+ */
+void autosave_set_interval(guint seconds);
+
+/**
  * Register a document for autosave tracking
  * @param doc The document to track
  * @return Unique autosave ID for this document, or NULL on error

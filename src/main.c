@@ -42,7 +42,7 @@ int main(int argc, char* argv[]) {
 
     app_dir = settings_get_executable_dir();
 
-    // autosave_init();
+    autosave_init();
 
     // test_filter_preview_dialog();
 
@@ -76,6 +76,9 @@ int main(int argc, char* argv[]) {
             recent_files_set_settings(app->settings);
             /* Initialize and load recent files from settings XML */
             recent_files_init();
+
+            /* Set file recovery (autosave) interval from settings */
+            autosave_set_interval((guint)settings_get_file_recovery_interval_seconds(app->settings));
 
             /* Update recent files menu after loading */
             ui_update_recent_files_menu(app);
