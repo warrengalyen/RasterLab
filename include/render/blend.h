@@ -68,11 +68,13 @@ G_BEGIN_DECLS
  * @param src_row Source pixel row (layer pixels)
  * @param dst_row Destination pixel row (tile pixels)
  * @param width Number of pixels to composite
+ * @param row_x X coordinate of first pixel in document space (for Dissolve)
+ * @param row_y Y coordinate of this row in document space (for Dissolve)
  * @param layer_opacity Layer opacity (0-255)
  * @param blend_mode Layer blend mode (from BlendMode enum)
  */
 void blend_composite_row(const guint32* src_row, guint32* dst_row,
-                         gint width, guint8 layer_opacity, BlendMode blend_mode);
+                         gint width, gint row_x, gint row_y, guint8 layer_opacity, BlendMode blend_mode);
 
 /**
  * Composite a row of pixels using SIMD (OVER blend only)

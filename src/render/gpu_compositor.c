@@ -152,6 +152,7 @@ struct GPUCompositor {
     GLint u_blend_mode_loc;     /* Blend mode uniform */
     GLint u_is_first_layer_loc; /* First layer flag (skip blending) */
     GLint u_tile_size_loc;      /* Tile dimensions for UV calculation */
+    GLint u_tile_offset_loc;    /* Tile position in document coordinates (for Dissolve) */
     
     /* Ping-pong framebuffers for blend mode compositing */
     GLuint fbo[2];              /* Two framebuffer objects */
@@ -210,6 +211,7 @@ static const char* FRAGMENT_SHADER_SOURCE =
     "uniform int u_blend_mode;\n"
     "uniform bool u_is_first_layer;\n"
     "uniform vec2 u_tile_size;\n"         /* Tile dimensions for UV calculation */
+    "uniform vec2 u_tile_offset;\n"       /* Tile position in document coordinates */
     "varying vec2 v_texcoord;\n"
     "\n"
     "/* Blend mode constants - must match BlendMode enum */\n"
@@ -267,32 +269,40 @@ static const char* FRAGMENT_SHADER_SOURCE =
     "    return clipColor(c + d);\n"
     "}\n"
     "\n"
-    "/* Helper: set saturation (complex - reorders components) */\n"
+    "/* Helper: set saturation using robust epsilon-tolerant comparisons */\n"
+    "/* Properly maps min->0, max->s, mid->proportional, preserving component ordering */\n"
     "vec3 setSat(vec3 c, float s) {\n"
+    "    const float EPS = 0.0001;\n"
     "    float cmin = min(min(c.r, c.g), c.b);\n"
     "    float cmax = max(max(c.r, c.g), c.b);\n"
-    "    float cmid;\n"
-    "    vec3 result;\n"
-    "    if (cmax == cmin) return vec3(0.0);\n"
-    "    /* Find and set mid value */\n"
-    "    if (c.r == cmax) {\n"
-    "        if (c.g == cmin) { cmid = c.b; result = vec3(s, 0.0, (cmid - cmin) * s / (cmax - cmin)); }\n"
-    "        else { cmid = c.g; result = vec3(s, (cmid - cmin) * s / (cmax - cmin), 0.0); }\n"
-    "    } else if (c.g == cmax) {\n"
-    "        if (c.r == cmin) { cmid = c.b; result = vec3(0.0, s, (cmid - cmin) * s / (cmax - cmin)); }\n"
-    "        else { cmid = c.r; result = vec3((cmid - cmin) * s / (cmax - cmin), s, 0.0); }\n"
-    "    } else {\n"
-    "        if (c.r == cmin) { cmid = c.g; result = vec3(0.0, (cmid - cmin) * s / (cmax - cmin), s); }\n"
-    "        else { cmid = c.r; result = vec3((cmid - cmin) * s / (cmax - cmin), 0.0, s); }\n"
-    "    }\n"
-    "    return result;\n"
+    "    float delta = cmax - cmin;\n"
+    "    if (delta < EPS) return vec3(0.0);\n"
+    "    /* Compute scale factor to map [cmin, cmax] -> [0, s] */\n"
+    "    float scale = s / delta;\n"
+    "    /* Apply uniform scaling: min becomes 0, max becomes s, mid stays proportional */\n"
+    "    return vec3(\n"
+    "        (c.r - cmin) * scale,\n"
+    "        (c.g - cmin) * scale,\n"
+    "        (c.b - cmin) * scale\n"
+    "    );\n"
+    "}\n"
+    "\n"
+    "/* Hash function for Dissolve dithering */\n"
+    "float hash2D(vec2 p) {\n"
+    "    /* Simple but effective hash function for pixel dithering.\n"
+    "     * Uses sin-based noise which works well for integer coordinates. */\n"
+    "    return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);\n"
     "}\n"
     "\n"
     "/* Apply blend mode to get blended RGB (non-premultiplied inputs) */\n"
     "vec3 applyBlendMode(vec3 src, vec3 dst, int mode) {\n"
     "    vec3 result;\n"
     "    \n"
-    "    if (mode == BLEND_NORMAL || mode == BLEND_DISSOLVE) {\n"
+    "    if (mode == BLEND_NORMAL) {\n"
+    "        result = src;\n"
+    "    }\n"
+    "    else if (mode == BLEND_DISSOLVE) {\n"
+    "        /* Dissolve is handled specially in main() */\n"
     "        result = src;\n"
     "    }\n"
     "    /* Darken modes */\n"
@@ -426,9 +436,18 @@ static const char* FRAGMENT_SHADER_SOURCE =
     "}\n"
     "\n"
     "void main() {\n"
-    "    /* Discard fragments outside valid texture range */\n"
+    "    /* For fragments outside layer texture bounds, pass through destination unchanged.\n"
+    "     * This is critical for multi-layer compositing where layers don't cover the entire tile. */\n"
     "    if (v_texcoord.x < 0.0 || v_texcoord.x > 1.0 || v_texcoord.y < 0.0 || v_texcoord.y > 1.0) {\n"
-    "        discard;\n"
+    "        if (u_is_first_layer) {\n"
+    "            /* First layer with no content here - output transparent */\n"
+    "            gl_FragColor = vec4(0.0, 0.0, 0.0, 0.0);\n"
+    "        } else {\n"
+    "            /* Pass through existing composition */\n"
+    "            vec2 dst_uv = gl_FragCoord.xy / u_tile_size;\n"
+    "            gl_FragColor = texture2D(u_dst_texture, dst_uv);\n"
+    "        }\n"
+    "        return;\n"
     "    }\n"
     "    \n"
     "    /* Sample source layer (premultiplied alpha from Cairo) */\n"
@@ -437,6 +456,28 @@ static const char* FRAGMENT_SHADER_SOURCE =
     "    /* Convert to straight alpha for blend calculations */\n"
     "    vec3 src_rgb = src_pm.a > 0.0 ? src_pm.rgb / src_pm.a : vec3(0.0);\n"
     "    float src_a = src_pm.a * u_opacity;\n"
+    "    \n"
+    "    /* Special handling for Dissolve mode */\n"
+    "    if (u_blend_mode == BLEND_DISSOLVE) {\n"
+    "        /* Use 2D hash with DOCUMENT coordinates for consistent pattern across tiles */\n"
+    "        vec2 doc_coord = gl_FragCoord.xy + u_tile_offset;\n"
+    "        float noise = hash2D(doc_coord);\n"
+    "        /* Dissolve uses COMBINED opacity (pixel alpha * layer opacity) for probability.\n"
+    "         * This means reducing layer opacity makes fewer pixels show. */\n"
+    "        float combined_opacity = src_pm.a * u_opacity;\n"
+    "        if (noise >= combined_opacity) {\n"
+    "            /* Don't show this pixel - pass through destination */\n"
+    "            if (u_is_first_layer) {\n"
+    "                gl_FragColor = vec4(0.0, 0.0, 0.0, 0.0);\n"
+    "            } else {\n"
+    "                vec2 dst_uv = gl_FragCoord.xy / u_tile_size;\n"
+    "                gl_FragColor = texture2D(u_dst_texture, dst_uv);\n"
+    "            }\n"
+    "            return;\n"
+    "        }\n"
+    "        /* Show this pixel at full alpha (pixels that pass dissolve test are fully visible) */\n"
+    "        src_a = src_pm.a;\n"
+    "    }\n"
     "    \n"
     "    /* For first layer or fully transparent source, just output the source */\n"
     "    if (u_is_first_layer || src_a <= 0.0) {\n"
@@ -816,6 +857,7 @@ GPUCompositor* gpu_compositor_create(const gchar* device_name) {
     compositor->u_blend_mode_loc = glGetUniformLocation(compositor->shader_program, "u_blend_mode");
     compositor->u_is_first_layer_loc = glGetUniformLocation(compositor->shader_program, "u_is_first_layer");
     compositor->u_tile_size_loc = glGetUniformLocation(compositor->shader_program, "u_tile_size");
+    compositor->u_tile_offset_loc = glGetUniformLocation(compositor->shader_program, "u_tile_offset");
     
     /* Create VAO and VBO for fullscreen quad */
     if (glGenVertexArrays) {
@@ -934,6 +976,9 @@ static gboolean ensure_fbo_size(GPUCompositor* compositor, gint width, gint heig
         return TRUE;
     }
     
+    /* Wait for pending operations before resizing FBOs */
+    glFinish();
+    
     /* Resize both FBO textures for ping-pong rendering */
     for (int i = 0; i < 2; i++) {
         glBindTexture(GL_TEXTURE_2D, compositor->fbo_texture[i]);
@@ -982,6 +1027,10 @@ static GLuint get_layer_texture(GPUCompositor* compositor, ImageLayer* layer) {
     if (!layer->surface) {
         return 0;
     }
+    
+    /* Flush Cairo surface to ensure all pending drawing operations are complete
+     * before reading the pixel data for GPU upload */
+    cairo_surface_flush(layer->surface);
     
     guint8* layer_data = cairo_image_surface_get_data(layer->surface);
     gint layer_stride = cairo_image_surface_get_stride(layer->surface);
@@ -1073,6 +1122,9 @@ gboolean gpu_compositor_composite_tile(GPUCompositor* compositor,
     /* Set tile size uniform for destination UV calculation */
     glUniform2f(compositor->u_tile_size_loc, (GLfloat)tile->w, (GLfloat)tile->h);
     
+    /* Set tile offset uniform for Dissolve (document coordinates) */
+    glUniform2f(compositor->u_tile_offset_loc, (GLfloat)tile->px, (GLfloat)tile->py);
+    
     /* Calculate tile bounds in document coordinates */
     gint tile_left = tile->px;
     gint tile_top = tile->py;
@@ -1142,8 +1194,16 @@ gboolean gpu_compositor_composite_tile(GPUCompositor* compositor,
         /* Set opacity */
         glUniform1f(compositor->u_opacity_loc, (GLfloat)layer->opacity);
         
-        /* Set blend mode (first layer always uses NORMAL internally) */
-        glUniform1i(compositor->u_blend_mode_loc, is_first_visible_layer ? 0 : (gint)layer->blend_mode);
+        /* Set blend mode - Dissolve needs to be passed even for first layer since it
+         * affects pixel visibility (dithering), not just blending with destination.
+         * Other blend modes use NORMAL for first layer since there's nothing to blend with. */
+        gint effective_blend_mode;
+        if (is_first_visible_layer && layer->blend_mode != BLEND_MODE_DISSOLVE) {
+            effective_blend_mode = BLEND_MODE_NORMAL;
+        } else {
+            effective_blend_mode = (gint)layer->blend_mode;
+        }
+        glUniform1i(compositor->u_blend_mode_loc, effective_blend_mode);
         glUniform1i(compositor->u_is_first_layer_loc, is_first_visible_layer ? 1 : 0);
         
         /* Draw fullscreen quad */
@@ -1154,11 +1214,32 @@ gboolean gpu_compositor_composite_tile(GPUCompositor* compositor,
         is_first_visible_layer = FALSE;
     }
     
-    /* Result is in the FBO we last wrote to (which is now current_fbo after the swap) */
-    gint result_fbo = 1 - compositor->current_fbo;
+    /* Result is in the FBO we last wrote to.
+     * After the swap, current_fbo equals what was read_fbo (the one NOT written to).
+     * So result is in 1 - current_fbo (the one that WAS written to). */
+    gint result_fbo;
+    if (is_first_visible_layer) {
+        /* No layers were rendered - both FBOs contain cleared content.
+         * Use FBO 0 which is the default cleared state. */
+        result_fbo = 0;
+    } else {
+        result_fbo = 1 - compositor->current_fbo;
+    }
     
     /* Bind result FBO for reading */
     glBindFramebuffer(GL_FRAMEBUFFER, compositor->fbo[result_fbo]);
+    
+    /* Verify FBO is complete before reading */
+    GLenum fbo_status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    if (fbo_status != GL_FRAMEBUFFER_COMPLETE) {
+        g_warning("GPU Compositor: Result FBO %d not complete before read: 0x%x", result_fbo, fbo_status);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        g_mutex_unlock(&compositor->mutex);
+        return FALSE;
+    }
+    
+    /* Explicitly set read buffer to color attachment */
+    glReadBuffer(GL_COLOR_ATTACHMENT0);
     
     /* Read back pixels to tile buffer
      * 
@@ -1170,12 +1251,27 @@ gboolean gpu_compositor_composite_tile(GPUCompositor* compositor,
      * - glReadPixels writes FBO y=0 to buffer[0]
      * - So buffer[0] = image top, which is correct for Cairo (no flip needed)
      */
-    glPixelStorei(GL_PACK_ROW_LENGTH, tile->stride / 4);
+    /* Ensure all rendering operations are complete before readback
+     * This prevents flickering caused by reading incomplete data */
+    glFinish();
+    
+    /* Set pixel storage parameters for proper alignment with Cairo's format */
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);  /* No padding between rows */
+    glPixelStorei(GL_PACK_ROW_LENGTH, tile->stride / 4);  /* Row length in pixels */
     glReadPixels(0, 0, tile->w, tile->h, GL_BGRA, GL_UNSIGNED_BYTE, tile->pixel_buffer);
     glPixelStorei(GL_PACK_ROW_LENGTH, 0);
+    glPixelStorei(GL_PACK_ALIGNMENT, 4);  /* Restore default */
     
-    /* Unbind FBO */
+    /* Clean up OpenGL state to prevent leakage between tiles */
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glUseProgram(0);
+    if (compositor->vao && glBindVertexArray) {
+        glBindVertexArray(0);
+    }
     
     compositor->tiles_composited++;
     compositor->frame_counter++;

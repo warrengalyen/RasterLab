@@ -107,6 +107,10 @@ gboolean tile_worker_composite_pixels(ImageDocument* doc,
             continue;
         }
 
+        /* Flush surface to ensure all Cairo operations are complete
+         * before we read the pixel data directly */
+        cairo_surface_flush(layer_surface);
+
         guint8* layer_data = cairo_image_surface_get_data(layer_surface);
         gint layer_stride = cairo_image_surface_get_stride(layer_surface);
 
@@ -138,8 +142,9 @@ gboolean tile_worker_composite_pixels(ImageDocument* doc,
             guint32* layer_row = (guint32*)(layer_data + (src_y + y) * layer_stride) + src_x;
             guint32* tile_row = (guint32*)(tile->pixel_buffer + (intersect_top - tile->py + y) * tile->stride) + (intersect_left - tile->px);
 
-            /* Use blend-mode-aware compositing function */
-            blend_composite_row(layer_row, tile_row, src_width, layer_opacity, effective_blend_mode);
+            /* Use blend-mode-aware compositing function
+             * Pass document coordinates (intersect_left, intersect_top + y) for Dissolve dithering */
+            blend_composite_row(layer_row, tile_row, src_width, intersect_left, intersect_top + y, layer_opacity, effective_blend_mode);
         }
     }
 

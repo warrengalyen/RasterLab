@@ -369,6 +369,10 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
                                 tile->h,
                                 tile->stride);
                             if (cairo_surface_status(tile->surface) == CAIRO_STATUS_SUCCESS) {
+                                /* Mark surface as dirty to inform Cairo that pixel data
+                                 * was modified externally (by SIMD blending). This is
+                                 * CRITICAL - without it, Cairo may use stale cached data. */
+                                cairo_surface_mark_dirty(tile->surface);
                                 tile->dirty = FALSE;
                                 tile->pending_upload = FALSE;
                                 /* Generate mipmaps for this tile */
@@ -485,6 +489,9 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
                                         tile->stride);
 
                                     if (cairo_surface_status(tile->surface) == CAIRO_STATUS_SUCCESS) {
+                                        /* Mark surface as dirty to inform Cairo that pixel data
+                                         * was modified externally (by SIMD blending). */
+                                        cairo_surface_mark_dirty(tile->surface);
                                         tile->dirty = FALSE;
                                         tile->pending_upload = FALSE;
                                     }

@@ -603,7 +603,8 @@ static void move_tool_mouse_move(Tool* tool, struct ImageDocument* doc, MouseEve
     /* Union both regions */
     dirty_rect_union(&old_rect, &new_rect, &union_rect);
 
-    /* Update layer offset */
+    /* Update layer offset AFTER calculating dirty regions but BEFORE invalidation
+     * This ensures tiles are composited with the layer at its final position */
     state->active_layer->offset_x = new_x;
     state->active_layer->offset_y = new_y;
 
@@ -611,7 +612,7 @@ static void move_tool_mouse_move(Tool* tool, struct ImageDocument* doc, MouseEve
     state->last_offset_x = new_x;
     state->last_offset_y = new_y;
 
-    /* Only invalidate the union of old and new regions */
+    /* Invalidate the union of old and new regions */
     if (!dirty_rect_is_empty(&union_rect)) {
         document_invalidate_region(doc, &union_rect);
     }
@@ -620,9 +621,6 @@ static void move_tool_mouse_move(Tool* tool, struct ImageDocument* doc, MouseEve
     if (doc->viewport) {
         gtk_widget_queue_draw(doc->viewport);
     }
-
-    // printf("Move tool: moved to offset (%d, %d)\n",
-    //        state->active_layer->offset_x, state->active_layer->offset_y);
 }
 
 /**

@@ -1440,11 +1440,20 @@ static inline guint32 scalar_blend_luminosity(guint32 src_pixel, guint32 dst_pix
  * ============================================================================ */
 
 void blend_composite_row(const guint32* src_row, guint32* dst_row,
-                         gint width, guint8 layer_opacity, BlendMode blend_mode) {
+                         gint width, gint row_x, gint row_y, guint8 layer_opacity, BlendMode blend_mode) {
     gint x = 0;
     
-    /* Process 4 pixels at a time with SIMD */
-    if (width >= 4) {
+    /* Check if blend mode requires scalar-only processing
+     * HSL modes need RGB<->HSL conversion which is complex for SIMD
+     * Dissolve needs per-pixel random decisions */
+    gboolean scalar_only = (blend_mode == BLEND_MODE_HUE ||
+                            blend_mode == BLEND_MODE_SATURATION ||
+                            blend_mode == BLEND_MODE_COLOR ||
+                            blend_mode == BLEND_MODE_LUMINOSITY ||
+                            blend_mode == BLEND_MODE_DISSOLVE);
+    
+    /* Process 4 pixels at a time with SIMD (unless scalar-only mode) */
+    if (width >= 4 && !scalar_only) {
         __m128i opacity_vec = _mm_set1_epi16(layer_opacity);
         gint simd_width = width & ~3;
         
@@ -1463,10 +1472,6 @@ void blend_composite_row(const guint32* src_row, guint32* dst_row,
             switch (blend_mode) {
                 /* Normal modes */
                 case BLEND_MODE_NORMAL:
-                    result = simd_blend_over(src, dst);
-                    break;
-                case BLEND_MODE_DISSOLVE:
-                    /* Dissolve uses random dithering - handled in scalar fallback */
                     result = simd_blend_over(src, dst);
                     break;
                 
@@ -1543,15 +1548,8 @@ void blend_composite_row(const guint32* src_row, guint32* dst_row,
                     result = simd_blend_divide(src, dst);
                     break;
                 
-                /* Component (HSL) modes - use OVER for SIMD, accurate in scalar */
-                case BLEND_MODE_HUE:
-                case BLEND_MODE_SATURATION:
-                case BLEND_MODE_COLOR:
-                case BLEND_MODE_LUMINOSITY:
-                    /* HSL modes require complex per-pixel calculations
-                     * Use OVER blend for SIMD path, scalar fallback handles properly */
-                    result = simd_blend_over(src, dst);
-                    break;
+                /* Note: HSL modes (Hue, Saturation, Color, Luminosity) and Dissolve
+                 * are handled entirely in scalar path - see scalar_only check above */
                 
                 default:
                     result = simd_blend_over(src, dst);
@@ -1588,11 +1586,18 @@ void blend_composite_row(const guint32* src_row, guint32* dst_row,
                 dst_row[x] = scalar_blend_over(src_row[x], dst_pixel, layer_opacity);
                 break;
             case BLEND_MODE_DISSOLVE:
-                /* Dissolve: random dithering based on opacity */
-                /* Use simple hash for pseudo-random per-pixel decision */
+                /* Dissolve: random dithering based on COMBINED opacity (pixel alpha * layer opacity).
+                 * This means reducing layer opacity makes fewer pixels show randomly. */
                 {
-                    guint32 hash = (guint32)(x * 2654435761U);
-                    if ((hash & 0xFF) < src_a) {
+                    /* Use document coordinates (row_x + x, row_y) for 2D hash */
+                    gint doc_x = row_x + x;
+                    guint32 hash = (guint32)((doc_x * 2654435761U) ^ (row_y * 2246822519U));
+                    /* Mix the bits further for better randomness */
+                    hash = hash ^ (hash >> 16);
+                    /* Calculate combined opacity: (src_alpha * layer_opacity) / 255 */
+                    guint32 combined_opacity = ((guint32)src_a * layer_opacity) / 255;
+                    if ((hash & 0xFF) < combined_opacity) {
+                        /* Pixel passes dissolve test - show at full alpha */
                         dst_row[x] = scalar_blend_over(src_row[x], dst_pixel, 255);
                     }
                     /* else keep destination unchanged */
