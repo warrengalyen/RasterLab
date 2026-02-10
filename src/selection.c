@@ -4,17 +4,11 @@
 
 /**
  * Draw marching ants outline for a rectangle using alternating pixels
- * @param cr Cairo context to draw on
- * @param x Rectangle x position
- * @param y Rectangle y position
- * @param width Rectangle width
- * @param height Rectangle height
- * @param line_width Line width (unused, kept for API compatibility)
- * @param animation_phase Animation phase (0-3) for marching effect
+ * Dash size = ANT_DASH_SIZE/zoom in image space so it appears constant on screen (like finalized outline).
  */
 void selection_draw_marching_ants(cairo_t* cr, gdouble x, gdouble y,
                                   gdouble width, gdouble height,
-                                  gdouble line_width, gdouble animation_phase) {
+                                  gdouble line_width, gdouble animation_phase, gdouble zoom) {
     if (!cr || width <= 0 || height <= 0) {
         return;
     }
@@ -24,19 +18,23 @@ void selection_draw_marching_ants(cairo_t* cr, gdouble x, gdouble y,
     gint x_end = (gint)(x + width);
     gint y_end = (gint)(y + height);
     gint dash_phase = (gint)animation_phase;
+    gint dash_size = (gint)(ANT_DASH_SIZE / zoom);
+    if (dash_size < 1) {
+        dash_size = 1;
+    }
 
     (void)line_width; /* Unused parameter - kept for API compatibility */
 
     /* Draw top and bottom edges */
     for (gint px = x_start; px <= x_end; px++) {
         /* Top edge - shift pattern by dash_phase for animation */
-        int pattern = ((px + y_start) / (int)ANT_DASH_SIZE + dash_phase) % 2;
+        int pattern = ((px + y_start) / dash_size + dash_phase) % 2;
         cairo_set_source_rgb(cr, pattern ? 0.0 : 1.0, pattern ? 0.0 : 1.0, pattern ? 0.0 : 1.0);
         cairo_rectangle(cr, px, y_start, 1.0, 1.0);
         cairo_fill(cr);
 
         /* Bottom edge */
-        pattern = ((px + y_end) / (int)ANT_DASH_SIZE + dash_phase) % 2;
+        pattern = ((px + y_end) / dash_size + dash_phase) % 2;
         cairo_set_source_rgb(cr, pattern ? 0.0 : 1.0, pattern ? 0.0 : 1.0, pattern ? 0.0 : 1.0);
         cairo_rectangle(cr, px, y_end, 1.0, 1.0);
         cairo_fill(cr);
@@ -45,13 +43,13 @@ void selection_draw_marching_ants(cairo_t* cr, gdouble x, gdouble y,
     /* Draw left and right edges */
     for (gint py = y_start; py <= y_end; py++) {
         /* Left edge */
-        int pattern = ((x_start + py) / (int)ANT_DASH_SIZE + dash_phase) % 2;
+        int pattern = ((x_start + py) / dash_size + dash_phase) % 2;
         cairo_set_source_rgb(cr, pattern ? 0.0 : 1.0, pattern ? 0.0 : 1.0, pattern ? 0.0 : 1.0);
         cairo_rectangle(cr, x_start, py, 1.0, 1.0);
         cairo_fill(cr);
 
         /* Right edge */
-        pattern = ((x_end + py) / (int)ANT_DASH_SIZE + dash_phase) % 2;
+        pattern = ((x_end + py) / dash_size + dash_phase) % 2;
         cairo_set_source_rgb(cr, pattern ? 0.0 : 1.0, pattern ? 0.0 : 1.0, pattern ? 0.0 : 1.0);
         cairo_rectangle(cr, x_end, py, 1.0, 1.0);
         cairo_fill(cr);
@@ -60,17 +58,11 @@ void selection_draw_marching_ants(cairo_t* cr, gdouble x, gdouble y,
 
 /**
  * Draw marching ants outline for an ellipse using alternating pixels
- * @param cr Cairo context to draw on
- * @param x Bounding rectangle x position
- * @param y Bounding rectangle y position
- * @param width Bounding rectangle width
- * @param height Bounding rectangle height
- * @param line_width Line width (unused, kept for API compatibility)
- * @param animation_phase Animation phase (0-3) for marching effect
+ * Dash size = ANT_DASH_SIZE/zoom in image space so it appears constant on screen (like finalized outline).
  */
 void selection_draw_marching_ants_ellipse(cairo_t* cr, gdouble x, gdouble y,
                                           gdouble width, gdouble height,
-                                          gdouble line_width, gdouble animation_phase) {
+                                          gdouble line_width, gdouble animation_phase, gdouble zoom) {
     if (!cr || width <= 0 || height <= 0) {
         return;
     }
@@ -83,6 +75,10 @@ void selection_draw_marching_ants_ellipse(cairo_t* cr, gdouble x, gdouble y,
     gdouble rx = width / 2.0;
     gdouble ry = height / 2.0;
     gint dash_phase = (gint)animation_phase;
+    gdouble dash_size = ANT_DASH_SIZE / zoom;
+    if (dash_size < 1.0) {
+        dash_size = 1.0;
+    }
 
     /* Draw the ellipse outline using Bresenham-style pixel plotting
      * We'll iterate around the ellipse and draw individual pixels */
@@ -123,7 +119,7 @@ void selection_draw_marching_ants_ellipse(cairo_t* cr, gdouble x, gdouble y,
         }
 
         /* Calculate pattern based on arc length for consistent marching effect */
-        gint pattern = ((gint)(arc_length / ANT_DASH_SIZE) + dash_phase) % 2;
+        gint pattern = ((gint)(arc_length / dash_size) + dash_phase) % 2;
         cairo_set_source_rgb(cr, pattern ? 0.0 : 1.0, pattern ? 0.0 : 1.0, pattern ? 0.0 : 1.0);
         cairo_rectangle(cr, px, py, 1.0, 1.0);
         cairo_fill(cr);

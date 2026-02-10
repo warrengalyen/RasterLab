@@ -597,7 +597,7 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
     /* Render selection overlays after all content is drawn */
     if (doc->selection_mask && !selection_mask_is_empty(doc->selection_mask)) {
         selection_mask_render_outline(cr, doc->selection_mask,
-                                      doc->selection_animation_phase, zoom);
+                                      doc->selection_animation_phase, zoom, FALSE);
     }
 
     return FALSE;

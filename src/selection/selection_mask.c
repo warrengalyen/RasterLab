@@ -738,13 +738,14 @@ void selection_mask_render_outline(
     cairo_t* cr,
     SelectionMask* mask,
     int dash_phase,
-    gdouble zoom_factor) {
+    gdouble zoom_factor,
+    gboolean already_in_image_space) {
     if (!cr || !mask)
         return;
 
-    /* Apply zoom transform if needed (similar to visualization code) */
+    /* Apply zoom transform only when not already in image space (e.g. preview draws with scale first) */
     cairo_save(cr);
-    if (zoom_factor != 1.0) {
+    if (!already_in_image_space && zoom_factor != 1.0) {
         cairo_scale(cr, zoom_factor, zoom_factor);
     }
 

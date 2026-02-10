@@ -815,7 +815,7 @@ void tool_ellipse_select_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble z
 
                 /* Compute and render feathered outline with animation phase if enabled */
                 int animation_phase = (current_opts && current_opts->ellipse_select_animate) ? state->animation_phase : 0;
-                selection_mask_render_outline(cr, preview_mask, animation_phase, zoom);
+                selection_mask_render_outline(cr, preview_mask, animation_phase, zoom, TRUE);
             }
 
             selection_mask_free(preview_mask);
@@ -823,7 +823,7 @@ void tool_ellipse_select_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble z
             /* Draw hard outline (no feathering) - faster for active dragging */
             int animation_phase = (state->is_editing && current_opts && current_opts->ellipse_select_animate) ? state->animation_phase : 0;
             gdouble animation_offset = (gdouble)animation_phase;
-            selection_draw_marching_ants_ellipse(cr, rect_x, rect_y, rect_w, rect_h, 0.0, animation_offset);
+            selection_draw_marching_ants_ellipse(cr, rect_x, rect_y, rect_w, rect_h, 0.0, animation_offset, zoom);
         }
 
         /* Draw corner resize handles only in edit mode */

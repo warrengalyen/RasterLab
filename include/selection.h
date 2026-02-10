@@ -36,33 +36,23 @@ typedef enum {
 
 /**
  * Draw marching ants outline for a rectangle
- * Used by selection preview rendering
- * @param cr Cairo context to draw on
- * @param x X coordinate of rectangle
- * @param y Y coordinate of rectangle
- * @param width Width of rectangle
- * @param height Height of rectangle
- * @param line_width Line width to use
- * @param animation_phase Dash offset for animation
+ * Used by selection preview rendering. Pass zoom so dash size is constant on screen (like finalized outline).
+ * @param cr Cairo context (expected in image space with scale(zoom) already applied by caller)
+ * @param zoom Zoom factor; dash size = ANT_DASH_SIZE/zoom in image space for constant screen size
  */
 void selection_draw_marching_ants(cairo_t* cr, gdouble x, gdouble y,
                                   gdouble width, gdouble height,
-                                  gdouble line_width, gdouble animation_phase);
+                                  gdouble line_width, gdouble animation_phase, gdouble zoom);
 
 /**
  * Draw marching ants outline for an ellipse
- * Used by elliptical selection preview rendering
- * @param cr Cairo context to draw on
- * @param x X coordinate of bounding rectangle
- * @param y Y coordinate of bounding rectangle
- * @param width Width of bounding rectangle
- * @param height Height of bounding rectangle
- * @param line_width Line width to use (unused, kept for API compatibility)
- * @param animation_phase Dash offset for animation
+ * Used by elliptical selection preview rendering. Pass zoom so dash size is constant on screen.
+ * @param cr Cairo context (expected in image space with scale(zoom) already applied by caller)
+ * @param zoom Zoom factor; dash size = ANT_DASH_SIZE/zoom in image space for constant screen size
  */
 void selection_draw_marching_ants_ellipse(cairo_t* cr, gdouble x, gdouble y,
                                           gdouble width, gdouble height,
-                                          gdouble line_width, gdouble animation_phase);
+                                          gdouble line_width, gdouble animation_phase, gdouble zoom);
 
 /**
  * Detect which handle (if any) is at the given point

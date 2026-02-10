@@ -177,13 +177,15 @@ void selection_mask_mark_dirty(SelectionMask* mask, int x, int y, int width, int
  * @param cr Cairo context to draw on
  * @param mask The selection mask
  * @param dash_phase Animation phase (0-3 for 4-pixel dashes)
- * @param zoom_factor Current zoom level (for line width)
+ * @param zoom_factor Current zoom level (for dash size and optional transform)
+ * @param already_in_image_space If TRUE, cr is already in image space (do not scale); use zoom only for dash size
  */
 void selection_mask_render_outline(
     cairo_t* cr,
     SelectionMask* mask,
     int dash_phase,
-    gdouble zoom_factor);
+    gdouble zoom_factor,
+    gboolean already_in_image_space);
 
 /**
  * Commit feathering parameters to selection
