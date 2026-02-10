@@ -21,6 +21,38 @@ enum {
     RENDERER_N_COLUMNS
 };
 
+#define SETTINGS_TAB_ICON_SIZE 30
+
+/* Set a notebook tab to show icon (from resource) before the existing label. */
+static void set_tab_icon_label(GtkNotebook* notebook, GtkWidget* page_child, GtkWidget* tab_label,
+                               const gchar* icon_resource) {
+    if (!notebook || !page_child || !tab_label || !icon_resource) {
+        return;
+    }
+    GError* err = NULL;
+    GdkPixbuf* pixbuf = gdk_pixbuf_new_from_resource(icon_resource, &err);
+    if (!pixbuf) {
+        if (err) {
+            g_warning("Settings tab icon %s: %s", icon_resource, err->message);
+            g_error_free(err);
+        }
+        return;
+    }
+    GdkPixbuf* scaled = gdk_pixbuf_scale_simple(pixbuf, SETTINGS_TAB_ICON_SIZE, SETTINGS_TAB_ICON_SIZE, GDK_INTERP_BILINEAR);
+    g_object_unref(pixbuf);
+    if (!scaled) {
+        return;
+    }
+    GtkWidget* image = gtk_image_new_from_pixbuf(scaled);
+    g_object_unref(scaled);
+    GtkWidget* box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+    gtk_container_add(GTK_CONTAINER(box), image);
+    /* Set box as tab label first so the notebook releases tab_label, then add label to box */
+    gtk_notebook_set_tab_label(notebook, page_child, box);
+    gtk_container_add(GTK_CONTAINER(box), tab_label);
+    gtk_widget_show_all(box);
+}
+
 /* Pixels per check: Small=4 (12×12 in 48px), Medium=8 (6×6), Large=16 (3×3). */
 static gint alpha_check_square_size_from_index(gint index) {
     switch (index) {
@@ -320,6 +352,28 @@ void settings_dialog_show(AppContext* ctx) {
                 gchar* prefixed = g_strdup_printf("*%s", current ? current : "");
                 gtk_label_set_text(label, prefixed);
                 g_free(prefixed);
+            }
+        }
+    }
+
+    /* Notebook tab icons (icon before label) */
+    {
+        GtkNotebook* notebook = GTK_NOTEBOOK(gtk_builder_get_object(builder, "settings_notebook"));
+        if (notebook) {
+            GtkWidget* general_page = GTK_WIDGET(gtk_builder_get_object(builder, "general_tab_content_box"));
+            GtkWidget* general_label = GTK_WIDGET(gtk_builder_get_object(builder, "general_tab_label"));
+            if (general_page && general_label) {
+                set_tab_icon_label(notebook, general_page, general_label, "/icons/settings-general.png");
+            }
+            GtkWidget* ui_page = GTK_WIDGET(gtk_builder_get_object(builder, "ui_tab_content_box"));
+            GtkWidget* ui_label = GTK_WIDGET(gtk_builder_get_object(builder, "ui_tab_label"));
+            if (ui_page && ui_label) {
+                set_tab_icon_label(notebook, ui_page, ui_label, "/icons/settings-ui.png");
+            }
+            GtkWidget* perf_page = GTK_WIDGET(gtk_builder_get_object(builder, "performance_tab_content_box"));
+            GtkWidget* perf_label = GTK_WIDGET(gtk_builder_get_object(builder, "performance_tab_label"));
+            if (perf_page && perf_label) {
+                set_tab_icon_label(notebook, perf_page, perf_label, "/icons/settings-performance.png");
             }
         }
     }

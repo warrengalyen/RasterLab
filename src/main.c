@@ -1,11 +1,11 @@
 #include "app/autosave.h"
 #include "app/recent_files.h"
 #include "app/settings.h"
-#include "render/render_utils.h"
 #include "plugins/builtin_plugins.h"
 #include "plugins/format_registry.h"
 #include "plugins/plugin_loader.h"
 #include "render/layer.h"
+#include "render/render_utils.h"
 #include "test_widgets.h"
 #include "ui.h"
 #include "ui/swatches.h"
@@ -13,6 +13,17 @@
 #include <gtk/gtk.h>
 #include <stdio.h>
 
+static void load_global_css(void) {
+    GtkCssProvider* provider = gtk_css_provider_new();
+
+    gtk_css_provider_load_from_resource(provider, "/css/app.css");
+    GdkScreen* screen = gdk_screen_get_default();
+    gtk_style_context_add_provider_for_screen(
+        screen,
+        GTK_STYLE_PROVIDER(provider),
+        GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+    g_object_unref(provider);
+}
 /**
  * Application initialization
  */
@@ -29,7 +40,13 @@ int main(int argc, char* argv[]) {
     /* Initialize GTK */
     gtk_init(&argc, &argv);
 
-    // test_color_chooser();
+    load_global_css();
+
+    GBytes* bytes = g_resources_lookup_data(
+        "/css/app.css",
+        G_RESOURCE_LOOKUP_FLAGS_NONE,
+        NULL);
+    g_assert(bytes != NULL);
 
     /* Initialize plugin system */
     plugin_loader_init();
@@ -44,6 +61,8 @@ int main(int argc, char* argv[]) {
     app_dir = settings_get_executable_dir();
 
     autosave_init();
+
+    // test_color_chooser();
 
     // test_filter_preview_dialog();
 

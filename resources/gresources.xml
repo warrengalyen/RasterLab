@@ -49,6 +49,9 @@
     <file preprocess="to-pixdata">icons/swatches-reset.png</file>
     <file preprocess="to-pixdata">icons/swatches-import.png</file>
     <file preprocess="to-pixdata">icons/swatches-export.png</file>
+    <file preprocess="to-pixdata">icons/settings-general.png</file>
+    <file preprocess="to-pixdata">icons/settings-ui.png</file>
+    <file preprocess="to-pixdata">icons/settings-performance.png</file>
     <file compressed="true" alias="app-icon">icons/rasterlab-icon.ico</file>
     <file>cursors/zoom_cursor.cur</file>
     <file>cursors/rect_select_cursor.cur</file>
@@ -80,5 +83,6 @@
     <file>ui/hdr_image_dialog.glade</file>
     <file>ui/settings_dialog.glade</file>
     <file>ui/main_window.glade</file>
+    <file>css/app.css</file>
   </gresource>
 </gresources>
