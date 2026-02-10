@@ -48,11 +48,13 @@
     <child internal-child="vbox">
       <object class="GtkBox" id="settings_dialog_vbox">
         <property name="can-focus">False</property>
+        <property name="margin-bottom">10</property>
         <property name="orientation">vertical</property>
         <property name="spacing">2</property>
         <child internal-child="action_area">
           <object class="GtkButtonBox" id="settings_dialog_action_area">
             <property name="can-focus">False</property>
+            <property name="margin-end">10</property>
             <property name="layout-style">end</property>
             <child>
               <object class="GtkButton" id="settings_cancel_button">
@@ -95,6 +97,7 @@
           <object class="GtkNotebook" id="settings_notebook">
             <property name="visible">True</property>
             <property name="can-focus">True</property>
+            <property name="margin-bottom">10</property>
             <property name="tab-pos">left</property>
             <child>
               <object class="GtkBox" id="general_tab_content_box">
@@ -119,52 +122,59 @@
                 <property name="can-focus">False</property>
                 <property name="orientation">vertical</property>
                 <child>
-                  <object class="GtkBox" id="ui_canvas_bgcolor_controls">
+                  <!-- n-columns=2 n-rows=1 -->
+                  <object class="GtkGrid" id="ui_tab_content_grid">
                     <property name="visible">True</property>
                     <property name="can-focus">False</property>
-                    <property name="halign">end</property>
-                    <property name="hexpand">True</property>
+                    <property name="margin-start">10</property>
+                    <property name="margin-end">10</property>
+                    <property name="margin-top">10</property>
+                    <property name="margin-bottom">10</property>
+                    <property name="column-spacing">5</property>
                     <child>
                       <object class="GtkLabel" id="canvas_bgcolor_label">
                         <property name="visible">True</property>
                         <property name="can-focus">False</property>
                         <property name="label" translatable="yes">canvas background color:</property>
+                        <property name="justify">right</property>
                       </object>
                       <packing>
-                        <property name="expand">False</property>
-                        <property name="fill">True</property>
-                        <property name="position">0</property>
+                        <property name="left-attach">0</property>
+                        <property name="top-attach">0</property>
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkButton" id="canvas_bgcolor_button">
-                        <property name="width-request">200</property>
+                      <object class="GtkBox" id="ui_canvas_bgcolor_controls">
                         <property name="visible">True</property>
-                        <property name="can-focus">True</property>
-                        <property name="receives-default">True</property>
-                        <property name="margin-start">10</property>
+                        <property name="can-focus">False</property>
+                        <property name="halign">end</property>
+                        <child>
+                          <object class="GtkButton" id="canvas_bgcolor_button">
+                            <property name="width-request">200</property>
+                            <property name="visible">True</property>
+                            <property name="can-focus">True</property>
+                            <property name="receives-default">True</property>
+                            <property name="margin-left">10</property>
+                            <property name="margin-start">10</property>
+                          </object>
+                          <packing>
+                            <property name="expand">False</property>
+                            <property name="fill">True</property>
+                            <property name="position">1</property>
+                          </packing>
+                        </child>
                       </object>
                       <packing>
-                        <property name="expand">False</property>
-                        <property name="fill">True</property>
-                        <property name="position">1</property>
+                        <property name="left-attach">1</property>
+                        <property name="top-attach">0</property>
                       </packing>
-                    </child>
-                    <child>
-                      <placeholder/>
                     </child>
                   </object>
                   <packing>
                     <property name="expand">False</property>
                     <property name="fill">True</property>
-                    <property name="position">0</property>
+                    <property name="position">1</property>
                   </packing>
-                </child>
-                <child>
-                  <placeholder/>
-                </child>
-                <child>
-                  <placeholder/>
                 </child>
               </object>
               <packing>
