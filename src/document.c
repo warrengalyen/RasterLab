@@ -714,8 +714,9 @@ static gboolean on_viewport_draw(GtkWidget* widget, cairo_t* cr, gpointer user_d
                     cairo_move_to(cr, 18, 46);
                     cairo_show_text(cr, gpu_available ? "GLFW/OpenGL: Available" : "GLFW/OpenGL: NOT Available");
                     cairo_move_to(cr, 18, 64);
-                    cairo_show_text(cr, settings_get_gpu_acceleration_enabled(ctx->settings) 
-                                    ? "Setting: Enabled" : "Setting: DISABLED");
+                    cairo_show_text(cr, settings_get_gpu_acceleration_enabled(ctx->settings)
+                                            ? "Setting: Enabled"
+                                            : "Setting: DISABLED");
                     cairo_move_to(cr, 18, 82);
                     cairo_show_text(cr, "Check console for errors");
                 }
@@ -1159,8 +1160,8 @@ ImageDocument* document_new(const gchar* filename, gboolean create_worker_pool, 
     doc->composite_dirty = TRUE;
     dirty_rect_init(&doc->dirty_region);
     doc->dirty_region_list = dirty_region_list_create(); /* Coalescing for optimized tile invalidation */
-    doc->tile_grid = NULL;        /* Will be created when image is loaded */
-    doc->tile_thread_pool = NULL; /* Will be created when image is loaded */
+    doc->tile_grid = NULL;                               /* Will be created when image is loaded */
+    doc->tile_thread_pool = NULL;                        /* Will be created when image is loaded */
     doc->zoom_factor = 1.0;
     doc->zoom_mode = 0; /* 0=manual zoom */
 
@@ -1651,7 +1652,7 @@ gboolean document_init_rendering_structures(ImageDocument* doc) {
         gchar* exe_dir = settings_get_executable_dir();
         Settings* app_settings = settings_load(exe_dir);
         g_free(exe_dir);
-        
+
         if (app_settings && settings_get_gpu_acceleration_enabled(app_settings)) {
             const gchar* gpu_device = settings_get_gpu_device_name(app_settings);
             doc->gpu_compositor = gpu_compositor_create(gpu_device);
@@ -1666,7 +1667,7 @@ gboolean document_init_rendering_structures(ImageDocument* doc) {
         } else {
             g_message("GPU acceleration: Disabled by settings");
         }
-        
+
         if (app_settings) {
             settings_free(app_settings);
         }

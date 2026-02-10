@@ -37,6 +37,16 @@ typedef struct {
     gboolean show_statusbar;   /* Show status bar (default TRUE) */
     gboolean show_gpu_stats;   /* Show GPU compositor statistics overlay (default FALSE) */
 
+    /* Alpha (transparency) checkerboard: 0=Small (8px), 1=Medium (16px), 2=Large (32px), default 1 */
+    gint alpha_check_size;
+    /* Alpha check colors (0.0-1.0). Default one: white, two: rgb(204,204,204) */
+    gdouble alpha_color_one_r;
+    gdouble alpha_color_one_g;
+    gdouble alpha_color_one_b;
+    gdouble alpha_color_two_r;
+    gdouble alpha_color_two_g;
+    gdouble alpha_color_two_b;
+
     /* Tone mapping settings */
     gboolean tone_map_auto_apply;      /* Auto-apply tone mapping settings (bypass dialog) */
     gint tone_map_operator;            /* Tone mapping operator (0=linear, 1=filmic, 2=drago, 3=reinhard) */
@@ -272,6 +282,20 @@ void settings_set_show_gpu_stats(Settings* settings, gboolean show);
  * @return TRUE if GPU stats overlay should be shown
  */
 gboolean settings_get_show_gpu_stats(Settings* settings);
+
+/**
+ * Alpha checkerboard: size (0=Small/8px, 1=Medium/16px, 2=Large/32px)
+ */
+void settings_set_alpha_check_size(Settings* settings, gint size);
+gint settings_get_alpha_check_size(Settings* settings);
+
+/**
+ * Alpha checkerboard: color one and color two (0.0-1.0 RGB)
+ */
+void settings_set_alpha_color_one(Settings* settings, gdouble r, gdouble g, gdouble b);
+void settings_get_alpha_color_one(Settings* settings, gdouble* r, gdouble* g, gdouble* b);
+void settings_set_alpha_color_two(Settings* settings, gdouble r, gdouble g, gdouble b);
+void settings_get_alpha_color_two(Settings* settings, gdouble* r, gdouble* g, gdouble* b);
 
 /**
  * Tone mapping settings getters/setters

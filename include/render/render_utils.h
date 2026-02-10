@@ -1,6 +1,7 @@
 #ifndef RENDER_UTILS_H
 #define RENDER_UTILS_H
 
+#include "app/settings.h"
 #include "render/dirty.h"
 #include <cairo/cairo.h>
 #include <gtk/gtk.h>
@@ -41,7 +42,17 @@ cairo_surface_t* pixbuf_to_cairo_surface(GdkPixbuf* pixbuf);
 GdkPixbuf* cairo_surface_to_pixbuf(cairo_surface_t* surface, gboolean keep_alpha);
 
 /**
+ * Set alpha (transparency) checkerboard options from app settings.
+ * Call once after loading settings (e.g. on app startup) and again when the user
+ * changes these options in the settings dialog. Options are stored in memory and
+ * applied to all subsequent checkerboard drawing.
+ * @param settings App settings (must not be NULL)
+ */
+void render_utils_set_alpha_check_from_settings(const Settings* settings);
+
+/**
  * Draw a checkered background pattern for transparency visualization
+ * Uses the options last set by render_utils_set_alpha_check_from_settings (or defaults).
  * @param cr The Cairo context to draw on
  * @param image_width Width of the area to fill
  * @param image_height Height of the area to fill

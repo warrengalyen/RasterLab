@@ -83,6 +83,15 @@ static Settings* settings_create_default(void) {
     settings->show_statusbar = TRUE;   /* Show status bar by default */
     settings->show_gpu_stats = FALSE;  /* Hide GPU stats by default */
 
+    /* Alpha checkerboard: Medium (16px), white + light gray */
+    settings->alpha_check_size = 1; /* 0=Small/8, 1=Medium/16, 2=Large/32 */
+    settings->alpha_color_one_r = 1.0;
+    settings->alpha_color_one_g = 1.0;
+    settings->alpha_color_one_b = 1.0;
+    settings->alpha_color_two_r = 204.0 / 255.0;
+    settings->alpha_color_two_g = 204.0 / 255.0;
+    settings->alpha_color_two_b = 204.0 / 255.0;
+
     /* Tone mapping defaults */
     settings->tone_map_auto_apply = FALSE;      /* Show dialog by default */
     settings->tone_map_operator = 0;            /* Linear operator */
@@ -150,6 +159,11 @@ static gdouble parse_double_attr(xmlNode* node, const char* attr_name, gdouble d
     }
     return default_value;
 }
+
+/**
+ * Parse "R,G,B" string (0-255) into 0.0-1.0 doubles. Returns TRUE if parsed successfully.
+ */
+static gboolean parse_rgb_string(const char* str, gdouble* r, gdouble* g, gdouble* b);
 
 /**
  * Parse an integer value from XML attribute
@@ -278,6 +292,16 @@ static void settings_load_performance(Settings* settings, xmlNode* performance_n
 static void settings_save_performance(xmlTextWriterPtr writer, Settings* settings);
 
 /**
+ * Load UI settings from XML (canvas background + checkerboard, under <ui>)
+ */
+static void settings_load_ui(Settings* settings, xmlNode* ui_node);
+
+/**
+ * Save UI settings to XML (forward declaration)
+ */
+static void settings_save_ui(xmlTextWriterPtr writer, Settings* settings);
+
+/**
  * Load view settings from XML (forward declaration)
  */
 static void settings_load_view(Settings* settings, xmlNode* view_node);
@@ -392,17 +416,14 @@ Settings* settings_load(const char* app_dir) {
             continue;
         }
 
-        if (xmlStrcmp(cur->name, (const xmlChar*)"canvas") == 0) {
-            settings_load_canvas(settings, cur);
+        if (xmlStrcmp(cur->name, (const xmlChar*)"ui") == 0) {
+            settings_load_ui(settings, cur);
         } else if (xmlStrcmp(cur->name, (const xmlChar*)"tools") == 0) {
             settings_load_tools(settings, cur);
         } else if (xmlStrcmp(cur->name, (const xmlChar*)"recent_files") == 0) {
             settings_load_recent_files(settings, cur);
         } else if (xmlStrcmp(cur->name, (const xmlChar*)"performance") == 0) {
             settings_load_performance(settings, cur);
-        } else if (xmlStrcmp(cur->name, (const xmlChar*)"undo") == 0) {
-            /* Legacy format: undo as direct child - load it directly */
-            settings_load_undo(settings, cur);
         } else if (xmlStrcmp(cur->name, (const xmlChar*)"view") == 0) {
             settings_load_view(settings, cur);
         } else if (xmlStrcmp(cur->name, (const xmlChar*)"tone_mapping") == 0) {
@@ -578,6 +599,53 @@ static void settings_save_performance(xmlTextWriterPtr writer, Settings* setting
 }
 
 /**
+ * Load UI settings from XML (canvas background + checkerboard under <ui>)
+ */
+static void settings_load_ui(Settings* settings, xmlNode* ui_node) {
+    if (!settings || !ui_node) {
+        return;
+    }
+
+    for (xmlNode* cur = ui_node->children; cur; cur = cur->next) {
+        if (cur->type != XML_ELEMENT_NODE) {
+            continue;
+        }
+
+        if (xmlStrcmp(cur->name, (const xmlChar*)"canvas") == 0) {
+            settings_load_canvas(settings, cur);
+        }
+        else if (xmlStrcmp(cur->name, (const xmlChar*)"alpha_check_size") == 0) {
+            xmlChar* value_attr = xmlGetProp(cur, (const xmlChar*)"value");
+            if (value_attr) {
+                gint v = (gint)strtol((const char*)value_attr, NULL, 10);
+                settings_set_alpha_check_size(settings, v);
+                xmlFree(value_attr);
+            }
+        }
+        else if (xmlStrcmp(cur->name, (const xmlChar*)"alpha_color_one") == 0) {
+            xmlChar* value_attr = xmlGetProp(cur, (const xmlChar*)"value");
+            if (value_attr) {
+                gdouble r, g, b;
+                if (parse_rgb_string((const char*)value_attr, &r, &g, &b)) {
+                    settings_set_alpha_color_one(settings, r, g, b);
+                }
+                xmlFree(value_attr);
+            }
+        }
+        else if (xmlStrcmp(cur->name, (const xmlChar*)"alpha_color_two") == 0) {
+            xmlChar* value_attr = xmlGetProp(cur, (const xmlChar*)"value");
+            if (value_attr) {
+                gdouble r, g, b;
+                if (parse_rgb_string((const char*)value_attr, &r, &g, &b)) {
+                    settings_set_alpha_color_two(settings, r, g, b);
+                }
+                xmlFree(value_attr);
+            }
+        }
+    }
+}
+
+/**
  * Load view settings from XML
  */
 static void settings_load_view(Settings* settings, xmlNode* view_node) {
@@ -662,29 +730,64 @@ static void settings_save_view(xmlTextWriterPtr writer, Settings* settings) {
 }
 
 /**
- * Save canvas background color to XML
+ * Save UI settings to XML (canvas background + checkerboard under <ui>)
  */
-static void settings_save_canvas(xmlTextWriterPtr writer, Settings* settings) {
+static void settings_save_ui(xmlTextWriterPtr writer, Settings* settings) {
+    if (!writer || !settings) {
+        return;
+    }
+
+    xmlTextWriterStartElement(writer, (const xmlChar*)"ui");
+
+    /* Canvas background (under ui) */
     xmlTextWriterStartElement(writer, (const xmlChar*)"canvas");
     xmlTextWriterStartElement(writer, (const xmlChar*)"background");
-
-    /* Convert to 0-255 range */
-    guint r = (guint)(settings->canvas_bg_r * 255.0);
-    guint g = (guint)(settings->canvas_bg_g * 255.0);
-    guint b = (guint)(settings->canvas_bg_b * 255.0);
-
-    gchar r_str[16], g_str[16], b_str[16];
-    g_snprintf(r_str, sizeof(r_str), "%u", r);
-    g_snprintf(g_str, sizeof(g_str), "%u", g);
-    g_snprintf(b_str, sizeof(b_str), "%u", b);
-
-    xmlTextWriterWriteAttribute(writer, (const xmlChar*)"r", (const xmlChar*)r_str);
-    xmlTextWriterWriteAttribute(writer, (const xmlChar*)"g", (const xmlChar*)g_str);
-    xmlTextWriterWriteAttribute(writer, (const xmlChar*)"b", (const xmlChar*)b_str);
-    xmlTextWriterWriteAttribute(writer, (const xmlChar*)"a", (const xmlChar*)"255");
-
+    {
+        guint r = (guint)(settings->canvas_bg_r * 255.0);
+        guint g = (guint)(settings->canvas_bg_g * 255.0);
+        guint b = (guint)(settings->canvas_bg_b * 255.0);
+        gchar r_str[16], g_str[16], b_str[16];
+        g_snprintf(r_str, sizeof(r_str), "%u", r);
+        g_snprintf(g_str, sizeof(g_str), "%u", g);
+        g_snprintf(b_str, sizeof(b_str), "%u", b);
+        xmlTextWriterWriteAttribute(writer, (const xmlChar*)"r", (const xmlChar*)r_str);
+        xmlTextWriterWriteAttribute(writer, (const xmlChar*)"g", (const xmlChar*)g_str);
+        xmlTextWriterWriteAttribute(writer, (const xmlChar*)"b", (const xmlChar*)b_str);
+        xmlTextWriterWriteAttribute(writer, (const xmlChar*)"a", (const xmlChar*)"255");
+    }
     xmlTextWriterEndElement(writer); /* background */
     xmlTextWriterEndElement(writer); /* canvas */
+
+    /* Alpha checkerboard (under ui) */
+    {
+        gchar buf[16];
+        g_snprintf(buf, sizeof(buf), "%d", settings->alpha_check_size);
+        xmlTextWriterStartElement(writer, (const xmlChar*)"alpha_check_size");
+        xmlTextWriterWriteAttribute(writer, (const xmlChar*)"value", (const xmlChar*)buf);
+        xmlTextWriterEndElement(writer);
+    }
+    {
+        gchar buf[16];
+        g_snprintf(buf, sizeof(buf), "%d,%d,%d",
+                   (gint)(settings->alpha_color_one_r * 255.0 + 0.5),
+                   (gint)(settings->alpha_color_one_g * 255.0 + 0.5),
+                   (gint)(settings->alpha_color_one_b * 255.0 + 0.5));
+        xmlTextWriterStartElement(writer, (const xmlChar*)"alpha_color_one");
+        xmlTextWriterWriteAttribute(writer, (const xmlChar*)"value", (const xmlChar*)buf);
+        xmlTextWriterEndElement(writer);
+    }
+    {
+        gchar buf[16];
+        g_snprintf(buf, sizeof(buf), "%d,%d,%d",
+                   (gint)(settings->alpha_color_two_r * 255.0 + 0.5),
+                   (gint)(settings->alpha_color_two_g * 255.0 + 0.5),
+                   (gint)(settings->alpha_color_two_b * 255.0 + 0.5));
+        xmlTextWriterStartElement(writer, (const xmlChar*)"alpha_color_two");
+        xmlTextWriterWriteAttribute(writer, (const xmlChar*)"value", (const xmlChar*)buf);
+        xmlTextWriterEndElement(writer);
+    }
+
+    xmlTextWriterEndElement(writer); /* ui */
 }
 
 /**
@@ -830,8 +933,8 @@ gboolean settings_save(Settings* settings, const char* app_dir) {
     /* Write root element */
     xmlTextWriterStartElement(writer, (const xmlChar*)"app_settings");
 
-    /* Write canvas settings */
-    settings_save_canvas(writer, settings);
+    /* Write UI settings (canvas background + checkerboard) */
+    settings_save_ui(writer, settings);
 
     /* Write tool options */
     settings_save_tools(writer, settings);
@@ -1326,6 +1429,82 @@ void settings_set_show_gpu_stats(Settings* settings, gboolean show) {
         return;
     }
     settings->show_gpu_stats = show;
+}
+
+/**
+ * Alpha checkerboard size: 0=Small (8px), 1=Medium (16px), 2=Large (32px)
+ */
+void settings_set_alpha_check_size(Settings* settings, gint size) {
+    if (!settings) {
+        return;
+    }
+    if (size < 0) {
+        size = 0;
+    }
+    if (size > 2) {
+        size = 2;
+    }
+    settings->alpha_check_size = size;
+}
+
+gint settings_get_alpha_check_size(Settings* settings) {
+    if (!settings) {
+        return 1; /* Default Medium */
+    }
+    return settings->alpha_check_size;
+}
+
+static gboolean parse_rgb_string(const char* str, gdouble* r, gdouble* g, gdouble* b) {
+    if (!str || !r || !g || !b) {
+        return FALSE;
+    }
+    gint ri = 0, gi = 0, bi = 0;
+    if (sscanf(str, "%d,%d,%d", &ri, &gi, &bi) != 3) {
+        return FALSE;
+    }
+    if (ri < 0) ri = 0; if (ri > 255) ri = 255;
+    if (gi < 0) gi = 0; if (gi > 255) gi = 255;
+    if (bi < 0) bi = 0; if (bi > 255) bi = 255;
+    *r = (gdouble)ri / 255.0;
+    *g = (gdouble)gi / 255.0;
+    *b = (gdouble)bi / 255.0;
+    return TRUE;
+}
+
+void settings_set_alpha_color_one(Settings* settings, gdouble r, gdouble g, gdouble b) {
+    if (!settings) {
+        return;
+    }
+    settings->alpha_color_one_r = (r < 0.0) ? 0.0 : ((r > 1.0) ? 1.0 : r);
+    settings->alpha_color_one_g = (g < 0.0) ? 0.0 : ((g > 1.0) ? 1.0 : g);
+    settings->alpha_color_one_b = (b < 0.0) ? 0.0 : ((b > 1.0) ? 1.0 : b);
+}
+
+void settings_get_alpha_color_one(Settings* settings, gdouble* r, gdouble* g, gdouble* b) {
+    if (!settings || !r || !g || !b) {
+        return;
+    }
+    *r = settings->alpha_color_one_r;
+    *g = settings->alpha_color_one_g;
+    *b = settings->alpha_color_one_b;
+}
+
+void settings_set_alpha_color_two(Settings* settings, gdouble r, gdouble g, gdouble b) {
+    if (!settings) {
+        return;
+    }
+    settings->alpha_color_two_r = (r < 0.0) ? 0.0 : ((r > 1.0) ? 1.0 : r);
+    settings->alpha_color_two_g = (g < 0.0) ? 0.0 : ((g > 1.0) ? 1.0 : g);
+    settings->alpha_color_two_b = (b < 0.0) ? 0.0 : ((b > 1.0) ? 1.0 : b);
+}
+
+void settings_get_alpha_color_two(Settings* settings, gdouble* r, gdouble* g, gdouble* b) {
+    if (!settings || !r || !g || !b) {
+        return;
+    }
+    *r = settings->alpha_color_two_r;
+    *g = settings->alpha_color_two_g;
+    *b = settings->alpha_color_two_b;
 }
 
 /**

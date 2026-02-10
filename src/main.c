@@ -1,6 +1,7 @@
 #include "app/autosave.h"
 #include "app/recent_files.h"
 #include "app/settings.h"
+#include "render/render_utils.h"
 #include "plugins/builtin_plugins.h"
 #include "plugins/format_registry.h"
 #include "plugins/plugin_loader.h"
@@ -87,6 +88,9 @@ int main(int argc, char* argv[]) {
             gdouble r, g, b;
             settings_get_canvas_background(app->settings, &r, &g, &b);
             ui_set_canvas_background_color(app, r, g, b);
+
+            /* Apply alpha (transparency) checkerboard options from settings */
+            render_utils_set_alpha_check_from_settings(app->settings);
 
             /* Load tool options from settings */
             ui_load_tool_options_from_settings(app);
