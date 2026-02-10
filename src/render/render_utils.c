@@ -173,8 +173,9 @@ GdkPixbuf* cairo_surface_to_pixbuf(cairo_surface_t* surface, gboolean keep_alpha
     return pixbuf;
 }
 
-/* Default alpha check: Medium (16px), white + light gray */
-#define DEFAULT_ALPHA_CHECK_SQUARE_SIZE 16
+/* Default: Medium = 8 px per check → 6×6 squares in 48px */
+#define DEFAULT_ALPHA_CHECK_SQUARE_SIZE 8
+
 #define DEFAULT_ALPHA_COLOR_ONE_R 1.0
 #define DEFAULT_ALPHA_COLOR_ONE_G 1.0
 #define DEFAULT_ALPHA_COLOR_ONE_B 1.0
@@ -182,7 +183,7 @@ GdkPixbuf* cairo_surface_to_pixbuf(cairo_surface_t* surface, gboolean keep_alpha
 #define DEFAULT_ALPHA_COLOR_TWO_G (204.0 / 255.0)
 #define DEFAULT_ALPHA_COLOR_TWO_B (204.0 / 255.0)
 
-/* In-memory alpha check options - set on app load and when user changes settings */
+/* Pixels per check (one square): Small=4 (12×12 in 48px), Medium=8 (6×6), Large=16 (3×3). Tile = 2×2 checks. */
 static gint current_alpha_check_square_size = DEFAULT_ALPHA_CHECK_SQUARE_SIZE;
 static gdouble current_r1 = DEFAULT_ALPHA_COLOR_ONE_R, current_g1 = DEFAULT_ALPHA_COLOR_ONE_G, current_b1 = DEFAULT_ALPHA_COLOR_ONE_B;
 static gdouble current_r2 = DEFAULT_ALPHA_COLOR_TWO_R, current_g2 = DEFAULT_ALPHA_COLOR_TWO_G, current_b2 = DEFAULT_ALPHA_COLOR_TWO_B;
@@ -201,15 +202,15 @@ void render_utils_set_alpha_check_from_settings(const Settings* settings) {
     if (!settings) {
         return;
     }
+    /* Small: 4 px/check (12×12 in 48px); Medium: 8 (6×6); Large: 16 (3×3). Tile = 2×2 of these squares. */
     switch (settings_get_alpha_check_size((Settings*)settings)) {
-        case 0: current_alpha_check_square_size = 8;   break; /* Small */
-        case 1: current_alpha_check_square_size = 16; break; /* Medium */
-        case 2: current_alpha_check_square_size = 32; break; /* Large */
+        case 0: current_alpha_check_square_size = 4;  break; /* Small */
+        case 1: current_alpha_check_square_size = 8; break; /* Medium */
+        case 2: current_alpha_check_square_size = 16; break; /* Large */
         default: current_alpha_check_square_size = DEFAULT_ALPHA_CHECK_SQUARE_SIZE; break;
     }
     settings_get_alpha_color_one((Settings*)settings, &current_r1, &current_g1, &current_b1);
     settings_get_alpha_color_two((Settings*)settings, &current_r2, &current_g2, &current_b2);
-    /* Invalidate pattern cache so next draw uses new options */
     if (checkered_pattern) {
         cairo_pattern_destroy(checkered_pattern);
         checkered_pattern = NULL;
@@ -222,14 +223,13 @@ void render_utils_set_alpha_check_from_settings(const Settings* settings) {
 }
 
 /**
- * Create or update the checkered pattern using current in-memory options
+ * Create tile: 2×2 checkerboard of squares (square_size × square_size each). Tile size = 2*square_size.
  */
 static void ensure_checkered_pattern(void) {
     gint square_size = current_alpha_check_square_size;
     gdouble r1 = current_r1, g1 = current_g1, b1 = current_b1;
     gdouble r2 = current_r2, g2 = current_g2, b2 = current_b2;
 
-    /* Reuse cache if parameters match */
     if (checkered_pattern != NULL &&
         cached_square_size == square_size &&
         cached_r1 == r1 && cached_g1 == g1 && cached_b1 == b1 &&
@@ -237,7 +237,6 @@ static void ensure_checkered_pattern(void) {
         return;
     }
 
-    /* Destroy previous pattern */
     if (checkered_pattern) {
         cairo_pattern_destroy(checkered_pattern);
         checkered_pattern = NULL;
@@ -252,26 +251,22 @@ static void ensure_checkered_pattern(void) {
     cached_r2 = r2; cached_g2 = g2; cached_b2 = b2;
 
     {
-        const gint pattern_size = square_size * 2;
+        const gint tile_size = square_size * 2; /* 2×2 block */
         cairo_t* pattern_cr;
 
-        checkered_pattern_surface = cairo_image_surface_create(CAIRO_FORMAT_RGB24, pattern_size, pattern_size);
+        checkered_pattern_surface = cairo_image_surface_create(CAIRO_FORMAT_RGB24, tile_size, tile_size);
         pattern_cr = cairo_create(checkered_pattern_surface);
 
+        /* Top-left, bottom-right: color1. Top-right, bottom-left: color2. */
         cairo_set_source_rgb(pattern_cr, r1, g1, b1);
         cairo_rectangle(pattern_cr, 0, 0, square_size, square_size);
         cairo_fill(pattern_cr);
-
+        cairo_rectangle(pattern_cr, square_size, square_size, square_size, square_size);
+        cairo_fill(pattern_cr);
         cairo_set_source_rgb(pattern_cr, r2, g2, b2);
         cairo_rectangle(pattern_cr, square_size, 0, square_size, square_size);
         cairo_fill(pattern_cr);
-
-        cairo_set_source_rgb(pattern_cr, r2, g2, b2);
         cairo_rectangle(pattern_cr, 0, square_size, square_size, square_size);
-        cairo_fill(pattern_cr);
-
-        cairo_set_source_rgb(pattern_cr, r1, g1, b1);
-        cairo_rectangle(pattern_cr, square_size, square_size, square_size, square_size);
         cairo_fill(pattern_cr);
 
         cairo_destroy(pattern_cr);
@@ -283,24 +278,29 @@ static void ensure_checkered_pattern(void) {
 }
 
 /**
- * Draw a checkered background pattern for transparency
+ * Draw a checkered background for transparency.
+ * Tile = 2×2 squares; square size 4/8/16 px (Small/Medium/Large) → 12/6/3 squares per row in 48px.
+ * Tile is repeated across the area (no scaling).
  */
 void draw_checkered_background(cairo_t* cr, gint image_width, gint image_height) {
-    const gint square_size = current_alpha_check_square_size;
-    for (gint y = 0; y < image_height; y += square_size) {
-        for (gint x = 0; x < image_width; x += square_size) {
-            gint cell_x = x / square_size;
-            gint cell_y = y / square_size;
-            gboolean use_first = ((cell_x + cell_y) % 2 == 0);
-            if (use_first) {
-                cairo_set_source_rgb(cr, current_r1, current_g1, current_b1);
-            } else {
-                cairo_set_source_rgb(cr, current_r2, current_g2, current_b2);
-            }
-            cairo_rectangle(cr, x, y, square_size, square_size);
-            cairo_fill(cr);
-        }
+    if (image_width <= 0 || image_height <= 0) {
+        return;
     }
+
+    ensure_checkered_pattern();
+    if (!checkered_pattern) {
+        cairo_set_source_rgb(cr, 0.9, 0.9, 0.9);
+        cairo_rectangle(cr, 0, 0, image_width, image_height);
+        cairo_fill(cr);
+        return;
+    }
+
+    cairo_save(cr);
+    cairo_set_source(cr, checkered_pattern);
+    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+    cairo_rectangle(cr, 0, 0, image_width, image_height);
+    cairo_fill(cr);
+    cairo_restore(cr);
 }
 
 /**
@@ -322,21 +322,18 @@ void draw_checkered_background_offset(cairo_t* cr, gint offset_x, gint offset_y,
 
     cairo_save(cr);
 
-    /* Use SOURCE operator to completely replace destination pixels.
-     * This prevents any artifacts from partial alpha blending with old content. */
+    /* Use SOURCE operator to completely replace destination pixels. */
     cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
 
-    /* Set the pattern as source with NEAREST filtering to avoid interpolation artifacts */
-    cairo_set_source(cr, checkered_pattern);
-    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+    if (image_width > 0 && image_height > 0) {
+        cairo_translate(cr, offset_x, offset_y);
+        cairo_set_source(cr, checkered_pattern);
+        cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+        cairo_rectangle(cr, 0, 0, image_width, image_height);
+        cairo_fill(cr);
+    }
 
-    /* Draw rectangle at the viewport area */
-    cairo_rectangle(cr, offset_x, offset_y, image_width, image_height);
-    cairo_fill(cr);
-
-    /* Reset operator to default OVER for subsequent drawing */
     cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
-
     cairo_restore(cr);
 }
 

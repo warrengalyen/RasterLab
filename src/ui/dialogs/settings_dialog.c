@@ -6,11 +6,13 @@
 #include "app/autosave.h"
 #include "app/settings.h"
 #include "render/gpu_compositor.h"
+#include "render/render_utils.h"
 #include "ui.h"
 #include "ui/dialogs/color_chooser_dialog.h"
 #include "ui/ui_utils.h"
 #include <glib.h>
 #include <gtk/gtk.h>
+#include <math.h>
 #include <string.h>
 
 enum {
@@ -18,6 +20,47 @@ enum {
     RENDERER_COLUMN_DEVICE_ID,
     RENDERER_N_COLUMNS
 };
+
+/* Pixels per check: Small=4 (12×12 in 48px), Medium=8 (6×6), Large=16 (3×3). */
+static gint alpha_check_square_size_from_index(gint index) {
+    switch (index) {
+        case 0:
+            return 4; /* Small: 12 squares per row in 48px */
+        case 1:
+            return 8; /* Medium: 6 squares per row */
+        case 2:
+            return 16; /* Large: 3 squares per row */
+        default:
+            return 8;
+    }
+}
+
+/* Grid color presets: Highlights (0), Midtones (1), Shadows (2). Values in 0-1 for Cairo. */
+typedef struct {
+    double r1, g1, b1;
+    double r2, g2, b2;
+} AlphaCheckPreset;
+
+static const AlphaCheckPreset alpha_check_presets[] = {
+    {1.0, 1.0, 1.0, 204.0 / 255.0, 204.0 / 255.0, 204.0 / 255.0},                               /* Highlights: White, Light Gray */
+    {153.0 / 255.0, 153.0 / 255.0, 153.0 / 255.0, 102.0 / 255.0, 102.0 / 255.0, 102.0 / 255.0}, /* Midtones */
+    {51.0 / 255.0, 51.0 / 255.0, 51.0 / 255.0, 0.0, 0.0, 0.0},                                  /* Shadows: Very Dark Gray, Black */
+};
+#define ALPHA_CHECK_N_PRESETS (sizeof(alpha_check_presets) / sizeof(alpha_check_presets[0]))
+
+static gint alpha_check_preset_from_settings(Settings* s) {
+    gdouble r1, g1, b1, r2, g2, b2;
+    settings_get_alpha_color_one(s, &r1, &g1, &b1);
+    settings_get_alpha_color_two(s, &r2, &g2, &b2);
+    for (size_t i = 0; i < ALPHA_CHECK_N_PRESETS; i++) {
+        const AlphaCheckPreset* p = &alpha_check_presets[i];
+        if (fabs(r1 - p->r1) < 0.02 && fabs(g1 - p->g1) < 0.02 && fabs(b1 - p->b1) < 0.02 &&
+            fabs(r2 - p->r2) < 0.02 && fabs(g2 - p->g2) < 0.02 && fabs(b2 - p->b2) < 0.02) {
+            return (gint)i;
+        }
+    }
+    return 0;
+}
 
 /* Apply dialog values to settings and save; then update UI (e.g. canvas bg) */
 static void settings_dialog_apply_and_save(GtkDialog* dialog, AppContext* ctx) {
@@ -83,6 +126,29 @@ static void settings_dialog_apply_and_save(GtkDialog* dialog, AppContext* ctx) {
         settings_set_gpu_acceleration_enabled(ctx->settings, gtk_toggle_button_get_active(gpu_check));
     }
 
+    /* Checkerboard: grid size (0=Small, 1=Medium, 2=Large) */
+    GtkComboBox* grid_size_combo = GTK_COMBO_BOX(gtk_builder_get_object(builder, "transparency_grid_size_combo"));
+    if (grid_size_combo) {
+        gint idx = gtk_combo_box_get_active(grid_size_combo);
+        if (idx >= 0 && idx <= 2) {
+            settings_set_alpha_check_size(ctx->settings, idx);
+        }
+    }
+
+    /* Checkerboard: grid colors preset -> set both alpha colors */
+    GtkComboBox* grid_colors_combo = GTK_COMBO_BOX(gtk_builder_get_object(builder, "transparency_grid_colors_combo"));
+    if (grid_colors_combo) {
+        gint idx = gtk_combo_box_get_active(grid_colors_combo);
+        if (idx >= 0 && (size_t)idx < ALPHA_CHECK_N_PRESETS) {
+            const AlphaCheckPreset* p = &alpha_check_presets[idx];
+            settings_set_alpha_color_one(ctx->settings, p->r1, p->g1, p->b1);
+            settings_set_alpha_color_two(ctx->settings, p->r2, p->g2, p->b2);
+        }
+    }
+
+    /* Apply checkerboard to global render state so canvas updates immediately */
+    render_utils_set_alpha_check_from_settings(ctx->settings);
+
     if (ctx->app_dir) {
         settings_save(ctx->settings, ctx->app_dir);
     }
@@ -106,6 +172,66 @@ static void on_settings_cancel_clicked(GtkButton* button, gpointer user_data) {
     GtkWidget* dialog = (GtkWidget*)g_object_get_data(G_OBJECT(button), "settings_dialog");
     if (dialog) {
         gtk_widget_destroy(dialog);
+    }
+}
+
+/* Draw checkerboard preview: tile 2×2 squares across 48×48. Small=12×12, Medium=6×6, Large=3×3 squares. */
+static gboolean on_transparency_preview_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
+    (void)user_data;
+    GtkWidget* toplevel = gtk_widget_get_toplevel(widget);
+    GtkBuilder* builder = (GtkBuilder*)g_object_get_data(G_OBJECT(toplevel), "settings_builder");
+    if (!builder) {
+        return FALSE;
+    }
+    GtkComboBox* size_combo = GTK_COMBO_BOX(gtk_builder_get_object(builder, "transparency_grid_size_combo"));
+    GtkComboBox* colors_combo = GTK_COMBO_BOX(gtk_builder_get_object(builder, "transparency_grid_colors_combo"));
+    if (!size_combo || !colors_combo) {
+        return FALSE;
+    }
+    gint size_index = gtk_combo_box_get_active(size_combo);
+    gint colors_index = gtk_combo_box_get_active(colors_combo);
+    if (size_index < 0)
+        size_index = 1;
+    if (colors_index < 0 || (size_t)colors_index >= ALPHA_CHECK_N_PRESETS)
+        colors_index = 0;
+
+    gint square_size = alpha_check_square_size_from_index(size_index);
+    const AlphaCheckPreset* p = &alpha_check_presets[colors_index];
+
+    gint w = gtk_widget_get_allocated_width(widget);
+    gint h = gtk_widget_get_allocated_height(widget);
+    if (w <= 0)
+        w = 48;
+    if (h <= 0)
+        h = 48;
+
+    for (gint y = 0; y < h; y += square_size) {
+        for (gint x = 0; x < w; x += square_size) {
+            gint cell_x = x / square_size;
+            gint cell_y = y / square_size;
+            gboolean use_first = ((cell_x + cell_y) & 1) == 0;
+            if (use_first) {
+                cairo_set_source_rgb(cr, p->r1, p->g1, p->b1);
+            } else {
+                cairo_set_source_rgb(cr, p->r2, p->g2, p->b2);
+            }
+            cairo_rectangle(cr, (double)x, (double)y, (double)square_size, (double)square_size);
+            cairo_fill(cr);
+        }
+    }
+    /* 1 px black border */
+    cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
+    cairo_set_line_width(cr, 1.0);
+    cairo_rectangle(cr, 0.5, 0.5, (double)w - 1.0, (double)h - 1.0);
+    cairo_stroke(cr);
+    return TRUE;
+}
+
+static void on_transparency_combo_changed(GtkComboBox* combo, gpointer user_data) {
+    (void)combo;
+    GtkWidget* preview = (GtkWidget*)user_data;
+    if (preview) {
+        gtk_widget_queue_draw(preview);
     }
 }
 
@@ -206,6 +332,63 @@ void settings_dialog_show(AppContext* ctx) {
         GdkRGBA rgba = {(float)r, (float)g, (float)b, 1.0f};
         update_color_button_appearance(canvas_bg_btn, &rgba);
         g_signal_connect(canvas_bg_btn, "clicked", G_CALLBACK(on_canvas_bgcolor_clicked), ctx);
+    }
+
+    /* Transparency (checkerboard): grid size combo - Small, Medium, Large */
+    GtkWidget* grid_size_combo = GTK_WIDGET(gtk_builder_get_object(builder, "transparency_grid_size_combo"));
+    if (grid_size_combo) {
+        GtkListStore* store = gtk_list_store_new(1, G_TYPE_STRING);
+        const gchar* size_labels[] = {"Small", "Medium", "Large", NULL};
+        for (int i = 0; size_labels[i] != NULL; i++) {
+            GtkTreeIter iter;
+            gtk_list_store_append(store, &iter);
+            gtk_list_store_set(store, &iter, 0, size_labels[i], -1);
+        }
+        gtk_combo_box_set_model(GTK_COMBO_BOX(grid_size_combo), GTK_TREE_MODEL(store));
+        g_object_unref(store);
+        GtkCellRenderer* cell = gtk_cell_renderer_text_new();
+        gtk_cell_layout_clear(GTK_CELL_LAYOUT(grid_size_combo));
+        gtk_cell_layout_pack_start(GTK_CELL_LAYOUT(grid_size_combo), cell, TRUE);
+        gtk_cell_layout_set_attributes(GTK_CELL_LAYOUT(grid_size_combo), cell, "text", 0, NULL);
+        gint size_idx = settings_get_alpha_check_size(ctx->settings);
+        if (size_idx < 0 || size_idx > 2)
+            size_idx = 1;
+        gtk_combo_box_set_active(GTK_COMBO_BOX(grid_size_combo), size_idx);
+    }
+
+    /* Transparency: grid colors combo - Highlights, Midtones, Shadows */
+    GtkWidget* grid_colors_combo = GTK_WIDGET(gtk_builder_get_object(builder, "transparency_grid_colors_combo"));
+    if (grid_colors_combo) {
+        GtkListStore* store = gtk_list_store_new(1, G_TYPE_STRING);
+        const gchar* color_labels[] = {"Highlights", "Midtones", "Shadows", NULL};
+        for (int i = 0; color_labels[i] != NULL; i++) {
+            GtkTreeIter iter;
+            gtk_list_store_append(store, &iter);
+            gtk_list_store_set(store, &iter, 0, color_labels[i], -1);
+        }
+        gtk_combo_box_set_model(GTK_COMBO_BOX(grid_colors_combo), GTK_TREE_MODEL(store));
+        g_object_unref(store);
+        GtkCellRenderer* cell = gtk_cell_renderer_text_new();
+        gtk_cell_layout_clear(GTK_CELL_LAYOUT(grid_colors_combo));
+        gtk_cell_layout_pack_start(GTK_CELL_LAYOUT(grid_colors_combo), cell, TRUE);
+        gtk_cell_layout_set_attributes(GTK_CELL_LAYOUT(grid_colors_combo), cell, "text", 0, NULL);
+        gint preset_idx = alpha_check_preset_from_settings(ctx->settings);
+        gtk_combo_box_set_active(GTK_COMBO_BOX(grid_colors_combo), preset_idx);
+    }
+
+    /* Transparency preview: draw checkerboard with current combo values */
+    GtkWidget* transparency_preview = GTK_WIDGET(gtk_builder_get_object(builder, "transparency_preview"));
+    if (transparency_preview) {
+        gtk_widget_set_size_request(transparency_preview, 48, 48);
+        gtk_widget_set_halign(transparency_preview, GTK_ALIGN_START);
+        gtk_widget_set_valign(transparency_preview, GTK_ALIGN_CENTER);
+        g_signal_connect(transparency_preview, "draw", G_CALLBACK(on_transparency_preview_draw), NULL);
+        if (grid_size_combo) {
+            g_signal_connect(grid_size_combo, "changed", G_CALLBACK(on_transparency_combo_changed), transparency_preview);
+        }
+        if (grid_colors_combo) {
+            g_signal_connect(grid_colors_combo, "changed", G_CALLBACK(on_transparency_combo_changed), transparency_preview);
+        }
     }
 
     /* Undo limit: settings use 1-100 */
