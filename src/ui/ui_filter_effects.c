@@ -2305,7 +2305,7 @@ static void on_pixelate_crystallize(GtkWidget* widget, gpointer data) {
     controls[0].filter_max = 100.0;
 
     response = ui_show_filter_dialog_with_zoom_pan(ctx, "Crystallize", controls, 1,
-                                                   on_crystallize_preview_update, values, FALSE);
+                                                   on_crystallize_preview_update, values, TRUE);
 
     if (response == GTK_RESPONSE_OK) {
         filter_values[0] = (gfloat)values[0]; /* cellSize */
