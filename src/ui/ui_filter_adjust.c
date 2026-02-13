@@ -5,6 +5,7 @@
 #include "render/layer.h"
 #include "selection/selection_mask.h"
 #include "ui.h"
+#include "ui/dialogs/channel_mixer_dialog.h"
 #include "ui/dialogs/color_balance_dialog.h"
 #include "ui/dialogs/curves_dialog.h"
 #include "ui/dialogs/gamma_dialog.h"
@@ -17,6 +18,7 @@
 #include "ui/filters/filter_auto_whitebalance.h"
 #include "ui/filters/filter_backlight.h"
 #include "ui/filters/filter_brightness_contrast.h"
+#include "ui/filters/filter_channel_mixer.h"
 #include "ui/filters/filter_chroma_key.h"
 #include "ui/filters/filter_color_invert.h"
 #include "ui/filters/filter_colorbalance.h"
@@ -815,6 +817,113 @@ static void on_adjust_colorbalance(GtkWidget* widget, gpointer data) {
     /* Clean up */
     g_object_set_data(G_OBJECT(color_balance_dialog_get_window(dialog)), "original_layer", NULL);
     color_balance_dialog_free(dialog);
+    layer_free(temp_layer);
+}
+
+/**
+ * Channel mixer filter preview update callback
+ */
+static gboolean on_channelmixer_preview_update(void* dialog_ptr,
+                                               const gfloat* mixer,
+                                               gboolean monochrome,
+                                               gboolean preserve_luminance,
+                                               gpointer user_data) {
+    ChannelMixerDialog* dialog = (ChannelMixerDialog*)dialog_ptr;
+    ImageLayer* temp_layer = (ImageLayer*)user_data;
+    ImageLayer* original_layer;
+
+    if (!dialog || !mixer || !temp_layer) {
+        return FALSE;
+    }
+
+    original_layer = (ImageLayer*)g_object_get_data(G_OBJECT(channel_mixer_dialog_get_window(dialog)), "original_layer");
+    if (!original_layer) {
+        return FALSE;
+    }
+
+    if (!ui_filter_utils_copy_layer_surface(temp_layer, original_layer)) {
+        return FALSE;
+    }
+
+    if (!filter_channel_mixer_apply(temp_layer, mixer, monochrome, preserve_luminance)) {
+        return FALSE;
+    }
+
+    channel_mixer_dialog_update_after_layer(dialog, temp_layer);
+    return TRUE;
+}
+
+/**
+ * Adjustments > Channel Mixer callback
+ */
+static void on_adjust_channel_mixer(GtkWidget* widget, gpointer data) {
+    (void)widget;
+
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc;
+    ImageLayer* layer;
+    ChannelMixerDialog* dialog;
+    ImageLayer* temp_layer;
+    gint response;
+    gfloat mixer[16];
+    gboolean monochrome;
+    gboolean preserve_luminance;
+    gfloat filter_values[18];
+
+    if (!ctx) {
+        return;
+    }
+
+    doc = ui_get_active_document(ctx);
+    if (!doc) {
+        g_warning("No document open");
+        return;
+    }
+
+    layer = document_get_selected_layer(doc);
+    if (!layer) {
+        g_warning("No layer selected");
+        return;
+    }
+
+    dialog = channel_mixer_dialog_new("Channel Mixer");
+    if (!dialog) {
+        g_warning("Failed to create channel mixer dialog");
+        return;
+    }
+
+    temp_layer = ui_filter_utils_create_temp_layer(layer);
+    if (!temp_layer) {
+        g_warning("Failed to create temporary layer for preview");
+        channel_mixer_dialog_free(dialog);
+        return;
+    }
+
+    g_object_set_data(G_OBJECT(channel_mixer_dialog_get_window(dialog)), "original_layer", layer);
+    g_object_set_data(G_OBJECT(channel_mixer_dialog_get_window(dialog)), "filter_doc", doc);
+
+    channel_mixer_dialog_set_layers(dialog, layer, temp_layer);
+    channel_mixer_dialog_set_preview_callback(dialog, on_channelmixer_preview_update, temp_layer);
+
+    if (ctx->window) {
+        gtk_window_set_transient_for(channel_mixer_dialog_get_window(dialog), GTK_WINDOW(ctx->window));
+    }
+
+    response = channel_mixer_dialog_run(dialog, GTK_WINDOW(ctx->window),
+                                        mixer, &monochrome, &preserve_luminance);
+
+    if (response == GTK_RESPONSE_OK) {
+        for (int i = 0; i < 16; i++) {
+            filter_values[i] = mixer[i];
+        }
+        filter_values[16] = (gfloat)monochrome;
+        filter_values[17] = (gfloat)preserve_luminance;
+        ui_apply_layer_filter_with_value(ctx, filter_channel_mixer_apply_values,
+                                         "Channel Mixer", filter_values, 18);
+    }
+
+    g_object_set_data(G_OBJECT(channel_mixer_dialog_get_window(dialog)), "original_layer", NULL);
+    channel_mixer_dialog_free(dialog);
     layer_free(temp_layer);
 }
 
@@ -2091,6 +2200,11 @@ void ui_filter_adjust_setup_menu(GtkBuilder* builder, AppContext* ctx) {
     GtkWidget* adjust_menu_colorbalance = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_colorbalance"));
     if (adjust_menu_colorbalance) {
         g_signal_connect(adjust_menu_colorbalance, "activate", G_CALLBACK(on_adjust_colorbalance), ctx);
+    }
+
+    GtkWidget* adjust_menu_channel_mixer = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_channel_mixer"));
+    if (adjust_menu_channel_mixer) {
+        g_signal_connect(adjust_menu_channel_mixer, "activate", G_CALLBACK(on_adjust_channel_mixer), ctx);
     }
 
     GtkWidget* adjust_menu_exposure = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_exposure"));

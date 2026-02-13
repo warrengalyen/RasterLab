@@ -105,6 +105,7 @@ set(SOURCES
     ui/dialogs/canvas_size_dialog.c
     ui/dialogs/hdr_image_dialog.c
     ui/dialogs/clouds_dialog.c
+    ui/dialogs/channel_mixer_dialog.c
     ui/dialogs/color_balance_dialog.c
     ui/dialogs/color_chooser_dialog.c
     ui/dialogs/convolution_dialog.c
@@ -138,6 +139,7 @@ set(SOURCES
     ui/filters/filter_box_blur.c
     ui/filters/filter_brightness_contrast.c
     ui/filters/filter_canny_edge.c
+    ui/filters/filter_channel_mixer.c
     ui/filters/filter_chroma_key.c
     ui/filters/filter_color_halftone.c
     ui/filters/filter_color_invert.c

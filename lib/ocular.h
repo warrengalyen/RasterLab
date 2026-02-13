@@ -50,9 +50,11 @@ typedef struct {
 
 /* Edge handling mode */
 typedef enum {
-    OC_EDGE_WRAP = 0,   /* repeat edge pixel */
-    OC_EDGE_MIRROR = 1, /* mirror edge pixel */
-    OC_EDGE_CLAMP = 2,  /* clamp edge pixel */
+    OC_EDGE_WRAP = 0,   // repeat edge pixel
+    OC_EDGE_MIRROR = 1, // mirror edge pixel
+    OC_EDGE_CLAMP = 2,  // clamp edge pixel
+    OC_EDGE_ERASE = 3,  // erase edge pixel
+    OC_EDGE_IGNORE = 4, // ignore edge pixel
 } OcEdgeMode;
 
 /* Blend modes */
@@ -278,6 +280,9 @@ OC_STATUS ocularBrightnessAndContrastFilter(unsigned char* Input, unsigned char*
 OC_STATUS ocularCurvesFilter(const unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride,
                              const OcCurve* curveR, const OcCurve* curveG, const OcCurve* curveB, const OcCurve* curveL);
 
+OC_STATUS ocularChannelMixerFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride,
+                                   const float* mixer, bool monochrome, bool preserveLuminance);
+
 OC_STATUS ocularGrayscaleFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride);
 
 OC_STATUS ocularRGBFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, float redAdjustment,
@@ -496,6 +501,12 @@ OC_STATUS ocularFrostedGlassEffect(unsigned char* Input, unsigned char* Output, 
 OC_STATUS ocularFilmGrainEffect(unsigned char* Input, unsigned char* Output, int Width, int Height, int Channels, float Strength, float Softness);
 
 OC_STATUS ocularReliefFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, float Angle, int Offset);
+
+OC_STATUS ocularGlassTilesFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride,
+                                 float rotation, int tileSize, float curvature, int quality, OcEdgeMode edgeMode);
+
+OC_STATUS ocularMarbleFilter(const unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride,
+                             float scale, float turbulence, int quality, OcEdgeMode edgeMode, unsigned int seed);
 
 OC_STATUS ocularFFTFilter(unsigned char* Input, unsigned char* Output, int Width, int Height, int Stride, OcFFTFilterParams* params);
 
