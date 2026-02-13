@@ -161,6 +161,7 @@ set(SOURCES
     ui/filters/filter_gamma.c
     ui/filters/filter_gaussian_blur.c
     ui/filters/filter_gradient_edge.c
+    ui/filters/filter_glass_tiles.c
     ui/filters/filter_grayscale.c
     ui/filters/filter_guided.c
     ui/filters/filter_highlight_shadow_tint.c

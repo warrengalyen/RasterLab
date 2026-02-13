@@ -26,6 +26,7 @@
 #include "ui/filters/filter_dehaze.h"
 #include "ui/filters/filter_equalize.h"
 #include "ui/filters/filter_exposure.h"
+#include "ui/filters/filter_glass_tiles.h"
 #include "ui/filters/filter_gamma.h"
 #include "ui/filters/filter_grayscale.h"
 #include "ui/filters/filter_highlight_shadow_tint.h"
@@ -286,6 +287,34 @@ static gboolean on_sepia_preview_update(FilterDialog* dialog,
 }
 
 /**
+ * Glass Tiles filter preview update callback
+ */
+static gboolean on_glass_tiles_preview_update(FilterDialog* dialog,
+                                              const gdouble* values,
+                                              gint num_values,
+                                              gpointer user_data) {
+    FilterControlParam* controls;
+    gfloat filter_values[5];
+
+    if (!dialog || !values || num_values < 5) {
+        return FALSE;
+    }
+
+    controls = (FilterControlParam*)g_object_get_data(G_OBJECT(filter_dialog_get_window(dialog)), "control_params");
+    if (!controls) {
+        return FALSE;
+    }
+
+    if (!ui_filter_utils_scale_values(values, filter_values, controls, 5)) {
+        return FALSE;
+    }
+
+    ui_filter_utils_setup_viewport_filter(dialog, (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_glass_tiles_apply,
+                                          filter_values, 5);
+    return TRUE;
+}
+
+/**
  * Adjustments > Sepia callback
  */
 static void on_adjust_sepia(GtkWidget* widget, gpointer data) {
@@ -322,6 +351,85 @@ static void on_adjust_sepia(GtkWidget* widget, gpointer data) {
         if (ui_filter_utils_scale_values(values, filter_values, controls, 1)) {
             ui_apply_layer_filter_with_value(ctx, filter_sepia_apply,
                                              "Sepia", filter_values, 1);
+        }
+    }
+}
+
+/**
+ * Adjustments > Glass Tiles callback
+ */
+static void on_adjust_glass_tiles(GtkWidget* widget, gpointer data) {
+    (void)widget;
+
+    AppContext* ctx = (AppContext*)data;
+    static const gchar* edge_labels[] = { "clamp", "reflect", "wrap", "erase", "ignore" };
+    FilterControlParam controls[5];
+    gdouble values[5];
+    gint response;
+
+    if (!ctx) {
+        return;
+    }
+
+    /* Angle (-45 to 45, default 0) */
+    controls[0].type = FILTER_CONTROL_DOUBLE;
+    controls[0].label = "Angle";
+    controls[0].min_value = -45.0;
+    controls[0].max_value = 45.0;
+    controls[0].default_value = 0.0;
+    controls[0].step = 1.0;
+    controls[0].decimals = 1;
+    controls[0].filter_min = -45.0;
+    controls[0].filter_max = 45.0;
+
+    /* Size (1 to 100, default 20) */
+    controls[1].type = FILTER_CONTROL_DOUBLE;
+    controls[1].label = "Size";
+    controls[1].min_value = 1.0;
+    controls[1].max_value = 100.0;
+    controls[1].default_value = 20.0;
+    controls[1].step = 1.0;
+    controls[1].decimals = 1;
+    controls[1].filter_min = 1.0;
+    controls[1].filter_max = 100.0;
+
+    /* Curvature (-20 to 20, default 8) */
+    controls[2].type = FILTER_CONTROL_DOUBLE;
+    controls[2].label = "Curvature";
+    controls[2].min_value = -20.0;
+    controls[2].max_value = 20.0;
+    controls[2].default_value = 8.0;
+    controls[2].step = 0.5;
+    controls[2].decimals = 1;
+    controls[2].filter_min = -20.0;
+    controls[2].filter_max = 20.0;
+
+    /* Quality (1 to 5, default 2) */
+    controls[3].type = FILTER_CONTROL_DOUBLE;
+    controls[3].label = "Quality";
+    controls[3].min_value = 1.0;
+    controls[3].max_value = 5.0;
+    controls[3].default_value = 2.0;
+    controls[3].step = 1.0;
+    controls[3].decimals = 0;
+    controls[3].filter_min = 1.0;
+    controls[3].filter_max = 5.0;
+
+    /* Edge mode (clamp, reflect, wrap, erase, ignore; default reflect = index 1) */
+    controls[4].type = FILTER_CONTROL_ENUM;
+    controls[4].label = "If pixels lie outside the image";
+    controls[4].enum_labels = edge_labels;
+    controls[4].enum_n_labels = 5;
+    controls[4].default_enum_index = 1;
+
+    response = ui_show_filter_dialog(ctx, "Glass Tiles", controls, 5,
+                                     on_glass_tiles_preview_update, values);
+
+    if (response == GTK_RESPONSE_OK) {
+        gfloat filter_values[5];
+        if (ui_filter_utils_scale_values(values, filter_values, controls, 5)) {
+            ui_apply_layer_filter_with_value(ctx, filter_glass_tiles_apply,
+                                             "Glass Tiles", filter_values, 5);
         }
     }
 }
@@ -2306,5 +2414,10 @@ void ui_filter_adjust_setup_menu(GtkBuilder* builder, AppContext* ctx) {
     GtkWidget* adjust_menu_palettize = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_palettize"));
     if (adjust_menu_palettize) {
         g_signal_connect(adjust_menu_palettize, "activate", G_CALLBACK(on_adjust_palettize), ctx);
+    }
+
+    GtkWidget* adjust_menu_glass_tiles = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_glass_tiles"));
+    if (adjust_menu_glass_tiles) {
+        g_signal_connect(adjust_menu_glass_tiles, "activate", G_CALLBACK(on_adjust_glass_tiles), ctx);
     }
 }

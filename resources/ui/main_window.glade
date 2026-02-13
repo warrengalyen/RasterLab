@@ -484,6 +484,22 @@
               </object>
             </child>
             <child>
+              <object class="GtkMenuItem" id="adjust_menu_glass_tiles">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">Glass Tiles</property>
+                <property name="use-underline">True</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkMenuItem" id="adjust_menu_marble">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">Marble</property>
+                <property name="use-underline">True</property>
+              </object>
+            </child>
+            <child>
               <object class="GtkMenuItem" id="artistic_menu_oil_paint">
                 <property name="visible">True</property>
                 <property name="can-focus">False</property>
