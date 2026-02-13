@@ -170,6 +170,7 @@ set(SOURCES
     ui/filters/filter_kaleidoscope.c
     ui/filters/filter_laplacian_edge.c
     ui/filters/filter_luminance_threshold.c
+    ui/filters/filter_marble.c
     ui/filters/filter_max.c
     ui/filters/filter_median_blur.c
     ui/filters/filter_min.c
