@@ -137,9 +137,9 @@ static void crop_tool_mouse_down(Tool* tool, struct ImageDocument* doc, MouseEve
     /* If we have an active crop rect, check handle or inside for move */
     if (state->is_active && state->rect_w > 0 && state->rect_h > 0) {
         gint handle = crop_detect_handle_at_point((gdouble)event->x, (gdouble)event->y,
-                                                   (gdouble)state->rect_x, (gdouble)state->rect_y,
-                                                   (gdouble)state->rect_w, (gdouble)state->rect_h,
-                                                   doc->zoom_factor);
+                                                  (gdouble)state->rect_x, (gdouble)state->rect_y,
+                                                  (gdouble)state->rect_w, (gdouble)state->rect_h,
+                                                  doc->zoom_factor);
 
         if (handle >= 0) {
             /* Clicking on handle - start resize */
@@ -257,14 +257,18 @@ static void crop_tool_mouse_move(Tool* tool, struct ImageDocument* doc, MouseEve
                     if (rw > 0 && rh > 0) {
                         gint w = state->rect_w;
                         gint h = state->rect_h;
-                        if (w < 1) w = 1;
-                        if (h < 1) h = 1;
+                        if (w < 1)
+                            w = 1;
+                        if (h < 1)
+                            h = 1;
                         if ((gdouble)w / h > (gdouble)rw / rh) {
                             h = (gint)((gdouble)w * rh / rw + 0.5);
-                            if (h < 1) h = 1;
+                            if (h < 1)
+                                h = 1;
                         } else {
                             w = (gint)((gdouble)h * rw / rh + 0.5);
-                            if (w < 1) w = 1;
+                            if (w < 1)
+                                w = 1;
                         }
                         /* Anchor opposite corner: 0=BR, 1=BL, 2=TR, 3=TL */
                         if (state->drag_mode == 0) {
@@ -302,8 +306,10 @@ static void crop_tool_mouse_move(Tool* tool, struct ImageDocument* doc, MouseEve
 
         /* Clamp to image bounds */
         if (state->drag_mode == -1) {
-            if (state->rect_x < 0) state->rect_x = 0;
-            if (state->rect_y < 0) state->rect_y = 0;
+            if (state->rect_x < 0)
+                state->rect_x = 0;
+            if (state->rect_y < 0)
+                state->rect_y = 0;
             if (state->rect_x + state->rect_w > (gint)doc->width) {
                 state->rect_x = doc->width - state->rect_w;
             }
@@ -325,8 +331,10 @@ static void crop_tool_mouse_move(Tool* tool, struct ImageDocument* doc, MouseEve
             if (state->rect_y + state->rect_h > (gint)doc->height) {
                 state->rect_h = doc->height - state->rect_y;
             }
-            if (state->rect_w < CROP_MIN_SIZE) state->rect_w = CROP_MIN_SIZE;
-            if (state->rect_h < CROP_MIN_SIZE) state->rect_h = CROP_MIN_SIZE;
+            if (state->rect_w < CROP_MIN_SIZE)
+                state->rect_w = CROP_MIN_SIZE;
+            if (state->rect_h < CROP_MIN_SIZE)
+                state->rect_h = CROP_MIN_SIZE;
         }
 
         state->current_x = event->x;
@@ -339,9 +347,9 @@ static void crop_tool_mouse_move(Tool* tool, struct ImageDocument* doc, MouseEve
     /* Not dragging: update hover cursor when we have active rect */
     if (!state->is_dragging && state->is_active && state->rect_w > 0 && state->rect_h > 0) {
         gint hovered = crop_detect_handle_at_point((gdouble)event->x, (gdouble)event->y,
-                                                    (gdouble)state->rect_x, (gdouble)state->rect_y,
-                                                    (gdouble)state->rect_w, (gdouble)state->rect_h,
-                                                    doc->zoom_factor);
+                                                   (gdouble)state->rect_x, (gdouble)state->rect_y,
+                                                   (gdouble)state->rect_w, (gdouble)state->rect_h,
+                                                   doc->zoom_factor);
 
         if (hovered < 0 &&
             event->x >= state->rect_x && event->x < state->rect_x + state->rect_w &&
@@ -371,15 +379,19 @@ static void crop_tool_mouse_move(Tool* tool, struct ImageDocument* doc, MouseEve
         if (opts) {
             tool_options_get_crop_ratio(opts, &rw, &rh);
         }
-        if (rw <= 0) rw = 16;
-        if (rh <= 0) rh = 9;
+        if (rw <= 0)
+            rw = 16;
+        if (rh <= 0)
+            rh = 9;
 
         if (mode == 2 && opts) {
             /* Fixed Size: rect at start with fixed dimensions */
             gint fw, fh;
             tool_options_get_crop_size(opts, &fw, &fh);
-            if (fw <= 0) fw = 1;
-            if (fh <= 0) fh = 1;
+            if (fw <= 0)
+                fw = 1;
+            if (fh <= 0)
+                fh = 1;
             state->current_x = state->start_x + fw;
             state->current_y = state->start_y + fh;
         } else if (mode == 1) {
@@ -400,14 +412,18 @@ static void crop_tool_mouse_move(Tool* tool, struct ImageDocument* doc, MouseEve
                 w = dx;
                 h = dy;
             }
-            if (w < 1) w = 1;
-            if (h < 1) h = 1;
+            if (w < 1)
+                w = 1;
+            if (h < 1)
+                h = 1;
             if ((gdouble)w / h > (gdouble)rw / rh) {
                 h = (gint)((gdouble)w * rh / rw + 0.5);
-                if (h < 1) h = 1;
+                if (h < 1)
+                    h = 1;
             } else {
                 w = (gint)((gdouble)h * rw / rh + 0.5);
-                if (w < 1) w = 1;
+                if (w < 1)
+                    w = 1;
             }
             state->current_x = state->start_x + (dx >= 0 ? w : -w);
             state->current_y = state->start_y + (dy >= 0 ? h : -h);
@@ -461,18 +477,30 @@ static void crop_tool_mouse_up(Tool* tool, struct ImageDocument* doc, MouseEvent
             /* Fixed Ratio: constrain to ratio */
             gint rw, rh;
             tool_options_get_crop_ratio(opts, &rw, &rh);
-            if (rw <= 0) rw = 16;
-            if (rh <= 0) rh = 9;
-            if (w < 0) { x += w; w = -w; }
-            if (h < 0) { y += h; h = -h; }
-            if (w < 1) w = 1;
-            if (h < 1) h = 1;
+            if (rw <= 0)
+                rw = 16;
+            if (rh <= 0)
+                rh = 9;
+            if (w < 0) {
+                x += w;
+                w = -w;
+            }
+            if (h < 0) {
+                y += h;
+                h = -h;
+            }
+            if (w < 1)
+                w = 1;
+            if (h < 1)
+                h = 1;
             if ((gdouble)w / h > (gdouble)rw / rh) {
                 h = (gint)((gdouble)w * rh / rw + 0.5);
-                if (h < 1) h = 1;
+                if (h < 1)
+                    h = 1;
             } else {
                 w = (gint)((gdouble)h * rw / rh + 0.5);
-                if (w < 1) w = 1;
+                if (w < 1)
+                    w = 1;
             }
         } else {
             if (w < 0) {
@@ -501,8 +529,10 @@ static void crop_tool_mouse_up(Tool* tool, struct ImageDocument* doc, MouseEvent
             h = doc->height - y;
         }
 
-        if (w < CROP_MIN_SIZE) w = CROP_MIN_SIZE;
-        if (h < CROP_MIN_SIZE) h = CROP_MIN_SIZE;
+        if (w < CROP_MIN_SIZE)
+            w = CROP_MIN_SIZE;
+        if (h < CROP_MIN_SIZE)
+            h = CROP_MIN_SIZE;
 
         if (w > 0 && h > 0) {
             state->rect_x = x;
@@ -615,8 +645,10 @@ void tool_crop_update_rect_from_options(ImageDocument* doc, void* registry) {
             new_w = state->rect_w;
             new_h = (gint)((gdouble)state->rect_w * rh / rw + 0.5);
         }
-        if (new_w < CROP_MIN_SIZE) new_w = CROP_MIN_SIZE;
-        if (new_h < CROP_MIN_SIZE) new_h = CROP_MIN_SIZE;
+        if (new_w < CROP_MIN_SIZE)
+            new_w = CROP_MIN_SIZE;
+        if (new_h < CROP_MIN_SIZE)
+            new_h = CROP_MIN_SIZE;
 
         state->rect_x = cx - new_w / 2;
         state->rect_y = cy - new_h / 2;
@@ -626,8 +658,10 @@ void tool_crop_update_rect_from_options(ImageDocument* doc, void* registry) {
         /* Fixed Size: resize rect to fixed dimensions, keep center */
         gint fw, fh;
         tool_options_get_crop_size(opts, &fw, &fh);
-        if (fw <= 0) fw = 1;
-        if (fh <= 0) fh = 1;
+        if (fw <= 0)
+            fw = 1;
+        if (fh <= 0)
+            fh = 1;
 
         gint cx = state->rect_x + state->rect_w / 2;
         gint cy = state->rect_y + state->rect_h / 2;
@@ -639,8 +673,10 @@ void tool_crop_update_rect_from_options(ImageDocument* doc, void* registry) {
     }
 
     /* Clamp to image bounds */
-    if (state->rect_x < 0) state->rect_x = 0;
-    if (state->rect_y < 0) state->rect_y = 0;
+    if (state->rect_x < 0)
+        state->rect_x = 0;
+    if (state->rect_y < 0)
+        state->rect_y = 0;
     if (state->rect_x + state->rect_w > (gint)doc->width) {
         state->rect_x = doc->width - state->rect_w;
     }
@@ -799,6 +835,9 @@ void tool_crop_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom) {
         handle_line_width = 0.5;
     }
 
+    /* Snap coord to device pixel center for crisp 1-pixel strokes (avoids antialiased fade) */
+    #define CROP_SNAP(c) (floor((c) * zoom + 0.5) / zoom)
+
     cairo_save(cr);
 
     if (zoom != 1.0) {
@@ -836,17 +875,20 @@ void tool_crop_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom) {
         }
     }
 
-    /* 2. Solid rectangle border (selection style but solid, not dashed) */
+    /* 2. Rectangle border: dark gray (0.2) 1px each side, white 1px center - full opacity */
     cairo_set_dash(cr, NULL, 0, 0);
-    cairo_rectangle(cr, rect_x, rect_y, rect_w, rect_h);
-    cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
-    cairo_set_line_width(cr, handle_line_width * 1.5);
-    cairo_stroke(cr);
-    cairo_rectangle(cr, rect_x + handle_line_width, rect_y + handle_line_width,
-                    rect_w - 2.0 * handle_line_width, rect_h - 2.0 * handle_line_width);
-    cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+    cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+    cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
+    cairo_rectangle(cr, CROP_SNAP(rect_x), CROP_SNAP(rect_y),
+                    CROP_SNAP(rect_x + rect_w) - CROP_SNAP(rect_x),
+                    CROP_SNAP(rect_y + rect_h) - CROP_SNAP(rect_y));
+    cairo_set_source_rgba(cr, 0.2, 0.2, 0.2, 1.0);
+    cairo_set_line_width(cr, handle_line_width * 3.0);
+    cairo_stroke_preserve(cr);
+    cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 1.0);
     cairo_set_line_width(cr, handle_line_width);
     cairo_stroke(cr);
+    cairo_set_antialias(cr, CAIRO_ANTIALIAS_DEFAULT);
 
     /* 3. Overlay guides (inside crop rect) */
     if (opts && opts->crop_overlay_mode > 0) {
@@ -854,51 +896,46 @@ void tool_crop_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom) {
                                  opts->crop_overlay_mode, handle_line_width);
     }
 
-    /* 4. Resize handles (8: corners + edges, same style as selection tool) */
-    corners[0][0] = rect_x;
-    corners[0][1] = rect_y;
-    corners[1][0] = rect_x + rect_w;
-    corners[1][1] = rect_y;
-    corners[2][0] = rect_x;
-    corners[2][1] = rect_y + rect_h;
-    corners[3][0] = rect_x + rect_w;
-    corners[3][1] = rect_y + rect_h;
-    corners[4][0] = rect_x + rect_w / 2.0;
-    corners[4][1] = rect_y;
-    corners[5][0] = rect_x + rect_w;
-    corners[5][1] = rect_y + rect_h / 2.0;
-    corners[6][0] = rect_x + rect_w / 2.0;
-    corners[6][1] = rect_y + rect_h;
-    corners[7][0] = rect_x;
-    corners[7][1] = rect_y + rect_h / 2.0;
+    /* 4. Resize handles (8: corners + edges) - snap to pixel centers for crisp strokes */
+    corners[0][0] = CROP_SNAP(rect_x);
+    corners[0][1] = CROP_SNAP(rect_y);
+    corners[1][0] = CROP_SNAP(rect_x + rect_w);
+    corners[1][1] = CROP_SNAP(rect_y);
+    corners[2][0] = CROP_SNAP(rect_x);
+    corners[2][1] = CROP_SNAP(rect_y + rect_h);
+    corners[3][0] = CROP_SNAP(rect_x + rect_w);
+    corners[3][1] = CROP_SNAP(rect_y + rect_h);
+    corners[4][0] = CROP_SNAP(rect_x + rect_w / 2.0);
+    corners[4][1] = CROP_SNAP(rect_y);
+    corners[5][0] = CROP_SNAP(rect_x + rect_w);
+    corners[5][1] = CROP_SNAP(rect_y + rect_h / 2.0);
+    corners[6][0] = CROP_SNAP(rect_x + rect_w / 2.0);
+    corners[6][1] = CROP_SNAP(rect_y + rect_h);
+    corners[7][0] = CROP_SNAP(rect_x);
+    corners[7][1] = CROP_SNAP(rect_y + rect_h / 2.0);
 
     cairo_set_dash(cr, NULL, 0, 0);
+    cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+    cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
 
     for (i = 0; i < 8; i++) {
         gdouble cx = corners[i][0];
         gdouble cy = corners[i][1];
+        gboolean hovered = (state->hovered_handle == i);
+        gdouble hx = CROP_SNAP(cx - half_handle);
+        gdouble hy = CROP_SNAP(cy - half_handle);
+        gdouble hw = CROP_SNAP(cx + half_handle) - hx;
+        gdouble hh = CROP_SNAP(cy + half_handle) - hy;
 
-        if (state->hovered_handle == i) {
-            gdouble inset = handle_line_width * 1.5;
-            cairo_rectangle(cr, cx - half_handle + inset, cy - half_handle + inset,
-                            handle_size - (inset * 2), handle_size - (inset * 2));
-            cairo_set_source_rgba(cr, 0.0, 0.5, 1.0, 0.6);
-            cairo_fill(cr);
-        }
-
-        cairo_rectangle(cr, cx - half_handle, cy - half_handle, handle_size, handle_size);
-        cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
+        cairo_rectangle(cr, hx, hy, hw, hh);
+        cairo_set_source_rgba(cr, 0.2, 0.2, 0.2, 1.0);
+        cairo_set_line_width(cr, handle_line_width * 3.0);
+        cairo_stroke_preserve(cr);
+        cairo_set_source_rgba(cr, hovered ? 0.0 : 1.0, hovered ? 0.5 : 1.0, 1.0, 1.0);
         cairo_set_line_width(cr, handle_line_width);
         cairo_stroke(cr);
-
-        {
-            gdouble inset = handle_line_width * 1.5;
-            cairo_rectangle(cr, cx - half_handle + inset, cy - half_handle + inset,
-                            handle_size - (inset * 2), handle_size - (inset * 2));
-            cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
-            cairo_stroke(cr);
-        }
     }
+    cairo_set_antialias(cr, CAIRO_ANTIALIAS_DEFAULT);
 
     cairo_restore(cr);
 }
