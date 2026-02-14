@@ -11,6 +11,18 @@
 #define CROP_MIN_SIZE 1
 
 /**
+ * Queue redraw of drawing area and viewport (crop overlay is drawn on viewport)
+ */
+static void crop_queue_redraw(ImageDocument* doc) {
+    if (doc->drawing_area) {
+        gtk_widget_queue_draw(doc->drawing_area);
+    }
+    if (doc->viewport) {
+        gtk_widget_queue_draw(doc->viewport);
+    }
+}
+
+/**
  * Detect which handle (if any) is at the given point
  * 8 handles: 0-3 corners (TL, TR, BL, BR), 4-7 edges (T, R, B, L)
  * Same handle size as selection tool (12 screen pixels = 6/zoom image pixels)
@@ -135,9 +147,7 @@ static void crop_tool_mouse_down(Tool* tool, struct ImageDocument* doc, MouseEve
             state->is_dragging = TRUE;
             state->start_x = event->x;
             state->start_y = event->y;
-            if (doc->drawing_area) {
-                gtk_widget_queue_draw(doc->drawing_area);
-            }
+            crop_queue_redraw(doc);
             return;
         }
 
@@ -148,9 +158,7 @@ static void crop_tool_mouse_down(Tool* tool, struct ImageDocument* doc, MouseEve
             state->is_dragging = TRUE;
             state->start_x = event->x;
             state->start_y = event->y;
-            if (doc->drawing_area) {
-                gtk_widget_queue_draw(doc->drawing_area);
-            }
+            crop_queue_redraw(doc);
             return;
         }
 
@@ -167,9 +175,7 @@ static void crop_tool_mouse_down(Tool* tool, struct ImageDocument* doc, MouseEve
     state->current_y = event->y;
     state->hovered_handle = -1;
 
-    if (doc->drawing_area) {
-        gtk_widget_queue_draw(doc->drawing_area);
-    }
+    crop_queue_redraw(doc);
 }
 
 /**
@@ -326,9 +332,7 @@ static void crop_tool_mouse_move(Tool* tool, struct ImageDocument* doc, MouseEve
         state->current_x = event->x;
         state->current_y = event->y;
 
-        if (doc->drawing_area) {
-            gtk_widget_queue_draw(doc->drawing_area);
-        }
+        crop_queue_redraw(doc);
         return;
     }
 
@@ -355,9 +359,7 @@ static void crop_tool_mouse_move(Tool* tool, struct ImageDocument* doc, MouseEve
             }
         }
 
-        if (doc->drawing_area) {
-            gtk_widget_queue_draw(doc->drawing_area);
-        }
+        crop_queue_redraw(doc);
         return;
     }
 
@@ -414,9 +416,7 @@ static void crop_tool_mouse_move(Tool* tool, struct ImageDocument* doc, MouseEve
             state->current_x = event->x;
             state->current_y = event->y;
         }
-        if (doc->drawing_area) {
-            gtk_widget_queue_draw(doc->drawing_area);
-        }
+        crop_queue_redraw(doc);
     }
 }
 
@@ -521,9 +521,7 @@ static void crop_tool_mouse_up(Tool* tool, struct ImageDocument* doc, MouseEvent
         state->hovered_handle = -1;
     }
 
-    if (doc->drawing_area) {
-        gtk_widget_queue_draw(doc->drawing_area);
-    }
+    crop_queue_redraw(doc);
 }
 
 /**

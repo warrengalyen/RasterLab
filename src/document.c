@@ -595,9 +595,6 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
     /* Draw ellipse select tool preview during drag */
     tool_ellipse_select_draw_preview(doc, cr, zoom);
 
-    /* Draw crop tool overlay during drag/edit */
-    tool_crop_draw_preview(doc, cr, zoom);
-
     /* Render selection overlays after all content is drawn */
     if (doc->selection_mask && !selection_mask_is_empty(doc->selection_mask)) {
         selection_mask_render_outline(cr, doc->selection_mask,
@@ -644,6 +641,9 @@ static gboolean on_viewport_draw(GtkWidget* widget, cairo_t* cr, gpointer user_d
 
     /* Draw move tool outline overlay (in drawing area coordinates) */
     tool_move_draw_preview(doc, cr, doc->zoom_factor);
+
+    /* Draw crop tool overlay (above canvas, handles not clipped at edges) */
+    tool_crop_draw_preview(doc, cr, doc->zoom_factor);
 
     cairo_restore(cr);
 
