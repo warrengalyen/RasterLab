@@ -41,6 +41,11 @@ typedef struct {
     /* Color picker tool options */
     gint color_picker_sample_radius;      /* Sample radius 0–100, default 0 (single pixel) */
     gboolean color_picker_sample_from_layer; /* TRUE = layer, FALSE = image; default TRUE */
+
+    /* Crop tool options */
+    gboolean crop_darken_outside;    /* Darken area outside crop rect */
+    gfloat crop_darken_opacity;      /* Darken overlay opacity 0–100 (default 60) */
+    gint crop_overlay_mode;          /* 0=None, 1=Rule of Thirds, 2=Golden Ratio, 3=Diagonal, 4=Center Lines */
 } ToolOptions;
 
 /**

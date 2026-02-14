@@ -51,6 +51,11 @@ ToolOptions* tool_options_new(void) {
     opts->color_picker_sample_radius = 0;      /* Default: single pixel */
     opts->color_picker_sample_from_layer = TRUE; /* Default: sample from layer */
 
+    /* Initialize crop tool options */
+    opts->crop_darken_outside = FALSE;
+    opts->crop_darken_opacity = 60.0f;  /* 0–100, default 60% */
+    opts->crop_overlay_mode = 0;        /* 0=None */
+
     return opts;
 }
 

@@ -2,6 +2,7 @@
 #include "document.h"
 #include "selection.h"
 #include "tool_manager.h"
+#include "tool_options.h"
 #include <gdk/gdk.h>
 #include <gtk/gtk.h>
 #include <math.h>
@@ -454,12 +455,256 @@ Tool* tool_crop_create(void) {
     return tool;
 }
 
+/* Golden ratio φ ≈ 1.618, 1/(1+φ) ≈ 0.382, φ/(1+φ) ≈ 0.618 */
+#define CROP_GOLDEN_RATIO 1.618033988749895
+#define CROP_GOLDEN_LOW (1.0 / (1.0 + CROP_GOLDEN_RATIO))
+#define CROP_GOLDEN_HIGH (CROP_GOLDEN_RATIO / (1.0 + CROP_GOLDEN_RATIO))
+
 /**
- * Draw crop overlay during drag/edit - placeholder for Stage 3
+ * Draw overlay guides inside crop rect (Rule of Thirds, Center Lines, etc)
+ */
+static void crop_draw_overlay_guides(cairo_t* cr, gdouble rect_x, gdouble rect_y,
+                                     gdouble rect_w, gdouble rect_h,
+                                     gint overlay_mode, gdouble line_width) {
+    gdouble x1, y1, x2, y2;
+
+    cairo_set_dash(cr, NULL, 0, 0);
+    cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.6);
+    cairo_set_line_width(cr, line_width);
+
+    switch (overlay_mode) {
+        case 1: /* Rule of Thirds */
+            /* Vertical lines at 1/3 and 2/3 */
+            x1 = rect_x + rect_w / 3.0;
+            cairo_move_to(cr, x1, rect_y);
+            cairo_line_to(cr, x1, rect_y + rect_h);
+            cairo_stroke(cr);
+            x1 = rect_x + 2.0 * rect_w / 3.0;
+            cairo_move_to(cr, x1, rect_y);
+            cairo_line_to(cr, x1, rect_y + rect_h);
+            cairo_stroke(cr);
+            /* Horizontal lines at 1/3 and 2/3 */
+            y1 = rect_y + rect_h / 3.0;
+            cairo_move_to(cr, rect_x, y1);
+            cairo_line_to(cr, rect_x + rect_w, y1);
+            cairo_stroke(cr);
+            y1 = rect_y + 2.0 * rect_h / 3.0;
+            cairo_move_to(cr, rect_x, y1);
+            cairo_line_to(cr, rect_x + rect_w, y1);
+            cairo_stroke(cr);
+            break;
+        case 2: /* Golden Ratio */
+            x1 = rect_x + rect_w * CROP_GOLDEN_LOW;
+            cairo_move_to(cr, x1, rect_y);
+            cairo_line_to(cr, x1, rect_y + rect_h);
+            cairo_stroke(cr);
+            x1 = rect_x + rect_w * CROP_GOLDEN_HIGH;
+            cairo_move_to(cr, x1, rect_y);
+            cairo_line_to(cr, x1, rect_y + rect_h);
+            cairo_stroke(cr);
+            y1 = rect_y + rect_h * CROP_GOLDEN_LOW;
+            cairo_move_to(cr, rect_x, y1);
+            cairo_line_to(cr, rect_x + rect_w, y1);
+            cairo_stroke(cr);
+            y1 = rect_y + rect_h * CROP_GOLDEN_HIGH;
+            cairo_move_to(cr, rect_x, y1);
+            cairo_line_to(cr, rect_x + rect_w, y1);
+            cairo_stroke(cr);
+            break;
+        case 3: /* Diagonal */
+            cairo_move_to(cr, rect_x, rect_y);
+            cairo_line_to(cr, rect_x + rect_w, rect_y + rect_h);
+            cairo_stroke(cr);
+            cairo_move_to(cr, rect_x + rect_w, rect_y);
+            cairo_line_to(cr, rect_x, rect_y + rect_h);
+            cairo_stroke(cr);
+            break;
+        case 4: /* Center Lines */
+            x1 = rect_x + rect_w / 2.0;
+            cairo_move_to(cr, x1, rect_y);
+            cairo_line_to(cr, x1, rect_y + rect_h);
+            cairo_stroke(cr);
+            y1 = rect_y + rect_h / 2.0;
+            cairo_move_to(cr, rect_x, y1);
+            cairo_line_to(cr, rect_x + rect_w, y1);
+            cairo_stroke(cr);
+            break;
+        default:
+            break;
+    }
+}
+
+/**
+ * Draw crop overlay during drag/edit
+ * Reuses selection tool style: solid lines instead of dashed, same handle appearance
  */
 void tool_crop_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom) {
-    (void)doc;
-    (void)cr;
-    (void)zoom;
-    /* Stage 3: draw solid border, handles, darken outside, overlay guides */
+    CropToolState* state;
+    Tool* active_tool;
+    ToolRegistry* tool_registry;
+    ToolOptions* opts;
+    gint rect_x, rect_y, rect_w, rect_h;
+    gdouble handle_size, half_handle, handle_line_width;
+    gdouble corners[8][2];
+    gint i;
+
+    if (!doc || !doc->drawing_area || !cr) {
+        return;
+    }
+
+    if (!doc->layers || g_list_length(doc->layers) == 0) {
+        return;
+    }
+
+    tool_registry = (ToolRegistry*)g_object_get_data(G_OBJECT(doc->drawing_area), "tool_registry");
+    if (!tool_registry) {
+        return;
+    }
+
+    active_tool = tool_manager_get_active(tool_registry);
+    if (!active_tool || active_tool->type != TOOL_CROP || !active_tool->user_data) {
+        return;
+    }
+
+    state = (CropToolState*)active_tool->user_data;
+
+    if (!state->is_dragging && !state->is_active) {
+        return;
+    }
+
+    /* Determine rectangle to draw */
+    if (state->is_dragging && state->drag_mode == -2) {
+        rect_x = state->start_x;
+        rect_y = state->start_y;
+        rect_w = state->current_x - state->start_x;
+        rect_h = state->current_y - state->start_y;
+        if (rect_w < 0) {
+            rect_x += rect_w;
+            rect_w = -rect_w;
+        }
+        if (rect_h < 0) {
+            rect_y += rect_h;
+            rect_h = -rect_h;
+        }
+    } else {
+        rect_x = state->rect_x;
+        rect_y = state->rect_y;
+        rect_w = state->rect_w;
+        rect_h = state->rect_h;
+    }
+
+    if (rect_w <= 0 || rect_h <= 0) {
+        return;
+    }
+
+    opts = tool_options_get_for_tool(TOOL_CROP);
+    handle_size = 12.0 / zoom;
+    half_handle = handle_size / 2.0;
+    handle_line_width = 1.0 / zoom;
+    if (handle_line_width < 0.5) {
+        handle_line_width = 0.5;
+    }
+
+    cairo_save(cr);
+
+    if (zoom != 1.0) {
+        cairo_scale(cr, zoom, zoom);
+    }
+
+    /* 1. Darken outside (if enabled) */
+    if (opts && opts->crop_darken_outside && opts->crop_darken_opacity > 0.0f) {
+        gdouble alpha = (gdouble)opts->crop_darken_opacity / 100.0;
+        guint w = doc->width;
+        guint h = doc->height;
+
+        cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, alpha);
+        cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+
+        /* Top strip */
+        if (rect_y > 0) {
+            cairo_rectangle(cr, 0, 0, (gdouble)w, (gdouble)rect_y);
+            cairo_fill(cr);
+        }
+        /* Bottom strip */
+        if ((gint)h > rect_y + rect_h) {
+            cairo_rectangle(cr, 0, rect_y + rect_h, (gdouble)w, (gdouble)h - (rect_y + rect_h));
+            cairo_fill(cr);
+        }
+        /* Left strip */
+        if (rect_x > 0 && rect_h > 0) {
+            cairo_rectangle(cr, 0, rect_y, (gdouble)rect_x, (gdouble)rect_h);
+            cairo_fill(cr);
+        }
+        /* Right strip */
+        if ((gint)w > rect_x + rect_w && rect_h > 0) {
+            cairo_rectangle(cr, rect_x + rect_w, rect_y, (gdouble)w - (rect_x + rect_w), (gdouble)rect_h);
+            cairo_fill(cr);
+        }
+    }
+
+    /* 2. Solid rectangle border (selection style but solid, not dashed) */
+    cairo_set_dash(cr, NULL, 0, 0);
+    cairo_rectangle(cr, rect_x, rect_y, rect_w, rect_h);
+    cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
+    cairo_set_line_width(cr, handle_line_width * 1.5);
+    cairo_stroke(cr);
+    cairo_rectangle(cr, rect_x + handle_line_width, rect_y + handle_line_width,
+                    rect_w - 2.0 * handle_line_width, rect_h - 2.0 * handle_line_width);
+    cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+    cairo_set_line_width(cr, handle_line_width);
+    cairo_stroke(cr);
+
+    /* 3. Overlay guides (inside crop rect) */
+    if (opts && opts->crop_overlay_mode > 0) {
+        crop_draw_overlay_guides(cr, rect_x, rect_y, rect_w, rect_h,
+                                 opts->crop_overlay_mode, handle_line_width);
+    }
+
+    /* 4. Resize handles (8: corners + edges, same style as selection tool) */
+    corners[0][0] = rect_x;
+    corners[0][1] = rect_y;
+    corners[1][0] = rect_x + rect_w;
+    corners[1][1] = rect_y;
+    corners[2][0] = rect_x;
+    corners[2][1] = rect_y + rect_h;
+    corners[3][0] = rect_x + rect_w;
+    corners[3][1] = rect_y + rect_h;
+    corners[4][0] = rect_x + rect_w / 2.0;
+    corners[4][1] = rect_y;
+    corners[5][0] = rect_x + rect_w;
+    corners[5][1] = rect_y + rect_h / 2.0;
+    corners[6][0] = rect_x + rect_w / 2.0;
+    corners[6][1] = rect_y + rect_h;
+    corners[7][0] = rect_x;
+    corners[7][1] = rect_y + rect_h / 2.0;
+
+    cairo_set_dash(cr, NULL, 0, 0);
+
+    for (i = 0; i < 8; i++) {
+        gdouble cx = corners[i][0];
+        gdouble cy = corners[i][1];
+
+        if (state->hovered_handle == i) {
+            gdouble inset = handle_line_width * 1.5;
+            cairo_rectangle(cr, cx - half_handle + inset, cy - half_handle + inset,
+                            handle_size - (inset * 2), handle_size - (inset * 2));
+            cairo_set_source_rgba(cr, 0.0, 0.5, 1.0, 0.6);
+            cairo_fill(cr);
+        }
+
+        cairo_rectangle(cr, cx - half_handle, cy - half_handle, handle_size, handle_size);
+        cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
+        cairo_set_line_width(cr, handle_line_width);
+        cairo_stroke(cr);
+
+        {
+            gdouble inset = handle_line_width * 1.5;
+            cairo_rectangle(cr, cx - half_handle + inset, cy - half_handle + inset,
+                            handle_size - (inset * 2), handle_size - (inset * 2));
+            cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+            cairo_stroke(cr);
+        }
+    }
+
+    cairo_restore(cr);
 }
