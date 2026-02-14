@@ -37,6 +37,13 @@ typedef struct {
 Tool* tool_crop_create(void);
 
 /**
+ * Update crop rectangle to match current ratio/size options (when not dragging)
+ * @param doc The active image document
+ * @param registry The tool registry (to get crop tool state)
+ */
+void tool_crop_update_rect_from_options(ImageDocument* doc, void* registry);
+
+/**
  * Draw crop overlay during drag/edit
  * @param doc The active image document
  * @param cr Cairo context to draw on

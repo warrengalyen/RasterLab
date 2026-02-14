@@ -241,6 +241,39 @@ static void crop_tool_mouse_move(Tool* tool, struct ImageDocument* doc, MouseEve
             }
             state->start_x = event->x;
             state->start_y = event->y;
+
+            /* Fixed Ratio: constrain dimensions during corner resize (0-3) */
+            if (state->drag_mode >= 0 && state->drag_mode <= 3) {
+                ToolOptions* opts = tool_options_get_for_tool(TOOL_CROP);
+                if (opts && tool_options_get_crop_constraint_mode(opts) == 1) {
+                    gint rw, rh;
+                    tool_options_get_crop_ratio(opts, &rw, &rh);
+                    if (rw > 0 && rh > 0) {
+                        gint w = state->rect_w;
+                        gint h = state->rect_h;
+                        if (w < 1) w = 1;
+                        if (h < 1) h = 1;
+                        if ((gdouble)w / h > (gdouble)rw / rh) {
+                            h = (gint)((gdouble)w * rh / rw + 0.5);
+                            if (h < 1) h = 1;
+                        } else {
+                            w = (gint)((gdouble)h * rw / rh + 0.5);
+                            if (w < 1) w = 1;
+                        }
+                        /* Anchor opposite corner: 0=BR, 1=BL, 2=TR, 3=TL */
+                        if (state->drag_mode == 0) {
+                            state->rect_x += state->rect_w - w;
+                            state->rect_y += state->rect_h - h;
+                        } else if (state->drag_mode == 1) {
+                            state->rect_y += state->rect_h - h;
+                        } else if (state->drag_mode == 2) {
+                            state->rect_x += state->rect_w - w;
+                        }
+                        state->rect_w = w;
+                        state->rect_h = h;
+                    }
+                }
+            }
         }
 
         /* Normalize negative dimensions (flip rect) */
@@ -328,10 +361,59 @@ static void crop_tool_mouse_move(Tool* tool, struct ImageDocument* doc, MouseEve
         return;
     }
 
-    /* New crop drag (drag_mode == -2) - just update current position */
+    /* New crop drag (drag_mode == -2) - update current position, apply constraint */
     if (state->is_dragging && state->drag_mode == -2) {
-        state->current_x = event->x;
-        state->current_y = event->y;
+        ToolOptions* opts = tool_options_get_for_tool(TOOL_CROP);
+        gint mode = opts ? tool_options_get_crop_constraint_mode(opts) : 0;
+        gint rw = 0, rh = 0;
+        if (opts) {
+            tool_options_get_crop_ratio(opts, &rw, &rh);
+        }
+        if (rw <= 0) rw = 16;
+        if (rh <= 0) rh = 9;
+
+        if (mode == 2 && opts) {
+            /* Fixed Size: rect at start with fixed dimensions */
+            gint fw, fh;
+            tool_options_get_crop_size(opts, &fw, &fh);
+            if (fw <= 0) fw = 1;
+            if (fh <= 0) fh = 1;
+            state->current_x = state->start_x + fw;
+            state->current_y = state->start_y + fh;
+        } else if (mode == 1) {
+            /* Fixed Ratio: constrain current to maintain ratio */
+            gint dx = event->x - state->start_x;
+            gint dy = event->y - state->start_y;
+            gint w, h;
+            if (dx < 0 && dy < 0) {
+                w = -dx;
+                h = -dy;
+            } else if (dx < 0) {
+                w = -dx;
+                h = dy;
+            } else if (dy < 0) {
+                w = dx;
+                h = -dy;
+            } else {
+                w = dx;
+                h = dy;
+            }
+            if (w < 1) w = 1;
+            if (h < 1) h = 1;
+            if ((gdouble)w / h > (gdouble)rw / rh) {
+                h = (gint)((gdouble)w * rh / rw + 0.5);
+                if (h < 1) h = 1;
+            } else {
+                w = (gint)((gdouble)h * rw / rh + 0.5);
+                if (w < 1) w = 1;
+            }
+            state->current_x = state->start_x + (dx >= 0 ? w : -w);
+            state->current_y = state->start_y + (dy >= 0 ? h : -h);
+        } else {
+            /* Free */
+            state->current_x = event->x;
+            state->current_y = event->y;
+        }
         if (doc->drawing_area) {
             gtk_widget_queue_draw(doc->drawing_area);
         }
@@ -360,18 +442,47 @@ static void crop_tool_mouse_up(Tool* tool, struct ImageDocument* doc, MouseEvent
 
     if (state->drag_mode == -2) {
         /* New crop drag - compute rectangle from start to current */
+        ToolOptions* opts = tool_options_get_for_tool(TOOL_CROP);
+        gint mode = opts ? tool_options_get_crop_constraint_mode(opts) : 0;
         gint x = state->start_x;
         gint y = state->start_y;
         gint w = state->current_x - state->start_x;
         gint h = state->current_y - state->start_y;
 
-        if (w < 0) {
-            x += w;
-            w = -w;
-        }
-        if (h < 0) {
-            y += h;
-            h = -h;
+        if (mode == 2 && opts) {
+            /* Fixed Size: use fixed dimensions */
+            gint fw, fh;
+            tool_options_get_crop_size(opts, &fw, &fh);
+            w = fw > 0 ? fw : 1;
+            h = fh > 0 ? fh : 1;
+            x = state->start_x;
+            y = state->start_y;
+        } else if (mode == 1 && opts) {
+            /* Fixed Ratio: constrain to ratio */
+            gint rw, rh;
+            tool_options_get_crop_ratio(opts, &rw, &rh);
+            if (rw <= 0) rw = 16;
+            if (rh <= 0) rh = 9;
+            if (w < 0) { x += w; w = -w; }
+            if (h < 0) { y += h; h = -h; }
+            if (w < 1) w = 1;
+            if (h < 1) h = 1;
+            if ((gdouble)w / h > (gdouble)rw / rh) {
+                h = (gint)((gdouble)w * rh / rw + 0.5);
+                if (h < 1) h = 1;
+            } else {
+                w = (gint)((gdouble)h * rw / rh + 0.5);
+                if (w < 1) w = 1;
+            }
+        } else {
+            if (w < 0) {
+                x += w;
+                w = -w;
+            }
+            if (h < 0) {
+                y += h;
+                h = -h;
+            }
         }
 
         /* Clamp to image bounds */
@@ -453,6 +564,91 @@ Tool* tool_crop_create(void) {
     }
 
     return tool;
+}
+
+/**
+ * Update crop rectangle to match current ratio/size options.
+ * Only applies when there is an active, finalized crop rect (not during drag).
+ */
+void tool_crop_update_rect_from_options(ImageDocument* doc, void* registry) {
+    CropToolState* state;
+    Tool* crop_tool;
+    ToolRegistry* tool_registry = (ToolRegistry*)registry;
+    ToolOptions* opts;
+
+    if (!doc || !tool_registry) {
+        return;
+    }
+
+    crop_tool = tool_manager_get(tool_registry, TOOL_CROP);
+    if (!crop_tool || !crop_tool->user_data) {
+        return;
+    }
+
+    state = (CropToolState*)crop_tool->user_data;
+
+    /* Only update when we have a finalized rect (not during drag) */
+    if (!state->is_active || state->is_dragging || state->rect_w <= 0 || state->rect_h <= 0) {
+        return;
+    }
+
+    opts = tool_options_get_for_tool(TOOL_CROP);
+    if (!opts) {
+        return;
+    }
+
+    if (tool_options_get_crop_constraint_mode(opts) == 1) {
+        /* Fixed Ratio: constrain rect to new ratio, keep center */
+        gint rw, rh;
+        tool_options_get_crop_ratio(opts, &rw, &rh);
+        if (rw <= 0 || rh <= 0) {
+            return;
+        }
+        gint cx = state->rect_x + state->rect_w / 2;
+        gint cy = state->rect_y + state->rect_h / 2;
+        gdouble target_ratio = (gdouble)rw / rh;
+        gdouble cur_ratio = (gdouble)state->rect_w / state->rect_h;
+        gint new_w, new_h;
+
+        if (cur_ratio > target_ratio) {
+            new_w = (gint)((gdouble)state->rect_h * rw / rh + 0.5);
+            new_h = state->rect_h;
+        } else {
+            new_w = state->rect_w;
+            new_h = (gint)((gdouble)state->rect_w * rh / rw + 0.5);
+        }
+        if (new_w < CROP_MIN_SIZE) new_w = CROP_MIN_SIZE;
+        if (new_h < CROP_MIN_SIZE) new_h = CROP_MIN_SIZE;
+
+        state->rect_x = cx - new_w / 2;
+        state->rect_y = cy - new_h / 2;
+        state->rect_w = new_w;
+        state->rect_h = new_h;
+    } else if (tool_options_get_crop_constraint_mode(opts) == 2) {
+        /* Fixed Size: resize rect to fixed dimensions, keep center */
+        gint fw, fh;
+        tool_options_get_crop_size(opts, &fw, &fh);
+        if (fw <= 0) fw = 1;
+        if (fh <= 0) fh = 1;
+
+        gint cx = state->rect_x + state->rect_w / 2;
+        gint cy = state->rect_y + state->rect_h / 2;
+
+        state->rect_x = cx - fw / 2;
+        state->rect_y = cy - fh / 2;
+        state->rect_w = fw;
+        state->rect_h = fh;
+    }
+
+    /* Clamp to image bounds */
+    if (state->rect_x < 0) state->rect_x = 0;
+    if (state->rect_y < 0) state->rect_y = 0;
+    if (state->rect_x + state->rect_w > (gint)doc->width) {
+        state->rect_x = doc->width - state->rect_w;
+    }
+    if (state->rect_y + state->rect_h > (gint)doc->height) {
+        state->rect_y = doc->height - state->rect_h;
+    }
 }
 
 /* Golden ratio φ ≈ 1.618, 1/(1+φ) ≈ 0.382, φ/(1+φ) ≈ 0.618 */

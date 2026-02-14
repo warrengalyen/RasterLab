@@ -69,6 +69,7 @@
     <file>ui/paintbucket_options.glade</file>
     <file>ui/rect_select_options.glade</file>
     <file>ui/elliptical_select_options.glade</file>
+    <file>ui/crop_options.glade</file>
     <file>ui/color_picker_options.glade</file>
     <file>ui/move_options.glade</file>
     <file>ui/new_image_dialog.glade</file>

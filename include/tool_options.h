@@ -43,9 +43,18 @@ typedef struct {
     gboolean color_picker_sample_from_layer; /* TRUE = layer, FALSE = image; default TRUE */
 
     /* Crop tool options */
+    gint crop_constraint_mode;       /* 0=Free, 1=Fixed Ratio, 2=Fixed Size */
+    gint crop_ratio_w;               /* Ratio width (e.g. 16) */
+    gint crop_ratio_h;               /* Ratio height (e.g. 9) */
+    gint crop_width;                 /* Fixed width in pixels */
+    gint crop_height;                /* Fixed height in pixels */
+    gboolean crop_link;              /* Link width/height to maintain aspect ratio */
+    gboolean crop_delete_pixels;     /* Delete pixels vs non-destructive */
+    gboolean crop_grow_canvas;       /* Grow canvas if crop exceeds image bounds */
     gboolean crop_darken_outside;    /* Darken area outside crop rect */
     gfloat crop_darken_opacity;      /* Darken overlay opacity 0–100 (default 60) */
     gint crop_overlay_mode;          /* 0=None, 1=Rule of Thirds, 2=Golden Ratio, 3=Diagonal, 4=Center Lines */
+    gboolean crop_snap;              /* Snap to guides */
 } ToolOptions;
 
 /**
@@ -274,5 +283,57 @@ void tool_options_set_color_picker_sample_from_layer(ToolOptions* opts, gboolean
  * Get color picker sample from (TRUE = layer, FALSE = image)
  */
 gboolean tool_options_get_color_picker_sample_from_layer(ToolOptions* opts);
+
+/**
+ * Crop tool: set/get constraint mode (0=Free, 1=Ratio, 2=Size)
+ */
+void tool_options_set_crop_constraint_mode(ToolOptions* opts, gint mode);
+gint tool_options_get_crop_constraint_mode(ToolOptions* opts);
+
+/**
+ * Crop tool: set/get ratio (width:height)
+ */
+void tool_options_set_crop_ratio(ToolOptions* opts, gint w, gint h);
+void tool_options_get_crop_ratio(ToolOptions* opts, gint* w, gint* h);
+
+/**
+ * Crop tool: set/get fixed size
+ */
+void tool_options_set_crop_size(ToolOptions* opts, gint w, gint h);
+void tool_options_get_crop_size(ToolOptions* opts, gint* w, gint* h);
+
+/**
+ * Crop tool: set/get link toggle (maintain aspect ratio when editing size)
+ */
+void tool_options_set_crop_link(ToolOptions* opts, gboolean link);
+gboolean tool_options_get_crop_link(ToolOptions* opts);
+
+/**
+ * Crop tool: set/get delete pixels, grow canvas
+ */
+void tool_options_set_crop_delete_pixels(ToolOptions* opts, gboolean delete_pixels);
+gboolean tool_options_get_crop_delete_pixels(ToolOptions* opts);
+void tool_options_set_crop_grow_canvas(ToolOptions* opts, gboolean grow);
+gboolean tool_options_get_crop_grow_canvas(ToolOptions* opts);
+
+/**
+ * Crop tool: set/get darken outside and opacity
+ */
+void tool_options_set_crop_darken_outside(ToolOptions* opts, gboolean darken);
+gboolean tool_options_get_crop_darken_outside(ToolOptions* opts);
+void tool_options_set_crop_darken_opacity(ToolOptions* opts, gfloat opacity);
+gfloat tool_options_get_crop_darken_opacity(ToolOptions* opts);
+
+/**
+ * Crop tool: set/get overlay mode (0=None, 1=Rule of Thirds, 2=Golden Ratio, 3=Diagonal, 4=Center Lines)
+ */
+void tool_options_set_crop_overlay_mode(ToolOptions* opts, gint mode);
+gint tool_options_get_crop_overlay_mode(ToolOptions* opts);
+
+/**
+ * Crop tool: set/get snap to guides
+ */
+void tool_options_set_crop_snap(ToolOptions* opts, gboolean snap);
+gboolean tool_options_get_crop_snap(ToolOptions* opts);
 
 #endif /* TOOL_OPTIONS_H */

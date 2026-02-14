@@ -48,13 +48,22 @@ ToolOptions* tool_options_new(void) {
     opts->move_auto_select_layer = TRUE; /* Default: auto-select enabled */
 
     /* Initialize color picker tool options */
-    opts->color_picker_sample_radius = 0;      /* Default: single pixel */
+    opts->color_picker_sample_radius = 0;        /* Default: single pixel */
     opts->color_picker_sample_from_layer = TRUE; /* Default: sample from layer */
 
     /* Initialize crop tool options */
+    opts->crop_constraint_mode = 0; /* 0=Free */
+    opts->crop_ratio_w = 16;
+    opts->crop_ratio_h = 9;
+    opts->crop_width = 1920;
+    opts->crop_height = 1080;
+    opts->crop_link = TRUE;
+    opts->crop_delete_pixels = TRUE;
+    opts->crop_grow_canvas = FALSE;
     opts->crop_darken_outside = FALSE;
-    opts->crop_darken_opacity = 60.0f;  /* 0–100, default 60% */
-    opts->crop_overlay_mode = 0;        /* 0=None */
+    opts->crop_darken_opacity = 60.0f;
+    opts->crop_overlay_mode = 1;
+    opts->crop_snap = FALSE;
 
     return opts;
 }
@@ -388,6 +397,89 @@ gboolean tool_options_get_color_picker_sample_from_layer(ToolOptions* opts) {
         return TRUE;
     }
     return opts->color_picker_sample_from_layer;
+}
+
+/* Crop tool option getters/setters */
+void tool_options_set_crop_constraint_mode(ToolOptions* opts, gint mode) {
+    if (opts && mode >= 0 && mode <= 2) {
+        opts->crop_constraint_mode = mode;
+    }
+}
+gint tool_options_get_crop_constraint_mode(ToolOptions* opts) {
+    return opts ? opts->crop_constraint_mode : 0;
+}
+void tool_options_set_crop_ratio(ToolOptions* opts, gint w, gint h) {
+    if (opts && w > 0 && h > 0) {
+        opts->crop_ratio_w = w;
+        opts->crop_ratio_h = h;
+    }
+}
+void tool_options_get_crop_ratio(ToolOptions* opts, gint* w, gint* h) {
+    if (opts && w && h) {
+        *w = opts->crop_ratio_w > 0 ? opts->crop_ratio_w : 16;
+        *h = opts->crop_ratio_h > 0 ? opts->crop_ratio_h : 9;
+    }
+}
+void tool_options_set_crop_size(ToolOptions* opts, gint w, gint h) {
+    if (opts && w > 0 && h > 0) {
+        opts->crop_width = w;
+        opts->crop_height = h;
+    }
+}
+void tool_options_get_crop_size(ToolOptions* opts, gint* w, gint* h) {
+    if (opts && w && h) {
+        *w = opts->crop_width > 0 ? opts->crop_width : 1920;
+        *h = opts->crop_height > 0 ? opts->crop_height : 1080;
+    }
+}
+void tool_options_set_crop_link(ToolOptions* opts, gboolean link) {
+    if (opts)
+        opts->crop_link = link ? TRUE : FALSE;
+}
+gboolean tool_options_get_crop_link(ToolOptions* opts) {
+    return opts ? opts->crop_link : TRUE;
+}
+void tool_options_set_crop_delete_pixels(ToolOptions* opts, gboolean delete_pixels) {
+    if (opts)
+        opts->crop_delete_pixels = delete_pixels ? TRUE : FALSE;
+}
+gboolean tool_options_get_crop_delete_pixels(ToolOptions* opts) {
+    return opts ? opts->crop_delete_pixels : TRUE;
+}
+void tool_options_set_crop_grow_canvas(ToolOptions* opts, gboolean grow) {
+    if (opts)
+        opts->crop_grow_canvas = grow ? TRUE : FALSE;
+}
+gboolean tool_options_get_crop_grow_canvas(ToolOptions* opts) {
+    return opts ? opts->crop_grow_canvas : FALSE;
+}
+void tool_options_set_crop_darken_outside(ToolOptions* opts, gboolean darken) {
+    if (opts)
+        opts->crop_darken_outside = darken ? TRUE : FALSE;
+}
+gboolean tool_options_get_crop_darken_outside(ToolOptions* opts) {
+    return opts ? opts->crop_darken_outside : FALSE;
+}
+void tool_options_set_crop_darken_opacity(ToolOptions* opts, gfloat opacity) {
+    if (opts)
+        opts->crop_darken_opacity = (opacity < 0.0f) ? 0.0f : (opacity > 100.0f ? 100.0f : opacity);
+}
+gfloat tool_options_get_crop_darken_opacity(ToolOptions* opts) {
+    return opts ? opts->crop_darken_opacity : 60.0f;
+}
+void tool_options_set_crop_overlay_mode(ToolOptions* opts, gint mode) {
+    if (opts && mode >= 0 && mode <= 4)
+        opts->crop_overlay_mode = mode;
+}
+gint tool_options_get_crop_overlay_mode(ToolOptions* opts) {
+    return opts ? opts->crop_overlay_mode : 0;
+}
+void tool_options_set_crop_snap(ToolOptions* opts, gboolean snap) {
+    if (opts)
+        opts->crop_snap = snap ? TRUE : FALSE;
+}
+gboolean tool_options_get_crop_snap(ToolOptions* opts) {
+    return opts ? opts->crop_snap : FALSE;
 }
 
 /**

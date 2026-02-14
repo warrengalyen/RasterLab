@@ -5,11 +5,15 @@
 #include "tool_manager.h"
 #include "tool_options.h"
 #include "tools.h"
+#include "tools/tool_crop.h"
 #include "tools/tool_ellipse_select.h"
 #include "tools/tool_rect_select.h"
 #include "ui.h"
 #include "ui/widgets/vertical_spin_button.h"
 #include <stdio.h>
+
+/* Flag to prevent recursive spin updates when crop link toggle is active */
+static gboolean g_crop_spin_updating = FALSE;
 
 /* Color picker preview state for color_draw */
 static gboolean g_color_picker_preview_has_color = FALSE;
@@ -1060,6 +1064,232 @@ static void on_ellipse_select_animate_toggled(GtkToggleButton* button, gpointer 
     }
 }
 
+static gboolean crop_panel_do_redraw_idle(gpointer user_data) {
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    if (!panel || !panel->panel) {
+        return G_SOURCE_REMOVE;
+    }
+    GtkWidget* window = gtk_widget_get_toplevel(panel->panel);
+    if (window) {
+        AppContext* ctx = (AppContext*)g_object_get_data(G_OBJECT(window), "app_context");
+        if (ctx) {
+            ImageDocument* doc = ui_get_active_document(ctx);
+            if (doc && doc->drawing_area) {
+                /* Update crop rect to match new ratio/size options before redraw */
+                if (ctx->tool_registry) {
+                    tool_crop_update_rect_from_options(doc, ctx->tool_registry);
+                }
+                gtk_widget_queue_draw(doc->drawing_area);
+                if (doc->viewport) {
+                    gtk_widget_queue_draw(doc->viewport);
+                }
+            }
+        }
+    }
+    return G_SOURCE_REMOVE;
+}
+
+/* Helper: update crop rect from options and redraw (called directly for spin changes) */
+static void crop_panel_update_and_redraw(ToolOptionsPanel* panel) {
+    if (!panel || !panel->panel) {
+        return;
+    }
+    GtkWidget* window = gtk_widget_get_toplevel(panel->panel);
+    if (window) {
+        AppContext* ctx = (AppContext*)g_object_get_data(G_OBJECT(window), "app_context");
+        if (ctx) {
+            ImageDocument* doc = ui_get_active_document(ctx);
+            if (doc && doc->drawing_area) {
+                if (ctx->tool_registry) {
+                    tool_crop_update_rect_from_options(doc, ctx->tool_registry);
+                }
+                gtk_widget_queue_draw(doc->drawing_area);
+                if (doc->viewport) {
+                    gtk_widget_queue_draw(doc->viewport);
+                }
+            }
+        }
+    }
+}
+
+/* Helper: trigger crop overlay redraw (deferred for stack switch, immediate for spin changes) */
+static void crop_panel_trigger_redraw(ToolOptionsPanel* panel) {
+    if (!panel || !panel->panel) {
+        return;
+    }
+    g_idle_add(crop_panel_do_redraw_idle, panel);
+}
+
+static void on_crop_stack_changed(GtkStack* stack, GParamSpec* pspec, gpointer user_data) {
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    const gchar* name = gtk_stack_get_visible_child_name(stack);
+    gint mode = 0;
+    if (name) {
+        if (g_str_equal(name, "ratio"))
+            mode = 1;
+        else if (g_str_equal(name, "size"))
+            mode = 2;
+    }
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_CROP);
+    if (opts) {
+        tool_options_set_crop_constraint_mode(opts, mode);
+    }
+    /* Immediate update so new constraint mode takes effect right away */
+    crop_panel_update_and_redraw(panel);
+}
+
+static void on_crop_ratio_width_changed(GtkSpinButton* spin, gpointer user_data) {
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    gint w = (gint)gtk_spin_button_get_value(spin);
+    gint h;
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_CROP);
+    if (!opts) return;
+    tool_options_get_crop_ratio(opts, NULL, &h);
+    tool_options_set_crop_ratio(opts, w > 0 ? w : 1, h);
+    crop_panel_update_and_redraw(panel);
+}
+
+static void on_crop_ratio_height_changed(GtkSpinButton* spin, gpointer user_data) {
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    gint h = (gint)gtk_spin_button_get_value(spin);
+    gint w;
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_CROP);
+    if (!opts) return;
+    tool_options_get_crop_ratio(opts, &w, NULL);
+    tool_options_set_crop_ratio(opts, w, h > 0 ? h : 1);
+    crop_panel_update_and_redraw(panel);
+}
+
+static void on_crop_width_changed(GtkSpinButton* spin, gpointer user_data) {
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    if (g_crop_spin_updating) return;
+    gint w = (gint)gtk_spin_button_get_value(spin);
+    gint h;
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_CROP);
+    if (!opts) return;
+    tool_options_get_crop_size(opts, NULL, &h);
+    tool_options_set_crop_size(opts, w > 0 ? w : 1, h);
+    if (tool_options_get_crop_link(opts) && opts->crop_ratio_w > 0 && opts->crop_ratio_h > 0 && panel->crop_panel) {
+        gint new_h = (gint)((gdouble)w * opts->crop_ratio_h / opts->crop_ratio_w + 0.5);
+        if (new_h < 1) new_h = 1;
+        GtkWidget* height_spin = (GtkWidget*)g_object_get_data(G_OBJECT(panel->crop_panel), "crop_height_spin");
+        if (height_spin) {
+            g_crop_spin_updating = TRUE;
+            gtk_spin_button_set_value(GTK_SPIN_BUTTON(height_spin), (gdouble)new_h);
+            tool_options_set_crop_size(opts, w, new_h);
+            g_crop_spin_updating = FALSE;
+        }
+    }
+    crop_panel_update_and_redraw(panel);
+}
+
+static void on_crop_height_changed(GtkSpinButton* spin, gpointer user_data) {
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    if (g_crop_spin_updating) return;
+    gint h = (gint)gtk_spin_button_get_value(spin);
+    gint w;
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_CROP);
+    if (!opts) return;
+    tool_options_get_crop_size(opts, &w, NULL);
+    tool_options_set_crop_size(opts, w, h > 0 ? h : 1);
+    if (tool_options_get_crop_link(opts) && opts->crop_ratio_w > 0 && opts->crop_ratio_h > 0 && panel->crop_panel) {
+        gint new_w = (gint)((gdouble)h * opts->crop_ratio_w / opts->crop_ratio_h + 0.5);
+        if (new_w < 1) new_w = 1;
+        GtkWidget* width_spin = (GtkWidget*)g_object_get_data(G_OBJECT(panel->crop_panel), "crop_width_spin");
+        if (width_spin) {
+            g_crop_spin_updating = TRUE;
+            gtk_spin_button_set_value(GTK_SPIN_BUTTON(width_spin), (gdouble)new_w);
+            tool_options_set_crop_size(opts, new_w, h);
+            g_crop_spin_updating = FALSE;
+        }
+    }
+    crop_panel_update_and_redraw(panel);
+}
+
+static void on_crop_link_toggled(GtkToggleButton* button, gpointer user_data) {
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    gboolean active = gtk_toggle_button_get_active(button);
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_CROP);
+    if (opts) {
+        tool_options_set_crop_link(opts, active);
+    }
+}
+
+static void on_crop_delete_toggled(GtkToggleButton* button, gpointer user_data) {
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    gboolean active = gtk_toggle_button_get_active(button);
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_CROP);
+    if (opts) {
+        tool_options_set_crop_delete_pixels(opts, active);
+    }
+}
+
+static void on_crop_grow_toggled(GtkToggleButton* button, gpointer user_data) {
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    gboolean active = gtk_toggle_button_get_active(button);
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_CROP);
+    if (opts) {
+        tool_options_set_crop_grow_canvas(opts, active);
+    }
+}
+
+static void on_crop_darken_toggled(GtkToggleButton* button, gpointer user_data) {
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    gboolean active = gtk_toggle_button_get_active(button);
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_CROP);
+    if (opts) {
+        tool_options_set_crop_darken_outside(opts, active);
+    }
+    crop_panel_trigger_redraw(panel);
+}
+
+static void on_crop_darken_opacity_changed(GtkRange* range, gpointer user_data) {
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    gfloat val = (gfloat)gtk_range_get_value(range);
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_CROP);
+    if (opts) {
+        tool_options_set_crop_darken_opacity(opts, val);
+    }
+    crop_panel_trigger_redraw(panel);
+}
+
+static void on_crop_overlay_changed(GtkComboBox* combo, gpointer user_data) {
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    gint active = gtk_combo_box_get_active(combo);
+    if (active < 0 || active > 4) return;
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_CROP);
+    if (opts) {
+        tool_options_set_crop_overlay_mode(opts, active);
+    }
+    crop_panel_trigger_redraw(panel);
+}
+
+static void on_crop_snap_toggled(GtkToggleButton* button, gpointer user_data) {
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    gboolean active = gtk_toggle_button_get_active(button);
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_CROP);
+    if (opts) {
+        tool_options_set_crop_snap(opts, active);
+    }
+}
+
+static void on_crop_reset_clicked(GtkButton* button, gpointer user_data) {
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    if (!panel || !panel->tool_registry) return;
+    Tool* crop_tool = tool_manager_get(panel->tool_registry, TOOL_CROP);
+    if (crop_tool) {
+        tool_crop_reset(crop_tool);
+    }
+    crop_panel_trigger_redraw(panel);
+}
+
+static void on_crop_apply_clicked(GtkButton* button, gpointer user_data) {
+    (void)button;
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    /* Stage 5: implement apply crop */
+    crop_panel_trigger_redraw(panel);
+}
+
 ToolOptionsPanel* create_tool_options_panel(void) {
     ToolOptionsPanel* tool_opts_panel = (ToolOptionsPanel*)g_malloc(sizeof(ToolOptionsPanel));
 
@@ -1077,6 +1307,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
     tool_opts_panel->color_picker_panel = NULL;
     tool_opts_panel->rect_select_panel = NULL;
     tool_opts_panel->ellipse_select_panel = NULL;
+    tool_opts_panel->crop_panel = NULL;
     tool_opts_panel->move_panel = NULL;
     tool_opts_panel->title_label = NULL;
     tool_opts_panel->size_scale = NULL;
@@ -1587,6 +1818,116 @@ ToolOptionsPanel* create_tool_options_panel(void) {
         }
     }
 
+    /* Load crop panel from Glade */
+    GtkBuilder* crop_builder = gtk_builder_new();
+    GError* crop_error = NULL;
+    GtkWidget* crop_constraint_stack = NULL;
+    GtkWidget* crop_ratio_w_spin = NULL;
+    GtkWidget* crop_ratio_h_spin = NULL;
+    GtkWidget* crop_width_spin = NULL;
+    GtkWidget* crop_height_spin = NULL;
+    GtkWidget* crop_link_toggle = NULL;
+    GtkWidget* crop_delete_check = NULL;
+    GtkWidget* crop_grow_check = NULL;
+    GtkWidget* crop_darken_check = NULL;
+    GtkWidget* crop_darken_opacity_scale = NULL;
+    GtkWidget* crop_overlay_combo = NULL;
+    GtkWidget* crop_snap_check = NULL;
+    GtkWidget* crop_reset_btn = NULL;
+    GtkWidget* crop_apply_btn = NULL;
+    ToolOptions* crop_opts = tool_options_get_for_tool(TOOL_CROP);
+
+    if (gtk_builder_add_from_resource(crop_builder, "/ui/crop_options.glade", &crop_error)) {
+        tool_opts_panel->crop_panel = GTK_WIDGET(gtk_builder_get_object(crop_builder, "crop_options_panel"));
+        if (tool_opts_panel->crop_panel) {
+            gtk_container_add(GTK_CONTAINER(container), tool_opts_panel->crop_panel);
+
+            crop_constraint_stack = GTK_WIDGET(gtk_builder_get_object(crop_builder, "crop_constraint_stack"));
+            crop_ratio_w_spin = GTK_WIDGET(gtk_builder_get_object(crop_builder, "crop_ratio_width_spin"));
+            crop_ratio_h_spin = GTK_WIDGET(gtk_builder_get_object(crop_builder, "crop_ratio_height_spin"));
+            crop_width_spin = GTK_WIDGET(gtk_builder_get_object(crop_builder, "crop_width_spin"));
+            crop_height_spin = GTK_WIDGET(gtk_builder_get_object(crop_builder, "crop_height_spin"));
+            crop_link_toggle = GTK_WIDGET(gtk_builder_get_object(crop_builder, "crop_link_toggle"));
+            crop_delete_check = GTK_WIDGET(gtk_builder_get_object(crop_builder, "crop_delete_checkbox"));
+            crop_grow_check = GTK_WIDGET(gtk_builder_get_object(crop_builder, "crop_grow_checkbox"));
+            crop_darken_check = GTK_WIDGET(gtk_builder_get_object(crop_builder, "crop_darken_checkbox"));
+            crop_darken_opacity_scale = GTK_WIDGET(gtk_builder_get_object(crop_builder, "crop_darken_opacity_scale"));
+            crop_overlay_combo = GTK_WIDGET(gtk_builder_get_object(crop_builder, "crop_overlay_combo"));
+            crop_snap_check = GTK_WIDGET(gtk_builder_get_object(crop_builder, "crop_snap_checkbox"));
+            crop_reset_btn = GTK_WIDGET(gtk_builder_get_object(crop_builder, "crop_reset_button"));
+            crop_apply_btn = GTK_WIDGET(gtk_builder_get_object(crop_builder, "crop_apply_button"));
+
+            g_object_set_data(G_OBJECT(tool_opts_panel->crop_panel), "crop_ratio_width_spin", crop_ratio_w_spin);
+            g_object_set_data(G_OBJECT(tool_opts_panel->crop_panel), "crop_ratio_height_spin", crop_ratio_h_spin);
+            g_object_set_data(G_OBJECT(tool_opts_panel->crop_panel), "crop_width_spin", crop_width_spin);
+            g_object_set_data(G_OBJECT(tool_opts_panel->crop_panel), "crop_height_spin", crop_height_spin);
+            g_object_set_data(G_OBJECT(tool_opts_panel->crop_panel), "crop_constraint_stack", crop_constraint_stack);
+
+            if (crop_constraint_stack) {
+                g_signal_connect(crop_constraint_stack, "notify::visible-child-name",
+                                 G_CALLBACK(on_crop_stack_changed), tool_opts_panel);
+            }
+            if (crop_ratio_w_spin) {
+                g_signal_connect(crop_ratio_w_spin, "value-changed", G_CALLBACK(on_crop_ratio_width_changed), tool_opts_panel);
+                if (crop_opts) gtk_spin_button_set_value(GTK_SPIN_BUTTON(crop_ratio_w_spin), (gdouble)crop_opts->crop_ratio_w);
+            }
+            if (crop_ratio_h_spin) {
+                g_signal_connect(crop_ratio_h_spin, "value-changed", G_CALLBACK(on_crop_ratio_height_changed), tool_opts_panel);
+                if (crop_opts) gtk_spin_button_set_value(GTK_SPIN_BUTTON(crop_ratio_h_spin), (gdouble)crop_opts->crop_ratio_h);
+            }
+            if (crop_width_spin) {
+                g_signal_connect(crop_width_spin, "value-changed", G_CALLBACK(on_crop_width_changed), tool_opts_panel);
+                if (crop_opts) gtk_spin_button_set_value(GTK_SPIN_BUTTON(crop_width_spin), (gdouble)crop_opts->crop_width);
+            }
+            if (crop_height_spin) {
+                g_signal_connect(crop_height_spin, "value-changed", G_CALLBACK(on_crop_height_changed), tool_opts_panel);
+                if (crop_opts) gtk_spin_button_set_value(GTK_SPIN_BUTTON(crop_height_spin), (gdouble)crop_opts->crop_height);
+            }
+            if (crop_link_toggle) {
+                g_signal_connect(crop_link_toggle, "toggled", G_CALLBACK(on_crop_link_toggled), tool_opts_panel);
+                if (crop_opts) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(crop_link_toggle), crop_opts->crop_link);
+            }
+            if (crop_delete_check) {
+                g_signal_connect(crop_delete_check, "toggled", G_CALLBACK(on_crop_delete_toggled), tool_opts_panel);
+                if (crop_opts) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(crop_delete_check), crop_opts->crop_delete_pixels);
+            }
+            if (crop_grow_check) {
+                g_signal_connect(crop_grow_check, "toggled", G_CALLBACK(on_crop_grow_toggled), tool_opts_panel);
+                if (crop_opts) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(crop_grow_check), crop_opts->crop_grow_canvas);
+            }
+            if (crop_darken_check) {
+                g_signal_connect(crop_darken_check, "toggled", G_CALLBACK(on_crop_darken_toggled), tool_opts_panel);
+                if (crop_opts) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(crop_darken_check), crop_opts->crop_darken_outside);
+            }
+            if (crop_darken_opacity_scale) {
+                g_signal_connect(crop_darken_opacity_scale, "value-changed", G_CALLBACK(on_crop_darken_opacity_changed), tool_opts_panel);
+                if (crop_opts) gtk_range_set_value(GTK_RANGE(crop_darken_opacity_scale), (gdouble)crop_opts->crop_darken_opacity);
+            }
+            if (crop_overlay_combo) {
+                g_signal_connect(crop_overlay_combo, "changed", G_CALLBACK(on_crop_overlay_changed), tool_opts_panel);
+                if (crop_opts) gtk_combo_box_set_active(GTK_COMBO_BOX(crop_overlay_combo), crop_opts->crop_overlay_mode);
+            }
+            if (crop_snap_check) {
+                g_signal_connect(crop_snap_check, "toggled", G_CALLBACK(on_crop_snap_toggled), tool_opts_panel);
+                if (crop_opts) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(crop_snap_check), crop_opts->crop_snap);
+            }
+            if (crop_reset_btn) {
+                g_signal_connect(crop_reset_btn, "clicked", G_CALLBACK(on_crop_reset_clicked), tool_opts_panel);
+            }
+            if (crop_apply_btn) {
+                g_signal_connect(crop_apply_btn, "clicked", G_CALLBACK(on_crop_apply_clicked), tool_opts_panel);
+            }
+
+            gtk_widget_set_visible(tool_opts_panel->crop_panel, FALSE);
+            gtk_widget_set_no_show_all(tool_opts_panel->crop_panel, TRUE);
+        }
+        g_object_unref(crop_builder);
+    } else {
+        g_warning("Failed to load crop options panel: %s", crop_error ? crop_error->message : "Unknown error");
+        if (crop_error) g_error_free(crop_error);
+        if (crop_builder) g_object_unref(crop_builder);
+    }
+
     /* Load move panel from Glade */
     GtkBuilder* move_builder = gtk_builder_new();
     GError* move_error = NULL;
@@ -1664,6 +2005,8 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
         new_tool_type = TOOL_ELLIPSE_SELECT;
     } else if (g_strcmp0(tool_name, "Move") == 0) {
         new_tool_type = TOOL_MOVE;
+    } else if (g_strcmp0(tool_name, "Crop") == 0) {
+        new_tool_type = TOOL_CROP;
     } else if (g_strcmp0(tool_name, "Color Picker") == 0) {
         new_tool_type = TOOL_COLOR_PICKER;
     } else if (g_strcmp0(tool_name, "Hand") == 0) {
@@ -1697,8 +2040,57 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
     if (panel->ellipse_select_panel) {
         gtk_widget_set_visible(panel->ellipse_select_panel, FALSE);
     }
+    if (panel->crop_panel) {
+        gtk_widget_set_visible(panel->crop_panel, FALSE);
+    }
     if (panel->move_panel) {
         gtk_widget_set_visible(panel->move_panel, FALSE);
+    }
+
+    /* For crop tool, show the options panel */
+    if (new_tool_type == TOOL_CROP && panel->crop_panel) {
+        if (panel->panel) {
+            gtk_widget_set_visible(panel->panel, TRUE);
+        }
+        gtk_widget_set_no_show_all(panel->crop_panel, FALSE);
+        gtk_widget_set_visible(panel->crop_panel, TRUE);
+        gtk_widget_show_all(panel->crop_panel);
+
+        ToolOptions* opts = tool_options_get_for_tool(TOOL_CROP);
+        if (opts) {
+            /* Initialize fixed size to canvas size when switching to crop tool */
+            GtkWidget* window = panel->panel ? gtk_widget_get_toplevel(panel->panel) : NULL;
+            if (window) {
+                AppContext* ctx = (AppContext*)g_object_get_data(G_OBJECT(window), "app_context");
+                if (ctx) {
+                    ImageDocument* doc = ui_get_active_document(ctx);
+                    if (doc && doc->width > 0 && doc->height > 0) {
+                        tool_options_set_crop_size(opts, (gint)doc->width, (gint)doc->height);
+                        GtkWidget* width_spin = (GtkWidget*)g_object_get_data(G_OBJECT(panel->crop_panel), "crop_width_spin");
+                        GtkWidget* height_spin = (GtkWidget*)g_object_get_data(G_OBJECT(panel->crop_panel), "crop_height_spin");
+                        if (width_spin && GTK_IS_SPIN_BUTTON(width_spin)) {
+                            g_signal_handlers_block_by_func(width_spin, G_CALLBACK(on_crop_width_changed), panel);
+                            gtk_spin_button_set_value(GTK_SPIN_BUTTON(width_spin), (gdouble)doc->width);
+                            g_signal_handlers_unblock_by_func(width_spin, G_CALLBACK(on_crop_width_changed), panel);
+                        }
+                        if (height_spin && GTK_IS_SPIN_BUTTON(height_spin)) {
+                            g_signal_handlers_block_by_func(height_spin, G_CALLBACK(on_crop_height_changed), panel);
+                            gtk_spin_button_set_value(GTK_SPIN_BUTTON(height_spin), (gdouble)doc->height);
+                            g_signal_handlers_unblock_by_func(height_spin, G_CALLBACK(on_crop_height_changed), panel);
+                        }
+                    }
+                }
+            }
+
+            GtkWidget* stack = (GtkWidget*)g_object_get_data(G_OBJECT(panel->crop_panel), "crop_constraint_stack");
+            if (stack && GTK_IS_STACK(stack)) {
+                const gchar* name = (opts->crop_constraint_mode == 1) ? "ratio" : (opts->crop_constraint_mode == 2) ? "size" : "free";
+                g_signal_handlers_block_by_func(stack, G_CALLBACK(on_crop_stack_changed), panel);
+                gtk_stack_set_visible_child_name(GTK_STACK(stack), name);
+                g_signal_handlers_unblock_by_func(stack, G_CALLBACK(on_crop_stack_changed), panel);
+            }
+        }
+        return;
     }
 
     /* For ellipse select tool, show the options panel */
@@ -2171,6 +2563,10 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
         if (panel->ellipse_select_panel) {
             gtk_widget_set_no_show_all(panel->ellipse_select_panel, TRUE);
             gtk_widget_hide(panel->ellipse_select_panel);
+        }
+        if (panel->crop_panel) {
+            gtk_widget_set_no_show_all(panel->crop_panel, TRUE);
+            gtk_widget_hide(panel->crop_panel);
         }
         if (panel->move_panel) {
             gtk_widget_set_no_show_all(panel->move_panel, TRUE);

@@ -17,6 +17,7 @@ typedef struct {
     GtkWidget* color_picker_panel;               /* Color picker tool options panel (from Glade) */
     GtkWidget* rect_select_panel;                /* Rectangular select tool options panel (from Glade) */
     GtkWidget* ellipse_select_panel;             /* Elliptical select tool options panel (from Glade) */
+    GtkWidget* crop_panel;                       /* Crop tool options panel (from Glade) */
     GtkWidget* move_panel;                       /* Move tool options panel (from Glade) */
     GtkWidget* title_label;                      /* Title showing tool name (current panel) */
     GtkWidget* size_scale;                       /* Size slider (current panel) */
