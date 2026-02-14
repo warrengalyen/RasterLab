@@ -28,3 +28,6 @@
 [submodule "lib/glfw"]
 	path = lib/glfw
 	url = https://github.com/glfw/glfw
+[submodule "lib/libexif"]
+	path = lib/libexif
+	url = https://github.com/libexif/libexif.git

@@ -892,6 +892,100 @@ else()
     set(HAVE_LIBTIFF 0)
 endif()
 
+# Check if libexif submodule exists
+set(LIBEXIF_FOUND FALSE)
+set(LIBEXIF_TARGET "")
+
+if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/libexif/CMakeLists.txt")
+    message(STATUS "libexif submodule found, building from source as shared library")
+
+    set(LIBEXIF_BUILD_DIR "${CMAKE_BINARY_DIR}/libexif_build")
+    set(LIBEXIF_INSTALL_DIR "${CMAKE_BINARY_DIR}/libexif_install")
+
+    if(WIN32)
+        if(MINGW)
+            set(LIBEXIF_DLL_NAME "libexif.dll")
+            set(LIBEXIF_IMPLIB_NAME "libexif.dll.a")
+        else()
+            set(LIBEXIF_DLL_NAME "exif.dll")
+            set(LIBEXIF_IMPLIB_NAME "exif.lib")
+        endif()
+        set(LIBEXIF_DLL_PATH "${LIBEXIF_INSTALL_DIR}/bin/${LIBEXIF_DLL_NAME}")
+        set(LIBEXIF_IMPLIB_PATH "${LIBEXIF_INSTALL_DIR}/lib/${LIBEXIF_IMPLIB_NAME}")
+    else()
+        set(LIBEXIF_LIB_NAME "libexif${CMAKE_SHARED_LIBRARY_SUFFIX}")
+        set(LIBEXIF_LIB_PATH "${LIBEXIF_INSTALL_DIR}/lib/${LIBEXIF_LIB_NAME}")
+    endif()
+
+    set(LIBEXIF_CMAKE_ARGS
+        -DCMAKE_INSTALL_PREFIX=${LIBEXIF_INSTALL_DIR}
+        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+        -DBUILD_SHARED_LIBS=ON
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+    )
+
+    ExternalProject_Add(
+        libexif_external
+        SOURCE_DIR "${CMAKE_SOURCE_DIR}/lib/libexif"
+        BINARY_DIR "${LIBEXIF_BUILD_DIR}"
+        INSTALL_DIR "${LIBEXIF_INSTALL_DIR}"
+        CMAKE_ARGS ${LIBEXIF_CMAKE_ARGS}
+        BUILD_ALWAYS FALSE
+    )
+
+    if(EXISTS "${CMAKE_SOURCE_DIR}/lib/libexif/libexif")
+        set(LIBEXIF_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/lib/libexif")
+    else()
+        set(LIBEXIF_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/lib/libexif")
+    endif()
+
+    include_directories(${LIBEXIF_INCLUDE_DIRS})
+
+    add_library(exif SHARED IMPORTED GLOBAL)
+    if(WIN32)
+        set_target_properties(exif PROPERTIES
+            INTERFACE_INCLUDE_DIRECTORIES "${LIBEXIF_INCLUDE_DIRS}"
+            IMPORTED_LOCATION "${LIBEXIF_DLL_PATH}"
+            IMPORTED_IMPLIB "${LIBEXIF_IMPLIB_PATH}"
+        )
+        add_custom_command(TARGET libexif_external POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${LIBEXIF_DLL_PATH}"
+                "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/"
+            COMMENT "Copying libexif DLL to bin directory"
+        )
+    else()
+        set_target_properties(exif PROPERTIES
+            INTERFACE_INCLUDE_DIRECTORIES "${LIBEXIF_INCLUDE_DIRS}"
+            IMPORTED_LOCATION "${LIBEXIF_LIB_PATH}"
+        )
+        add_custom_command(TARGET libexif_external POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${LIBEXIF_LIB_PATH}"
+                "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/"
+            COMMENT "Copying libexif shared library to bin directory"
+        )
+    endif()
+
+    set(LIBEXIF_FOUND TRUE)
+    set(LIBEXIF_TARGET exif)
+    message(STATUS "Building libexif from source as shared library")
+    message(STATUS "libexif include dirs: ${LIBEXIF_INCLUDE_DIRS}")
+    if(WIN32)
+        message(STATUS "libexif DLL path: ${LIBEXIF_DLL_PATH}")
+    else()
+        message(STATUS "libexif library path: ${LIBEXIF_LIB_PATH}")
+    endif()
+else()
+    pkg_check_modules(LIBEXIF libexif)
+    if(LIBEXIF_FOUND)
+        include_directories(${LIBEXIF_INCLUDE_DIRS})
+        message(STATUS "Using system libexif: ${LIBEXIF_INCLUDE_DIRS}")
+    endif()
+endif()
+
 # Check if libde265 submodule exists (HEVC decoder for libheif HEIC support)
 set(LIBDE265_FOUND FALSE)
 set(LIBDE265_TARGET "")
