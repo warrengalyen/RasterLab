@@ -1,0 +1,421 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Generated with glade 3.40.0 -->
+<interface>
+  <requires lib="gtk+" version="3.24"/>
+  <object class="GtkAdjustment" id="crop_darken_opacity_adjustment">
+    <property name="upper">100</property>
+    <property name="value">60</property>
+    <property name="step-increment">1</property>
+  </object>
+  <object class="GtkAdjustment" id="crop_height_adjustment">
+    <property name="lower">1</property>
+    <property name="upper">100000</property>
+    <property name="value">1080</property>
+    <property name="step-increment">1</property>
+  </object>
+  <object class="GtkAdjustment" id="crop_ratio_height_adjustment">
+    <property name="lower">1</property>
+    <property name="upper">10000</property>
+    <property name="value">9</property>
+    <property name="step-increment">1</property>
+  </object>
+  <object class="GtkAdjustment" id="crop_ratio_width_adjustment">
+    <property name="lower">1</property>
+    <property name="upper">10000</property>
+    <property name="value">16</property>
+    <property name="step-increment">1</property>
+  </object>
+  <object class="GtkAdjustment" id="crop_width_adjustment">
+    <property name="lower">1</property>
+    <property name="upper">100000</property>
+    <property name="value">1920</property>
+    <property name="step-increment">1</property>
+  </object>
+  <object class="GtkBox" id="crop_options_panel">
+    <property name="visible">True</property>
+    <property name="can-focus">False</property>
+    <property name="margin-top">8</property>
+    <property name="margin-bottom">8</property>
+    <property name="spacing">15</property>
+    <child>
+      <object class="GtkLabel">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="halign">start</property>
+        <property name="margin-left">10</property>
+        <property name="label">&lt;b&gt;Crop&lt;/b&gt;</property>
+        <property name="use-markup">True</property>
+      </object>
+      <packing>
+        <property name="expand">False</property>
+        <property name="fill">True</property>
+        <property name="position">0</property>
+      </packing>
+    </child>
+    <child>
+      <object class="GtkSeparator">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="orientation">vertical</property>
+      </object>
+      <packing>
+        <property name="expand">False</property>
+        <property name="fill">True</property>
+        <property name="position">1</property>
+      </packing>
+    </child>
+    <child>
+      <object class="GtkBox" id="crop_constraint_box">
+        <property name="width-request">180</property>
+        <property name="can-focus">False</property>
+        <property name="orientation">vertical</property>
+        <property name="spacing">3</property>
+        <child>
+          <object class="GtkLabel">
+            <property name="can-focus">False</property>
+            <property name="label">mode</property>
+            <property name="xalign">0</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">0</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkStackSwitcher" id="crop_stack_switcher">
+            <property name="visible">True</property>
+            <property name="can-focus">False</property>
+            <property name="stack">crop_constraint_stack</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">1</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkStack" id="crop_constraint_stack">
+            <property name="visible">True</property>
+            <property name="can-focus">False</property>
+            <child>
+              <object class="GtkBox">
+                <property name="can-focus">False</property>
+                <property name="orientation">vertical</property>
+              </object>
+              <packing>
+                <property name="name">free</property>
+                <property name="title">Free</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkBox">
+                <property name="can-focus">False</property>
+                <property name="orientation">vertical</property>
+                <property name="spacing">3</property>
+                <child>
+                  <object class="GtkBox">
+                    <property name="can-focus">False</property>
+                    <property name="spacing">2</property>
+                    <child>
+                      <object class="GtkSpinButton">
+                        <property name="width-request">60</property>
+                        <property name="can-focus">False</property>
+                        <property name="adjustment">crop_ratio_width_adjustment</property>
+                      </object>
+                      <packing>
+                        <property name="expand">False</property>
+                        <property name="fill">True</property>
+                        <property name="position">0</property>
+                      </packing>
+                    </child>
+                    <child>
+                      <object class="GtkLabel">
+                        <property name="can-focus">False</property>
+                        <property name="label">:</property>
+                      </object>
+                      <packing>
+                        <property name="expand">False</property>
+                        <property name="fill">True</property>
+                        <property name="position">1</property>
+                      </packing>
+                    </child>
+                    <child>
+                      <object class="GtkSpinButton">
+                        <property name="width-request">60</property>
+                        <property name="can-focus">False</property>
+                        <property name="adjustment">crop_ratio_height_adjustment</property>
+                      </object>
+                      <packing>
+                        <property name="expand">False</property>
+                        <property name="fill">True</property>
+                        <property name="position">2</property>
+                      </packing>
+                    </child>
+                  </object>
+                  <packing>
+                    <property name="expand">False</property>
+                    <property name="fill">True</property>
+                    <property name="position">0</property>
+                  </packing>
+                </child>
+              </object>
+              <packing>
+                <property name="name">ratio</property>
+                <property name="title">Ratio</property>
+                <property name="position">1</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkBox">
+                <property name="can-focus">False</property>
+                <property name="orientation">vertical</property>
+                <property name="spacing">3</property>
+                <child>
+                  <object class="GtkBox">
+                    <property name="can-focus">False</property>
+                    <property name="spacing">2</property>
+                    <child>
+                      <object class="GtkSpinButton" id="crop_width_spin">
+                        <property name="width-request">70</property>
+                        <property name="can-focus">False</property>
+                        <property name="adjustment">crop_width_adjustment</property>
+                      </object>
+                      <packing>
+                        <property name="expand">False</property>
+                        <property name="fill">True</property>
+                        <property name="position">0</property>
+                      </packing>
+                    </child>
+                    <child>
+                      <object class="GtkToggleButton" id="crop_link_toggle">
+                        <property name="width-request">28</property>
+                        <property name="can-focus">False</property>
+                        <property name="focus-on-click">False</property>
+                        <property name="receives-default">False</property>
+                        <property name="relief">none</property>
+                        <child>
+                          <object class="GtkImage">
+                            <property name="can-focus">False</property>
+                            <property name="icon-name">object-locked-symbolic</property>
+                            <property name="icon_size">1</property>
+                          </object>
+                        </child>
+                      </object>
+                      <packing>
+                        <property name="expand">False</property>
+                        <property name="fill">True</property>
+                        <property name="position">1</property>
+                      </packing>
+                    </child>
+                    <child>
+                      <object class="GtkSpinButton" id="crop_height_spin">
+                        <property name="width-request">70</property>
+                        <property name="can-focus">False</property>
+                        <property name="adjustment">crop_height_adjustment</property>
+                      </object>
+                      <packing>
+                        <property name="expand">False</property>
+                        <property name="fill">True</property>
+                        <property name="position">2</property>
+                      </packing>
+                    </child>
+                  </object>
+                  <packing>
+                    <property name="expand">False</property>
+                    <property name="fill">True</property>
+                    <property name="position">0</property>
+                  </packing>
+                </child>
+              </object>
+              <packing>
+                <property name="name">size</property>
+                <property name="title">Size</property>
+                <property name="position">2</property>
+              </packing>
+            </child>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">2</property>
+          </packing>
+        </child>
+      </object>
+      <packing>
+        <property name="expand">False</property>
+        <property name="fill">True</property>
+        <property name="position">2</property>
+      </packing>
+    </child>
+    <child>
+      <object class="GtkBox">
+        <property name="width-request">180</property>
+        <property name="can-focus">False</property>
+        <property name="orientation">vertical</property>
+        <property name="spacing">3</property>
+        <child>
+          <object class="GtkLabel">
+            <property name="can-focus">False</property>
+            <property name="label">overlay</property>
+            <property name="xalign">0</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">0</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkComboBoxText" id="crop_overlay_combo">
+            <property name="can-focus">False</property>
+            <items>
+              <item>None</item>
+              <item>Rule of Thirds</item>
+              <item>Golden Ratio</item>
+              <item>Diagonal</item>
+              <item>Center Lines</item>
+            </items>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">1</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkCheckButton" id="crop_snap_checkbox">
+            <property name="label">snap</property>
+            <property name="can-focus">False</property>
+            <property name="receives-default">False</property>
+            <property name="draw-indicator">True</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">2</property>
+          </packing>
+        </child>
+      </object>
+      <packing>
+        <property name="expand">False</property>
+        <property name="fill">True</property>
+        <property name="position">3</property>
+      </packing>
+    </child>
+    <child>
+      <object class="GtkBox">
+        <property name="width-request">180</property>
+        <property name="can-focus">False</property>
+        <property name="orientation">vertical</property>
+        <property name="spacing">3</property>
+        <child>
+          <object class="GtkCheckButton" id="crop_delete_checkbox">
+            <property name="label">delete pixels</property>
+            <property name="can-focus">False</property>
+            <property name="receives-default">False</property>
+            <property name="draw-indicator">True</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">0</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkCheckButton" id="crop_grow_checkbox">
+            <property name="label">grow canvas</property>
+            <property name="can-focus">False</property>
+            <property name="receives-default">False</property>
+            <property name="draw-indicator">True</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">1</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkCheckButton" id="crop_darken_checkbox">
+            <property name="label">darken outside</property>
+            <property name="can-focus">False</property>
+            <property name="receives-default">False</property>
+            <property name="draw-indicator">True</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">2</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkScale">
+            <property name="width-request">88</property>
+            <property name="can-focus">False</property>
+            <property name="adjustment">crop_darken_opacity_adjustment</property>
+            <property name="digits">0</property>
+            <property name="draw-value">False</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">3</property>
+          </packing>
+        </child>
+      </object>
+      <packing>
+        <property name="expand">False</property>
+        <property name="fill">True</property>
+        <property name="position">4</property>
+      </packing>
+    </child>
+    <child>
+      <object class="GtkBox">
+        <property name="can-focus">False</property>
+        <property name="hexpand">True</property>
+      </object>
+      <packing>
+        <property name="expand">False</property>
+        <property name="fill">True</property>
+        <property name="position">5</property>
+      </packing>
+    </child>
+    <child>
+      <object class="GtkBox">
+        <property name="can-focus">False</property>
+        <property name="spacing">6</property>
+        <child>
+          <object class="GtkButton" id="crop_reset_button">
+            <property name="label">Reset</property>
+            <property name="can-focus">False</property>
+            <property name="receives-default">False</property>
+            <property name="valign">start</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">0</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkButton" id="crop_apply_button">
+            <property name="label">Apply</property>
+            <property name="can-focus">False</property>
+            <property name="receives-default">False</property>
+            <property name="valign">start</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">1</property>
+          </packing>
+        </child>
+      </object>
+      <packing>
+        <property name="expand">False</property>
+        <property name="fill">True</property>
+        <property name="position">6</property>
+      </packing>
+    </child>
+  </object>
+</interface>
