@@ -826,51 +826,46 @@ void tool_ellipse_select_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble z
             selection_draw_marching_ants_ellipse(cr, rect_x, rect_y, rect_w, rect_h, 0.0, animation_offset, zoom);
         }
 
-        /* Draw corner resize handles only in edit mode */
+        /* Draw corner resize handles only in edit mode (crop tool style) */
         if (state->is_editing) {
-            gdouble handle_size = 12.0 / zoom; /* Increased from 8.0 */
+            gdouble handle_size = 12.0 / zoom;
             gdouble half_handle = handle_size / 2.0;
             gdouble handle_line_width = 1.0 / zoom;
+            if (handle_line_width < 0.5)
+                handle_line_width = 0.5;
 
-            /* Reset dash pattern for solid handles */
+#define SEL_SNAP(c) (floor((c)*zoom + 0.5) / zoom)
+
             cairo_set_dash(cr, NULL, 0, 0);
+            cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+            cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
 
-            /* Corner positions: top-left, top-right, bottom-left, bottom-right */
             gdouble corners[4][2] = {
-                {rect_x, rect_y},                  /* top-left */
-                {rect_x + rect_w, rect_y},         /* top-right */
-                {rect_x, rect_y + rect_h},         /* bottom-left */
-                {rect_x + rect_w, rect_y + rect_h} /* bottom-right */
-            };
+                {SEL_SNAP(rect_x), SEL_SNAP(rect_y)},
+                {SEL_SNAP(rect_x + rect_w), SEL_SNAP(rect_y)},
+                {SEL_SNAP(rect_x), SEL_SNAP(rect_y + rect_h)},
+                {SEL_SNAP(rect_x + rect_w), SEL_SNAP(rect_y + rect_h)}};
 
             for (gint i = 0; i < 4; i++) {
                 gdouble cx = corners[i][0];
                 gdouble cy = corners[i][1];
+                gboolean hovered = (state->hovered_handle == i);
+                gdouble hx = SEL_SNAP(cx - half_handle);
+                gdouble hy = SEL_SNAP(cy - half_handle);
+                gdouble hw = SEL_SNAP(cx + half_handle) - hx;
+                gdouble hh = SEL_SNAP(cy + half_handle) - hy;
 
-                /* Draw filled area with blue if this handle is hovered */
-                if (state->hovered_handle == i) {
-                    gdouble inset = handle_line_width * 1.5;
-                    cairo_rectangle(cr, cx - half_handle + inset, cy - half_handle + inset,
-                                    handle_size - (inset * 2), handle_size - (inset * 2));
-                    cairo_set_source_rgba(cr, 0.0, 0.5, 1.0, 0.6); /* Blue with transparency */
-                    cairo_fill(cr);
-                }
-
-                /* Draw outer black line (full size) - solid */
-                cairo_rectangle(cr, cx - half_handle, cy - half_handle,
-                                handle_size, handle_size);
-                cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
-                cairo_set_line_width(cr, handle_line_width);
-                cairo_stroke(cr);
-
-                /* Draw inner white line (smaller, inset) - solid */
-                gdouble inset = handle_line_width * 1.5;
-                cairo_rectangle(cr, cx - half_handle + inset, cy - half_handle + inset,
-                                handle_size - (inset * 2), handle_size - (inset * 2));
-                cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+                cairo_rectangle(cr, hx, hy, hw, hh);
+                cairo_set_source_rgba(cr, 0.2, 0.2, 0.2, 1.0);
+                cairo_set_line_width(cr, handle_line_width * 3.0);
+                cairo_stroke_preserve(cr);
+                cairo_set_source_rgba(cr, hovered ? 0.0 : 1.0, hovered ? 0.5 : 1.0, 1.0, 1.0);
                 cairo_set_line_width(cr, handle_line_width);
                 cairo_stroke(cr);
             }
+            cairo_set_antialias(cr, CAIRO_ANTIALIAS_DEFAULT);
+
+#undef SEL_SNAP
         }
 
         cairo_restore(cr);
