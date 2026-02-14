@@ -346,6 +346,7 @@ GtkWidget* tools_panel_initialize_from_builder(GtkBuilder* builder, ToolRegistry
         "tool_button_zoom",
         "tool_button_move",
         "tool_button_color_picker",
+        "tool_button_crop",
         "tool_button_pencil",
         "tool_button_brush",
         "tool_button_eraser",
@@ -359,6 +360,7 @@ GtkWidget* tools_panel_initialize_from_builder(GtkBuilder* builder, ToolRegistry
         TOOL_ZOOM,
         TOOL_MOVE,
         TOOL_COLOR_PICKER,
+        TOOL_CROP,
         TOOL_PENCIL,
         TOOL_BRUSH,
         TOOL_ERASER,
@@ -393,6 +395,7 @@ GtkWidget* tools_panel_initialize_from_builder(GtkBuilder* builder, ToolRegistry
                 "/icons/tool-zoom.png",
                 "/icons/tool-move.png",
                 "/icons/tool-colorpicker.png",
+                "/icons/tool-crop.png",
                 "/icons/tool-pencil.png",
                 "/icons/tool-paintbrush.png",
                 "/icons/tool-eraser.png",
@@ -587,6 +590,10 @@ gboolean tools_panel_on_window_key_press(GtkWidget* widget, GdkEventKey* event, 
                     tool_to_activate = TOOL_RECT_SELECT;
                 }
             }
+            break;
+        case GDK_KEY_c:
+        case GDK_KEY_C:
+            tool_to_activate = TOOL_CROP;
             break;
         default:
             return FALSE; /* Not a tool hotkey */

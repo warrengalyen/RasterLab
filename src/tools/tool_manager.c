@@ -2,6 +2,7 @@
 #include "tool_options.h"
 #include "tools/tool_brush.h"
 #include "tools/tool_colorpicker.h"
+#include "tools/tool_crop.h"
 #include "tools/tool_ellipse_select.h"
 #include "tools/tool_eraser.h"
 #include "tools/tool_fill.h"
@@ -110,6 +111,13 @@ gboolean tool_manager_init_defaults(ToolRegistry* registry) {
     }
     tool_manager_register(registry, tool, TOOL_ELLIPSE_SELECT);
 
+    /* Create Crop tool */
+    tool = tool_crop_create();
+    if (!tool) {
+        return FALSE;
+    }
+    tool_manager_register(registry, tool, TOOL_CROP);
+
     /* Activate Hand tool by default */
     tool_manager_activate(registry, TOOL_HAND);
 
@@ -163,6 +171,11 @@ gboolean tool_manager_activate(ToolRegistry* registry, ToolType type) {
         tool_ellipse_select_finalize(prev_tool, registry->current_doc);
         /* Reset tool state to clear preview */
         tool_ellipse_select_reset(prev_tool);
+    }
+
+    /* Reset crop tool if switching away from it */
+    if (prev_tool && prev_tool->type == TOOL_CROP) {
+        tool_crop_reset(prev_tool);
     }
 
     registry->active_tool = tool;

@@ -15,6 +15,7 @@
 #include "tool_options.h"
 #include "tools.h"
 #include "tools/tool_colorpicker.h"
+#include "tools/tool_crop.h"
 #include "tools/tool_ellipse_select.h"
 #include "tools/tool_move.h"
 #include "tools/tool_rect_select.h"
@@ -593,6 +594,9 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
 
     /* Draw ellipse select tool preview during drag */
     tool_ellipse_select_draw_preview(doc, cr, zoom);
+
+    /* Draw crop tool overlay during drag/edit */
+    tool_crop_draw_preview(doc, cr, zoom);
 
     /* Render selection overlays after all content is drawn */
     if (doc->selection_mask && !selection_mask_is_empty(doc->selection_mask)) {
