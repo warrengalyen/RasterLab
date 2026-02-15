@@ -1304,6 +1304,24 @@ static void on_crop_link_toggled(GtkToggleButton* button, gpointer user_data) {
     }
 }
 
+static void on_crop_delete_pixels_toggled(GtkToggleButton* button, gpointer user_data) {
+    (void)user_data;
+    gboolean active = gtk_toggle_button_get_active(button);
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_CROP);
+    if (opts) {
+        tool_options_set_crop_delete_pixels(opts, active);
+    }
+}
+
+static void on_crop_grow_canvas_toggled(GtkToggleButton* button, gpointer user_data) {
+    (void)user_data;
+    gboolean active = gtk_toggle_button_get_active(button);
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_CROP);
+    if (opts) {
+        tool_options_set_crop_grow_canvas(opts, active);
+    }
+}
+
 static void on_crop_darken_toggled(GtkToggleButton* button, gpointer user_data) {
     ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
     gboolean active = gtk_toggle_button_get_active(button);
@@ -1377,7 +1395,12 @@ gboolean crop_apply_if_active(AppContext* ctx) {
         return FALSE;
     }
 
-    cmd = command_create_crop_to_rect(doc, x, y, (guint)w, (guint)h);
+    {
+        ToolOptions* opts = tool_options_get_for_tool(TOOL_CROP);
+        gboolean grow_canvas = opts ? tool_options_get_crop_grow_canvas(opts) : FALSE;
+        gboolean delete_pixels = opts ? tool_options_get_crop_delete_pixels(opts) : TRUE;
+        cmd = command_create_crop_to_rect(doc, x, y, (guint)w, (guint)h, grow_canvas, delete_pixels);
+    }
     if (!cmd) {
         return FALSE;
     }
@@ -1970,6 +1993,8 @@ ToolOptionsPanel* create_tool_options_panel(void) {
     GtkWidget* crop_width_spin = NULL;
     GtkWidget* crop_height_spin = NULL;
     GtkWidget* crop_link_toggle = NULL;
+    GtkWidget* crop_delete_pixels_check = NULL;
+    GtkWidget* crop_grow_canvas_check = NULL;
     GtkWidget* crop_darken_check = NULL;
     GtkWidget* crop_darken_opacity_scale = NULL;
     GtkWidget* crop_overlay_combo = NULL;
@@ -1989,6 +2014,8 @@ ToolOptionsPanel* create_tool_options_panel(void) {
             crop_width_spin = GTK_WIDGET(gtk_builder_get_object(crop_builder, "crop_width_spin"));
             crop_height_spin = GTK_WIDGET(gtk_builder_get_object(crop_builder, "crop_height_spin"));
             crop_link_toggle = GTK_WIDGET(gtk_builder_get_object(crop_builder, "crop_link_toggle"));
+            crop_delete_pixels_check = GTK_WIDGET(gtk_builder_get_object(crop_builder, "crop_delete_pixels_checkbox"));
+            crop_grow_canvas_check = GTK_WIDGET(gtk_builder_get_object(crop_builder, "crop_grow_canvas_checkbox"));
             crop_darken_check = GTK_WIDGET(gtk_builder_get_object(crop_builder, "crop_darken_checkbox"));
             crop_darken_opacity_scale = GTK_WIDGET(gtk_builder_get_object(crop_builder, "crop_darken_opacity_scale"));
             crop_overlay_combo = GTK_WIDGET(gtk_builder_get_object(crop_builder, "crop_overlay_combo"));
@@ -2032,6 +2059,16 @@ ToolOptionsPanel* create_tool_options_panel(void) {
                     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(crop_link_toggle), crop_opts->crop_link);
                 /* Ensure icon matches initial toggle state (set_active may not emit toggled) */
                 on_crop_link_toggled(GTK_TOGGLE_BUTTON(crop_link_toggle), tool_opts_panel);
+            }
+            if (crop_delete_pixels_check) {
+                g_signal_connect(crop_delete_pixels_check, "toggled", G_CALLBACK(on_crop_delete_pixels_toggled), tool_opts_panel);
+                if (crop_opts)
+                    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(crop_delete_pixels_check), crop_opts->crop_delete_pixels);
+            }
+            if (crop_grow_canvas_check) {
+                g_signal_connect(crop_grow_canvas_check, "toggled", G_CALLBACK(on_crop_grow_canvas_toggled), tool_opts_panel);
+                if (crop_opts)
+                    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(crop_grow_canvas_check), crop_opts->crop_grow_canvas);
             }
             if (crop_darken_check) {
                 g_signal_connect(crop_darken_check, "toggled", G_CALLBACK(on_crop_darken_toggled), tool_opts_panel);

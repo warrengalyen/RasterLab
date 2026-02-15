@@ -203,15 +203,17 @@ Command* command_create_flatten(struct ImageDocument* doc);
  */
 typedef struct {
     struct ImageDocument* doc; /* Document containing the layers */
-    GList* layer_snapshots;    /* List of cairo_surface_t* snapshots (before operation) */
+    GList* layer_snapshots;    /* List of cairo_surface_t* snapshots (before operation); NULL when delete_pixels is FALSE */
     GList* layers;             /* List of ImageLayer* pointers */
     GList* layer_offsets;      /* List of LayerOffsetPair* for old offsets */
     guint old_width;           /* Document width before crop */
     guint old_height;          /* Document height before crop */
     guint new_width;           /* Document width after crop */
     guint new_height;          /* Document height after crop */
-    gint crop_x;               /* X offset of crop region (document coords) */
-    gint crop_y;               /* Y offset of crop region (document coords) */
+    gint crop_x;               /* X offset of crop region (document coords; can be negative when grow_canvas) */
+    gint crop_y;               /* Y offset of crop region (document coords; can be negative when grow_canvas) */
+    gboolean grow_canvas;      /* If TRUE, crop rect may extend beyond image (expand canvas) */
+    gboolean delete_pixels;    /* If TRUE, resize layers and remove pixels; if FALSE, only change doc size and offsets (non-destructive) */
 } CropCommandData;
 
 /**
@@ -230,10 +232,13 @@ Command* command_create_crop_to_selection(struct ImageDocument* doc);
  * @param y Top edge of crop region (document coords)
  * @param w Width of crop region
  * @param h Height of crop region
+ * @param grow_canvas If TRUE, allow crop rect to extend beyond image (canvas grows)
+ * @param delete_pixels If TRUE, remove pixels outside crop; if FALSE, non-destructive (hide by offset only)
  * @return Newly created Command, or NULL on failure
  */
 Command* command_create_crop_to_rect(struct ImageDocument* doc,
-                                     gint x, gint y, guint w, guint h);
+                                     gint x, gint y, guint w, guint h,
+                                     gboolean grow_canvas, gboolean delete_pixels);
 
 /**
  * Create a trim borders command

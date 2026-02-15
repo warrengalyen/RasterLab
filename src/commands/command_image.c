@@ -2226,7 +2226,8 @@ static void crop_command_data_free(CropCommandData* data) {
 
 /**
  * Crop command apply callback
- * Crops all layers by creating new surfaces with cropped content
+ * Destructive: crops all layers by creating new surfaces with cropped content.
+ * Non-destructive: only updates document size and layer offsets (pixels hidden, not removed).
  */
 static void crop_command_apply(Command* cmd, struct ImageDocument* doc) {
     CropCommandData* data;
@@ -2238,7 +2239,24 @@ static void crop_command_apply(Command* cmd, struct ImageDocument* doc) {
 
     data = (CropCommandData*)cmd->user_data;
 
-    /* Crop each layer */
+    if (!data->delete_pixels) {
+        /* Non-destructive: change doc size and layer offsets only; layer surfaces unchanged */
+        doc->width = data->new_width;
+        doc->height = data->new_height;
+        iter = data->layer_offsets;
+        while (iter) {
+            LayerOffsetPair* pair = (LayerOffsetPair*)iter->data;
+            if (pair && pair->layer) {
+                pair->layer->offset_x = pair->old_offset_x - data->crop_x;
+                pair->layer->offset_y = pair->old_offset_y - data->crop_y;
+                layer_invalidate_cache(pair->layer);
+            }
+            iter = iter->next;
+        }
+        goto crop_apply_common;
+    }
+
+    /* Destructive: crop each layer */
     for (iter = data->layers; iter; iter = iter->next) {
         struct ImageLayer* layer = (struct ImageLayer*)iter->data;
         if (!layer || !layer->surface) {
@@ -2310,10 +2328,11 @@ static void crop_command_apply(Command* cmd, struct ImageDocument* doc) {
         layer_invalidate_cache(layer);
     }
 
-    /* Update document dimensions */
+    /* Update document dimensions (destructive path only; non-destructive already set them) */
     doc->width = data->new_width;
     doc->height = data->new_height;
 
+crop_apply_common:
     /* Recreate tile grid with new dimensions */
     if (doc->tile_grid) {
         tile_grid_free(doc->tile_grid);
@@ -2344,7 +2363,7 @@ static void crop_command_apply(Command* cmd, struct ImageDocument* doc) {
 
 /**
  * Crop command revert callback
- * Restores layers from snapshots
+ * Destructive: restores layers from snapshots. Non-destructive: restores doc size and layer offsets only.
  */
 static void crop_command_revert(Command* cmd, struct ImageDocument* doc) {
     CropCommandData* data;
@@ -2356,7 +2375,22 @@ static void crop_command_revert(Command* cmd, struct ImageDocument* doc) {
 
     data = (CropCommandData*)cmd->user_data;
 
-    /* Restore all layers from snapshots */
+    if (!data->delete_pixels) {
+        /* Non-destructive: restore document dimensions and layer offsets only */
+        for (offset_iter = data->layer_offsets; offset_iter; offset_iter = offset_iter->next) {
+            LayerOffsetPair* pair = (LayerOffsetPair*)offset_iter->data;
+            if (pair && pair->layer) {
+                pair->layer->offset_x = pair->old_offset_x;
+                pair->layer->offset_y = pair->old_offset_y;
+                layer_invalidate_cache(pair->layer);
+            }
+        }
+        doc->width = data->old_width;
+        doc->height = data->old_height;
+        goto crop_revert_common;
+    }
+
+    /* Restore all layers from snapshots (destructive) */
     layer_iter = data->layers;
     snapshot_iter = data->layer_snapshots;
     offset_iter = data->layer_offsets;
@@ -2401,10 +2435,11 @@ static void crop_command_revert(Command* cmd, struct ImageDocument* doc) {
         offset_iter = offset_iter->next;
     }
 
-    /* Restore document dimensions */
+    /* Restore document dimensions (destructive path; non-destructive already restored above) */
     doc->width = data->old_width;
     doc->height = data->old_height;
 
+crop_revert_common:
     /* Recreate tile grid with old dimensions */
     if (doc->tile_grid) {
         tile_grid_free(doc->tile_grid);
@@ -2572,9 +2607,12 @@ Command* command_create_crop_to_selection(struct ImageDocument* doc) {
 /**
  * Create a crop to rect command
  * Crops all layers and canvas to the given rectangle
+ * @param grow_canvas If TRUE, crop rect may extend beyond image (canvas grows)
+ * @param delete_pixels If TRUE, remove pixels; if FALSE, non-destructive (doc size + offsets only)
  */
 Command* command_create_crop_to_rect(struct ImageDocument* doc,
-                                     gint x, gint y, guint w, guint h) {
+                                     gint x, gint y, guint w, guint h,
+                                     gboolean grow_canvas, gboolean delete_pixels) {
     Command* cmd;
     CropCommandData* data;
     GList* iter;
@@ -2588,24 +2626,26 @@ Command* command_create_crop_to_rect(struct ImageDocument* doc,
         return NULL;
     }
 
-    /* Clamp rect to document bounds */
-    if (x < 0) {
-        w = (guint)((gint)w + x);
-        x = 0;
-    }
-    if (y < 0) {
-        h = (guint)((gint)h + y);
-        y = 0;
-    }
-    if (x + (gint)w > (gint)doc->width) {
-        w = (guint)(doc->width - x);
-    }
-    if (y + (gint)h > (gint)doc->height) {
-        h = (guint)(doc->height - y);
-    }
-    if (w <= 0 || h <= 0) {
-        g_warning("Crop rect outside document bounds");
-        return NULL;
+    if (!grow_canvas) {
+        /* Clamp rect to document bounds */
+        if (x < 0) {
+            w = (guint)((gint)w + x);
+            x = 0;
+        }
+        if (y < 0) {
+            h = (guint)((gint)h + y);
+            y = 0;
+        }
+        if (x + (gint)w > (gint)doc->width) {
+            w = (guint)(doc->width - x);
+        }
+        if (y + (gint)h > (gint)doc->height) {
+            h = (guint)(doc->height - y);
+        }
+        if (w <= 0 || h <= 0) {
+            g_warning("Crop rect outside document bounds");
+            return NULL;
+        }
     }
 
     /* Create command data */
@@ -2617,19 +2657,24 @@ Command* command_create_crop_to_rect(struct ImageDocument* doc,
     data->new_height = h;
     data->crop_x = x;
     data->crop_y = y;
+    data->grow_canvas = grow_canvas ? TRUE : FALSE;
+    data->delete_pixels = delete_pixels ? TRUE : FALSE;
     data->layer_snapshots = NULL;
     data->layers = NULL;
     data->layer_offsets = NULL;
 
-    /* Create snapshots of all layers */
+    /* Build layers and layer_offsets; snapshots only when destructive */
     for (iter = doc->layers; iter; iter = iter->next) {
         struct ImageLayer* layer = (struct ImageLayer*)iter->data;
         if (layer && layer->surface) {
-            cairo_surface_t* snapshot = cairo_surface_snapshot(layer->surface);
-            if (snapshot) {
-                data->layer_snapshots = g_list_append(data->layer_snapshots, snapshot);
-                data->layers = g_list_append(data->layers, layer);
-
+            if (delete_pixels) {
+                cairo_surface_t* snapshot = cairo_surface_snapshot(layer->surface);
+                if (snapshot) {
+                    data->layer_snapshots = g_list_append(data->layer_snapshots, snapshot);
+                }
+            }
+            data->layers = g_list_append(data->layers, layer);
+            {
                 LayerOffsetPair* offset = (LayerOffsetPair*)g_malloc(sizeof(LayerOffsetPair));
                 offset->layer = layer;
                 offset->old_offset_x = layer->offset_x;
@@ -2640,6 +2685,11 @@ Command* command_create_crop_to_rect(struct ImageDocument* doc,
     }
 
     if (!data->layers) {
+        crop_command_data_free(data);
+        return NULL;
+    }
+
+    if (delete_pixels && data->layer_snapshots && g_list_length(data->layer_snapshots) != g_list_length(data->layers)) {
         crop_command_data_free(data);
         return NULL;
     }

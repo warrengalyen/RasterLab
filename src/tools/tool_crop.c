@@ -305,37 +305,43 @@ static void crop_tool_mouse_move(Tool* tool, struct ImageDocument* doc, MouseEve
             state->rect_h = CROP_MIN_SIZE;
         }
 
-        /* Clamp to image bounds */
-        if (state->drag_mode == -1) {
-            if (state->rect_x < 0)
-                state->rect_x = 0;
-            if (state->rect_y < 0)
-                state->rect_y = 0;
-            if (state->rect_x + state->rect_w > (gint)doc->width) {
-                state->rect_x = doc->width - state->rect_w;
+        /* Clamp to image bounds unless grow canvas is enabled */
+        {
+            ToolOptions* opts = tool_options_get_for_tool(TOOL_CROP);
+            gboolean grow_canvas = opts ? tool_options_get_crop_grow_canvas(opts) : FALSE;
+            if (!grow_canvas) {
+                if (state->drag_mode == -1) {
+                    if (state->rect_x < 0)
+                        state->rect_x = 0;
+                    if (state->rect_y < 0)
+                        state->rect_y = 0;
+                    if (state->rect_x + state->rect_w > (gint)doc->width) {
+                        state->rect_x = doc->width - state->rect_w;
+                    }
+                    if (state->rect_y + state->rect_h > (gint)doc->height) {
+                        state->rect_y = doc->height - state->rect_h;
+                    }
+                } else if (state->drag_mode >= 0) {
+                    if (state->rect_x < 0) {
+                        state->rect_w += state->rect_x;
+                        state->rect_x = 0;
+                    }
+                    if (state->rect_y < 0) {
+                        state->rect_h += state->rect_y;
+                        state->rect_y = 0;
+                    }
+                    if (state->rect_x + state->rect_w > (gint)doc->width) {
+                        state->rect_w = doc->width - state->rect_x;
+                    }
+                    if (state->rect_y + state->rect_h > (gint)doc->height) {
+                        state->rect_h = doc->height - state->rect_y;
+                    }
+                    if (state->rect_w < CROP_MIN_SIZE)
+                        state->rect_w = CROP_MIN_SIZE;
+                    if (state->rect_h < CROP_MIN_SIZE)
+                        state->rect_h = CROP_MIN_SIZE;
+                }
             }
-            if (state->rect_y + state->rect_h > (gint)doc->height) {
-                state->rect_y = doc->height - state->rect_h;
-            }
-        } else if (state->drag_mode >= 0) {
-            if (state->rect_x < 0) {
-                state->rect_w += state->rect_x;
-                state->rect_x = 0;
-            }
-            if (state->rect_y < 0) {
-                state->rect_h += state->rect_y;
-                state->rect_y = 0;
-            }
-            if (state->rect_x + state->rect_w > (gint)doc->width) {
-                state->rect_w = doc->width - state->rect_x;
-            }
-            if (state->rect_y + state->rect_h > (gint)doc->height) {
-                state->rect_h = doc->height - state->rect_y;
-            }
-            if (state->rect_w < CROP_MIN_SIZE)
-                state->rect_w = CROP_MIN_SIZE;
-            if (state->rect_h < CROP_MIN_SIZE)
-                state->rect_h = CROP_MIN_SIZE;
         }
 
         state->current_x = event->x;
@@ -537,20 +543,26 @@ static void crop_tool_mouse_up(Tool* tool, struct ImageDocument* doc, MouseEvent
             }
         }
 
-        /* Clamp to image bounds */
-        if (x < 0) {
-            w += x;
-            x = 0;
-        }
-        if (y < 0) {
-            h += y;
-            y = 0;
-        }
-        if (x + w > (gint)doc->width) {
-            w = doc->width - x;
-        }
-        if (y + h > (gint)doc->height) {
-            h = doc->height - y;
+        /* Clamp to image bounds unless grow canvas is enabled */
+        {
+            ToolOptions* opts = tool_options_get_for_tool(TOOL_CROP);
+            gboolean grow_canvas = opts ? tool_options_get_crop_grow_canvas(opts) : FALSE;
+            if (!grow_canvas) {
+                if (x < 0) {
+                    w += x;
+                    x = 0;
+                }
+                if (y < 0) {
+                    h += y;
+                    y = 0;
+                }
+                if (x + w > (gint)doc->width) {
+                    w = doc->width - x;
+                }
+                if (y + h > (gint)doc->height) {
+                    h = doc->height - y;
+                }
+            }
         }
 
         if (w < CROP_MIN_SIZE)
