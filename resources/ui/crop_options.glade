@@ -2,6 +2,11 @@
 <!-- Generated with glade 3.40.0 -->
 <interface>
   <requires lib="gtk+" version="3.24"/>
+  <object class="GtkImage" id="apply_image">
+    <property name="visible">True</property>
+    <property name="can-focus">False</property>
+    <property name="resource">/icons/checkmark.png</property>
+  </object>
   <object class="GtkAdjustment" id="crop_darken_opacity_adjustment">
     <property name="upper">100</property>
     <property name="value">60</property>
@@ -30,6 +35,11 @@
     <property name="upper">100000</property>
     <property name="value">1920</property>
     <property name="step-increment">1</property>
+  </object>
+  <object class="GtkImage" id="reset_image">
+    <property name="visible">True</property>
+    <property name="can-focus">False</property>
+    <property name="resource">/icons/reset.png</property>
   </object>
   <object class="GtkBox" id="crop_options_panel">
     <property name="visible">True</property>
@@ -105,7 +115,7 @@
               </object>
               <packing>
                 <property name="name">free</property>
-                <property name="title">Free</property>
+                <property name="title">Unconstrained</property>
               </packing>
             </child>
             <child>
@@ -197,7 +207,7 @@
                         <child>
                           <object class="GtkImage">
                             <property name="can-focus">False</property>
-                            <property name="icon-name">object-locked-symbolic</property>
+                            <property name="resource">/icons/lock.png</property>
                             <property name="icon_size">1</property>
                           </object>
                         </child>
@@ -230,7 +240,7 @@
               </object>
               <packing>
                 <property name="name">size</property>
-                <property name="title">Size</property>
+                <property name="title">Fixed Size</property>
                 <property name="position">2</property>
               </packing>
             </child>
@@ -257,7 +267,7 @@
         <child>
           <object class="GtkLabel">
             <property name="can-focus">False</property>
-            <property name="label">overlay</property>
+            <property name="label">guide overlay</property>
             <property name="xalign">0</property>
           </object>
           <packing>
@@ -273,7 +283,6 @@
               <item translatable="yes">None</item>
               <item translatable="yes">Rule of Thirds</item>
               <item translatable="yes">Phi Grid</item>
-              <item translatable="yes">Golden Spiral</item>
               <item translatable="yes">Diagonal</item>
               <item translatable="yes">Center Lines</item>
             </items>
@@ -282,19 +291,6 @@
             <property name="expand">False</property>
             <property name="fill">True</property>
             <property name="position">1</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkCheckButton" id="crop_snap_checkbox">
-            <property name="label">snap</property>
-            <property name="can-focus">False</property>
-            <property name="receives-default">False</property>
-            <property name="draw-indicator">True</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">2</property>
           </packing>
         </child>
       </object>
@@ -311,16 +307,44 @@
         <property name="orientation">vertical</property>
         <property name="spacing">3</property>
         <child>
-          <object class="GtkCheckButton" id="crop_darken_checkbox">
-            <property name="label">darken outside</property>
-            <property name="can-focus">False</property>
+          <object class="GtkCheckButton" id="crop_delete_pixels_checkbox">
+            <property name="label">delete cropped pixels</property>
+            <property name="can-focus">True</property>
             <property name="receives-default">False</property>
+            <property name="active">True</property>
             <property name="draw-indicator">True</property>
           </object>
           <packing>
             <property name="expand">False</property>
             <property name="fill">True</property>
             <property name="position">0</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkCheckButton" id="crop_grow_canvas_checkbox">
+            <property name="label">grow canvas</property>
+            <property name="can-focus">True</property>
+            <property name="receives-default">False</property>
+            <property name="draw-indicator">True</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">1</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkCheckButton" id="crop_darken_checkbox">
+            <property name="label">highlight crop area</property>
+            <property name="can-focus">False</property>
+            <property name="receives-default">False</property>
+            <property name="active">True</property>
+            <property name="draw-indicator">True</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">2</property>
           </packing>
         </child>
         <child>
@@ -334,7 +358,7 @@
           <packing>
             <property name="expand">False</property>
             <property name="fill">True</property>
-            <property name="position">1</property>
+            <property name="position">3</property>
           </packing>
         </child>
       </object>
@@ -347,24 +371,14 @@
     <child>
       <object class="GtkBox">
         <property name="can-focus">False</property>
-        <property name="hexpand">True</property>
-      </object>
-      <packing>
-        <property name="expand">False</property>
-        <property name="fill">True</property>
-        <property name="position">5</property>
-      </packing>
-    </child>
-    <child>
-      <object class="GtkBox">
-        <property name="can-focus">False</property>
         <property name="spacing">6</property>
         <child>
           <object class="GtkButton" id="crop_reset_button">
-            <property name="label">Reset</property>
             <property name="can-focus">False</property>
             <property name="receives-default">False</property>
             <property name="valign">start</property>
+            <property name="image">reset_image</property>
+            <property name="always-show-image">True</property>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -374,10 +388,11 @@
         </child>
         <child>
           <object class="GtkButton" id="crop_apply_button">
-            <property name="label">Apply</property>
             <property name="can-focus">False</property>
             <property name="receives-default">False</property>
             <property name="valign">start</property>
+            <property name="image">apply_image</property>
+            <property name="always-show-image">True</property>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -388,7 +403,7 @@
       </object>
       <packing>
         <property name="expand">False</property>
-        <property name="fill">True</property>
+        <property name="fill">False</property>
         <property name="position">6</property>
       </packing>
     </child>

@@ -83,6 +83,15 @@ void tool_options_panel_set_tool_registry(ToolOptionsPanel* panel, ToolRegistry*
 void tool_options_panel_set_combine_mode(ToolOptionsPanel* panel, SelectionCombineMode mode);
 
 /**
+ * Sync crop tool options (ratio, fixed size) and panel spinners from manual resize
+ * Call when crop preview rect is resized by dragging handles
+ * @param drawing_area Document drawing area (to get app context)
+ * @param w Crop rect width
+ * @param h Crop rect height
+ */
+void tool_options_panel_sync_crop_from_rect(GtkWidget* drawing_area, gint w, gint h);
+
+/**
  * Update color picker preview in tool options (color_draw widget).
  * When has_color is FALSE, show checkerboard only (transparency).
  * When has_color is TRUE, show checkerboard + color overlay (r,g,b,a in 0–1).

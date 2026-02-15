@@ -53,6 +53,9 @@
     <file preprocess="to-pixdata">icons/settings-general.png</file>
     <file preprocess="to-pixdata">icons/settings-ui.png</file>
     <file preprocess="to-pixdata">icons/settings-performance.png</file>
+    <file preprocess="to-pixdata">icons/checkmark.png</file>
+    <file preprocess="to-pixdata">icons/reset.png</file>
+    <file preprocess="to-pixdata">icons/lock.png</file>
     <file compressed="true" alias="app-icon">icons/rasterlab-icon.ico</file>
     <file>cursors/zoom_cursor.cur</file>
     <file>cursors/rect_select_cursor.cur</file>

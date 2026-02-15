@@ -3,6 +3,7 @@
 #include "selection.h"
 #include "tool_manager.h"
 #include "tool_options.h"
+#include "ui/tool_options_panel.h"
 #include <gdk/gdk.h>
 #include <gtk/gtk.h>
 #include <math.h>
@@ -340,6 +341,11 @@ static void crop_tool_mouse_move(Tool* tool, struct ImageDocument* doc, MouseEve
         state->current_x = event->x;
         state->current_y = event->y;
 
+        /* Sync ratio and fixed size during resize */
+        if (state->drag_mode >= 0 && doc->drawing_area && state->rect_w > 0 && state->rect_h > 0) {
+            tool_options_panel_sync_crop_from_rect(doc->drawing_area, state->rect_w, state->rect_h);
+        }
+
         crop_queue_redraw(doc);
         return;
     }
@@ -428,10 +434,27 @@ static void crop_tool_mouse_move(Tool* tool, struct ImageDocument* doc, MouseEve
             }
             state->current_x = state->start_x + (dx >= 0 ? w : -w);
             state->current_y = state->start_y + (dy >= 0 ? h : -h);
+            /* Sync ratio and fixed size during new crop drag */
+            if (doc->drawing_area && w > 0 && h > 0) {
+                tool_options_panel_sync_crop_from_rect(doc->drawing_area, w, h);
+            }
         } else {
             /* Free */
+            gint w = event->x - state->start_x;
+            gint h = event->y - state->start_y;
+            if (w < 0)
+                w = -w;
+            if (h < 0)
+                h = -h;
+            if (w < 1)
+                w = 1;
+            if (h < 1)
+                h = 1;
             state->current_x = event->x;
             state->current_y = event->y;
+            if (doc->drawing_area) {
+                tool_options_panel_sync_crop_from_rect(doc->drawing_area, w, h);
+            }
         }
         crop_queue_redraw(doc);
     }
@@ -541,12 +564,16 @@ static void crop_tool_mouse_up(Tool* tool, struct ImageDocument* doc, MouseEvent
             state->rect_w = w;
             state->rect_h = h;
             state->is_active = TRUE;
+            /* Sync ratio and fixed size to tool options panel */
+            if (doc->drawing_area) {
+                tool_options_panel_sync_crop_from_rect(doc->drawing_area, w, h);
+            }
         }
 
         state->drag_mode = -1;
         state->hovered_handle = -1;
     } else {
-        /* Move or resize completed - rect already updated by mouse_move */
+        /* Move or resize completed - rect already updated by mouse_move, sync already done during drag */
         state->is_active = (state->rect_w > 0 && state->rect_h > 0);
         state->drag_mode = -1;
         state->hovered_handle = -1;

@@ -1,7 +1,6 @@
 {
     "files.associations": {
         "*.json": "jsonc",
-        "*.php": "php",
         "*.cpp": "cpp",
         "*.c": "c",
         "*.h": "c",
@@ -32,9 +31,6 @@
     "C_Cpp.clang_format_path": "",
     "clang-format.executable": "",
     "clang-format.style": "file",
-    "clangd.diagnostics": {
-        "unusedIncludes": "Strict"
-    },
     "[xml]": {
         "editor.formatOnSave": false
     }

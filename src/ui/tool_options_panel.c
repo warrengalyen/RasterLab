@@ -17,6 +17,17 @@
 /* Flag to prevent recursive spin updates when crop link toggle is active */
 static gboolean g_crop_spin_updating = FALSE;
 
+static gint gcd(gint a, gint b) {
+    a = a < 0 ? -a : a;
+    b = b < 0 ? -b : b;
+    while (b) {
+        gint t = b;
+        b = a % b;
+        a = t;
+    }
+    return a;
+}
+
 /* Color picker preview state for color_draw */
 static gboolean g_color_picker_preview_has_color = FALSE;
 static gdouble g_color_picker_preview_r = 0.0;
@@ -1089,6 +1100,68 @@ static gboolean crop_panel_do_redraw_idle(gpointer user_data) {
         }
     }
     return G_SOURCE_REMOVE;
+}
+
+void tool_options_panel_sync_crop_from_rect(GtkWidget* drawing_area, gint w, gint h) {
+    AppContext* ctx;
+    ToolOptionsPanel* panel;
+    ToolOptions* opts;
+    GtkWidget *ratio_w_spin, *ratio_h_spin, *width_spin, *height_spin;
+    gint rw, rh;
+
+    if (!drawing_area || w < 1 || h < 1) {
+        return;
+    }
+
+    ctx = (AppContext*)g_object_get_data(G_OBJECT(drawing_area), "app_context");
+    if (!ctx || !ctx->tool_options_panel) {
+        return;
+    }
+
+    panel = ctx->tool_options_panel;
+    if (!panel->crop_panel) {
+        return;
+    }
+
+    opts = tool_options_get_for_tool(TOOL_CROP);
+    if (!opts) {
+        return;
+    }
+
+    /* Update fixed size */
+    tool_options_set_crop_size(opts, w, h);
+
+    /* Simplify ratio (gcd) for display */
+    rw = w;
+    rh = h;
+    {
+        gint g = gcd(w, h);
+        if (g > 0) {
+            rw = w / g;
+            rh = h / g;
+        }
+        if (rw < 1)
+            rw = 1;
+        if (rh < 1)
+            rh = 1;
+    }
+    tool_options_set_crop_ratio(opts, rw, rh);
+
+    /* Update spinners without triggering callbacks */
+    g_crop_spin_updating = TRUE;
+    ratio_w_spin = (GtkWidget*)g_object_get_data(G_OBJECT(panel->crop_panel), "crop_ratio_width_spin");
+    ratio_h_spin = (GtkWidget*)g_object_get_data(G_OBJECT(panel->crop_panel), "crop_ratio_height_spin");
+    width_spin = (GtkWidget*)g_object_get_data(G_OBJECT(panel->crop_panel), "crop_width_spin");
+    height_spin = (GtkWidget*)g_object_get_data(G_OBJECT(panel->crop_panel), "crop_height_spin");
+    if (ratio_w_spin)
+        gtk_spin_button_set_value(GTK_SPIN_BUTTON(ratio_w_spin), (gdouble)rw);
+    if (ratio_h_spin)
+        gtk_spin_button_set_value(GTK_SPIN_BUTTON(ratio_h_spin), (gdouble)rh);
+    if (width_spin)
+        gtk_spin_button_set_value(GTK_SPIN_BUTTON(width_spin), (gdouble)w);
+    if (height_spin)
+        gtk_spin_button_set_value(GTK_SPIN_BUTTON(height_spin), (gdouble)h);
+    g_crop_spin_updating = FALSE;
 }
 
 /* Helper: update crop rect from options and redraw (called directly for spin changes) */
