@@ -58,6 +58,20 @@ void tool_crop_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom);
 void tool_crop_reset(Tool* tool);
 
 /**
+ * Initialize crop preview at full canvas size (for tool activation or Reset)
+ * @param tool The crop tool
+ * @param doc The active image document
+ */
+void tool_crop_init_at_canvas(Tool* tool, struct ImageDocument* doc);
+
+/**
+ * Reset crop preview to full canvas size
+ * @param tool The crop tool
+ * @param doc The active image document
+ */
+void tool_crop_reset_to_canvas(Tool* tool, struct ImageDocument* doc);
+
+/**
  * Get the crop rectangle from the crop tool (when active)
  * @param tool The crop tool (from tool_manager_get(registry, TOOL_CROP))
  * @param out_x Output: left edge

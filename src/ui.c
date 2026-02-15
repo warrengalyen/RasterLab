@@ -2611,6 +2611,10 @@ static const char* tool_type_to_name(ToolType tool_type) {
             return "move";
         case TOOL_RECT_SELECT:
             return "rect_select";
+        case TOOL_ELLIPSE_SELECT:
+            return "ellipse_select";
+        case TOOL_CROP:
+            return "crop";
         case TOOL_COLOR_PICKER:
             return "color_picker";
         default:
@@ -2855,6 +2859,39 @@ void ui_load_tool_options_from_settings(AppContext* ctx) {
                 tool_options_set_ellipse_select_animate(opts, TRUE);
             }
         }
+
+        /* Crop tool specific options */
+        if (tool_type == TOOL_CROP) {
+            const char* overlay_str = settings_get_tool_option(ctx->settings, tool_name, "crop_overlay_mode");
+            if (overlay_str) {
+                gint overlay_val = (gint)g_ascii_strtoll(overlay_str, NULL, 10);
+                if (overlay_val >= 0 && overlay_val <= 5) {
+                    tool_options_set_crop_overlay_mode(opts, overlay_val);
+                }
+            }
+            const char* delete_pixels_str = settings_get_tool_option(ctx->settings, tool_name, "crop_delete_pixels");
+            if (delete_pixels_str) {
+                gboolean val = (g_strcmp0(delete_pixels_str, "true") == 0 || g_strcmp0(delete_pixels_str, "1") == 0);
+                tool_options_set_crop_delete_pixels(opts, val);
+            }
+            const char* grow_canvas_str = settings_get_tool_option(ctx->settings, tool_name, "crop_grow_canvas");
+            if (grow_canvas_str) {
+                gboolean val = (g_strcmp0(grow_canvas_str, "true") == 0 || g_strcmp0(grow_canvas_str, "1") == 0);
+                tool_options_set_crop_grow_canvas(opts, val);
+            }
+            const char* darken_str = settings_get_tool_option(ctx->settings, tool_name, "crop_darken_outside");
+            if (darken_str) {
+                gboolean val = (g_strcmp0(darken_str, "true") == 0 || g_strcmp0(darken_str, "1") == 0);
+                tool_options_set_crop_darken_outside(opts, val);
+            }
+            const char* darken_opacity_str = settings_get_tool_option(ctx->settings, tool_name, "crop_darken_opacity");
+            if (darken_opacity_str) {
+                gfloat val = (gfloat)g_ascii_strtod(darken_opacity_str, NULL);
+                if (val >= 0.0f && val <= 100.0f) {
+                    tool_options_set_crop_darken_opacity(opts, val);
+                }
+            }
+        }
     }
 }
 
@@ -2919,6 +2956,11 @@ static void ui_save_tool_options_to_settings_internal(AppContext* ctx, ToolType 
     gboolean ellipse_select_animate_val = opts->ellipse_select_animate;
     gint color_picker_sample_radius_val = opts->color_picker_sample_radius;
     gboolean color_picker_sample_from_layer_val = opts->color_picker_sample_from_layer;
+    gint crop_overlay_mode_val = opts->crop_overlay_mode;
+    gboolean crop_delete_pixels_val = opts->crop_delete_pixels;
+    gboolean crop_grow_canvas_val = opts->crop_grow_canvas;
+    gboolean crop_darken_outside_val = opts->crop_darken_outside;
+    gfloat crop_darken_opacity_val = opts->crop_darken_opacity;
 
     /* Save only the options that this tool supports */
     /* Check tool_options_flags to determine which options to save */
@@ -3025,6 +3067,20 @@ static void ui_save_tool_options_to_settings_internal(AppContext* ctx, ToolType 
         settings_set_tool_option(ctx->settings, tool_name, "ellipse_select_feather", feather_str);
 
         settings_set_tool_option(ctx->settings, tool_name, "ellipse_select_animate", ellipse_select_animate_val ? "true" : "false");
+    }
+
+    /* Crop tool options */
+    if (tool_type == TOOL_CROP) {
+        gchar overlay_str[16];
+        g_snprintf(overlay_str, sizeof(overlay_str), "%d", crop_overlay_mode_val >= 0 && crop_overlay_mode_val <= 5 ? crop_overlay_mode_val : 0);
+        settings_set_tool_option(ctx->settings, tool_name, "crop_overlay_mode", overlay_str);
+        settings_set_tool_option(ctx->settings, tool_name, "crop_delete_pixels", crop_delete_pixels_val ? "true" : "false");
+        settings_set_tool_option(ctx->settings, tool_name, "crop_grow_canvas", crop_grow_canvas_val ? "true" : "false");
+        settings_set_tool_option(ctx->settings, tool_name, "crop_darken_outside", crop_darken_outside_val ? "true" : "false");
+        gchar opacity_str[32];
+        gfloat safe_opacity = (crop_darken_opacity_val >= 0.0f && crop_darken_opacity_val <= 100.0f) ? crop_darken_opacity_val : 60.0f;
+        g_snprintf(opacity_str, sizeof(opacity_str), "%.1f", safe_opacity);
+        settings_set_tool_option(ctx->settings, tool_name, "crop_darken_opacity", opacity_str);
     }
 
     /* Save settings immediately if requested */

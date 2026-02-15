@@ -632,6 +632,28 @@ void tool_crop_reset(Tool* tool) {
     state->hovered_handle = -1;
 }
 
+void tool_crop_init_at_canvas(Tool* tool, struct ImageDocument* doc) {
+    CropToolState* state;
+
+    if (!tool || !tool->user_data || !doc || doc->width <= 0 || doc->height <= 0) {
+        return;
+    }
+
+    state = (CropToolState*)tool->user_data;
+    state->rect_x = 0;
+    state->rect_y = 0;
+    state->rect_w = (gint)doc->width;
+    state->rect_h = (gint)doc->height;
+    state->is_active = TRUE;
+    state->is_dragging = FALSE;
+    state->drag_mode = -1;
+    state->hovered_handle = -1;
+}
+
+void tool_crop_reset_to_canvas(Tool* tool, struct ImageDocument* doc) {
+    tool_crop_init_at_canvas(tool, doc);
+}
+
 /**
  * Create the Crop Tool
  */
@@ -850,37 +872,7 @@ static void crop_draw_overlay_guides(cairo_t* cr, gdouble rect_x, gdouble rect_y
             overlay_stroke_path(cr, line_width);
             break;
         }
-        case 3: { /* Golden Spiral - DISABLED (to fix later) */
-#if 0
-            gdouble cx, cy, a, theta, r, step;
-            gdouble max_extent, sy;
-            gint n, i;
-            gboolean portrait;
-            cairo_set_antialias(cr, CAIRO_ANTIALIAS_DEFAULT);
-            /* Pole at phi grid intersection: bottom-right of top-left quadrant (0.382, 0.382) */
-            cx = rect_x + rect_w * CROP_GOLDEN_LOW;
-            cy = rect_y + rect_h * CROP_GOLDEN_LOW;
-            max_extent = fmin(rect_w * CROP_GOLDEN_HIGH, rect_h * CROP_GOLDEN_HIGH);
-            a = max_extent / pow(CROP_GOLDEN_RATIO, 9.0);
-            portrait = (rect_h > rect_w);
-            sy = portrait ? -1.0 : 1.0;
-            n = 180;
-            step = 4.5 * G_PI / (gdouble)n;
-            cairo_save(cr);
-            cairo_rectangle(cr, rect_x, rect_y, rect_w, rect_h);
-            cairo_clip(cr);
-            cairo_move_to(cr, cx + a, cy);
-            for (i = 1; i <= n; i++) {
-                theta = step * (gdouble)i;
-                r = a * pow(CROP_GOLDEN_RATIO, 2.0 * theta / G_PI);
-                cairo_line_to(cr, cx + r * cos(theta), cy + sy * r * sin(theta));
-            }
-            overlay_stroke_path(cr, line_width);
-            cairo_restore(cr);
-#endif
-            break;
-        }
-        case 4: /* Diagonal */
+        case 3: /* Diagonal */
             cairo_set_antialias(cr, CAIRO_ANTIALIAS_DEFAULT);
             cairo_move_to(cr, rect_x, rect_y);
             cairo_line_to(cr, rect_x + rect_w, rect_y + rect_h);
@@ -888,7 +880,7 @@ static void crop_draw_overlay_guides(cairo_t* cr, gdouble rect_x, gdouble rect_y
             cairo_line_to(cr, rect_x, rect_y + rect_h);
             overlay_stroke_path(cr, line_width);
             break;
-        case 5: /* Center Lines */
+        case 4: /* Center Lines */
             cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
             x1 = rect_x + rect_w / 2.0;
             y1 = rect_y + rect_h / 2.0;
