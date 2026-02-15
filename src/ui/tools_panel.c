@@ -599,8 +599,15 @@ gboolean tools_panel_on_window_key_press(GtkWidget* widget, GdkEventKey* event, 
             break;
         case GDK_KEY_Return:
         case GDK_KEY_KP_Enter:
-            /* Enter with crop preview applies the crop */
+            /* Enter with crop preview applies the crop, unless focus is in an editable in the crop panel */
             {
+                GtkWidget* focus = gtk_window_get_focus(GTK_WINDOW(widget));
+                if (focus && ctx->tool_options_panel && ctx->tool_options_panel->crop_panel &&
+                    gtk_widget_is_ancestor(ctx->tool_options_panel->crop_panel, focus)) {
+                    if (GTK_IS_ENTRY(focus) || GTK_IS_SPIN_BUTTON(focus)) {
+                        return FALSE; /* Let the widget handle Enter */
+                    }
+                }
                 Tool* active_tool = tool_manager_get_active(ctx->tool_registry);
                 gint x, y, w, h;
                 if (active_tool && active_tool->type == TOOL_CROP &&
