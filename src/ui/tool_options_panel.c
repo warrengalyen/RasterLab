@@ -1296,6 +1296,12 @@ static void on_crop_link_toggled(GtkToggleButton* button, gpointer user_data) {
     if (opts) {
         tool_options_set_crop_link(opts, active);
     }
+    /* Update icon: active (linked) = lock, inactive (unlinked) = unlock */
+    GtkWidget* img = gtk_bin_get_child(GTK_BIN(button));
+    if (img && GTK_IS_IMAGE(img)) {
+        gtk_image_set_from_resource(GTK_IMAGE(img),
+            active ? "/icons/lock.png" : "/icons/unlock.png");
+    }
 }
 
 static void on_crop_darken_toggled(GtkToggleButton* button, gpointer user_data) {
@@ -2024,6 +2030,8 @@ ToolOptionsPanel* create_tool_options_panel(void) {
                 g_signal_connect(crop_link_toggle, "toggled", G_CALLBACK(on_crop_link_toggled), tool_opts_panel);
                 if (crop_opts)
                     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(crop_link_toggle), crop_opts->crop_link);
+                /* Ensure icon matches initial toggle state (set_active may not emit toggled) */
+                on_crop_link_toggled(GTK_TOGGLE_BUTTON(crop_link_toggle), tool_opts_panel);
             }
             if (crop_darken_check) {
                 g_signal_connect(crop_darken_check, "toggled", G_CALLBACK(on_crop_darken_toggled), tool_opts_panel);
