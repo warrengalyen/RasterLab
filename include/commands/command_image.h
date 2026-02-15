@@ -223,6 +223,19 @@ typedef struct {
 Command* command_create_crop_to_selection(struct ImageDocument* doc);
 
 /**
+ * Create a crop to rect command
+ * Crops all layers and canvas to the given rectangle
+ * @param doc The document
+ * @param x Left edge of crop region (document coords)
+ * @param y Top edge of crop region (document coords)
+ * @param w Width of crop region
+ * @param h Height of crop region
+ * @return Newly created Command, or NULL on failure
+ */
+Command* command_create_crop_to_rect(struct ImageDocument* doc,
+                                     gint x, gint y, guint w, guint h);
+
+/**
  * Create a trim borders command
  * Crops all layers and canvas to remove transparent borders
  * @param doc The document

@@ -57,4 +57,15 @@ void tool_crop_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom);
  */
 void tool_crop_reset(Tool* tool);
 
+/**
+ * Get the crop rectangle from the crop tool (when active)
+ * @param tool The crop tool (from tool_manager_get(registry, TOOL_CROP))
+ * @param out_x Output: left edge
+ * @param out_y Output: top edge
+ * @param out_w Output: width
+ * @param out_h Output: height
+ * @return TRUE if crop is active and has valid rect, FALSE otherwise
+ */
+gboolean tool_crop_get_rect(Tool* tool, gint* out_x, gint* out_y, gint* out_w, gint* out_h);
+
 #endif /* TOOL_CROP_H */

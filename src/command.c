@@ -433,6 +433,7 @@ const gchar* command_get_name_string(CommandName name) {
         "Feather Selection",
         "Move Selected Pixels",
         "Crop to Selection",
+        "Crop tool",
         "Trim Borders"};
 
     if (name < 0 || name >= CMD_NAME_COUNT) {

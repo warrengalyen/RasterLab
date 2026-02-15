@@ -97,4 +97,4 @@ void tool_options_panel_set_color_picker_preview(ToolOptionsPanel* panel,
                                                  gboolean has_color,
                                                  gdouble r, gdouble g, gdouble b, gdouble a);
 
-#endif /* TOOL_OPTIONS_PANEL_H */
+#endif  /* TOOL_OPTIONS_PANEL_H */

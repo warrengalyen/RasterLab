@@ -2570,6 +2570,98 @@ Command* command_create_crop_to_selection(struct ImageDocument* doc) {
 }
 
 /**
+ * Create a crop to rect command
+ * Crops all layers and canvas to the given rectangle
+ */
+Command* command_create_crop_to_rect(struct ImageDocument* doc,
+                                     gint x, gint y, guint w, guint h) {
+    Command* cmd;
+    CropCommandData* data;
+    GList* iter;
+
+    if (!doc || !doc->layers || g_list_length(doc->layers) == 0) {
+        return NULL;
+    }
+
+    if (w <= 0 || h <= 0) {
+        g_warning("Invalid crop dimensions");
+        return NULL;
+    }
+
+    /* Clamp rect to document bounds */
+    if (x < 0) {
+        w = (guint)((gint)w + x);
+        x = 0;
+    }
+    if (y < 0) {
+        h = (guint)((gint)h + y);
+        y = 0;
+    }
+    if (x + (gint)w > (gint)doc->width) {
+        w = (guint)(doc->width - x);
+    }
+    if (y + (gint)h > (gint)doc->height) {
+        h = (guint)(doc->height - y);
+    }
+    if (w <= 0 || h <= 0) {
+        g_warning("Crop rect outside document bounds");
+        return NULL;
+    }
+
+    /* Create command data */
+    data = (CropCommandData*)g_malloc0(sizeof(CropCommandData));
+    data->doc = doc;
+    data->old_width = doc->width;
+    data->old_height = doc->height;
+    data->new_width = w;
+    data->new_height = h;
+    data->crop_x = x;
+    data->crop_y = y;
+    data->layer_snapshots = NULL;
+    data->layers = NULL;
+    data->layer_offsets = NULL;
+
+    /* Create snapshots of all layers */
+    for (iter = doc->layers; iter; iter = iter->next) {
+        struct ImageLayer* layer = (struct ImageLayer*)iter->data;
+        if (layer && layer->surface) {
+            cairo_surface_t* snapshot = cairo_surface_snapshot(layer->surface);
+            if (snapshot) {
+                data->layer_snapshots = g_list_append(data->layer_snapshots, snapshot);
+                data->layers = g_list_append(data->layers, layer);
+
+                LayerOffsetPair* offset = (LayerOffsetPair*)g_malloc(sizeof(LayerOffsetPair));
+                offset->layer = layer;
+                offset->old_offset_x = layer->offset_x;
+                offset->old_offset_y = layer->offset_y;
+                data->layer_offsets = g_list_append(data->layer_offsets, offset);
+            }
+        }
+    }
+
+    if (!data->layers) {
+        crop_command_data_free(data);
+        return NULL;
+    }
+
+    /* Create command */
+    cmd = command_new(command_get_name_string(CMD_NAME_CROP_TOOL),
+                      COMMAND_CANVAS_RESIZE,
+                      crop_command_apply,
+                      crop_command_revert,
+                      crop_command_destroy);
+
+    if (!cmd) {
+        crop_command_data_free(data);
+        return NULL;
+    }
+
+    cmd->user_data = data;
+
+    return cmd;
+}
+
+/**
  * Helper: Calculate non-transparent bounds from composited image
  * Returns TRUE if there are non-transparent pixels, FALSE if empty
  */

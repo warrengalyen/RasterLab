@@ -40,6 +40,13 @@ struct _AppContext {
 typedef struct _AppContext AppContext;
 
 /**
+ * Apply crop if crop tool is active with a valid crop rectangle
+ * @param ctx Application context (document and tool registry)
+ * @return TRUE if crop was applied, FALSE otherwise
+ */
+gboolean crop_apply_if_active(AppContext* ctx);
+
+/**
  * Create the main application UI
  * @return Initialized AppContext
  */

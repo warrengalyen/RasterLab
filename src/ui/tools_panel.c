@@ -1,5 +1,7 @@
 #include "ui/tools_panel.h"
+#include "tool_manager.h"
 #include "tool_options.h"
+#include "tools/tool_crop.h"
 #include "ui.h"
 #include "ui/dialogs/color_chooser_dialog.h"
 #include "ui/layers_panel.h"
@@ -595,6 +597,20 @@ gboolean tools_panel_on_window_key_press(GtkWidget* widget, GdkEventKey* event, 
         case GDK_KEY_C:
             tool_to_activate = TOOL_CROP;
             break;
+        case GDK_KEY_Return:
+        case GDK_KEY_KP_Enter:
+            /* Enter with crop preview applies the crop */
+            {
+                Tool* active_tool = tool_manager_get_active(ctx->tool_registry);
+                gint x, y, w, h;
+                if (active_tool && active_tool->type == TOOL_CROP &&
+                    tool_crop_get_rect(active_tool, &x, &y, &w, &h)) {
+                    if (crop_apply_if_active(ctx)) {
+                        return TRUE;
+                    }
+                }
+            }
+            return FALSE;
         default:
             return FALSE; /* Not a tool hotkey */
     }
