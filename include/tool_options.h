@@ -53,7 +53,7 @@ typedef struct {
     gboolean crop_grow_canvas;       /* Grow canvas if crop exceeds image bounds */
     gboolean crop_darken_outside;    /* Darken area outside crop rect */
     gfloat crop_darken_opacity;      /* Darken overlay opacity 0–100 (default 60) */
-    gint crop_overlay_mode;          /* 0=None, 1=Rule of Thirds, 2=Golden Ratio, 3=Diagonal, 4=Center Lines */
+    gint crop_overlay_mode;          /* 0=None, 1=Rule of Thirds, 2=Phi Grid, 3=Golden Spiral, 4=Diagonal, 5=Center Lines */
     gboolean crop_snap;              /* Snap to guides */
 } ToolOptions;
 
@@ -325,7 +325,7 @@ void tool_options_set_crop_darken_opacity(ToolOptions* opts, gfloat opacity);
 gfloat tool_options_get_crop_darken_opacity(ToolOptions* opts);
 
 /**
- * Crop tool: set/get overlay mode (0=None, 1=Rule of Thirds, 2=Golden Ratio, 3=Diagonal, 4=Center Lines)
+ * Crop tool: set/get overlay mode (0=None, 1=Rule of Thirds, 2=Phi Grid, 3=Golden Spiral, 4=Diagonal, 5=Center Lines)
  */
 void tool_options_set_crop_overlay_mode(ToolOptions* opts, gint mode);
 gint tool_options_get_crop_overlay_mode(ToolOptions* opts);

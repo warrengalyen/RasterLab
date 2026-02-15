@@ -468,7 +468,7 @@ gfloat tool_options_get_crop_darken_opacity(ToolOptions* opts) {
     return opts ? opts->crop_darken_opacity : 60.0f;
 }
 void tool_options_set_crop_overlay_mode(ToolOptions* opts, gint mode) {
-    if (opts && mode >= 0 && mode <= 4)
+    if (opts && mode >= 0 && mode <= 5)
         opts->crop_overlay_mode = mode;
 }
 gint tool_options_get_crop_overlay_mode(ToolOptions* opts) {

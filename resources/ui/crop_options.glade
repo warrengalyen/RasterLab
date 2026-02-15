@@ -270,11 +270,12 @@
           <object class="GtkComboBoxText" id="crop_overlay_combo">
             <property name="can-focus">False</property>
             <items>
-              <item>None</item>
-              <item>Rule of Thirds</item>
-              <item>Golden Ratio</item>
-              <item>Diagonal</item>
-              <item>Center Lines</item>
+              <item translatable="yes">None</item>
+              <item translatable="yes">Rule of Thirds</item>
+              <item translatable="yes">Phi Grid</item>
+              <item translatable="yes">Golden Spiral</item>
+              <item translatable="yes">Diagonal</item>
+              <item translatable="yes">Center Lines</item>
             </items>
           </object>
           <packing>

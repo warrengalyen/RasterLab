@@ -1256,7 +1256,7 @@ static void on_crop_darken_opacity_changed(GtkRange* range, gpointer user_data) 
 static void on_crop_overlay_changed(GtkComboBox* combo, gpointer user_data) {
     ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
     gint active = gtk_combo_box_get_active(combo);
-    if (active < 0 || active > 4) return;
+    if (active < 0 || active > 5) return;
     ToolOptions* opts = tool_options_get_for_tool(TOOL_CROP);
     if (opts) {
         tool_options_set_crop_overlay_mode(opts, active);

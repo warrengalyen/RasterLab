@@ -351,17 +351,18 @@ static void crop_tool_mouse_move(Tool* tool, struct ImageDocument* doc, MouseEve
                                                    (gdouble)state->rect_w, (gdouble)state->rect_h,
                                                    doc->zoom_factor);
 
-        if (hovered < 0 &&
-            event->x >= state->rect_x && event->x < state->rect_x + state->rect_w &&
-            event->y >= state->rect_y && event->y < state->rect_y + state->rect_h) {
-            hovered = -1;
+        if (hovered >= 0) {
+            state->hovered_handle = hovered; /* on handle */
+        } else if (event->x >= state->rect_x && event->x < state->rect_x + state->rect_w &&
+                   event->y >= state->rect_y && event->y < state->rect_y + state->rect_h) {
+            state->hovered_handle = -1; /* inside rect (move) */
+        } else {
+            state->hovered_handle = -2; /* outside */
         }
 
-        state->hovered_handle = hovered;
-
         if (window) {
-            if (hovered >= -1) {
-                crop_set_cursor_for_handle(window, hovered, tool->cursor);
+            if (state->hovered_handle >= -1) {
+                crop_set_cursor_for_handle(window, state->hovered_handle, tool->cursor);
             } else {
                 gdk_window_set_cursor(window, tool->cursor);
             }
@@ -555,6 +556,28 @@ static void crop_tool_mouse_up(Tool* tool, struct ImageDocument* doc, MouseEvent
 }
 
 /**
+ * Get the crop rectangle from the crop tool (when active)
+ */
+gboolean tool_crop_get_rect(Tool* tool, gint* out_x, gint* out_y, gint* out_w, gint* out_h) {
+    CropToolState* state;
+
+    if (!tool || !tool->user_data || !out_x || !out_y || !out_w || !out_h) {
+        return FALSE;
+    }
+
+    state = (CropToolState*)tool->user_data;
+    if (!state->is_active || state->is_dragging || state->rect_w <= 0 || state->rect_h <= 0) {
+        return FALSE;
+    }
+
+    *out_x = state->rect_x;
+    *out_y = state->rect_y;
+    *out_w = state->rect_w;
+    *out_h = state->rect_h;
+    return TRUE;
+}
+
+/**
  * Reset crop tool state (called when tool is deactivated)
  */
 void tool_crop_reset(Tool* tool) {
@@ -690,74 +713,156 @@ void tool_crop_update_rect_from_options(ImageDocument* doc, void* registry) {
 #define CROP_GOLDEN_LOW (1.0 / (1.0 + CROP_GOLDEN_RATIO))
 #define CROP_GOLDEN_HIGH (CROP_GOLDEN_RATIO / (1.0 + CROP_GOLDEN_RATIO))
 
+/* Stroke path with outline style: dark gray 3px, white 1px center */
+static void overlay_stroke_path(cairo_t* cr, gdouble line_width) {
+    cairo_set_source_rgba(cr, 0.2, 0.2, 0.2, 1.0);
+    cairo_set_line_width(cr, line_width * 3.0);
+    cairo_stroke_preserve(cr);
+    cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 1.0);
+    cairo_set_line_width(cr, line_width);
+    cairo_stroke(cr);
+}
+
+/* Offset to stop lines short of intersections (avoids double stroke at overlaps) */
+#define OVERLAY_GAP (1.5)
+
 /**
- * Draw overlay guides inside crop rect (Rule of Thirds, Center Lines, etc)
+ * Draw overlay guides inside crop rect (Rule of Thirds, Center Lines, etc).
+ * Grid lines are broken at intersections so overlap areas get no stroke (connected look).
+ * Diagonal mode uses antialiasing (non-axis-aligned).
  */
 static void crop_draw_overlay_guides(cairo_t* cr, gdouble rect_x, gdouble rect_y,
                                      gdouble rect_w, gdouble rect_h,
                                      gint overlay_mode, gdouble line_width) {
-    gdouble x1, y1, x2, y2;
+    gdouble x1, x2, y1, y2;
+    gdouble gap;
 
     cairo_set_dash(cr, NULL, 0, 0);
-    cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.6);
-    cairo_set_line_width(cr, line_width);
+    gap = line_width * OVERLAY_GAP;
 
     switch (overlay_mode) {
-        case 1: /* Rule of Thirds */
-            /* Vertical lines at 1/3 and 2/3 */
+        case 1: { /* Rule of Thirds */
+            cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
             x1 = rect_x + rect_w / 3.0;
-            cairo_move_to(cr, x1, rect_y);
-            cairo_line_to(cr, x1, rect_y + rect_h);
-            cairo_stroke(cr);
-            x1 = rect_x + 2.0 * rect_w / 3.0;
-            cairo_move_to(cr, x1, rect_y);
-            cairo_line_to(cr, x1, rect_y + rect_h);
-            cairo_stroke(cr);
-            /* Horizontal lines at 1/3 and 2/3 */
+            x2 = rect_x + 2.0 * rect_w / 3.0;
             y1 = rect_y + rect_h / 3.0;
+            y2 = rect_y + 2.0 * rect_h / 3.0;
+            /* Vertical at x1: 3 segments with gaps at y1, y2 */
+            cairo_move_to(cr, x1, rect_y);
+            cairo_line_to(cr, x1, y1 - gap);
+            cairo_move_to(cr, x1, y1 + gap);
+            cairo_line_to(cr, x1, y2 - gap);
+            cairo_move_to(cr, x1, y2 + gap);
+            cairo_line_to(cr, x1, rect_y + rect_h);
+            /* Vertical at x2 */
+            cairo_move_to(cr, x2, rect_y);
+            cairo_line_to(cr, x2, y1 - gap);
+            cairo_move_to(cr, x2, y1 + gap);
+            cairo_line_to(cr, x2, y2 - gap);
+            cairo_move_to(cr, x2, y2 + gap);
+            cairo_line_to(cr, x2, rect_y + rect_h);
+            /* Horizontal at y1: 3 segments with gaps at x1, x2 */
             cairo_move_to(cr, rect_x, y1);
+            cairo_line_to(cr, x1 - gap, y1);
+            cairo_move_to(cr, x1 + gap, y1);
+            cairo_line_to(cr, x2 - gap, y1);
+            cairo_move_to(cr, x2 + gap, y1);
             cairo_line_to(cr, rect_x + rect_w, y1);
-            cairo_stroke(cr);
-            y1 = rect_y + 2.0 * rect_h / 3.0;
-            cairo_move_to(cr, rect_x, y1);
-            cairo_line_to(cr, rect_x + rect_w, y1);
-            cairo_stroke(cr);
+            /* Horizontal at y2 */
+            cairo_move_to(cr, rect_x, y2);
+            cairo_line_to(cr, x1 - gap, y2);
+            cairo_move_to(cr, x1 + gap, y2);
+            cairo_line_to(cr, x2 - gap, y2);
+            cairo_move_to(cr, x2 + gap, y2);
+            cairo_line_to(cr, rect_x + rect_w, y2);
+            overlay_stroke_path(cr, line_width);
             break;
-        case 2: /* Golden Ratio */
+        }
+        case 2: { /* Phi Grid */
+            cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
             x1 = rect_x + rect_w * CROP_GOLDEN_LOW;
-            cairo_move_to(cr, x1, rect_y);
-            cairo_line_to(cr, x1, rect_y + rect_h);
-            cairo_stroke(cr);
-            x1 = rect_x + rect_w * CROP_GOLDEN_HIGH;
-            cairo_move_to(cr, x1, rect_y);
-            cairo_line_to(cr, x1, rect_y + rect_h);
-            cairo_stroke(cr);
+            x2 = rect_x + rect_w * CROP_GOLDEN_HIGH;
             y1 = rect_y + rect_h * CROP_GOLDEN_LOW;
+            y2 = rect_y + rect_h * CROP_GOLDEN_HIGH;
+            cairo_move_to(cr, x1, rect_y);
+            cairo_line_to(cr, x1, y1 - gap);
+            cairo_move_to(cr, x1, y1 + gap);
+            cairo_line_to(cr, x1, y2 - gap);
+            cairo_move_to(cr, x1, y2 + gap);
+            cairo_line_to(cr, x1, rect_y + rect_h);
+            cairo_move_to(cr, x2, rect_y);
+            cairo_line_to(cr, x2, y1 - gap);
+            cairo_move_to(cr, x2, y1 + gap);
+            cairo_line_to(cr, x2, y2 - gap);
+            cairo_move_to(cr, x2, y2 + gap);
+            cairo_line_to(cr, x2, rect_y + rect_h);
             cairo_move_to(cr, rect_x, y1);
+            cairo_line_to(cr, x1 - gap, y1);
+            cairo_move_to(cr, x1 + gap, y1);
+            cairo_line_to(cr, x2 - gap, y1);
+            cairo_move_to(cr, x2 + gap, y1);
             cairo_line_to(cr, rect_x + rect_w, y1);
-            cairo_stroke(cr);
-            y1 = rect_y + rect_h * CROP_GOLDEN_HIGH;
-            cairo_move_to(cr, rect_x, y1);
-            cairo_line_to(cr, rect_x + rect_w, y1);
-            cairo_stroke(cr);
+            cairo_move_to(cr, rect_x, y2);
+            cairo_line_to(cr, x1 - gap, y2);
+            cairo_move_to(cr, x1 + gap, y2);
+            cairo_line_to(cr, x2 - gap, y2);
+            cairo_move_to(cr, x2 + gap, y2);
+            cairo_line_to(cr, rect_x + rect_w, y2);
+            overlay_stroke_path(cr, line_width);
             break;
-        case 3: /* Diagonal */
+        }
+        case 3: { /* Golden Spiral - DISABLED (to fix later) */
+#if 0
+            gdouble cx, cy, a, theta, r, step;
+            gdouble max_extent, sy;
+            gint n, i;
+            gboolean portrait;
+            cairo_set_antialias(cr, CAIRO_ANTIALIAS_DEFAULT);
+            /* Pole at phi grid intersection: bottom-right of top-left quadrant (0.382, 0.382) */
+            cx = rect_x + rect_w * CROP_GOLDEN_LOW;
+            cy = rect_y + rect_h * CROP_GOLDEN_LOW;
+            max_extent = fmin(rect_w * CROP_GOLDEN_HIGH, rect_h * CROP_GOLDEN_HIGH);
+            a = max_extent / pow(CROP_GOLDEN_RATIO, 9.0);
+            portrait = (rect_h > rect_w);
+            sy = portrait ? -1.0 : 1.0;
+            n = 180;
+            step = 4.5 * G_PI / (gdouble)n;
+            cairo_save(cr);
+            cairo_rectangle(cr, rect_x, rect_y, rect_w, rect_h);
+            cairo_clip(cr);
+            cairo_move_to(cr, cx + a, cy);
+            for (i = 1; i <= n; i++) {
+                theta = step * (gdouble)i;
+                r = a * pow(CROP_GOLDEN_RATIO, 2.0 * theta / G_PI);
+                cairo_line_to(cr, cx + r * cos(theta), cy + sy * r * sin(theta));
+            }
+            overlay_stroke_path(cr, line_width);
+            cairo_restore(cr);
+#endif
+            break;
+        }
+        case 4: /* Diagonal */
+            cairo_set_antialias(cr, CAIRO_ANTIALIAS_DEFAULT);
             cairo_move_to(cr, rect_x, rect_y);
             cairo_line_to(cr, rect_x + rect_w, rect_y + rect_h);
-            cairo_stroke(cr);
             cairo_move_to(cr, rect_x + rect_w, rect_y);
             cairo_line_to(cr, rect_x, rect_y + rect_h);
-            cairo_stroke(cr);
+            overlay_stroke_path(cr, line_width);
             break;
-        case 4: /* Center Lines */
+        case 5: /* Center Lines */
+            cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
             x1 = rect_x + rect_w / 2.0;
-            cairo_move_to(cr, x1, rect_y);
-            cairo_line_to(cr, x1, rect_y + rect_h);
-            cairo_stroke(cr);
             y1 = rect_y + rect_h / 2.0;
+            cairo_move_to(cr, x1, rect_y);
+            cairo_line_to(cr, x1, y1 - gap);
+            cairo_move_to(cr, x1, y1 + gap);
+            cairo_line_to(cr, x1, rect_y + rect_h);
             cairo_move_to(cr, rect_x, y1);
+            cairo_line_to(cr, x1 - gap, y1);
+            cairo_move_to(cr, x1 + gap, y1);
+
             cairo_line_to(cr, rect_x + rect_w, y1);
-            cairo_stroke(cr);
+            overlay_stroke_path(cr, line_width);
             break;
         default:
             break;
@@ -835,8 +940,8 @@ void tool_crop_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom) {
         handle_line_width = 0.5;
     }
 
-    /* Snap coord to device pixel center for crisp 1-pixel strokes (avoids antialiased fade) */
-    #define CROP_SNAP(c) (floor((c) * zoom + 0.5) / zoom)
+/* Snap coord to device pixel center for crisp 1-pixel strokes (avoids antialiased fade) */
+#define CROP_SNAP(c) (floor((c)*zoom + 0.5) / zoom)
 
     cairo_save(cr);
 
@@ -875,7 +980,8 @@ void tool_crop_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom) {
         }
     }
 
-    /* 2. Rectangle border: dark gray (0.2) 1px each side, white 1px center - full opacity */
+    /* 2. Rectangle border */
+    gboolean outline_highlight = (state->hovered_handle == -1); /* cursor inside rect (move) */
     cairo_set_dash(cr, NULL, 0, 0);
     cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
     cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
@@ -885,7 +991,7 @@ void tool_crop_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom) {
     cairo_set_source_rgba(cr, 0.2, 0.2, 0.2, 1.0);
     cairo_set_line_width(cr, handle_line_width * 3.0);
     cairo_stroke_preserve(cr);
-    cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 1.0);
+    cairo_set_source_rgba(cr, outline_highlight ? 0.0 : 1.0, outline_highlight ? 0.5 : 1.0, 1.0, 1.0);
     cairo_set_line_width(cr, handle_line_width);
     cairo_stroke(cr);
     cairo_set_antialias(cr, CAIRO_ANTIALIAS_DEFAULT);
