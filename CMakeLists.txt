@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.10)
 project(RasterLab C)
 
-# Option: build only the application, use system libs (skip building libjpeg, libpng, libtiff, libwebp, libheif, libde265, zlib from lib/)
-option(RASTERLAB_APP_ONLY "Only build the application; skip building libraries in lib/ (use system libjpeg, libpng, libtiff, libwebp, libheif, libde265, libaom, zlib)" ON)
+# Option: build only the application, use system libs (skip building libjpeg, libpng, libtiff, libwebp, libheif, libde265, libaom, zlib, openexr from lib/)
+option(RASTERLAB_APP_ONLY "Only build the application; skip building libraries in lib/ (use system libjpeg, libpng, libtiff, libwebp, libheif, libde265, libaom, zlib, openexr)" ON)
 if(RASTERLAB_APP_ONLY)
     message(STATUS "RASTERLAB_APP_ONLY=ON: skipping build of lib/ deps, using system libraries")
 endif()
@@ -1236,6 +1236,179 @@ if(LIBHEIF_FOUND)
     set(HAVE_LIBHEIF 1)
 else()
     set(HAVE_LIBHEIF 0)
+endif()
+
+# Check if OpenEXR submodule exists (skip when APP_ONLY: use system libs)
+set(OPENEXR_FOUND FALSE)
+set(OPENEXR_LIBRARIES "")
+set(OPENEXR_TARGET "")
+
+if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/openexr/CMakeLists.txt")
+    message(STATUS "OpenEXR submodule found, building from source")
+
+    # Read OpenEXR version for library suffix (e.g. 4_0)
+    set(OPENEXR_VERSION_H "${CMAKE_SOURCE_DIR}/lib/openexr/src/lib/OpenEXRCore/openexr_version.h")
+    set(OPENEXR_VERSION_API "4_0")
+    set(OPENEXR_VERSION_MAJOR "")
+    set(OPENEXR_VERSION_MINOR "")
+    if(EXISTS "${OPENEXR_VERSION_H}")
+        file(STRINGS "${OPENEXR_VERSION_H}" OPENEXR_MAJOR_LINES REGEX "#define OPENEXR_VERSION_MAJOR ")
+        file(STRINGS "${OPENEXR_VERSION_H}" OPENEXR_MINOR_LINES REGEX "#define OPENEXR_VERSION_MINOR ")
+        if(OPENEXR_MAJOR_LINES)
+            list(GET OPENEXR_MAJOR_LINES 0 OPENEXR_MAJOR_LINE)
+            string(REGEX REPLACE ".*OPENEXR_VERSION_MAJOR[ \t]+([0-9]+).*" "\\1" OPENEXR_VERSION_MAJOR "${OPENEXR_MAJOR_LINE}")
+        endif()
+        if(OPENEXR_MINOR_LINES)
+            list(GET OPENEXR_MINOR_LINES 0 OPENEXR_MINOR_LINE)
+            string(REGEX REPLACE ".*OPENEXR_VERSION_MINOR[ \t]+([0-9]+).*" "\\1" OPENEXR_VERSION_MINOR "${OPENEXR_MINOR_LINE}")
+        endif()
+        if(DEFINED OPENEXR_VERSION_MAJOR AND DEFINED OPENEXR_VERSION_MINOR AND NOT "${OPENEXR_VERSION_MAJOR}" STREQUAL "" AND NOT "${OPENEXR_VERSION_MINOR}" STREQUAL "")
+            set(OPENEXR_VERSION_API "${OPENEXR_VERSION_MAJOR}_${OPENEXR_VERSION_MINOR}")
+        endif()
+    endif()
+
+    set(OPENEXR_BUILD_DIR "${CMAKE_BINARY_DIR}/openexr_build")
+    set(OPENEXR_INSTALL_DIR "${CMAKE_BINARY_DIR}/openexr_install")
+
+    if(WIN32)
+        set(OPENEXR_DLL_PREFIX "${OPENEXR_INSTALL_DIR}/bin")
+        set(OPENEXR_LIB_PREFIX "${OPENEXR_INSTALL_DIR}/lib")
+    else()
+        set(OPENEXR_LIB_PREFIX "${OPENEXR_INSTALL_DIR}/lib")
+    endif()
+
+    set(OPENEXR_CMAKE_ARGS
+        -DCMAKE_INSTALL_PREFIX=${OPENEXR_INSTALL_DIR}
+        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+        -DBUILD_SHARED_LIBS=ON
+        -DOPENEXR_BUILD_LIBS=ON
+        -DOPENEXR_BUILD_TOOLS=OFF
+        -DOPENEXR_BUILD_EXAMPLES=OFF
+        -DOPENEXR_INSTALL=ON
+        -DOPENEXR_INSTALL_TOOLS=OFF
+        -DOPENEXR_INSTALL_PKG_CONFIG=OFF
+        -DOPENEXR_FORCE_INTERNAL_IMATH=ON
+        -DOPENEXR_FORCE_INTERNAL_DEFLATE=ON
+        -DOPENEXR_FORCE_INTERNAL_OPENJPH=ON
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+    )
+
+    if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+        list(APPEND OPENEXR_CMAKE_ARGS -DCMAKE_SYSTEM_PROCESSOR=${CMAKE_SYSTEM_PROCESSOR})
+    else()
+        list(APPEND OPENEXR_CMAKE_ARGS -DCMAKE_SYSTEM_PROCESSOR=${CMAKE_SYSTEM_PROCESSOR})
+    endif()
+
+    # On Windows, Git stores the OpenJPH "openjph" symlink as a text file ("common"),
+    # so <openjph/ojph_params.h> fails and the compiler picks up system OpenJPH (older API).
+    # Create a real openjph directory and copy vendored headers so the build uses bundled OpenJPH.
+    set(OPENEXR_OPENJPH_CORE "${CMAKE_SOURCE_DIR}/lib/openexr/external/OpenJPH/src/core")
+    set(OPENEXR_OPENJPH_OPENJPH "${OPENEXR_OPENJPH_CORE}/openjph")
+    set(OPENEXR_OPENJPH_COMMON "${OPENEXR_OPENJPH_CORE}/common")
+    if(NOT IS_DIRECTORY "${OPENEXR_OPENJPH_OPENJPH}" AND EXISTS "${OPENEXR_OPENJPH_COMMON}")
+        message(STATUS "OpenEXR: creating openjph include dir for Windows (Git symlink fix)")
+        if(EXISTS "${OPENEXR_OPENJPH_OPENJPH}")
+            file(REMOVE "${OPENEXR_OPENJPH_OPENJPH}")
+        endif()
+        file(MAKE_DIRECTORY "${OPENEXR_OPENJPH_OPENJPH}")
+        file(GLOB OPENEXR_OPENJPH_HEADERS "${OPENEXR_OPENJPH_COMMON}/*.h")
+        foreach(H ${OPENEXR_OPENJPH_HEADERS})
+            file(COPY "${H}" DESTINATION "${OPENEXR_OPENJPH_OPENJPH}")
+        endforeach()
+    endif()
+
+    file(MAKE_DIRECTORY "${OPENEXR_INSTALL_DIR}/include")
+
+    ExternalProject_Add(
+        openexr_external
+        SOURCE_DIR "${CMAKE_SOURCE_DIR}/lib/openexr"
+        BINARY_DIR "${OPENEXR_BUILD_DIR}"
+        INSTALL_DIR "${OPENEXR_INSTALL_DIR}"
+        CMAKE_ARGS ${OPENEXR_CMAKE_ARGS}
+        BUILD_ALWAYS FALSE
+    )
+
+    # include/, include/OpenEXR/, and include/Imath/ needed for openexr.h and its transitive includes
+    set(OPENEXR_INCLUDE_DIRS
+        "${OPENEXR_INSTALL_DIR}/include"
+        "${OPENEXR_INSTALL_DIR}/include/OpenEXR"
+        "${OPENEXR_INSTALL_DIR}/include/Imath")
+    include_directories(${OPENEXR_INCLUDE_DIRS})
+
+    # Main OpenEXR library (Imf) - primary target for linking
+    set(OPENEXR_MAIN_LIB_NAME "OpenEXR-${OPENEXR_VERSION_API}")
+    set(OPENEXR_MAIN_IMPLIB_NAME "OpenEXR-${OPENEXR_VERSION_API}.lib")
+    if(MINGW)
+        set(OPENEXR_MAIN_IMPLIB_NAME "libOpenEXR-${OPENEXR_VERSION_API}.dll.a")
+    endif()
+
+    add_library(OpenEXR::OpenEXR SHARED IMPORTED GLOBAL)
+    set_target_properties(OpenEXR::OpenEXR PROPERTIES
+        INTERFACE_INCLUDE_DIRECTORIES "${OPENEXR_INCLUDE_DIRS}"
+    )
+    if(WIN32)
+        set_target_properties(OpenEXR::OpenEXR PROPERTIES
+            IMPORTED_LOCATION "${OPENEXR_DLL_PREFIX}/OpenEXR-${OPENEXR_VERSION_API}${CMAKE_SHARED_LIBRARY_SUFFIX}"
+            IMPORTED_IMPLIB "${OPENEXR_LIB_PREFIX}/${OPENEXR_MAIN_IMPLIB_NAME}"
+        )
+    else()
+        set_target_properties(OpenEXR::OpenEXR PROPERTIES
+            IMPORTED_LOCATION "${OPENEXR_LIB_PREFIX}/libOpenEXR-${OPENEXR_VERSION_API}${CMAKE_SHARED_LIBRARY_SUFFIX}"
+        )
+    endif()
+
+    # OpenEXRCore (C API exr_*) - required for EXR plugin
+    set(OPENEXR_CORE_LIB_NAME "OpenEXRCore-${OPENEXR_VERSION_API}")
+    set(OPENEXR_CORE_IMPLIB_NAME "OpenEXRCore-${OPENEXR_VERSION_API}.lib")
+    if(MINGW)
+        set(OPENEXR_CORE_IMPLIB_NAME "libOpenEXRCore-${OPENEXR_VERSION_API}.dll.a")
+    endif()
+    add_library(OpenEXR::OpenEXRCore SHARED IMPORTED GLOBAL)
+    set_target_properties(OpenEXR::OpenEXRCore PROPERTIES
+        INTERFACE_INCLUDE_DIRECTORIES "${OPENEXR_INCLUDE_DIRS}"
+    )
+    if(WIN32)
+        set_target_properties(OpenEXR::OpenEXRCore PROPERTIES
+            IMPORTED_LOCATION "${OPENEXR_DLL_PREFIX}/lib${OPENEXR_CORE_LIB_NAME}${CMAKE_SHARED_LIBRARY_SUFFIX}"
+            IMPORTED_IMPLIB "${OPENEXR_LIB_PREFIX}/${OPENEXR_CORE_IMPLIB_NAME}"
+        )
+    else()
+        set_target_properties(OpenEXR::OpenEXRCore PROPERTIES
+            IMPORTED_LOCATION "${OPENEXR_LIB_PREFIX}/lib${OPENEXR_CORE_LIB_NAME}${CMAKE_SHARED_LIBRARY_SUFFIX}"
+        )
+    endif()
+
+    configure_file(
+        "${CMAKE_SOURCE_DIR}/cmake/CopyOpenEXRDLLs.cmake"
+        "${CMAKE_BINARY_DIR}/cmake/CopyOpenEXRDLLs.cmake"
+        @ONLY
+    )
+    add_custom_command(TARGET openexr_external POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
+        COMMAND ${CMAKE_COMMAND} -P "${CMAKE_BINARY_DIR}/cmake/CopyOpenEXRDLLs.cmake"
+        COMMENT "Copying OpenEXR (and Imath) DLLs/shared libs to bin directory"
+    )
+
+    set(OPENEXR_FOUND TRUE)
+    set(OPENEXR_TARGET OpenEXR::OpenEXR)
+    message(STATUS "Building OpenEXR from source as shared library")
+    message(STATUS "OpenEXR include dirs: ${OPENEXR_INCLUDE_DIRS}")
+else()
+    # Fallback to system OpenEXR via find_package
+    find_package(OpenEXR QUIET)
+    if(OpenEXR_FOUND)
+        set(OPENEXR_FOUND TRUE)
+        set(OPENEXR_TARGET OpenEXR::OpenEXR)
+        message(STATUS "Using system OpenEXR")
+    else()
+        message(STATUS "OpenEXR not found. EXR/HDR plugin may use alternative or no OpenEXR.")
+    endif()
+endif()
+
+if(OPENEXR_FOUND)
+    set(HAVE_OPENEXR 1)
+else()
+    set(HAVE_OPENEXR 0)
 endif()
 
 # Find GTK3, GdkPixbuf, libxml2, and LZ4 using pkg-config

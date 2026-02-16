@@ -1,0 +1,25 @@
+# CMake script to copy OpenEXR (and Imath) DLLs/shared libs to bin directory.
+# Called from ExternalProject POST_BUILD. Compatible with CMake 3.10+.
+
+set(OPENEXR_INSTALL_DIR "@OPENEXR_INSTALL_DIR@")
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "@CMAKE_RUNTIME_OUTPUT_DIRECTORY@")
+
+if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows")
+    set(OPENEXR_BIN "${OPENEXR_INSTALL_DIR}/bin")
+    if(EXISTS "${OPENEXR_BIN}")
+        file(GLOB OPENEXR_DLLS "${OPENEXR_BIN}/*.dll")
+        foreach(DLL ${OPENEXR_DLLS})
+            file(COPY "${DLL}" DESTINATION "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
+            message(STATUS "Copying OpenEXR/Imath DLL: ${DLL}")
+        endforeach()
+    endif()
+else()
+    set(OPENEXR_LIB "${OPENEXR_INSTALL_DIR}/lib")
+    if(EXISTS "${OPENEXR_LIB}")
+        file(GLOB OPENEXR_SOS "${OPENEXR_LIB}/*.so" "${OPENEXR_LIB}/*.so.*" "${OPENEXR_LIB}/*.dylib" "${OPENEXR_LIB}/*.dylib.*")
+        foreach(LIB ${OPENEXR_SOS})
+            file(COPY "${LIB}" DESTINATION "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
+            message(STATUS "Copying OpenEXR/Imath shared lib: ${LIB}")
+        endforeach()
+    endif()
+endif()

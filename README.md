@@ -25,6 +25,7 @@ A full-featured image editor written in C.
 | Digital Imaging and Communications in Medicine | `.dcm`, `.dicom` | Read only | Grayscale, RGB, palette, YBR; RLE/JPEG compressed; multi-frame (as layers) |
 | Kodak Photo CD | `.pcd` | Read only | All resolutions |
 | High Efficiency Image Format | `.heic`, `.heif` | Read, Write | RGB, RGBA; multiframe |
+| OpenEXR | `.exr` | Read only | HDR; RGB, RGBA; Y/RY/BY (luminance+chroma) with optional 2×2 subsampling; Y-only grayscale; scanline and tiled storage |
 
 ## Features
 

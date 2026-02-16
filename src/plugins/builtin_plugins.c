@@ -22,6 +22,9 @@
 #include "plugins/plugin_webp.h"
 #include "plugins/plugin_xbm.h"
 #include "plugins/plugin_xpm.h"
+#ifdef HAVE_OPENEXR
+#include "plugins/plugin_exr.h"
+#endif
 #include <glib.h>
 
 /**
@@ -50,6 +53,7 @@ void builtin_plugins_register(void) {
     ImageFormatPlugin pcd_plugin;
     ImageFormatPlugin heic_plugin;
     ImageFormatPlugin avif_plugin;
+    ImageFormatPlugin exr_plugin;
 
     /* Register PNG plugin (using libpng) */
 #ifdef HAVE_LIBPNG
@@ -313,5 +317,21 @@ void builtin_plugins_register(void) {
     }
 #else
     g_message("AVIF plugin not available (requires HAVE_LIBHEIF and HAVE_LIBAOM)");
+#endif
+
+    /* Register EXR plugin (OpenEXR) */
+#ifdef HAVE_OPENEXR
+    g_message("Registering built-in EXR plugin");
+    if (plugin_init_exr(host_api, &exr_plugin)) {
+        if (format_registry_register_builtin(&exr_plugin)) {
+            g_message("Successfully registered EXR plugin");
+        } else {
+            g_message("Failed to register EXR plugin with format registry");
+        }
+    } else {
+        g_message("Failed to initialize EXR plugin");
+    }
+#else
+    g_message("EXR plugin not available (HAVE_OPENEXR not defined)");
 #endif
 }

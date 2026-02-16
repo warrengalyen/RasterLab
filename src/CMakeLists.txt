@@ -68,6 +68,7 @@ set(SOURCES
     plugins/plugin_hdr.c
     plugins/plugin_fits.c
     plugins/plugin_dicom.c
+    plugins/plugin_exr.c
     plugins/plugin_webp.c
     plugins/plugin_heic.c
     plugins/plugin_avif.c
@@ -524,6 +525,31 @@ if(HAVE_LIBAOM)
     target_compile_definitions(rasterlab PRIVATE HAVE_LIBAOM=1)
 else()
     target_compile_definitions(rasterlab PRIVATE HAVE_LIBAOM=0)
+endif()
+
+# Link OpenEXR if available (for EXR/HDR support)
+if(OPENEXR_FOUND)
+    if(OPENEXR_TARGET AND TARGET ${OPENEXR_TARGET})
+        get_target_property(OPENEXR_INCLUDE_DIRS ${OPENEXR_TARGET} INTERFACE_INCLUDE_DIRECTORIES)
+        if(OPENEXR_INCLUDE_DIRS)
+            target_include_directories(rasterlab PRIVATE BEFORE SYSTEM ${OPENEXR_INCLUDE_DIRS})
+        endif()
+        target_link_libraries(rasterlab ${OPENEXR_TARGET})
+        # EXR plugin uses C API (exr_*) from OpenEXRCore
+        if(TARGET OpenEXR::OpenEXRCore)
+            target_link_libraries(rasterlab OpenEXR::OpenEXRCore)
+        endif()
+        if(TARGET openexr_external)
+            add_dependencies(rasterlab openexr_external)
+        endif()
+        message(STATUS "Linking against OpenEXR target: ${OPENEXR_TARGET}")
+    elseif(OPENEXR_LIBRARIES)
+        target_link_libraries(rasterlab ${OPENEXR_LIBRARIES})
+        message(STATUS "Linking against system OpenEXR: ${OPENEXR_LIBRARIES}")
+    endif()
+    target_compile_definitions(rasterlab PRIVATE HAVE_OPENEXR=1)
+else()
+    target_compile_definitions(rasterlab PRIVATE HAVE_OPENEXR=0)
 endif()
 
 # Link libtiff if available
