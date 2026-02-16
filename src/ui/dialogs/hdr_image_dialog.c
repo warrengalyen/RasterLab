@@ -20,6 +20,10 @@ static void on_parameter_changed(GtkWidget* widget, gpointer user_data);
 static gboolean update_preview_timeout(gpointer user_data);
 static void schedule_preview_update(GtkWidget* dialog);
 static void on_dialog_button_clicked(GtkButton* button, gpointer user_data);
+static void on_dialog_map_center_and_clamp(GtkWidget* dialog, gpointer user_data);
+static gboolean on_dialog_configure_event(GtkWidget* dialog, GdkEventConfigure* event, gpointer user_data);
+static void apply_params_to_widgets(GtkWidget* dialog, const ToneMapParams* params);
+static void on_reset_clicked(GtkWidget* widget, gpointer user_data);
 
 /**
  * Callback when operator toggle button is toggled
@@ -405,7 +409,6 @@ static gboolean update_preview_timeout(gpointer user_data) {
     return G_SOURCE_REMOVE;
 }
 
-
 /**
  * Button clicked callback to emit dialog response
  * Prevents double-triggering by checking if response was already handled
@@ -413,19 +416,157 @@ static gboolean update_preview_timeout(gpointer user_data) {
 static void on_dialog_button_clicked(GtkButton* button, gpointer user_data) {
     GtkDialog* dialog = GTK_DIALOG(user_data);
     gint response_id = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "response-id"));
-    
+
     /* Check if we've already handled this response to prevent double-triggering */
     gpointer handled = g_object_get_data(G_OBJECT(dialog), "response-handled");
     if (handled) {
         /* Already handled, ignore this signal */
         return;
     }
-    
+
     /* Mark as handled BEFORE emitting response to prevent re-entry */
     g_object_set_data(G_OBJECT(dialog), "response-handled", GINT_TO_POINTER(TRUE));
-    
+
     /* Emit response - this will cause gtk_dialog_run to return */
     gtk_dialog_response(dialog, response_id);
+}
+
+#define HDR_DIALOG_WIDTH 700
+#define HDR_DIALOG_HEIGHT 470
+
+static gboolean idle_center_and_clamp(gpointer user_data) {
+    GtkWidget* dialog = (GtkWidget*)user_data;
+    GtkWindow* parent = (GtkWindow*)g_object_get_data(G_OBJECT(dialog), "hdr_dialog_parent");
+    if (!dialog || !gtk_widget_get_visible(dialog)) {
+        g_object_set_data(G_OBJECT(dialog), "hdr_resize_pending", NULL);
+        return G_SOURCE_REMOVE;
+    }
+    g_object_set_data(G_OBJECT(dialog), "hdr_dialog_parent", NULL);
+    g_object_set_data(G_OBJECT(dialog), "hdr_resize_pending", NULL);
+
+    int w = 0, h = 0;
+    gtk_window_get_size(GTK_WINDOW(dialog), &w, &h);
+    if (w != HDR_DIALOG_WIDTH || h != HDR_DIALOG_HEIGHT) {
+        gtk_window_resize(GTK_WINDOW(dialog), HDR_DIALOG_WIDTH, HDR_DIALOG_HEIGHT);
+        w = HDR_DIALOG_WIDTH;
+        h = HDR_DIALOG_HEIGHT;
+    }
+
+    if (parent && gtk_widget_get_visible(GTK_WIDGET(parent))) {
+        int px = 0, py = 0, pw = 0, ph = 0;
+        gtk_window_get_position(parent, &px, &py);
+        gtk_window_get_size(parent, &pw, &ph);
+        gtk_window_move(GTK_WINDOW(dialog), px + (pw - w) / 2, py + (ph - h) / 2);
+    }
+    return G_SOURCE_REMOVE;
+}
+
+/**
+ * On configure: if WM/layout resized the window.
+ */
+static gboolean on_dialog_configure_event(GtkWidget* dialog, GdkEventConfigure* event, gpointer user_data) {
+    (void)user_data;
+    if ((event->width != HDR_DIALOG_WIDTH || event->height != HDR_DIALOG_HEIGHT) &&
+        !g_object_get_data(G_OBJECT(dialog), "hdr_resize_pending")) {
+        g_object_set_data(G_OBJECT(dialog), "hdr_resize_pending", GINT_TO_POINTER(1));
+        g_idle_add(idle_center_and_clamp, dialog);
+    }
+    return FALSE;
+}
+
+/**
+ * On first map: schedule idle to clamp dialog and center on parent.
+ * Disconnects after one run.
+ */
+static void on_dialog_map_center_and_clamp(GtkWidget* dialog, gpointer user_data) {
+    GtkWindow* parent = (GtkWindow*)user_data;
+    if (!gtk_widget_get_window(dialog) || !GTK_IS_WINDOW(dialog)) {
+        return;
+    }
+
+    g_signal_handlers_disconnect_by_func(dialog, G_CALLBACK(on_dialog_map_center_and_clamp), user_data);
+    g_object_set_data(G_OBJECT(dialog), "hdr_dialog_parent", parent);
+    g_idle_add(idle_center_and_clamp, dialog);
+}
+
+/**
+ * Apply tone mapping params to all dialog widgets (operator, normalize, adjustments).
+ * Used when resetting to defaults.
+ */
+static void apply_params_to_widgets(GtkWidget* dialog, const ToneMapParams* params) {
+    GtkBuilder* builder = GTK_BUILDER(g_object_get_data(G_OBJECT(dialog), "builder"));
+    if (!builder || !params) {
+        return;
+    }
+    GtkWidget* linear_operator = GTK_WIDGET(gtk_builder_get_object(builder, "linear_operator_button"));
+    GtkWidget* filmic_operator = GTK_WIDGET(gtk_builder_get_object(builder, "filmic_operator_button"));
+    GtkWidget* drago_operator = GTK_WIDGET(gtk_builder_get_object(builder, "drago_operator_button"));
+    GtkWidget* reinhard_operator = GTK_WIDGET(gtk_builder_get_object(builder, "reinhard_operator_button"));
+    GtkWidget* norm_none = GTK_WIDGET(gtk_builder_get_object(builder, "linear_normalize_none_button"));
+    GtkWidget* norm_visible = GTK_WIDGET(gtk_builder_get_object(builder, "linear_normalize_visible_button"));
+    GtkWidget* norm_full = GTK_WIDGET(gtk_builder_get_object(builder, "linear_normalize_full_button"));
+    GtkAdjustment* adj;
+    switch (params->operator) {
+        case TONE_MAP_LINEAR:
+            gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(linear_operator), TRUE);
+            break;
+        case TONE_MAP_FILMIC:
+            gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(filmic_operator), TRUE);
+            break;
+        case TONE_MAP_DRAGO:
+            gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(drago_operator), TRUE);
+            break;
+        case TONE_MAP_REINHARD:
+            gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(reinhard_operator), TRUE);
+            break;
+    }
+    if (norm_none && norm_visible && norm_full) {
+        switch (params->normalize) {
+            case TONE_MAP_NORMALIZE_NONE:
+                gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(norm_none), TRUE);
+                break;
+            case TONE_MAP_NORMALIZE_VISIBLE_SPECTRUM:
+                gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(norm_visible), TRUE);
+                break;
+            case TONE_MAP_NORMALIZE_FULL_SPECTRUM:
+                gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(norm_full), TRUE);
+                break;
+        }
+    }
+    if ((adj = GTK_ADJUSTMENT(gtk_builder_get_object(builder, "linear_gamma_adjustment"))))
+        gtk_adjustment_set_value(adj, params->gamma);
+    if ((adj = GTK_ADJUSTMENT(gtk_builder_get_object(builder, "filmic_gamma_adjustment"))))
+        gtk_adjustment_set_value(adj, params->gamma);
+    if ((adj = GTK_ADJUSTMENT(gtk_builder_get_object(builder, "filmic_exposure_adjustment"))))
+        gtk_adjustment_set_value(adj, params->exposure);
+    if ((adj = GTK_ADJUSTMENT(gtk_builder_get_object(builder, "filmic_whitepoint_adjustment"))))
+        gtk_adjustment_set_value(adj, params->white_point);
+    if ((adj = GTK_ADJUSTMENT(gtk_builder_get_object(builder, "drago_gamma_adjustment"))))
+        gtk_adjustment_set_value(adj, params->gamma);
+    if ((adj = GTK_ADJUSTMENT(gtk_builder_get_object(builder, "drago_exposure_adjustment"))))
+        gtk_adjustment_set_value(adj, params->exposure);
+    if ((adj = GTK_ADJUSTMENT(gtk_builder_get_object(builder, "reinhard_intensity_adjustment"))))
+        gtk_adjustment_set_value(adj, params->intensity);
+    if ((adj = GTK_ADJUSTMENT(gtk_builder_get_object(builder, "reinhard_adaptation_adjustment"))))
+        gtk_adjustment_set_value(adj, params->adaptation);
+    if ((adj = GTK_ADJUSTMENT(gtk_builder_get_object(builder, "reinhard_color_correction_adjustment"))))
+        gtk_adjustment_set_value(adj, params->color_correction);
+}
+
+/**
+ * Reset parameters to defaults
+ */
+static void on_reset_clicked(GtkWidget* widget, gpointer user_data) {
+    GtkWidget* dialog = (GtkWidget*)user_data;
+    ToneMapParams* params = (ToneMapParams*)g_object_get_data(G_OBJECT(dialog), "tone_params");
+    (void)widget;
+    if (!params) {
+        return;
+    }
+    tone_map_params_init(params);
+    apply_params_to_widgets(dialog, params);
+    update_controls_visibility(dialog, params->operator);
+    schedule_preview_update(dialog);
 }
 
 /**
@@ -606,7 +747,7 @@ gint hdr_image_dialog_show(GtkWindow* parent, ToneMapParams* params, gboolean* a
     g_object_set_data(G_OBJECT(dialog), "hdr_width", GUINT_TO_POINTER(width));
     g_object_set_data(G_OBJECT(dialog), "hdr_height", GUINT_TO_POINTER(height));
     g_object_set_data(G_OBJECT(dialog), "tone_params", params);
-    
+
     /* Store settings for preview background color */
     if (settings) {
         g_object_set_data(G_OBJECT(dialog), "settings", settings);
@@ -822,25 +963,45 @@ gint hdr_image_dialog_show(GtkWindow* parent, ToneMapParams* params, gboolean* a
         g_object_set_data(G_OBJECT(cancel_button), "response-id", GINT_TO_POINTER(GTK_RESPONSE_CANCEL));
         g_signal_connect(cancel_button, "clicked", G_CALLBACK(on_dialog_button_clicked), dialog);
     }
+    /* Match filter dialog: action area with 5px vertical margin; 0 horizontal so reset aligns with content */
+    GtkWidget* action_area = GTK_WIDGET(gtk_builder_get_object(builder, "hdr_image_dialog_action_area"));
+    if (action_area) {
+        gtk_widget_set_margin_top(action_area, 5);
+        gtk_widget_set_margin_bottom(action_area, 5);
+        gtk_widget_set_margin_start(action_area, 0);
+        gtk_widget_set_margin_end(action_area, 0);
+        gtk_widget_set_hexpand(action_area, TRUE);
+    }
+    GtkWidget* reset_button = GTK_WIDGET(gtk_builder_get_object(builder, "hdr_reset_button"));
+    if (reset_button) {
+        g_signal_connect(reset_button, "clicked", G_CALLBACK(on_reset_clicked), dialog);
+        gtk_button_set_always_show_image(GTK_BUTTON(reset_button), TRUE);
+        gtk_widget_set_halign(reset_button, GTK_ALIGN_START);
+        gtk_widget_set_valign(reset_button, GTK_ALIGN_CENTER);
+    }
 
     /* Create initial preview */
     update_preview(dialog, rgbe_data, width, height, params);
 
-    /* Set parent window, size, and position RIGHT BEFORE showing dialog
-     * This ensures proper centering and size */
+    /* Set parent window and modal before showing */
     if (parent && GTK_IS_WINDOW(parent) && GTK_IS_WINDOW(dialog)) {
         gtk_window_set_transient_for(GTK_WINDOW(dialog), parent);
-        gtk_window_set_position(GTK_WINDOW(dialog), GTK_WIN_POS_CENTER_ON_PARENT);
-    } else if (GTK_IS_WINDOW(dialog)) {
-        /* Fallback to center on screen if no valid parent */
-        gtk_window_set_position(GTK_WINDOW(dialog), GTK_WIN_POS_CENTER);
     }
-
-    /* Set dialog size and modal property right before showing */
-    gtk_window_set_default_size(GTK_WINDOW(dialog), 700, -1);
     gtk_window_set_modal(GTK_WINDOW(dialog), TRUE);
 
-    /* Show all widgets in dialog */
+    gtk_window_set_resizable(GTK_WINDOW(dialog), FALSE);
+    gtk_window_set_default_size(GTK_WINDOW(dialog), HDR_DIALOG_WIDTH, HDR_DIALOG_HEIGHT);
+    gtk_widget_set_size_request(dialog, HDR_DIALOG_WIDTH, HDR_DIALOG_HEIGHT);
+    {
+        GdkGeometry geometry;
+        memset(&geometry, 0, sizeof(geometry));
+        geometry.min_width = geometry.max_width = HDR_DIALOG_WIDTH;
+        geometry.min_height = geometry.max_height = HDR_DIALOG_HEIGHT;
+        gtk_window_set_geometry_hints(GTK_WINDOW(dialog), NULL, &geometry, GDK_HINT_MIN_SIZE | GDK_HINT_MAX_SIZE);
+    }
+    g_signal_connect(dialog, "map", G_CALLBACK(on_dialog_map_center_and_clamp), parent);
+    g_signal_connect(dialog, "configure-event", G_CALLBACK(on_dialog_configure_event), NULL);
+
     gtk_widget_show_all(dialog);
 
     /* Initial visibility update */
@@ -912,11 +1073,11 @@ gint hdr_image_dialog_show(GtkWindow* parent, ToneMapParams* params, gboolean* a
         /* Get auto apply checkbox value */
         if (auto_apply_check) {
             *auto_apply = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(auto_apply_check));
-            
+
             /* If auto apply is checked, save settings */
             if (*auto_apply && settings && app_dir) {
                 Settings* s = (Settings*)settings;
-                
+
                 /* Save tone mapping settings */
                 settings_set_tone_map_auto_apply(s, TRUE);
                 settings_set_tone_map_operator(s, (gint)params->operator);
@@ -927,7 +1088,7 @@ gint hdr_image_dialog_show(GtkWindow* parent, ToneMapParams* params, gboolean* a
                 settings_set_tone_map_intensity(s, (gdouble)params->intensity);
                 settings_set_tone_map_adaptation(s, (gdouble)params->adaptation);
                 settings_set_tone_map_color_correction(s, (gdouble)params->color_correction);
-                
+
                 /* Save to file */
                 settings_save(s, app_dir);
             }
