@@ -41,8 +41,10 @@
  * Clamp a value to a range
  */
 static inline float clamp(float value, float min_val, float max_val) {
-    if (value < min_val) return min_val;
-    if (value > max_val) return max_val;
+    if (value < min_val)
+        return min_val;
+    if (value > max_val)
+        return max_val;
     return value;
 }
 
@@ -55,7 +57,7 @@ void tone_map_params_init(ToneMapParams* params) {
     }
 
     memset(params, 0, sizeof(ToneMapParams));
-    params->operator = TONE_MAP_LINEAR;
+    params->operator= TONE_MAP_LINEAR;
     params->gamma = GAMMA_DEFAULT;
     params->exposure = EXPOSURE_DEFAULT_LINEAR;
     params->white_point = WHITE_POINT_DEFAULT;
@@ -88,7 +90,7 @@ void tone_map_normalize(float r_in, float g_in, float b_in,
             *r_out = clamp(r_in, VISIBLE_SPECTRUM_MIN, VISIBLE_SPECTRUM_MAX);
             *g_out = clamp(g_in, VISIBLE_SPECTRUM_MIN, VISIBLE_SPECTRUM_MAX);
             *b_out = clamp(b_in, VISIBLE_SPECTRUM_MIN, VISIBLE_SPECTRUM_MAX);
-            
+
             /* Map to [0, 1] range */
             float range = VISIBLE_SPECTRUM_MAX - VISIBLE_SPECTRUM_MIN;
             if (range > 0.0f) {
@@ -107,7 +109,7 @@ void tone_map_normalize(float r_in, float g_in, float b_in,
             *r_out = clamp(r_in, FULL_SPECTRUM_MIN, FULL_SPECTRUM_MAX);
             *g_out = clamp(g_in, FULL_SPECTRUM_MIN, FULL_SPECTRUM_MAX);
             *b_out = clamp(b_in, FULL_SPECTRUM_MIN, FULL_SPECTRUM_MAX);
-            
+
             /* Map to [0, 1] range */
             float range = FULL_SPECTRUM_MAX - FULL_SPECTRUM_MIN;
             if (range > 0.0f) {
@@ -188,39 +190,40 @@ static void tone_map_filmic(float r, float g, float b, float gamma,
 }
 
 /**
- * Drago tone mapping operator
+ * Drago tone mapping operator (luminance-based to avoid color noise in dark regio)
+ * Uses global Lwmax when max_luminance > 0; otherwise fmaxf(per_pixel_max, 1.0f)
  */
 static void tone_map_drago(float r, float g, float b, float gamma,
-                           float exposure,
+                           float exposure, float max_luminance,
                            uint8_t* r_out, uint8_t* g_out, uint8_t* b_out) {
     /* Apply exposure */
     r *= powf(2.0f, exposure);
     g *= powf(2.0f, exposure);
     b *= powf(2.0f, exposure);
 
-    /* Find maximum luminance */
-    float max_lum = fmaxf(fmaxf(r, g), b);
-    if (max_lum <= 0.0f) {
+    /* Luminance (same weights as Reinhard) */
+    float Lw = 0.2126f * r + 0.7152f * g + 0.0722f * b;
+    if (Lw <= 0.0f) {
         *r_out = *g_out = *b_out = 0;
         return;
     }
 
-    /* Drago logarithmic mapping */
-    /* Ld = Ldmax * log(1 + Lw) / log(1 + Lwmax) */
-    /* where Ldmax = 100, Lwmax = max_lum */
-    float Ldmax = 100.0f;
-    float Lwmax = max_lum;
+    /* Global or fallback Lwmax: avoid per-pixel Lwmax so dark pixels don't blow out to white */
+    float Lwmax = (max_luminance > 0.0f)
+                      ? max_luminance
+                      : fmaxf(fmaxf(fmaxf(r, g), b), 1.0f);
     float log_base = logf(1.0f + Lwmax);
-    
     if (log_base <= 0.0f) {
         *r_out = *g_out = *b_out = 0;
         return;
     }
 
-    float scale = Ldmax / log_base;
-    r = logf(1.0f + r) * scale / Ldmax;
-    g = logf(1.0f + g) * scale / Ldmax;
-    b = logf(1.0f + b) * scale / Ldmax;
+    /* Drago: Ld = log(1 + Lw) / log(1 + Lwmax); scale RGB by Ld/Lw to preserve color */
+    float Ld = logf(1.0f + Lw) / log_base;
+    float scale = Ld / Lw;
+    r *= scale;
+    g *= scale;
+    b *= scale;
 
     /* Apply gamma correction */
     float inv_gamma = 1.0f / gamma;
@@ -246,7 +249,7 @@ static void tone_map_reinhard(float r, float g, float b,
                               uint8_t* r_out, uint8_t* g_out, uint8_t* b_out) {
     /* Calculate luminance */
     float lum = 0.2126f * r + 0.7152f * g + 0.0722f * b;
-    
+
     if (lum <= 0.0f) {
         *r_out = *g_out = *b_out = 0;
         return;
@@ -256,10 +259,11 @@ static void tone_map_reinhard(float r, float g, float b,
     /* Ld = Lw / (1 + Lw) * (1 + Lw / (Lwhite^2)) */
     /* where Lwhite = adaptation * max_luminance */
     float Lwhite = adaptation * 100.0f; /* Assume max luminance of 100 for adaptation */
-    if (Lwhite < 1.0f) Lwhite = 1.0f;
+    if (Lwhite < 1.0f)
+        Lwhite = 1.0f;
 
     float Ld = lum / (1.0f + lum) * (1.0f + lum / (Lwhite * Lwhite));
-    
+
     /* Apply intensity adjustment */
     Ld *= powf(2.0f, intensity);
 
@@ -301,7 +305,7 @@ void tone_map_rgb(float r_in, float g_in, float b_in,
     float r = r_in, g = g_in, b = b_in;
 
     /* Apply normalization only when linear operator is set */
-    if (params->operator == TONE_MAP_LINEAR && params->normalize != TONE_MAP_NORMALIZE_NONE) {
+    if (params->operator== TONE_MAP_LINEAR && params->normalize != TONE_MAP_NORMALIZE_NONE) {
         tone_map_normalize(r, g, b, params->normalize, &r, &g, &b);
     }
 
@@ -324,7 +328,7 @@ void tone_map_rgb(float r_in, float g_in, float b_in,
             break;
 
         case TONE_MAP_DRAGO:
-            tone_map_drago(r, g, b, gamma, exposure, r_out, g_out, b_out);
+            tone_map_drago(r, g, b, gamma, exposure, params->max_luminance, r_out, g_out, b_out);
             break;
 
         case TONE_MAP_REINHARD:
@@ -342,12 +346,28 @@ void tone_map_image(const float* hdr_input, uint8_t* output,
         return;
     }
 
+    ToneMapParams local_params = *params;
+
+    /* Drago: use global max luminance when not set to avoid blowing dark regions */
+    if (params->operator== TONE_MAP_DRAGO && params->max_luminance <= 0.0f) {
+        float max_lum = 0.0f;
+        for (uint32_t i = 0; i < num_pixels; i++) {
+            float r = hdr_input[i * 3 + 0];
+            float g = hdr_input[i * 3 + 1];
+            float b = hdr_input[i * 3 + 2];
+            float L = fmaxf(fmaxf(r, g), b);
+            if (L > max_lum)
+                max_lum = L;
+        }
+        local_params.max_luminance = fmaxf(max_lum, 1e-6f);
+    }
+
     for (uint32_t i = 0; i < num_pixels; i++) {
         float r = hdr_input[i * 3 + 0];
         float g = hdr_input[i * 3 + 1];
         float b = hdr_input[i * 3 + 2];
 
-        tone_map_rgb(r, g, b, params,
+        tone_map_rgb(r, g, b, &local_params,
                      &output[i * 3 + 0],
                      &output[i * 3 + 1],
                      &output[i * 3 + 2]);

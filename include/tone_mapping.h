@@ -48,6 +48,9 @@ typedef struct {
 
     /* Normalization mode (only used with linear operator) */
     ToneMapNormalize normalize;
+
+    /* Drago: global max luminance (0 = auto in tone_map_image, else use for Lwmax) */
+    float max_luminance;
 } ToneMapParams;
 
 /**
