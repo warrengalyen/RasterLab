@@ -324,6 +324,17 @@ gboolean tools_panel_set_foreground_color(GdkRGBA* color) {
 }
 
 /**
+ * Get the current background color from the color picker
+ */
+gboolean tools_panel_get_background_color(GdkRGBA* rgba) {
+    if (!rgba) {
+        return FALSE;
+    }
+    *rgba = g_bg_color;
+    return TRUE;
+}
+
+/**
  * Initialize tools panel from an existing builder (used when panel is in main window)
  */
 GtkWidget* tools_panel_initialize_from_builder(GtkBuilder* builder, ToolRegistry* tool_registry) {

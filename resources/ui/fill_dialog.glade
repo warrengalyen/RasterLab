@@ -1,0 +1,272 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Generated with glade 3.40.0 -->
+<interface>
+  <requires lib="gtk+" version="3.24"/>
+  <object class="GtkAdjustment" id="opacity_adjustment">
+    <property name="upper">100</property>
+    <property name="value">100</property>
+    <property name="step-increment">1</property>
+    <property name="page-increment">10</property>
+  </object>
+  <object class="GtkDialog" id="fill_dialog">
+    <property name="width-request">300</property>
+    <property name="can-focus">False</property>
+    <property name="title" translatable="yes">Fill</property>
+    <property name="resizable">False</property>
+    <property name="modal">True</property>
+    <property name="window-position">center-on-parent</property>
+    <property name="type-hint">dialog</property>
+    <child internal-child="vbox">
+      <object class="GtkBox" id="fill_dialog_vbox">
+        <property name="can-focus">False</property>
+        <property name="margin-start">10</property>
+        <property name="margin-end">10</property>
+        <property name="margin-top">10</property>
+        <property name="margin-bottom">10</property>
+        <property name="orientation">vertical</property>
+        <property name="spacing">2</property>
+        <child internal-child="action_area">
+          <object class="GtkButtonBox" id="fill_dialog_action_area">
+            <property name="can-focus">False</property>
+            <property name="margin-top">20</property>
+            <property name="layout-style">end</property>
+            <child>
+              <object class="GtkButton" id="fill_dialog_ok_button">
+                <property name="label">gtk-ok</property>
+                <property name="visible">True</property>
+                <property name="can-focus">True</property>
+                <property name="can-default">True</property>
+                <property name="receives-default">True</property>
+                <property name="use-stock">True</property>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">False</property>
+                <property name="position">0</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkButton" id="fill_dialog_cancel_button">
+                <property name="label">gtk-cancel</property>
+                <property name="visible">True</property>
+                <property name="can-focus">True</property>
+                <property name="can-default">True</property>
+                <property name="receives-default">True</property>
+                <property name="use-stock">True</property>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">False</property>
+                <property name="position">1</property>
+              </packing>
+            </child>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">False</property>
+            <property name="position">0</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkBox" id="fill_content_area">
+            <property name="visible">True</property>
+            <property name="can-focus">False</property>
+            <property name="margin-start">10</property>
+            <property name="margin-end">10</property>
+            <property name="margin-top">10</property>
+            <property name="margin-bottom">10</property>
+            <property name="orientation">vertical</property>
+            <property name="spacing">20</property>
+            <child>
+              <!-- n-columns=2 n-rows=3 -->
+              <object class="GtkGrid" id="color_controls_grid">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="row-spacing">5</property>
+                <property name="column-spacing">10</property>
+                <child>
+                  <object class="GtkRadioButton" id="custom_color_radio">
+                    <property name="label" translatable="yes">Custom Color</property>
+                    <property name="visible">True</property>
+                    <property name="can-focus">True</property>
+                    <property name="receives-default">False</property>
+                    <property name="halign">start</property>
+                    <property name="active">True</property>
+                    <property name="draw-indicator">True</property>
+                  </object>
+                  <packing>
+                    <property name="left-attach">0</property>
+                    <property name="top-attach">0</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkButton" id="custom_color_button">
+                    <property name="width-request">200</property>
+                    <property name="visible">True</property>
+                    <property name="can-focus">True</property>
+                    <property name="receives-default">True</property>
+                  </object>
+                  <packing>
+                    <property name="left-attach">1</property>
+                    <property name="top-attach">0</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkRadioButton" id="foreground_color_radio">
+                    <property name="label" translatable="yes">Foreground Color</property>
+                    <property name="visible">True</property>
+                    <property name="can-focus">True</property>
+                    <property name="receives-default">False</property>
+                    <property name="halign">start</property>
+                    <property name="draw-indicator">True</property>
+                    <property name="group">custom_color_radio</property>
+                  </object>
+                  <packing>
+                    <property name="left-attach">0</property>
+                    <property name="top-attach">1</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkRadioButton" id="background_color_radio">
+                    <property name="label" translatable="yes">Background Color</property>
+                    <property name="visible">True</property>
+                    <property name="can-focus">True</property>
+                    <property name="receives-default">False</property>
+                    <property name="halign">start</property>
+                    <property name="draw-indicator">True</property>
+                    <property name="group">custom_color_radio</property>
+                  </object>
+                  <packing>
+                    <property name="left-attach">0</property>
+                    <property name="top-attach">2</property>
+                  </packing>
+                </child>
+                <child>
+                  <placeholder/>
+                </child>
+                <child>
+                  <placeholder/>
+                </child>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">0</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkBox" id="opacity_vbox">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="orientation">vertical</property>
+                <child>
+                  <object class="GtkLabel" id="opacity_label">
+                    <property name="visible">True</property>
+                    <property name="can-focus">False</property>
+                    <property name="halign">start</property>
+                    <property name="label" translatable="yes">Opacity</property>
+                  </object>
+                  <packing>
+                    <property name="expand">False</property>
+                    <property name="fill">True</property>
+                    <property name="position">0</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkBox" id="opacity_controls_box">
+                    <property name="visible">True</property>
+                    <property name="can-focus">False</property>
+                    <property name="margin-start">10</property>
+                    <property name="margin-top">5</property>
+                    <property name="spacing">8</property>
+                    <child>
+                      <object class="GtkScale" id="opacity_scale">
+                        <property name="visible">True</property>
+                        <property name="can-focus">True</property>
+                        <property name="adjustment">opacity_adjustment</property>
+                        <property name="digits">0</property>
+                        <property name="draw-value">False</property>
+                      </object>
+                      <packing>
+                        <property name="expand">True</property>
+                        <property name="fill">True</property>
+                        <property name="position">1</property>
+                      </packing>
+                    </child>
+                    <child>
+                      <object class="GtkSpinButton" id="opacity_spin">
+                        <property name="visible">True</property>
+                        <property name="can-focus">True</property>
+                        <property name="width-chars">4</property>
+                        <property name="adjustment">opacity_adjustment</property>
+                        <property name="numeric">True</property>
+                      </object>
+                      <packing>
+                        <property name="expand">False</property>
+                        <property name="fill">False</property>
+                        <property name="position">2</property>
+                      </packing>
+                    </child>
+                  </object>
+                  <packing>
+                    <property name="expand">False</property>
+                    <property name="fill">True</property>
+                    <property name="position">2</property>
+                  </packing>
+                </child>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">1</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkBox" id="blend_mode_vbox">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="orientation">vertical</property>
+                <child>
+                  <object class="GtkLabel" id="blend_mode_label">
+                    <property name="visible">True</property>
+                    <property name="can-focus">False</property>
+                    <property name="halign">start</property>
+                    <property name="label" translatable="yes">Blend Mode</property>
+                  </object>
+                  <packing>
+                    <property name="expand">False</property>
+                    <property name="fill">True</property>
+                    <property name="position">0</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkComboBox" id="blend_mode_combo">
+                    <property name="visible">True</property>
+                    <property name="can-focus">False</property>
+                    <property name="margin-start">10</property>
+                    <property name="margin-top">5</property>
+                  </object>
+                  <packing>
+                    <property name="expand">False</property>
+                    <property name="fill">True</property>
+                    <property name="position">1</property>
+                  </packing>
+                </child>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">2</property>
+              </packing>
+            </child>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">1</property>
+          </packing>
+        </child>
+      </object>
+    </child>
+  </object>
+</interface>

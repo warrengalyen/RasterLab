@@ -41,6 +41,13 @@ gboolean tools_panel_get_foreground_color(GdkRGBA* rgba);
 gboolean tools_panel_set_foreground_color(GdkRGBA* color);
 
 /**
+ * Get the current background color from the color picker
+ * @param rgba Pointer to GdkRGBA to fill with background color
+ * @return TRUE if color was retrieved, FALSE if color button not available
+ */
+gboolean tools_panel_get_background_color(GdkRGBA* rgba);
+
+/**
  * Window key press handler for tool hotkeys
  * @param widget The widget that received the key press
  * @param event The key press event

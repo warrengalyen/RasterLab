@@ -2,6 +2,7 @@
 #include "command.h"
 #include "commands/command_layer.h"
 #include "document.h"
+#include "render/blend.h"
 #include "render/compositor.h"
 #include "render/dirty.h"
 #include "render/layer.h"
@@ -10,6 +11,7 @@
 #include "selection/selection_mask.h"
 #include "selection/selection_render.h"
 #include "ui.h"
+#include "ui/dialogs/fill_dialog.h"
 #include "ui/layers_panel.h"
 #include <cairo/cairo.h>
 #include <gdk-pixbuf/gdk-pixbuf.h>
@@ -1434,6 +1436,131 @@ void on_edit_cut_merged(GtkWidget* widget, gpointer data) {
 }
 
 /**
+ * Edit > Fill callback: show fill dialog and fill layer (or selection) with chosen color/opacity/blend.
+ */
+static void on_edit_fill(GtkWidget* widget, gpointer data) {
+    (void)widget;
+
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc;
+    ImageLayer* layer;
+    FillDialogResult fill_result;
+    Command* cmd;
+    gdouble r, g, b;
+    guint8 fill_a_byte;
+    guint8 opacity_byte;
+
+    if (!ctx) return;
+
+    doc = ui_get_active_document(ctx);
+    if (!doc) return;
+
+    layer = document_get_selected_layer(doc);
+    if (!layer || !layer->surface) return;
+
+    if (!fill_dialog_run(GTK_WINDOW(ctx->window), &fill_result))
+        return;
+
+    r = fill_result.color.red;
+    g = fill_result.color.green;
+    b = fill_result.color.blue;
+    opacity_byte = (guint8)((fill_result.opacity * 255) / 100);
+    if (opacity_byte > 255) opacity_byte = 255;
+
+    cmd = command_create_draw(layer, "Fill");
+    if (!cmd) return;
+
+    cairo_surface_flush(layer->surface);
+    guchar* layer_data = cairo_image_surface_get_data(layer->surface);
+    gint layer_stride = cairo_image_surface_get_stride(layer->surface);
+    gint width = (gint)layer->width;
+    gint height = (gint)layer->height;
+
+    /* Premultiplied fill color: fill_a_byte is the opacity we apply */
+    fill_a_byte = opacity_byte;
+    guint8 fr = (guint8)(r * fill_a_byte + 0.5);
+    guint8 fg = (guint8)(g * fill_a_byte + 0.5);
+    guint8 fb = (guint8)(b * fill_a_byte + 0.5);
+    if (fr > 255) fr = 255;
+    if (fg > 255) fg = 255;
+    if (fb > 255) fb = 255;
+
+    gboolean has_selection = (doc->selection_mask && !selection_mask_is_empty(doc->selection_mask));
+
+    if (has_selection) {
+        DirtyRect layer_rect;
+        dirty_rect_set(&layer_rect, layer->offset_x, layer->offset_y, layer->width, layer->height);
+        DirtyRect actual_region;
+        SelectionMask* region_mask = selection_build_combined_mask(
+            doc->selection_mask, &layer_rect, FEATHER_QUALITY_NORMAL, &actual_region);
+
+        if (region_mask && region_mask->data) {
+            guint32* fill_row = (guint32*)g_malloc((size_t)width * sizeof(guint32));
+            if (fill_row) {
+                for (gint y = 0; y < height; y++) {
+                    gint doc_y = layer->offset_y + y;
+                    gint mask_y = doc_y - actual_region.y;
+
+                    for (gint x = 0; x < width; x++) {
+                        gint doc_x = layer->offset_x + x;
+                        gint mask_x = doc_x - actual_region.x;
+                        uint8_t ma = 0;
+                        if (mask_y >= 0 && mask_y < region_mask->height && mask_x >= 0 && mask_x < region_mask->width)
+                            ma = region_mask->data[mask_y * region_mask->stride + mask_x];
+                        uint8_t fa = (uint8_t)((fill_a_byte * ma) / 255);
+                        uint8_t pr = (uint8_t)(r * fa + 0.5);
+                        uint8_t pg = (uint8_t)(g * fa + 0.5);
+                        uint8_t pb = (uint8_t)(b * fa + 0.5);
+                        if (pr > 255) pr = 255;
+                        if (pg > 255) pg = 255;
+                        if (pb > 255) pb = 255;
+                        fill_row[x] = ((guint32)fa << 24) | ((guint32)pr << 16) | ((guint32)pg << 8) | pb;
+                    }
+                    guint32* dst_row = (guint32*)(layer_data + (gint64)y * layer_stride);
+                    blend_composite_row(fill_row, dst_row, width, 0, y, 255, fill_result.blend_mode);
+                }
+                g_free(fill_row);
+            }
+            selection_mask_free(region_mask);
+        }
+    } else {
+        /* No selection: fill entire layer using blend row by row */
+        guint32 fill_px = ((guint32)fill_a_byte << 24) | ((guint32)fr << 16) | ((guint32)fg << 8) | fb;
+        guint32* fill_row = (guint32*)g_malloc((size_t)width * sizeof(guint32));
+        if (fill_row) {
+            for (gint x = 0; x < width; x++)
+                fill_row[x] = fill_px;
+            for (gint y = 0; y < height; y++) {
+                guint32* dst_row = (guint32*)(layer_data + (gint64)y * layer_stride);
+                blend_composite_row(fill_row, dst_row, width, 0, y, 255, fill_result.blend_mode);
+            }
+            g_free(fill_row);
+        }
+    }
+
+    cairo_surface_mark_dirty(layer->surface);
+
+    if (command_finalize_draw(cmd)) {
+        command_execute(cmd, doc);
+        command_stack_push(doc->undo_stack, cmd);
+        command_stack_clear(doc->redo_stack);
+    } else {
+        command_free(cmd);
+    }
+
+    layer_invalidate_cache(layer);
+    document_invalidate_composite(doc);
+
+    LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window), "layers_panel");
+    if (layers_panel)
+        layers_panel_update(layers_panel, doc);
+    ui_update_menu_and_button_states(ctx);
+    ui_update_window_title(ctx, NULL);
+    if (doc->drawing_area)
+        gtk_widget_queue_draw(doc->drawing_area);
+}
+
+/**
  * Setup Edit menu from Glade builder
  */
 void ui_edit_menu_setup(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* accel_group) {
@@ -1499,5 +1626,11 @@ void ui_edit_menu_setup(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* acc
     GtkWidget* edit_menu_clear = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu_clear"));
     if (edit_menu_clear) {
         g_signal_connect(edit_menu_clear, "activate", G_CALLBACK(on_edit_clear), ctx);
+    }
+
+    /* Connect Fill menu item */
+    GtkWidget* edit_menu_fill = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu_fill"));
+    if (edit_menu_fill) {
+        g_signal_connect(edit_menu_fill, "activate", G_CALLBACK(on_edit_fill), ctx);
     }
 }
