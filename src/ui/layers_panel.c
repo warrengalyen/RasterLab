@@ -173,7 +173,7 @@ static gboolean opacity_slider_dragging = FALSE;
  * Starts deferred update mode - no canvas updates during drag
  */
 static gboolean on_opacity_scale_button_press(GtkWidget* widget, GdkEventButton* event,
-                                               gpointer user_data) {
+                                              gpointer user_data) {
     (void)widget;
     (void)event;
     (void)user_data;
@@ -189,7 +189,7 @@ static gboolean on_opacity_scale_button_press(GtkWidget* widget, GdkEventButton*
  * Ends deferred mode and does the actual canvas update
  */
 static gboolean on_opacity_scale_button_release(GtkWidget* widget, GdkEventButton* event,
-                                                 gpointer user_data) {
+                                                gpointer user_data) {
     LayersPanel* layers_panel = (LayersPanel*)user_data;
     ImageLayer* selected_layer;
     (void)widget;
@@ -471,6 +471,9 @@ static GdkPixbuf* create_layer_thumbnail(cairo_surface_t* layer_surface, gint th
     cairo_paint(cr);
     cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
 
+    /* Draw checkered background for transparency */
+    draw_checkered_background(cr, thumb_size, thumb_size);
+
     /* Draw layer scaled and centered */
     cairo_save(cr);
     cairo_translate(cr, (thumb_size - thumb_width) / 2.0, (thumb_size - thumb_height) / 2.0);
@@ -642,7 +645,7 @@ LayersPanel* create_layers_panel(AppContext* ctx) {
         layers_panel->btn_opacity_reset = NULL;
         layers_panel->combo_blend = NULL;
         layers_panel->current_doc = NULL;
-        layers_panel->app_context = ctx;  /* Store app context */
+        layers_panel->app_context = ctx; /* Store app context */
         return layers_panel;
     }
 
@@ -807,39 +810,39 @@ LayersPanel* create_layers_panel(AppContext* ctx) {
          * Order matches BlendMode enum in document.h */
         const char* blend_modes[] = {
             /* Normal modes */
-            "Normal",           /* 0  - BLEND_MODE_NORMAL */
-            "Dissolve",         /* 1  - BLEND_MODE_DISSOLVE */
+            "Normal",   /* 0  - BLEND_MODE_NORMAL */
+            "Dissolve", /* 1  - BLEND_MODE_DISSOLVE */
             /* Darken modes */
-            "Darken",           /* 2  - BLEND_MODE_DARKEN */
-            "Multiply",         /* 3  - BLEND_MODE_MULTIPLY */
-            "Color Burn",       /* 4  - BLEND_MODE_COLOR_BURN */
-            "Linear Burn",      /* 5  - BLEND_MODE_LINEAR_BURN */
-            "Darker Color",     /* 6  - BLEND_MODE_DARKER_COLOR */
+            "Darken",       /* 2  - BLEND_MODE_DARKEN */
+            "Multiply",     /* 3  - BLEND_MODE_MULTIPLY */
+            "Color Burn",   /* 4  - BLEND_MODE_COLOR_BURN */
+            "Linear Burn",  /* 5  - BLEND_MODE_LINEAR_BURN */
+            "Darker Color", /* 6  - BLEND_MODE_DARKER_COLOR */
             /* Lighten modes */
-            "Lighten",          /* 7  - BLEND_MODE_LIGHTEN */
-            "Screen",           /* 8  - BLEND_MODE_SCREEN */
-            "Color Dodge",      /* 9  - BLEND_MODE_COLOR_DODGE */
-            "Linear Dodge",     /* 10 - BLEND_MODE_LINEAR_DODGE (Add) */
-            "Lighter Color",    /* 11 - BLEND_MODE_LIGHTER_COLOR */
+            "Lighten",       /* 7  - BLEND_MODE_LIGHTEN */
+            "Screen",        /* 8  - BLEND_MODE_SCREEN */
+            "Color Dodge",   /* 9  - BLEND_MODE_COLOR_DODGE */
+            "Linear Dodge",  /* 10 - BLEND_MODE_LINEAR_DODGE (Add) */
+            "Lighter Color", /* 11 - BLEND_MODE_LIGHTER_COLOR */
             /* Contrast modes */
-            "Overlay",          /* 12 - BLEND_MODE_OVERLAY */
-            "Soft Light",       /* 13 - BLEND_MODE_SOFT_LIGHT */
-            "Hard Light",       /* 14 - BLEND_MODE_HARD_LIGHT */
-            "Vivid Light",      /* 15 - BLEND_MODE_VIVID_LIGHT */
-            "Linear Light",     /* 16 - BLEND_MODE_LINEAR_LIGHT */
-            "Pin Light",        /* 17 - BLEND_MODE_PIN_LIGHT */
-            "Hard Mix",         /* 18 - BLEND_MODE_HARD_MIX */
+            "Overlay",      /* 12 - BLEND_MODE_OVERLAY */
+            "Soft Light",   /* 13 - BLEND_MODE_SOFT_LIGHT */
+            "Hard Light",   /* 14 - BLEND_MODE_HARD_LIGHT */
+            "Vivid Light",  /* 15 - BLEND_MODE_VIVID_LIGHT */
+            "Linear Light", /* 16 - BLEND_MODE_LINEAR_LIGHT */
+            "Pin Light",    /* 17 - BLEND_MODE_PIN_LIGHT */
+            "Hard Mix",     /* 18 - BLEND_MODE_HARD_MIX */
             /* Inversion modes */
-            "Difference",       /* 19 - BLEND_MODE_DIFFERENCE */
-            "Exclusion",        /* 20 - BLEND_MODE_EXCLUSION */
+            "Difference", /* 19 - BLEND_MODE_DIFFERENCE */
+            "Exclusion",  /* 20 - BLEND_MODE_EXCLUSION */
             /* Cancellation modes */
-            "Subtract",         /* 21 - BLEND_MODE_SUBTRACT */
-            "Divide",           /* 22 - BLEND_MODE_DIVIDE */
+            "Subtract", /* 21 - BLEND_MODE_SUBTRACT */
+            "Divide",   /* 22 - BLEND_MODE_DIVIDE */
             /* Component (HSL) modes */
-            "Hue",              /* 23 - BLEND_MODE_HUE */
-            "Saturation",       /* 24 - BLEND_MODE_SATURATION */
-            "Color",            /* 25 - BLEND_MODE_COLOR */
-            "Luminosity"        /* 26 - BLEND_MODE_LUMINOSITY */
+            "Hue",        /* 23 - BLEND_MODE_HUE */
+            "Saturation", /* 24 - BLEND_MODE_SATURATION */
+            "Color",      /* 25 - BLEND_MODE_COLOR */
+            "Luminosity"  /* 26 - BLEND_MODE_LUMINOSITY */
         };
 
         for (int i = 0; i < BLEND_MODE_COUNT; i++) {
@@ -865,7 +868,7 @@ LayersPanel* create_layers_panel(AppContext* ctx) {
     }
 
     layers_panel->current_doc = NULL;
-    layers_panel->app_context = ctx;  /* Store app context for GPU acceleration check */
+    layers_panel->app_context = ctx; /* Store app context for GPU acceleration check */
 
     return layers_panel;
 }
@@ -1219,7 +1222,7 @@ void layers_panel_update_opacity_controls(LayersPanel* layers_panel) {
             /* BlendMode enum values map directly to combo box indices */
             gint blend_index = (gint)selected_layer->blend_mode;
             if (blend_index < 0 || blend_index >= BLEND_MODE_COUNT) {
-                blend_index = 0;  /* Default to Normal */
+                blend_index = 0; /* Default to Normal */
             }
 
             g_signal_handlers_block_by_func(layers_panel->combo_blend,
