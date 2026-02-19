@@ -431,7 +431,7 @@ static gboolean on_layer_row_activated(GtkTreeView* tree_view, GtkTreePath* path
 /**
  * Create a thumbnail from a layer surface
  */
-static GdkPixbuf* create_layer_thumbnail(cairo_surface_t* layer_surface, gint thumb_size, gboolean visible) {
+static GdkPixbuf* create_layer_thumbnail(cairo_surface_t* layer_surface, gint thumb_max_size, gboolean visible) {
     GdkPixbuf* thumbnail = NULL;
     GdkPixbuf* full_pixbuf = NULL;
     cairo_surface_t* thumb_surface = NULL;
@@ -450,16 +450,25 @@ static GdkPixbuf* create_layer_thumbnail(cairo_surface_t* layer_surface, gint th
         return NULL;
     }
 
-    /* Calculate scale to fit thumbnail size */
-    scale_x = (gdouble)thumb_size / layer_width;
-    scale_y = (gdouble)thumb_size / layer_height;
+    /* Scale to fit within max size, keeping aspect ratio */
+    scale_x = (gdouble)thumb_max_size / layer_width;
+    scale_y = (gdouble)thumb_max_size / layer_height;
     scale = (scale_x < scale_y) ? scale_x : scale_y;
 
     gint thumb_width = (gint)(layer_width * scale);
     gint thumb_height = (gint)(layer_height * scale);
+    if (thumb_width < 1)
+        thumb_width = 1;
+    if (thumb_height < 1)
+        thumb_height = 1;
 
-    /* Create thumbnail surface */
-    thumb_surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, thumb_size, thumb_size);
+    /* Create fixed-size surface (column width) so pixbuf fills column and centers in treeview */
+    gint surface_width = thumb_max_size;
+    gint surface_height = thumb_max_size;
+    gint offset_x = (surface_width - thumb_width) / 2;
+    gint offset_y = (surface_height - thumb_height) / 2;
+
+    thumb_surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, surface_width, surface_height);
     if (!thumb_surface) {
         return NULL;
     }
@@ -471,22 +480,29 @@ static GdkPixbuf* create_layer_thumbnail(cairo_surface_t* layer_surface, gint th
     cairo_paint(cr);
     cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
 
-    /* Draw checkered background for transparency */
-    draw_checkered_background(cr, thumb_size, thumb_size);
-
-    /* Draw layer scaled and centered */
+    /* Draw checkered background only within the layer image bounds (not the padding) */
     cairo_save(cr);
-    cairo_translate(cr, (thumb_size - thumb_width) / 2.0, (thumb_size - thumb_height) / 2.0);
+    cairo_translate(cr, offset_x, offset_y);
+    cairo_rectangle(cr, 0, 0, thumb_width, thumb_height);
+    cairo_clip(cr);
+    draw_checkered_background(cr, thumb_width, thumb_height);
+    cairo_restore(cr);
+
+    /* Draw layer scaled and centered within the surface */
+    cairo_save(cr);
+    cairo_translate(cr, offset_x, offset_y);
     cairo_scale(cr, scale, scale);
     cairo_set_source_surface(cr, layer_surface, 0, 0);
     cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
     cairo_paint(cr);
     cairo_restore(cr);
 
-    /* If not visible, apply grayscale/disabled effect */
+    /* If not visible, apply grayscale/disabled effect over layer region only */
     if (!visible) {
-        /* Convert to grayscale and reduce opacity */
         cairo_save(cr);
+        cairo_translate(cr, offset_x, offset_y);
+        cairo_rectangle(cr, 0, 0, thumb_width, thumb_height);
+        cairo_clip(cr);
         cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
         cairo_set_source_rgba(cr, 0.5, 0.5, 0.5, 0.5);
         cairo_paint(cr);
@@ -707,13 +723,14 @@ LayersPanel* create_layers_panel(AppContext* ctx) {
 
     /* Thumbnail column */
     renderer = gtk_cell_renderer_pixbuf_new();
-    g_object_set(renderer, "xpad", 4, "ypad", 4, NULL);
+    g_object_set(renderer, "xpad", 0, "ypad", 4, "xalign", 0.5, NULL);
     column = gtk_tree_view_column_new_with_attributes("Thumbnail",
                                                       renderer,
                                                       "pixbuf", 1,
                                                       NULL);
     gtk_tree_view_column_set_sizing(column, GTK_TREE_VIEW_COLUMN_FIXED);
     gtk_tree_view_column_set_fixed_width(column, 48);
+    gtk_tree_view_column_set_alignment(column, 0.5f);
     gtk_tree_view_append_column(GTK_TREE_VIEW(layers_panel->tree_view), column);
 
     /* Name column (editable) */
