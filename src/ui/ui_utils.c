@@ -1,5 +1,6 @@
 #include "ui/ui_utils.h"
 #include "ui/dialogs/color_chooser_dialog.h"
+#include <stdarg.h>
 
 void update_color_button_appearance(GtkWidget* button, GdkRGBA* color) {
     if (!button || !color)
@@ -158,6 +159,66 @@ void set_custom_color_button_color(GtkWidget* button, GdkRGBA* color) {
 
     data->color = *color;
     update_color_button_appearance(button, &data->color);
+}
+
+/**
+ * Create and run a message dialog with custom buttons and spacing
+ */
+gint ui_utils_message_dialog_run(GtkWindow* parent,
+                                 GtkMessageType message_type,
+                                 const gchar* primary_text,
+                                 const gchar* secondary_text,
+                                 gint default_response,
+                                 ...) {
+    GtkWidget* dialog;
+    GtkWidget* button_box;
+    gint response;
+    va_list args;
+
+    dialog = gtk_message_dialog_new(
+        parent,
+        GTK_DIALOG_MODAL,
+        message_type,
+        GTK_BUTTONS_NONE,
+        "%s",
+        primary_text ? primary_text : "");
+
+    if (secondary_text && secondary_text[0] != '\0') {
+        gtk_message_dialog_format_secondary_text(GTK_MESSAGE_DIALOG(dialog),
+                                                 "%s", secondary_text);
+    }
+
+    va_start(args, default_response);
+    while (1) {
+        const gchar* button_text = va_arg(args, const gchar*);
+        if (!button_text)
+            break;
+        gtk_dialog_add_button(GTK_DIALOG(dialog), button_text,
+                              va_arg(args, gint));
+    }
+    va_end(args);
+
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
+    button_box = gtk_dialog_get_action_area(GTK_DIALOG(dialog));
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif
+    if (button_box) {
+        gtk_widget_set_margin_top(button_box, 5);
+        gtk_widget_set_margin_bottom(button_box, 5);
+        gtk_widget_set_margin_start(button_box, 5);
+        gtk_widget_set_margin_end(button_box, 5);
+    }
+
+    gtk_dialog_set_default_response(GTK_DIALOG(dialog), default_response);
+
+    response = gtk_dialog_run(GTK_DIALOG(dialog));
+    gtk_widget_destroy(dialog);
+
+    return response;
 }
 
 /**

@@ -12,6 +12,7 @@
 #include "selection/selection_render.h"
 #include "ui.h"
 #include "ui/dialogs/fill_dialog.h"
+#include "ui/ui_utils.h"
 #include "ui/layers_panel.h"
 #include <cairo/cairo.h>
 #include <gdk-pixbuf/gdk-pixbuf.h>
@@ -910,14 +911,9 @@ void on_edit_paste(GtkWidget* widget, gpointer data) {
     pixbuf = gtk_clipboard_wait_for_image(clipboard);
     if (!pixbuf) {
         /* No valid image in clipboard - notify user */
-        GtkWidget* dialog = gtk_message_dialog_new(
-            GTK_WINDOW(ctx->window),
-            GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
-            GTK_MESSAGE_INFO,
-            GTK_BUTTONS_OK,
-            "No valid image found in clipboard.");
-        gtk_dialog_run(GTK_DIALOG(dialog));
-        gtk_widget_destroy(dialog);
+        ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_INFO,
+            "No valid image found in clipboard.", NULL, GTK_RESPONSE_OK,
+            "_OK", GTK_RESPONSE_OK, NULL);
         return;
     }
 
@@ -1052,14 +1048,9 @@ void on_edit_paste_new_image(GtkWidget* widget, gpointer data) {
     pixbuf = gtk_clipboard_wait_for_image(clipboard);
     if (!pixbuf) {
         /* No valid image in clipboard - notify user */
-        GtkWidget* dialog = gtk_message_dialog_new(
-            GTK_WINDOW(ctx->window),
-            GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
-            GTK_MESSAGE_INFO,
-            GTK_BUTTONS_OK,
-            "No valid image found in clipboard.");
-        gtk_dialog_run(GTK_DIALOG(dialog));
-        gtk_widget_destroy(dialog);
+        ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_INFO,
+            "No valid image found in clipboard.", NULL, GTK_RESPONSE_OK,
+            "_OK", GTK_RESPONSE_OK, NULL);
         return;
     }
 

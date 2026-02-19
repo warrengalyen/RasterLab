@@ -35,6 +35,7 @@
 #include "ui/ui_select_menu.h"
 #include "ui/ui_tools_menu.h"
 #include "ui/ui_view_menu.h"
+#include "ui/ui_utils.h"
 #include "ui/workspace.h"
 #include "undo/undo_disk.h"
 #include <glib.h>
@@ -859,56 +860,39 @@ void ui_close_document_tab(AppContext* ctx, ImageDocument* doc) {
 
     /* Check if document has unsaved changes */
     if (document_is_dirty(doc)) {
-        GtkWidget* dialog;
         gint response;
+        gchar* primary_text;
         const gchar* filename = document_get_filename(doc);
 
-        /* Create confirmation dialog */
-        dialog = gtk_message_dialog_new(
+        primary_text = g_strdup_printf("Save changes to \"%s\" before closing?",
+                                       filename ? filename : "Untitled");
+
+        response = ui_utils_message_dialog_run(
             GTK_WINDOW(ctx->window),
-            GTK_DIALOG_MODAL,
             GTK_MESSAGE_WARNING,
-            GTK_BUTTONS_NONE,
-            "Save changes to \"%s\" before closing?",
-            filename);
+            primary_text,
+            "If you don't save, changes will be lost.",
+            GTK_RESPONSE_ACCEPT,
+            "_Discard", GTK_RESPONSE_REJECT,
+            "_Cancel", GTK_RESPONSE_CANCEL,
+            "_Save", GTK_RESPONSE_ACCEPT,
+            NULL);
 
-        gtk_message_dialog_format_secondary_text(
-            GTK_MESSAGE_DIALOG(dialog),
-            "If you don't save, changes will be lost.");
-
-        /* Add buttons */
-        gtk_dialog_add_buttons(GTK_DIALOG(dialog),
-                               "_Discard", GTK_RESPONSE_REJECT,
-                               "_Cancel", GTK_RESPONSE_CANCEL,
-                               "_Save", GTK_RESPONSE_ACCEPT,
-                               NULL);
-
-        /* Set default button to Save */
-        gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_ACCEPT);
-
-        /* Show dialog and get response */
-        response = gtk_dialog_run(GTK_DIALOG(dialog));
-        gtk_widget_destroy(dialog);
+        g_free(primary_text);
 
         switch (response) {
             case GTK_RESPONSE_ACCEPT:
-                /* User clicked Save */
-                // printf("User wants to save before closing\n");
                 ui_save_document_as(ctx);
                 /* Note: We don't actually close here - let user complete save */
                 /* In a full implementation, we'd detect when save completes */
                 break;
 
             case GTK_RESPONSE_REJECT:
-                /* User clicked Discard */
-                // printf("User discarding changes\n");
                 ui_close_document_tab_internal(ctx, doc);
                 break;
 
             case GTK_RESPONSE_CANCEL:
             case GTK_RESPONSE_DELETE_EVENT:
-                /* User clicked Cancel or closed dialog */
-                // printf("User cancelled close operation\n");
                 break;
 
             default:
@@ -3015,8 +2999,8 @@ static void ui_save_tool_options_to_settings_internal(AppContext* ctx, ToolType 
     if (tool_type == TOOL_COLOR_PICKER) {
         gchar radius_str[32];
         gint safe_radius = (color_picker_sample_radius_val >= 0 && color_picker_sample_radius_val <= 100)
-                              ? color_picker_sample_radius_val
-                              : 0;
+                               ? color_picker_sample_radius_val
+                               : 0;
         g_snprintf(radius_str, sizeof(radius_str), "%d", safe_radius);
         settings_set_tool_option(ctx->settings, tool_name, "sample_radius", radius_str);
         settings_set_tool_option(ctx->settings, tool_name, "sample_from_layer",

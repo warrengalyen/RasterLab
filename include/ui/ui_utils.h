@@ -56,4 +56,21 @@ void set_custom_color_button_color(GtkWidget* button, GdkRGBA* color);
  */
 void ui_utils_set_header_bar(GtkWindow* window, const gchar* title);
 
+/**
+ * Create and run a message dialog with custom buttons and spacing.
+ * @param parent Parent window for the dialog
+ * @param message_type GTK_MESSAGE_INFO, GTK_MESSAGE_WARNING, etc.
+ * @param primary_text Primary message text
+ * @param secondary_text Secondary text, or NULL
+ * @param default_response Response ID of the default button
+ * @param ... Button list: "button_text", response_id pairs, NULL-terminated
+ * @return The response ID from gtk_dialog_run
+ */
+gint ui_utils_message_dialog_run(GtkWindow* parent,
+                                 GtkMessageType message_type,
+                                 const gchar* primary_text,
+                                 const gchar* secondary_text,
+                                 gint default_response,
+                                 ...);
+
 #endif /* UI_UTILS_H */

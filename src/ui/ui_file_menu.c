@@ -8,6 +8,7 @@
 #include "plugins/format_registry.h"
 #include "ui.h"
 #include "ui/dialogs/new_image_dialog.h"
+#include "ui/ui_utils.h"
 #include "ui/dialogs/save_options_dialog.h"
 #include "ui/layers_panel.h"
 #include "ui/swatches.h"
@@ -37,16 +38,12 @@ void on_recent_file_activate(GtkMenuItem* menu_item, gpointer user_data) {
     /* Check if file still exists */
     if (!g_file_test(file_path, G_FILE_TEST_EXISTS)) {
         /* Show warning dialog */
-        GtkWidget* dialog = gtk_message_dialog_new(
-            GTK_WINDOW(ctx->window),
-            GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
-            GTK_MESSAGE_WARNING,
-            GTK_BUTTONS_OK,
+        gchar* msg = g_strdup_printf(
             "File not found: %s\n\nThe file has been removed from the recent files list.",
             file_path);
-
-        gtk_dialog_run(GTK_DIALOG(dialog));
-        gtk_widget_destroy(dialog);
+        ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_WARNING,
+            msg, NULL, GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
+        g_free(msg);
 
         /* Remove from recent files */
         recent_files_remove(file_path);
@@ -66,16 +63,12 @@ void on_recent_file_activate(GtkMenuItem* menu_item, gpointer user_data) {
     handler = format_registry_find_loader(file_path, header, header_size);
     if (!handler) {
         /* No plugin can handle this file format */
-        GtkWidget* dialog = gtk_message_dialog_new(
-            GTK_WINDOW(ctx->window),
-            GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
-            GTK_MESSAGE_ERROR,
-            GTK_BUTTONS_OK,
+        gchar* msg = g_strdup_printf(
             "Unsupported file format: %s\n\nNo plugin is available to load this file type.\n\nThe file has been removed from the recent files list.",
             file_path);
-
-        gtk_dialog_run(GTK_DIALOG(dialog));
-        gtk_widget_destroy(dialog);
+        ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_ERROR,
+            msg, NULL, GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
+        g_free(msg);
 
         /* Remove from recent files */
         recent_files_remove(file_path);
@@ -104,16 +97,11 @@ void on_recent_file_activate(GtkMenuItem* menu_item, gpointer user_data) {
             const char* error_message = image_io_get_error_message(load_error, file_path);
 
             /* Show error dialog */
-            GtkWidget* dialog = gtk_message_dialog_new(
-                GTK_WINDOW(ctx->window),
-                GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
-                GTK_MESSAGE_ERROR,
-                GTK_BUTTONS_OK,
-                "Failed to load image: %s\n\n%s",
-                file_path, error_message);
-
-            gtk_dialog_run(GTK_DIALOG(dialog));
-            gtk_widget_destroy(dialog);
+            gchar* msg = g_strdup_printf("Failed to load image: %s\n\n%s",
+                                         file_path, error_message);
+            ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_ERROR,
+                msg, NULL, GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
+            g_free(msg);
 
             /* Destroy document since load failed (it was never added to notebook) */
             document_free(doc);
@@ -133,16 +121,11 @@ void on_recent_file_activate(GtkMenuItem* menu_item, gpointer user_data) {
          * dialogs again (e.g., HDR tone mapping dialog). Instead, we call the
          * initialization parts directly since image_io_load() already loaded everything. */
         if (!document_init_rendering_structures(doc)) {
-            GtkWidget* dialog = gtk_message_dialog_new(
-                GTK_WINDOW(ctx->window),
-                GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
-                GTK_MESSAGE_ERROR,
-                GTK_BUTTONS_OK,
-                "Failed to initialize document rendering for: %s",
-                file_path);
-
-            gtk_dialog_run(GTK_DIALOG(dialog));
-            gtk_widget_destroy(dialog);
+            gchar* msg = g_strdup_printf("Failed to initialize document rendering for: %s",
+                                         file_path);
+            ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_ERROR,
+                msg, NULL, GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
+            g_free(msg);
 
             /* Remove from notebook if it was added, then destroy document */
             if (doc->scrolled_window && ctx->notebook) {
@@ -447,16 +430,10 @@ void on_file_open_response(GtkNativeDialog* dialog, gint response_id, gpointer u
             handler = format_registry_find_loader(file_path, header, header_size);
             if (!handler) {
                 /* No plugin can handle this file format */
-                GtkWidget* error_dialog = gtk_message_dialog_new(
-                    GTK_WINDOW(ctx->window),
-                    GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
-                    GTK_MESSAGE_ERROR,
-                    GTK_BUTTONS_OK,
-                    "Unsupported file format: %s",
-                    file_path);
-
-                gtk_dialog_run(GTK_DIALOG(error_dialog));
-                gtk_widget_destroy(error_dialog);
+                gchar* msg = g_strdup_printf("Unsupported file format: %s", file_path);
+                ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_ERROR,
+                    msg, NULL, GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
+                g_free(msg);
                 g_free(file_path);
                 g_object_unref(dialog);
                 return;
@@ -483,16 +460,11 @@ void on_file_open_response(GtkNativeDialog* dialog, gint response_id, gpointer u
                     const char* error_message = image_io_get_error_message(load_error, file_path);
 
                     /* Show error dialog */
-                    GtkWidget* error_dialog = gtk_message_dialog_new(
-                        GTK_WINDOW(ctx->window),
-                        GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
-                        GTK_MESSAGE_ERROR,
-                        GTK_BUTTONS_OK,
-                        "Failed to load image: %s\n\n%s",
-                        file_path, error_message);
-
-                    gtk_dialog_run(GTK_DIALOG(error_dialog));
-                    gtk_widget_destroy(error_dialog);
+                    gchar* msg = g_strdup_printf("Failed to load image: %s\n\n%s",
+                                                 file_path, error_message);
+                    ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_ERROR,
+                        msg, NULL, GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
+                    g_free(msg);
 
                     /* Destroy document since load failed (it was never added to notebook) */
                     document_free(doc);
@@ -514,16 +486,11 @@ void on_file_open_response(GtkNativeDialog* dialog, gint response_id, gpointer u
                  * dialogs again (e.g., HDR tone mapping dialog). Instead, we call the
                  * initialization parts directly since image_io_load() already loaded everything. */
                 if (!document_init_rendering_structures(doc)) {
-                    GtkWidget* error_dialog = gtk_message_dialog_new(
-                        GTK_WINDOW(ctx->window),
-                        GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
-                        GTK_MESSAGE_ERROR,
-                        GTK_BUTTONS_OK,
-                        "Failed to initialize document rendering for: %s",
-                        file_path);
-
-                    gtk_dialog_run(GTK_DIALOG(error_dialog));
-                    gtk_widget_destroy(error_dialog);
+                    gchar* msg = g_strdup_printf("Failed to initialize document rendering for: %s",
+                                                 file_path);
+                    ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_ERROR,
+                        msg, NULL, GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
+                    g_free(msg);
 
                     /* Remove from notebook if it was added, then destroy document */
                     if (doc->scrolled_window && ctx->notebook) {
@@ -769,16 +736,11 @@ void on_file_save(GtkWidget* widget, gpointer data) {
         const char* error_message = image_io_get_error_message(save_error, doc->file_path);
 
         /* Show error dialog */
-        GtkWidget* error_dialog = gtk_message_dialog_new(
-            GTK_WINDOW(ctx->window),
-            GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
-            GTK_MESSAGE_ERROR,
-            GTK_BUTTONS_OK,
-            "Failed to save image: %s\n\n%s",
-            doc->file_path, error_message);
-
-        gtk_dialog_run(GTK_DIALOG(error_dialog));
-        gtk_widget_destroy(error_dialog);
+        gchar* msg = g_strdup_printf("Failed to save image: %s\n\n%s",
+                                     doc->file_path, error_message);
+        ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_ERROR,
+            msg, NULL, GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
+        g_free(msg);
     }
 
     /* Clean up plugin data */
@@ -864,16 +826,11 @@ static void process_save_as_result(GtkNativeDialog* native_dialog, AppContext* c
                     const char* error_message = image_io_get_error_message(save_error, file_path);
 
                     /* Show error dialog */
-                    GtkWidget* error_dialog = gtk_message_dialog_new(
-                        GTK_WINDOW(ctx->window),
-                        GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
-                        GTK_MESSAGE_ERROR,
-                        GTK_BUTTONS_OK,
-                        "Failed to save image: %s\n\n%s",
-                        file_path, error_message);
-
-                    gtk_dialog_run(GTK_DIALOG(error_dialog));
-                    gtk_widget_destroy(error_dialog);
+                    gchar* msg = g_strdup_printf("Failed to save image: %s\n\n%s",
+                                                 file_path, error_message);
+                    ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_ERROR,
+                        msg, NULL, GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
+                    g_free(msg);
                 }
             }
             /* If dialog_result is FALSE, user cancelled, so don't save */
@@ -1129,16 +1086,12 @@ void on_file_new(GtkWidget* widget, gpointer data) {
     if (response == GTK_RESPONSE_OK && result) {
         /* Validate dimensions */
         if (result->width == 0 || result->height == 0) {
-            GtkWidget* error_dialog = gtk_message_dialog_new(
-                GTK_WINDOW(ctx->window),
-                GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
-                GTK_MESSAGE_ERROR,
-                GTK_BUTTONS_OK,
+            gchar* msg = g_strdup_printf(
                 "Invalid image dimensions: %u x %u\n\nWidth and height must be greater than 0.",
                 result->width, result->height);
-
-            gtk_dialog_run(GTK_DIALOG(error_dialog));
-            gtk_widget_destroy(error_dialog);
+            ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_ERROR,
+                msg, NULL, GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
+            g_free(msg);
             new_image_dialog_result_free(result);
             new_image_dialog_free(dialog);
             return;
@@ -1167,15 +1120,9 @@ void on_file_new(GtkWidget* widget, gpointer data) {
 
         /* Initialize rendering structures */
         if (!document_init_rendering_structures(doc)) {
-            GtkWidget* error_dialog = gtk_message_dialog_new(
-                GTK_WINDOW(ctx->window),
-                GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
-                GTK_MESSAGE_ERROR,
-                GTK_BUTTONS_OK,
-                "Failed to initialize document rendering structures");
-
-            gtk_dialog_run(GTK_DIALOG(error_dialog));
-            gtk_widget_destroy(error_dialog);
+            ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_ERROR,
+                "Failed to initialize document rendering structures", NULL,
+                GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
             document_free(doc);
             new_image_dialog_result_free(result);
             new_image_dialog_free(dialog);

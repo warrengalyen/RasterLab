@@ -2,6 +2,7 @@
 #include "ocular.h"
 #include "ui.h"
 #include "ui/swatches.h"
+#include "ui/ui_utils.h"
 #include "ui/tools_panel.h"
 #include "ui/widgets/swatches_widget.h"
 #include <glib/gstdio.h>
@@ -254,14 +255,10 @@ static void on_swatches_import_button_clicked(GtkButton* button, gpointer user_d
                 swatches_sync_to_widgets(&ctx->swatches, main_widget, recent_widget);
             } else {
                 /* Show error dialog */
-                GtkWidget* error_dialog = gtk_message_dialog_new(
-                    GTK_WINDOW(ctx->window),
-                    GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
-                    GTK_MESSAGE_ERROR,
-                    GTK_BUTTONS_OK,
-                    "Failed to load palette file: %s", filename);
-                gtk_dialog_run(GTK_DIALOG(error_dialog));
-                gtk_widget_destroy(error_dialog);
+                gchar* msg = g_strdup_printf("Failed to load palette file: %s", filename);
+                ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_ERROR,
+                    msg, NULL, GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
+                g_free(msg);
             }
 
             g_free(filename);
@@ -285,14 +282,8 @@ static void on_swatches_export_button_clicked(GtkButton* button, gpointer user_d
 
     if (ctx->swatches.main_swatch_count == 0) {
         /* Show error dialog */
-        GtkWidget* error_dialog = gtk_message_dialog_new(
-            GTK_WINDOW(ctx->window),
-            GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
-            GTK_MESSAGE_WARNING,
-            GTK_BUTTONS_OK,
-            "No swatches to export");
-        gtk_dialog_run(GTK_DIALOG(error_dialog));
-        gtk_widget_destroy(error_dialog);
+        ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_WARNING,
+            "No swatches to export", NULL, GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
         return;
     }
 
