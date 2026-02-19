@@ -12,12 +12,13 @@
 #include "selection/selection_render.h"
 #include "ui.h"
 #include "ui/dialogs/fill_dialog.h"
-#include "ui/ui_utils.h"
 #include "ui/layers_panel.h"
+#include "ui/ui_utils.h"
 #include <cairo/cairo.h>
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <glib.h>
 #include <stdint.h>
+
 
 /* Forward declarations for helper functions */
 static cairo_surface_t* extract_pixels_for_copy(ImageDocument* doc, ImageLayer* layer);
@@ -912,8 +913,8 @@ void on_edit_paste(GtkWidget* widget, gpointer data) {
     if (!pixbuf) {
         /* No valid image in clipboard - notify user */
         ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_INFO,
-            "No valid image found in clipboard.", NULL, GTK_RESPONSE_OK,
-            "_OK", GTK_RESPONSE_OK, NULL);
+                                    "No valid image found in clipboard.", NULL, GTK_RESPONSE_OK,
+                                    "_OK", GTK_RESPONSE_OK, NULL);
         return;
     }
 
@@ -1049,8 +1050,8 @@ void on_edit_paste_new_image(GtkWidget* widget, gpointer data) {
     if (!pixbuf) {
         /* No valid image in clipboard - notify user */
         ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_INFO,
-            "No valid image found in clipboard.", NULL, GTK_RESPONSE_OK,
-            "_OK", GTK_RESPONSE_OK, NULL);
+                                    "No valid image found in clipboard.", NULL, GTK_RESPONSE_OK,
+                                    "_OK", GTK_RESPONSE_OK, NULL);
         return;
     }
 
@@ -1441,13 +1442,16 @@ static void on_edit_fill(GtkWidget* widget, gpointer data) {
     guint8 fill_a_byte;
     guint8 opacity_byte;
 
-    if (!ctx) return;
+    if (!ctx)
+        return;
 
     doc = ui_get_active_document(ctx);
-    if (!doc) return;
+    if (!doc)
+        return;
 
     layer = document_get_selected_layer(doc);
-    if (!layer || !layer->surface) return;
+    if (!layer || !layer->surface)
+        return;
 
     if (!fill_dialog_run(GTK_WINDOW(ctx->window), &fill_result))
         return;
@@ -1456,10 +1460,12 @@ static void on_edit_fill(GtkWidget* widget, gpointer data) {
     g = fill_result.color.green;
     b = fill_result.color.blue;
     opacity_byte = (guint8)((fill_result.opacity * 255) / 100);
-    if (opacity_byte > 255) opacity_byte = 255;
+    if (opacity_byte > 255)
+        opacity_byte = 255;
 
     cmd = command_create_draw(layer, "Fill");
-    if (!cmd) return;
+    if (!cmd)
+        return;
 
     cairo_surface_flush(layer->surface);
     guchar* layer_data = cairo_image_surface_get_data(layer->surface);
@@ -1472,9 +1478,12 @@ static void on_edit_fill(GtkWidget* widget, gpointer data) {
     guint8 fr = (guint8)(r * fill_a_byte + 0.5);
     guint8 fg = (guint8)(g * fill_a_byte + 0.5);
     guint8 fb = (guint8)(b * fill_a_byte + 0.5);
-    if (fr > 255) fr = 255;
-    if (fg > 255) fg = 255;
-    if (fb > 255) fb = 255;
+    if (fr > 255)
+        fr = 255;
+    if (fg > 255)
+        fg = 255;
+    if (fb > 255)
+        fb = 255;
 
     gboolean has_selection = (doc->selection_mask && !selection_mask_is_empty(doc->selection_mask));
 
@@ -1502,9 +1511,12 @@ static void on_edit_fill(GtkWidget* widget, gpointer data) {
                         uint8_t pr = (uint8_t)(r * fa + 0.5);
                         uint8_t pg = (uint8_t)(g * fa + 0.5);
                         uint8_t pb = (uint8_t)(b * fa + 0.5);
-                        if (pr > 255) pr = 255;
-                        if (pg > 255) pg = 255;
-                        if (pb > 255) pb = 255;
+                        if (pr > 255)
+                            pr = 255;
+                        if (pg > 255)
+                            pg = 255;
+                        if (pb > 255)
+                            pb = 255;
                         fill_row[x] = ((guint32)fa << 24) | ((guint32)pr << 16) | ((guint32)pg << 8) | pb;
                     }
                     guint32* dst_row = (guint32*)(layer_data + (gint64)y * layer_stride);
@@ -1596,18 +1608,28 @@ void ui_edit_menu_setup(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* acc
 
     if (edit_menu_copy) {
         g_signal_connect(edit_menu_copy, "activate", G_CALLBACK(on_edit_copy), ctx);
+        gtk_widget_add_accelerator(edit_menu_copy, "activate", accel_group,
+                                   GDK_KEY_c, GDK_CONTROL_MASK, GTK_ACCEL_VISIBLE);
     }
     if (edit_menu_cut) {
         g_signal_connect(edit_menu_cut, "activate", G_CALLBACK(on_edit_cut), ctx);
+        gtk_widget_add_accelerator(edit_menu_cut, "activate", accel_group,
+                                   GDK_KEY_x, GDK_CONTROL_MASK, GTK_ACCEL_VISIBLE);
     }
     if (edit_menu_paste) {
         g_signal_connect(edit_menu_paste, "activate", G_CALLBACK(on_edit_paste), ctx);
+        gtk_widget_add_accelerator(edit_menu_paste, "activate", accel_group,
+                                   GDK_KEY_v, GDK_CONTROL_MASK, GTK_ACCEL_VISIBLE);
     }
     if (edit_menu_paste_new_image) {
         g_signal_connect(edit_menu_paste_new_image, "activate", G_CALLBACK(on_edit_paste_new_image), ctx);
+        gtk_widget_add_accelerator(edit_menu_paste_new_image, "activate", accel_group,
+                                   GDK_KEY_v, GDK_CONTROL_MASK | GDK_SHIFT_MASK, GTK_ACCEL_VISIBLE);
     }
     if (edit_menu_copy_merged) {
         g_signal_connect(edit_menu_copy_merged, "activate", G_CALLBACK(on_edit_copy_merged), ctx);
+        gtk_widget_add_accelerator(edit_menu_copy_merged, "activate", accel_group,
+                                   GDK_KEY_c, GDK_CONTROL_MASK | GDK_SHIFT_MASK, GTK_ACCEL_VISIBLE);
     }
     if (edit_menu_cut_merged) {
         g_signal_connect(edit_menu_cut_merged, "activate", G_CALLBACK(on_edit_cut_merged), ctx);
@@ -1617,6 +1639,8 @@ void ui_edit_menu_setup(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* acc
     GtkWidget* edit_menu_clear = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu_clear"));
     if (edit_menu_clear) {
         g_signal_connect(edit_menu_clear, "activate", G_CALLBACK(on_edit_clear), ctx);
+        gtk_widget_add_accelerator(edit_menu_clear, "activate", accel_group,
+                                   GDK_KEY_Delete, (GdkModifierType)0, GTK_ACCEL_VISIBLE);
     }
 
     /* Connect Fill menu item */
