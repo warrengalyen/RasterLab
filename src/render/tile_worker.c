@@ -101,15 +101,29 @@ gboolean tile_worker_composite_pixels(ImageDocument* doc,
         src_width = intersect_right - intersect_left;
         src_height = intersect_bottom - intersect_top;
 
-        /* Get layer pixel data */
+        /* Get layer surface and its actual dimensions before clamping */
         cairo_surface_t* layer_surface = layer->surface;
         if (!layer_surface) {
             continue;
         }
-
-        /* Flush surface to ensure all Cairo operations are complete
-         * before we read the pixel data directly */
         cairo_surface_flush(layer_surface);
+        gint surface_w = cairo_image_surface_get_width(layer_surface);
+        gint surface_h = cairo_image_surface_get_height(layer_surface);
+        if (surface_w <= 0 || surface_h <= 0) {
+            continue;
+        }
+
+        /* Clamp to surface bounds - prevents reading past valid pixels or into
+         * stride padding. Required for Screen, Exclusion, Difference, Subtract,
+         * Darker/Lighter Color which show vertical artifacts when reading OOB. */
+        if (src_x < 0) { src_width += src_x; src_x = 0; }
+        if (src_y < 0) { src_height += src_y; src_y = 0; }
+        if (src_x + src_width > surface_w)
+            src_width = surface_w - src_x;
+        if (src_y + src_height > surface_h)
+            src_height = surface_h - src_y;
+        if (src_width <= 0 || src_height <= 0)
+            continue;
 
         guint8* layer_data = cairo_image_surface_get_data(layer_surface);
         gint layer_stride = cairo_image_surface_get_stride(layer_surface);
@@ -117,6 +131,13 @@ gboolean tile_worker_composite_pixels(ImageDocument* doc,
         if (!layer_data) {
             continue;
         }
+
+        /* Clamp to stride: never read past the row (stride may have padding) */
+        gint max_col = layer_stride / 4;
+        if (src_x + src_width > max_col)
+            src_width = max_col - src_x;
+        if (src_width <= 0)
+            continue;
 
         /* Get layer opacity (0.0 - 1.0), convert to 0-255 */
         guint8 layer_opacity = (guint8)(layer->opacity * 255.0);
