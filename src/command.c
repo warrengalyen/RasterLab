@@ -419,6 +419,8 @@ const gchar* command_get_name_string(CommandName name) {
         "Duplicate Layer",
         "Move Layer Up",
         "Move Layer Down",
+        "Merge Layer Up",
+        "Merge Layer Down",
         "Canvas size",
         "Flip Horizontal",
         "Flip Vertical",
@@ -1164,4 +1166,36 @@ void composite_layers_onto_surface(cairo_surface_t* target, struct ImageDocument
 
     cairo_destroy(cr);
     cairo_surface_flush(target);
+}
+
+/**
+ * Composite a single source layer onto a target layer's surface.
+ * Used for merge down/up operations.
+ */
+void composite_layer_onto_layer(struct ImageLayer* target, struct ImageLayer* source) {
+    cairo_t* cr;
+
+    if (!target || !target->surface || !source) {
+        return;
+    }
+
+    if (!layer_ensure_cache(source)) {
+        return;
+    }
+
+    cr = cairo_create(target->surface);
+    if (!cr) {
+        return;
+    }
+
+    /* Don't clear - composite on top of existing content */
+    cairo_save(cr);
+    cairo_translate(cr, source->offset_x, source->offset_y);
+    cairo_set_source_surface(cr, source->cache_surface, 0, 0);
+    cairo_set_operator(cr, blend_mode_to_cairo_operator(source->blend_mode));
+    cairo_paint_with_alpha(cr, source->opacity);
+    cairo_restore(cr);
+
+    cairo_destroy(cr);
+    cairo_surface_flush(target->surface);
 }

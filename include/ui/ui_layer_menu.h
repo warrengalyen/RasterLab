@@ -12,6 +12,8 @@ void on_layer_delete(GtkWidget* widget, gpointer data);
 void on_layer_duplicate(GtkWidget* widget, gpointer data);
 void on_layer_move_up(GtkWidget* widget, gpointer data);
 void on_layer_move_down(GtkWidget* widget, gpointer data);
+void on_layer_merge_up(GtkWidget* widget, gpointer data);
+void on_layer_merge_down(GtkWidget* widget, gpointer data);
 void on_layer_selection_changed(GtkTreeSelection* selection, gpointer user_data);
 
 /**

@@ -25,6 +25,8 @@ struct _AppContext {
     GtkWidget* layer_menu_new;            /* Layer > New Layer menu item */
     GtkWidget* layer_menu_delete;         /* Layer > Delete Layer menu item */
     GtkWidget* layer_menu_duplicate;      /* Layer > Duplicate Layer menu item */
+    GtkWidget* layer_menu_merge_up;       /* Layer > Merge up menu item */
+    GtkWidget* layer_menu_merge_down;     /* Layer > Merge down menu item */
     GtkWidget* edit_menu_undo;            /* Edit > Undo menu item */
     GtkWidget* edit_menu_redo;            /* Edit > Redo menu item */
     GtkWidget* file_menu_save;            /* File > Save menu item */

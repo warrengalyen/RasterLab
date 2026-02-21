@@ -1252,6 +1252,14 @@
       </object>
     </child>
     <child>
+      <object class="GtkMenuItem" id="layer_menu_delete">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">_Delete Layer</property>
+        <property name="use-underline">True</property>
+      </object>
+    </child>
+    <child>
       <object class="GtkMenuItem" id="layer_menu_duplicate">
         <property name="visible">True</property>
         <property name="can-focus">False</property>
@@ -1266,11 +1274,180 @@
       </object>
     </child>
     <child>
-      <object class="GtkMenuItem" id="layer_menu_delete">
+      <object class="GtkMenuItem" id="layer_menu_merge_up">
         <property name="visible">True</property>
         <property name="can-focus">False</property>
-        <property name="label" translatable="yes">_Delete Layer</property>
+        <property name="label" translatable="yes">Merge up</property>
         <property name="use-underline">True</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="layer_menu_merge_down">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Merge down</property>
+        <property name="use-underline">True</property>
+        <accelerator key="e" signal="activate" modifiers="GDK_CONTROL_MASK"/>
+      </object>
+    </child>
+    <child>
+      <object class="GtkSeparatorMenuItem" id="layer_separator1">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="layer_menu_order">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Order</property>
+        <property name="use-underline">True</property>
+        <child type="submenu">
+          <object class="GtkMenu">
+            <property name="visible">True</property>
+            <property name="can-focus">False</property>
+            <child>
+              <object class="GtkMenuItem" id="layer_menu_order_select_top">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">Select top layer</property>
+                <property name="use-underline">True</property>
+                <accelerator key="Page_Up" signal="activate" modifiers="GDK_CONTROL_MASK | GDK_MOD1_MASK"/>
+              </object>
+            </child>
+            <child>
+              <object class="GtkMenuItem" id="layer_menu_order_select_above">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">Select layer above</property>
+                <property name="use-underline">True</property>
+                <accelerator key="Page_Up" signal="activate" modifiers="GDK_MOD1_MASK"/>
+              </object>
+            </child>
+            <child>
+              <object class="GtkMenuItem" id="layer_menu_order_select_below">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">Select layer below</property>
+                <property name="use-underline">True</property>
+                <accelerator key="Page_Down" signal="activate" modifiers="GDK_MOD1_MASK"/>
+              </object>
+            </child>
+            <child>
+              <object class="GtkMenuItem" id="layer_menu_order_select_bottom">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">Select bottom layer</property>
+                <property name="use-underline">True</property>
+                <accelerator key="Page_Down" signal="activate" modifiers="GDK_CONTROL_MASK | GDK_MOD1_MASK"/>
+              </object>
+            </child>
+            <child>
+              <object class="GtkSeparatorMenuItem" id="layer_separator2">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkMenuItem" id="layer_menu_order_move_top">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">Move layer to top</property>
+                <property name="use-underline">True</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkMenuItem" id="layer_menu_order_move_up">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">Move layer up</property>
+                <property name="use-underline">True</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkMenuItem" id="layer_menu_order_move_down">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">Move layer down</property>
+                <property name="use-underline">True</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkMenuItem" id="layer_menu_order_move_bottom">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">Move layer to bottom</property>
+                <property name="use-underline">True</property>
+              </object>
+            </child>
+          </object>
+        </child>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="layer_menu_visibility">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Visibility</property>
+        <property name="use-underline">True</property>
+        <child type="submenu">
+          <object class="GtkMenu">
+            <property name="visible">True</property>
+            <property name="can-focus">False</property>
+            <child>
+              <object class="GtkMenuItem" id="layer_menu_visibility_show_current">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">Show this layer</property>
+                <property name="use-underline">True</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkSeparatorMenuItem" id="layer_separator3">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkMenuItem" id="layer_menu_visibility_show_only">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">Show only this layer</property>
+                <property name="use-underline">True</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkMenuItem" id="layer_menu_visibility_hide_only">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">Hide only this layer</property>
+                <property name="use-underline">True</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkSeparatorMenuItem" id="layer_separator4">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkMenuItem" id="layer_menu_visibility_show_all">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">Show all layers</property>
+                <property name="use-underline">True</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkMenuItem" id="layer_menu_visibility_hide_all">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">Hide all layers</property>
+                <property name="use-underline">True</property>
+              </object>
+            </child>
+          </object>
+        </child>
       </object>
     </child>
   </object>
@@ -1773,14 +1950,13 @@
                 <property name="hexpand">False</property>
                 <property name="vexpand">True</property>
                 <property name="orientation">vertical</property>
-                <property name="spacing">0</property>
                 <child>
                   <object class="GtkToggleButton" id="tool_button_hand">
+                    <property name="name">tool_button</property>
                     <property name="width-request">32</property>
                     <property name="height-request">32</property>
                     <property name="visible">True</property>
                     <property name="can-focus">True</property>
-                    <property name="name">tool_button</property>
                     <property name="receives-default">False</property>
                     <property name="tooltip-text" translatable="yes">Hand (click and drag image scrolling)
 Shortcut Key: H</property>
@@ -1802,11 +1978,11 @@ Shortcut Key: H</property>
                 </child>
                 <child>
                   <object class="GtkToggleButton" id="tool_button_zoom">
+                    <property name="name">tool_button</property>
                     <property name="width-request">32</property>
                     <property name="height-request">32</property>
                     <property name="visible">True</property>
                     <property name="can-focus">True</property>
-                    <property name="name">tool_button</property>
                     <property name="receives-default">False</property>
                     <property name="tooltip-text" translatable="yes">Zoom
 Shortcut Key: Z</property>
@@ -1828,11 +2004,11 @@ Shortcut Key: Z</property>
                 </child>
                 <child>
                   <object class="GtkToggleButton" id="tool_button_move">
+                    <property name="name">tool_button</property>
                     <property name="width-request">32</property>
                     <property name="height-request">32</property>
                     <property name="visible">True</property>
                     <property name="can-focus">False</property>
-                    <property name="name">tool_button</property>
                     <property name="receives-default">False</property>
                     <property name="tooltip-text" translatable="yes">Move image layers
 Shortcut Key: M</property>
@@ -1854,11 +2030,11 @@ Shortcut Key: M</property>
                 </child>
                 <child>
                   <object class="GtkToggleButton" id="tool_button_color_picker">
+                    <property name="name">tool_button</property>
                     <property name="width-request">32</property>
                     <property name="height-request">32</property>
                     <property name="visible">True</property>
                     <property name="can-focus">True</property>
-                    <property name="name">tool_button</property>
                     <property name="receives-default">False</property>
                     <property name="tooltip-text" translatable="yes">Color Picker
 Shortcut Key: I</property>
@@ -1880,11 +2056,11 @@ Shortcut Key: I</property>
                 </child>
                 <child>
                   <object class="GtkToggleButton" id="tool_button_crop">
+                    <property name="name">tool_button</property>
                     <property name="width-request">32</property>
                     <property name="height-request">32</property>
                     <property name="visible">True</property>
                     <property name="can-focus">True</property>
-                    <property name="name">tool_button</property>
                     <property name="receives-default">False</property>
                     <property name="tooltip-text" translatable="yes">Crop
 Shortcut Key: C</property>
@@ -1906,11 +2082,11 @@ Shortcut Key: C</property>
                 </child>
                 <child>
                   <object class="GtkToggleButton" id="tool_button_pencil">
+                    <property name="name">tool_button</property>
                     <property name="width-request">32</property>
                     <property name="height-request">32</property>
                     <property name="visible">True</property>
                     <property name="can-focus">False</property>
-                    <property name="name">tool_button</property>
                     <property name="receives-default">False</property>
                     <property name="tooltip-text" translatable="yes">Pencil
 Shortcut Key: P</property>
@@ -1932,11 +2108,11 @@ Shortcut Key: P</property>
                 </child>
                 <child>
                   <object class="GtkToggleButton" id="tool_button_brush">
+                    <property name="name">tool_button</property>
                     <property name="width-request">32</property>
                     <property name="height-request">32</property>
                     <property name="visible">True</property>
                     <property name="can-focus">False</property>
-                    <property name="name">tool_button</property>
                     <property name="receives-default">False</property>
                     <property name="tooltip-text" translatable="yes">Paintbrush
 Shortcut Key: B</property>
@@ -1958,11 +2134,11 @@ Shortcut Key: B</property>
                 </child>
                 <child>
                   <object class="GtkToggleButton" id="tool_button_eraser">
+                    <property name="name">tool_button</property>
                     <property name="width-request">32</property>
                     <property name="height-request">32</property>
                     <property name="visible">True</property>
                     <property name="can-focus">False</property>
-                    <property name="name">tool_button</property>
                     <property name="receives-default">False</property>
                     <property name="tooltip-text" translatable="yes">Eraser
 Shortcut Key: E</property>
@@ -1984,11 +2160,11 @@ Shortcut Key: E</property>
                 </child>
                 <child>
                   <object class="GtkToggleButton" id="tool_button_fill">
+                    <property name="name">tool_button</property>
                     <property name="width-request">32</property>
                     <property name="height-request">32</property>
                     <property name="visible">True</property>
                     <property name="can-focus">False</property>
-                    <property name="name">tool_button</property>
                     <property name="receives-default">False</property>
                     <property name="tooltip-text" translatable="yes">Paint bucket
 Shortcut Key: F</property>
@@ -2021,11 +2197,11 @@ Shortcut Key: F</property>
                 </child>
                 <child>
                   <object class="GtkToggleButton" id="tool_button_rect_select">
+                    <property name="name">tool_button</property>
                     <property name="width-request">32</property>
                     <property name="height-request">32</property>
                     <property name="visible">True</property>
                     <property name="can-focus">True</property>
-                    <property name="name">tool_button</property>
                     <property name="receives-default">False</property>
                     <property name="tooltip-text" translatable="yes">Rectangular Selection
 Shortcut Key: S</property>
@@ -2047,11 +2223,11 @@ Shortcut Key: S</property>
                 </child>
                 <child>
                   <object class="GtkToggleButton" id="tool_button_elliptical_select">
+                    <property name="name">tool_button</property>
                     <property name="width-request">32</property>
                     <property name="height-request">32</property>
                     <property name="visible">True</property>
                     <property name="can-focus">True</property>
-                    <property name="name">tool_button</property>
                     <property name="receives-default">False</property>
                     <property name="tooltip-text" translatable="yes">Elliptical Selection
 Shortcut Key: S</property>
@@ -2088,8 +2264,8 @@ Shortcut Key: S</property>
                     <property name="can-focus">False</property>
                     <property name="margin-start">4</property>
                     <property name="margin-end">4</property>
-                    <property name="orientation">vertical</property>
                     <property name="margin-top">5</property>
+                    <property name="orientation">vertical</property>
                     <property name="spacing">2</property>
                     <child>
                       <object class="GtkFixed" id="color_picker_container">

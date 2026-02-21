@@ -333,6 +333,8 @@ AppContext* ui_create_main_window(void) {
     ctx->layer_menu_new = NULL;
     ctx->layer_menu_delete = NULL;
     ctx->layer_menu_duplicate = NULL;
+    ctx->layer_menu_merge_up = NULL;
+    ctx->layer_menu_merge_down = NULL;
     ctx->edit_menu_undo = NULL;
     ctx->edit_menu_redo = NULL;
     ctx->workspace = NULL;           /* Initialize workspace early */
@@ -2466,6 +2468,16 @@ void ui_update_menu_and_button_states(AppContext* ctx) {
     }
     if (ctx->layer_menu_duplicate && GTK_IS_WIDGET(ctx->layer_menu_duplicate)) {
         gtk_widget_set_sensitive(ctx->layer_menu_duplicate, has_document && has_selection);
+    }
+    if (ctx->layer_menu_merge_up && GTK_IS_WIDGET(ctx->layer_menu_merge_up)) {
+        gboolean can_merge_up = has_document && has_selection && selected_layer &&
+            document_layer_can_move_up(doc, selected_layer);
+        gtk_widget_set_sensitive(ctx->layer_menu_merge_up, can_merge_up);
+    }
+    if (ctx->layer_menu_merge_down && GTK_IS_WIDGET(ctx->layer_menu_merge_down)) {
+        gboolean can_merge_down = has_document && has_selection && selected_layer &&
+            document_layer_can_move_down(doc, selected_layer);
+        gtk_widget_set_sensitive(ctx->layer_menu_merge_down, can_merge_down);
     }
 }
 

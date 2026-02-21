@@ -81,6 +81,8 @@ void ui_layer_menu_setup(GtkBuilder* builder, AppContext* ctx) {
     ctx->layer_menu_new = GTK_WIDGET(gtk_builder_get_object(builder, "layer_menu_new"));
     ctx->layer_menu_duplicate = GTK_WIDGET(gtk_builder_get_object(builder, "layer_menu_duplicate"));
     ctx->layer_menu_delete = GTK_WIDGET(gtk_builder_get_object(builder, "layer_menu_delete"));
+    ctx->layer_menu_merge_up = GTK_WIDGET(gtk_builder_get_object(builder, "layer_menu_merge_up"));
+    ctx->layer_menu_merge_down = GTK_WIDGET(gtk_builder_get_object(builder, "layer_menu_merge_down"));
 
     /* Connect Layer menu signals */
     if (ctx->layer_menu_new) {
@@ -91,6 +93,12 @@ void ui_layer_menu_setup(GtkBuilder* builder, AppContext* ctx) {
     }
     if (ctx->layer_menu_delete) {
         g_signal_connect(ctx->layer_menu_delete, "activate", G_CALLBACK(on_layer_delete), ctx);
+    }
+    if (ctx->layer_menu_merge_up) {
+        g_signal_connect(ctx->layer_menu_merge_up, "activate", G_CALLBACK(on_layer_merge_up), ctx);
+    }
+    if (ctx->layer_menu_merge_down) {
+        g_signal_connect(ctx->layer_menu_merge_down, "activate", G_CALLBACK(on_layer_merge_down), ctx);
     }
 }
 
@@ -302,6 +310,112 @@ void on_layer_duplicate(GtkWidget* widget, gpointer data) {
         ui_update_window_title(ctx, NULL);
         doc->modified = TRUE;
     }
+}
+
+/**
+ * Layer > Merge Up callback
+ */
+void on_layer_merge_up(GtkWidget* widget, gpointer data) {
+    (void)widget; /* Unused */
+
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc = ui_get_active_document(ctx);
+    LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window),
+                                                                "layers_panel");
+    Command* cmd;
+
+    if (!doc || !doc->layers) {
+        g_warning("No document or layers");
+        return;
+    }
+
+    ImageLayer* selected_layer = NULL;
+    if (layers_panel) {
+        selected_layer = layers_panel_get_selected_layer(layers_panel);
+    }
+
+    if (!selected_layer) {
+        g_warning("No layer selected");
+        return;
+    }
+
+    cmd = command_create_layer_merge_up(doc, selected_layer);
+    if (!cmd) {
+        return; /* Can't merge up (no layer above) */
+    }
+
+    command_execute(cmd, doc);
+
+    if (doc->undo_stack) {
+        command_stack_push(doc->undo_stack, cmd);
+        if (doc->redo_stack) {
+            command_stack_clear(doc->redo_stack);
+        }
+    } else {
+        command_free(cmd);
+    }
+
+    if (layers_panel) {
+        layers_panel_update(layers_panel, doc);
+        layers_panel_select_layer(layers_panel, doc, doc->selected_layer);
+    }
+
+    ui_update_menu_and_button_states(ctx);
+    ui_update_window_title(ctx, NULL);
+    doc->modified = TRUE;
+}
+
+/**
+ * Layer > Merge Down callback
+ */
+void on_layer_merge_down(GtkWidget* widget, gpointer data) {
+    (void)widget; /* Unused */
+
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc = ui_get_active_document(ctx);
+    LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window),
+                                                                "layers_panel");
+    Command* cmd;
+
+    if (!doc || !doc->layers) {
+        g_warning("No document or layers");
+        return;
+    }
+
+    ImageLayer* selected_layer = NULL;
+    if (layers_panel) {
+        selected_layer = layers_panel_get_selected_layer(layers_panel);
+    }
+
+    if (!selected_layer) {
+        g_warning("No layer selected");
+        return;
+    }
+
+    cmd = command_create_layer_merge_down(doc, selected_layer);
+    if (!cmd) {
+        return; /* Can't merge down (no layer below) */
+    }
+
+    command_execute(cmd, doc);
+
+    if (doc->undo_stack) {
+        command_stack_push(doc->undo_stack, cmd);
+        if (doc->redo_stack) {
+            command_stack_clear(doc->redo_stack);
+        }
+    } else {
+        command_free(cmd);
+    }
+
+    if (layers_panel) {
+        layers_panel_update(layers_panel, doc);
+        layers_panel_select_layer(layers_panel, doc, doc->selected_layer);
+    }
+
+    ui_update_menu_and_button_states(ctx);
+    ui_update_window_title(ctx, NULL);
+    doc->modified = TRUE;
 }
 
 /**

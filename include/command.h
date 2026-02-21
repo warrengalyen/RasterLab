@@ -41,6 +41,8 @@ typedef enum {
     CMD_NAME_DUPLICATE_LAYER,
     CMD_NAME_MOVE_LAYER_UP,
     CMD_NAME_MOVE_LAYER_DOWN,
+    CMD_NAME_MERGE_LAYER_UP,
+    CMD_NAME_MERGE_LAYER_DOWN,
     CMD_NAME_CANVAS_SIZE,
     CMD_NAME_FLIP_HORIZONTAL,
     CMD_NAME_FLIP_VERTICAL,
@@ -337,5 +339,11 @@ void composite_layers_to_surface(cairo_surface_t* target, struct ImageDocument* 
  * Used for flatten operation where we want to composite into an existing layer
  */
 void composite_layers_onto_surface(cairo_surface_t* target, struct ImageDocument* doc, struct ImageLayer* skip_layer);
+
+/**
+ * Composite a single source layer onto a target layer's surface.
+ * Used for merge down/up operations.
+ */
+void composite_layer_onto_layer(struct ImageLayer* target, struct ImageLayer* source);
 
 #endif /* COMMAND_H */

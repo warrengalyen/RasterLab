@@ -1,5 +1,6 @@
 #include "commands/command_layer.h"
 #include "command.h"
+#include "document.h"
 #include "render/layer.h"
 
 /**
@@ -671,6 +672,240 @@ Command* command_create_layer_move_down(struct ImageDocument* doc, struct ImageL
         return NULL;
     }
 
+    cmd->user_data = data;
+    return cmd;
+}
+
+/**
+ * Layer merge command apply callback (composite source onto target, remove source)
+ */
+static void layer_merge_command_apply(Command* cmd, struct ImageDocument* doc) {
+    LayerMergeCommandData* data;
+
+    if (!cmd || !cmd->user_data || !doc) {
+        return;
+    }
+
+    data = (LayerMergeCommandData*)cmd->user_data;
+
+    if (!data->target_layer || !data->target_layer->surface || !data->source_layer) {
+        return;
+    }
+
+    /* Composite source layer onto target */
+    composite_layer_onto_layer(data->target_layer, data->source_layer);
+    layer_invalidate_cache(data->target_layer);
+
+    /* Remove source layer from document */
+    doc->layers = g_list_remove(doc->layers, data->source_layer);
+    if (doc->selected_layer == data->source_layer) {
+        doc->selected_layer = data->target_layer;
+    }
+    layer_free(data->source_layer);
+    data->source_layer = NULL;
+
+    document_invalidate_composite(doc);
+}
+
+/**
+ * Layer merge command revert callback (restore target and source layers)
+ */
+static void layer_merge_command_revert(Command* cmd, struct ImageDocument* doc) {
+    LayerMergeCommandData* data;
+    struct ImageLayer* restored_layer;
+    cairo_t* cr;
+    GList* insert_point;
+
+    if (!cmd || !cmd->user_data || !doc) {
+        return;
+    }
+
+    data = (LayerMergeCommandData*)cmd->user_data;
+
+    if (!data->target_snapshot || !data->target_layer || !data->removed_snapshot) {
+        return;
+    }
+
+    /* Restore target layer from snapshot */
+    cr = cairo_create(data->target_layer->surface);
+    cairo_set_source_surface(cr, data->target_snapshot, 0, 0);
+    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+    cairo_paint(cr);
+    cairo_destroy(cr);
+    cairo_surface_flush(data->target_layer->surface);
+    layer_invalidate_cache(data->target_layer);
+
+    /* Recreate and reinsert the removed layer */
+    restored_layer = layer_new(data->removed_layer_name, data->removed_width, data->removed_height,
+                               TRUE, LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT,
+                               NULL, doc);
+    if (restored_layer) {
+        cr = cairo_create(restored_layer->surface);
+        cairo_set_source_surface(cr, data->removed_snapshot, 0, 0);
+        cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+        cairo_paint(cr);
+        cairo_destroy(cr);
+        cairo_surface_flush(restored_layer->surface);
+
+        restored_layer->opacity = data->removed_opacity;
+        restored_layer->blend_mode = data->removed_blend_mode;
+        restored_layer->offset_x = data->removed_offset_x;
+        restored_layer->offset_y = data->removed_offset_y;
+        restored_layer->visible = data->removed_visible;
+        layer_invalidate_cache(restored_layer);
+
+        insert_point = g_list_nth(doc->layers, data->removed_position);
+        if (insert_point) {
+            doc->layers = g_list_insert_before(doc->layers, insert_point, restored_layer);
+        } else {
+            doc->layers = g_list_append(doc->layers, restored_layer);
+        }
+        doc->selected_layer = restored_layer;
+        data->source_layer = restored_layer;
+    }
+
+    document_invalidate_composite(doc);
+}
+
+/**
+ * Layer merge command destroy callback
+ */
+static void layer_merge_command_destroy(Command* cmd) {
+    LayerMergeCommandData* data;
+
+    if (!cmd || !cmd->user_data) {
+        return;
+    }
+
+    data = (LayerMergeCommandData*)cmd->user_data;
+
+    if (data->target_snapshot) {
+        cairo_surface_destroy(data->target_snapshot);
+    }
+    if (data->removed_snapshot) {
+        cairo_surface_destroy(data->removed_snapshot);
+    }
+    if (data->removed_layer_name) {
+        g_free(data->removed_layer_name);
+    }
+    if (data->source_layer) {
+        if (!data->doc || !data->doc->layers || !g_list_find(data->doc->layers, data->source_layer)) {
+            layer_free(data->source_layer);
+        }
+    }
+    g_free(data);
+}
+
+/**
+ * Create a layer merge down command (merge selected into layer below)
+ */
+Command* command_create_layer_merge_down(struct ImageDocument* doc, struct ImageLayer* selected_layer) {
+    Command* cmd;
+    LayerMergeCommandData* data;
+    GList* iter;
+
+    if (!doc || !selected_layer) {
+        return NULL;
+    }
+
+    iter = g_list_find(doc->layers, selected_layer);
+    if (!iter || !iter->prev) {
+        return NULL; /* No layer below to merge into */
+    }
+
+    data = (LayerMergeCommandData*)g_malloc(sizeof(LayerMergeCommandData));
+    data->doc = doc;
+    data->target_layer = (struct ImageLayer*)iter->prev->data;
+    data->source_layer = selected_layer;
+    data->target_snapshot = cairo_surface_snapshot(data->target_layer->surface);
+    data->removed_position = get_layer_position(doc, selected_layer);
+    data->removed_layer_name = g_strdup(selected_layer->name);
+    data->removed_width = selected_layer->width;
+    data->removed_height = selected_layer->height;
+    data->removed_snapshot = cairo_surface_snapshot(selected_layer->surface);
+    data->removed_opacity = selected_layer->opacity;
+    data->removed_blend_mode = selected_layer->blend_mode;
+    data->removed_offset_x = selected_layer->offset_x;
+    data->removed_offset_y = selected_layer->offset_y;
+    data->removed_visible = selected_layer->visible;
+
+    if (!data->target_snapshot || !data->removed_snapshot) {
+        if (data->target_snapshot) cairo_surface_destroy(data->target_snapshot);
+        if (data->removed_snapshot) cairo_surface_destroy(data->removed_snapshot);
+        g_free(data->removed_layer_name);
+        g_free(data);
+        return NULL;
+    }
+
+    cmd = command_new(command_get_name_string(CMD_NAME_MERGE_LAYER_DOWN),
+                      COMMAND_LAYER_EDIT,
+                      layer_merge_command_apply,
+                      layer_merge_command_revert,
+                      layer_merge_command_destroy);
+    if (!cmd) {
+        cairo_surface_destroy(data->target_snapshot);
+        cairo_surface_destroy(data->removed_snapshot);
+        g_free(data->removed_layer_name);
+        g_free(data);
+        return NULL;
+    }
+    cmd->user_data = data;
+    return cmd;
+}
+
+/**
+ * Create a layer merge up command (merge selected into layer above)
+ */
+Command* command_create_layer_merge_up(struct ImageDocument* doc, struct ImageLayer* selected_layer) {
+    Command* cmd;
+    LayerMergeCommandData* data;
+    GList* iter;
+
+    if (!doc || !selected_layer) {
+        return NULL;
+    }
+
+    iter = g_list_find(doc->layers, selected_layer);
+    if (!iter || !iter->next) {
+        return NULL; /* No layer above to merge into */
+    }
+
+    data = (LayerMergeCommandData*)g_malloc(sizeof(LayerMergeCommandData));
+    data->doc = doc;
+    data->target_layer = (struct ImageLayer*)iter->next->data;
+    data->source_layer = selected_layer;
+    data->target_snapshot = cairo_surface_snapshot(data->target_layer->surface);
+    data->removed_position = get_layer_position(doc, selected_layer);
+    data->removed_layer_name = g_strdup(selected_layer->name);
+    data->removed_width = selected_layer->width;
+    data->removed_height = selected_layer->height;
+    data->removed_snapshot = cairo_surface_snapshot(selected_layer->surface);
+    data->removed_opacity = selected_layer->opacity;
+    data->removed_blend_mode = selected_layer->blend_mode;
+    data->removed_offset_x = selected_layer->offset_x;
+    data->removed_offset_y = selected_layer->offset_y;
+    data->removed_visible = selected_layer->visible;
+
+    if (!data->target_snapshot || !data->removed_snapshot) {
+        if (data->target_snapshot) cairo_surface_destroy(data->target_snapshot);
+        if (data->removed_snapshot) cairo_surface_destroy(data->removed_snapshot);
+        g_free(data->removed_layer_name);
+        g_free(data);
+        return NULL;
+    }
+
+    cmd = command_new(command_get_name_string(CMD_NAME_MERGE_LAYER_UP),
+                      COMMAND_LAYER_EDIT,
+                      layer_merge_command_apply,
+                      layer_merge_command_revert,
+                      layer_merge_command_destroy);
+    if (!cmd) {
+        cairo_surface_destroy(data->target_snapshot);
+        cairo_surface_destroy(data->removed_snapshot);
+        g_free(data->removed_layer_name);
+        g_free(data);
+        return NULL;
+    }
     cmd->user_data = data;
     return cmd;
 }

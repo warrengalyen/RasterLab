@@ -44,6 +44,28 @@ typedef struct {
 } LayerMoveDownCommandData;
 
 /**
+ * Data for merge down/up commands.
+ * Merge down: selected layer is composited into the layer below, then removed.
+ * Merge up: selected layer is composited into the layer above, then removed.
+ */
+typedef struct {
+    struct ImageDocument* doc;        /* Document containing the layers */
+    struct ImageLayer* target_layer;  /* Layer that receives the merge (stays) */
+    struct ImageLayer* source_layer;  /* Layer being merged (removed); NULL after apply */
+    cairo_surface_t* target_snapshot; /* Snapshot of target before merge */
+    gint removed_position;            /* Position of removed layer before merge */
+    gchar* removed_layer_name;
+    guint removed_width;
+    guint removed_height;
+    cairo_surface_t* removed_snapshot;
+    gfloat removed_opacity;
+    gint removed_blend_mode;
+    gint removed_offset_x;
+    gint removed_offset_y;
+    gboolean removed_visible;
+} LayerMergeCommandData;
+
+/**
  * Create a layer add command
  * @param doc The document
  * @param layer The layer being added
@@ -85,6 +107,22 @@ Command* command_create_layer_move_up(struct ImageDocument* doc, struct ImageLay
  * @return Newly created Command, or NULL on failure
  */
 Command* command_create_layer_move_down(struct ImageDocument* doc, struct ImageLayer* layer);
+
+/**
+ * Create a layer merge down command (merge selected layer into layer below)
+ * @param doc The document
+ * @param selected_layer The selected layer to merge (will be removed)
+ * @return Newly created Command, or NULL on failure
+ */
+Command* command_create_layer_merge_down(struct ImageDocument* doc, struct ImageLayer* selected_layer);
+
+/**
+ * Create a layer merge up command (merge selected layer into layer above)
+ * @param doc The document
+ * @param selected_layer The selected layer to merge (will be removed)
+ * @return Newly created Command, or NULL on failure
+ */
+Command* command_create_layer_merge_up(struct ImageDocument* doc, struct ImageLayer* selected_layer);
 
 /**
  * Create a paste command (adds layer with "Paste" name in undo/redo)
