@@ -416,16 +416,31 @@ static void on_layer_name_edited(GtkCellRendererText* renderer,
 }
 
 /**
- * Layer tree view row activated callback
+ * Layer tree view row activated callback - start editing layer name on double-click
  */
 static gboolean on_layer_row_activated(GtkTreeView* tree_view, GtkTreePath* path,
                                        GtkTreeViewColumn* column, gpointer user_data) {
-    (void)tree_view;
-    (void)path;
-    (void)column;
-    (void)user_data;
+    LayersPanel* layers_panel = (LayersPanel*)user_data;
+    GtkTreeViewColumn* name_column;
+    GtkCellRenderer* name_renderer;
 
-    return FALSE;
+    (void)column; /* Unused - we always edit the name column */
+
+    if (!layers_panel || !path) {
+        return FALSE;
+    }
+
+    name_column = (GtkTreeViewColumn*)g_object_get_data(G_OBJECT(tree_view), "name_column");
+    name_renderer = (GtkCellRenderer*)g_object_get_data(G_OBJECT(tree_view), "name_renderer");
+    if (name_column && name_renderer) {
+        /* Temporarily enable editing so set_cursor_on_cell can start it */
+        g_object_set(name_renderer, "editable", TRUE, NULL);
+        gtk_tree_view_set_cursor_on_cell(tree_view, path, name_column, name_renderer, TRUE);
+        /* Restore FALSE so single-click won't start editing next time */
+        g_object_set(name_renderer, "editable", FALSE, NULL);
+    }
+
+    return TRUE; /* Event handled */
 }
 
 /**
@@ -499,6 +514,14 @@ static GdkPixbuf* create_layer_thumbnail(cairo_surface_t* layer_surface, gint th
 
     /* If not visible, apply grayscale/disabled effect over layer region only */
     if (!visible) {
+        /* Convert to grayscale and reduce opacity */
+        /* Convert to grayscale and reduce opacity */
+        /* Convert to grayscale and reduce opacity */
+        /* Convert to grayscale and reduce opacity */
+        /* Convert to grayscale and reduce opacity */
+        /* Convert to grayscale and reduce opacity */
+        /* Convert to grayscale and reduce opacity */
+        /* Convert to grayscale and reduce opacity */
         cairo_save(cr);
         cairo_translate(cr, offset_x, offset_y);
         cairo_rectangle(cr, 0, 0, thumb_width, thumb_height);
@@ -698,7 +721,7 @@ LayersPanel* create_layers_panel(AppContext* ctx) {
     layers_panel->tree_view = gtk_tree_view_new_with_model(GTK_TREE_MODEL(layers_panel->store));
     gtk_tree_view_set_headers_visible(GTK_TREE_VIEW(layers_panel->tree_view), FALSE);
     g_signal_connect(layers_panel->tree_view, "row-activated",
-                     G_CALLBACK(on_layer_row_activated), NULL);
+                     G_CALLBACK(on_layer_row_activated), layers_panel);
     g_signal_connect(layers_panel->tree_view, "button-press-event",
                      G_CALLBACK(on_treeview_button_press), layers_panel);
     gtk_container_add(GTK_CONTAINER(scroll_window), layers_panel->tree_view);
@@ -723,20 +746,19 @@ LayersPanel* create_layers_panel(AppContext* ctx) {
 
     /* Thumbnail column */
     renderer = gtk_cell_renderer_pixbuf_new();
-    g_object_set(renderer, "xpad", 0, "ypad", 4, "xalign", 0.5, NULL);
+    g_object_set(renderer, "xpad", 4, "ypad", 4, "xalign", 0.5, NULL);
     column = gtk_tree_view_column_new_with_attributes("Thumbnail",
                                                       renderer,
                                                       "pixbuf", 1,
                                                       NULL);
     gtk_tree_view_column_set_sizing(column, GTK_TREE_VIEW_COLUMN_FIXED);
     gtk_tree_view_column_set_fixed_width(column, 48);
-    gtk_tree_view_column_set_alignment(column, 0.5f);
     gtk_tree_view_append_column(GTK_TREE_VIEW(layers_panel->tree_view), column);
 
-    /* Name column (editable) */
+    /* Name column (editable on double-click only - editable=FALSE prevents single-click) */
     renderer = gtk_cell_renderer_text_new();
     g_object_set(renderer,
-                 "editable", TRUE,
+                 "editable", FALSE,
                  "yalign", 0.5, /* Center vertically */
                  "ypad", 0,     /* No vertical padding */
                  "height", -1,  /* Let height fit content */
@@ -749,6 +771,8 @@ LayersPanel* create_layers_panel(AppContext* ctx) {
                      G_CALLBACK(on_layer_name_edited), layers_panel);
     gtk_tree_view_column_set_expand(column, TRUE);
     gtk_tree_view_append_column(GTK_TREE_VIEW(layers_panel->tree_view), column);
+    g_object_set_data(G_OBJECT(layers_panel->tree_view), "name_column", column);
+    g_object_set_data(G_OBJECT(layers_panel->tree_view), "name_renderer", renderer);
 
     /* Note: We don't use gtk_tree_view_set_fixed_height_mode because the Name column
      * needs to expand, which conflicts with fixed height mode. The yalign and ypad

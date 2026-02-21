@@ -292,6 +292,9 @@ void on_layer_duplicate(GtkWidget* widget, gpointer data) {
         /* Update layers panel */
         if (layers_panel) {
             layers_panel_update(layers_panel, doc);
+            /* Select the duplicated layer */
+            document_set_selected_layer(doc, dup_layer);
+            layers_panel_select_layer(layers_panel, doc, dup_layer);
         }
 
         /* Update UI state */

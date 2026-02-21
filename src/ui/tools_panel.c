@@ -531,6 +531,19 @@ GtkWidget* tools_panel_initialize_from_builder(GtkBuilder* builder, ToolRegistry
         g_warning("Failed to get swap_colors_event_box from builder");
     }
 
+    /* Sync Hand tool button to active state (Hand is the default tool) */
+    if (g_tool_buttons[TOOL_HAND]) {
+        g_updating_tools = TRUE;
+        g_signal_handlers_block_by_func(g_tool_buttons[TOOL_HAND],
+                                        G_CALLBACK(on_tool_button_clicked),
+                                        GINT_TO_POINTER(TOOL_HAND));
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g_tool_buttons[TOOL_HAND]), TRUE);
+        g_signal_handlers_unblock_by_func(g_tool_buttons[TOOL_HAND],
+                                          G_CALLBACK(on_tool_button_clicked),
+                                          GINT_TO_POINTER(TOOL_HAND));
+        g_updating_tools = FALSE;
+    }
+
     gtk_widget_show_all(panel);
 
     return panel;
