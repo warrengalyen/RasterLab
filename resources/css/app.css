@@ -1,0 +1,11 @@
+#layers_list {
+    border: 1px solid #d5d0cc;
+}
+
+#tool_button {
+    border-radius: 0;
+}
+
+checkbutton:hover label {
+    /* color: #3584e4; */
+}

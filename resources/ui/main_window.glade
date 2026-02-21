@@ -1773,13 +1773,14 @@
                 <property name="hexpand">False</property>
                 <property name="vexpand">True</property>
                 <property name="orientation">vertical</property>
-                <property name="spacing">5</property>
+                <property name="spacing">0</property>
                 <child>
                   <object class="GtkToggleButton" id="tool_button_hand">
                     <property name="width-request">32</property>
                     <property name="height-request">32</property>
                     <property name="visible">True</property>
                     <property name="can-focus">True</property>
+                    <property name="name">tool_button</property>
                     <property name="receives-default">False</property>
                     <property name="tooltip-text" translatable="yes">Hand (click and drag image scrolling)
 Shortcut Key: H</property>
@@ -1805,6 +1806,7 @@ Shortcut Key: H</property>
                     <property name="height-request">32</property>
                     <property name="visible">True</property>
                     <property name="can-focus">True</property>
+                    <property name="name">tool_button</property>
                     <property name="receives-default">False</property>
                     <property name="tooltip-text" translatable="yes">Zoom
 Shortcut Key: Z</property>
@@ -1830,6 +1832,7 @@ Shortcut Key: Z</property>
                     <property name="height-request">32</property>
                     <property name="visible">True</property>
                     <property name="can-focus">False</property>
+                    <property name="name">tool_button</property>
                     <property name="receives-default">False</property>
                     <property name="tooltip-text" translatable="yes">Move image layers
 Shortcut Key: M</property>
@@ -1855,6 +1858,7 @@ Shortcut Key: M</property>
                     <property name="height-request">32</property>
                     <property name="visible">True</property>
                     <property name="can-focus">True</property>
+                    <property name="name">tool_button</property>
                     <property name="receives-default">False</property>
                     <property name="tooltip-text" translatable="yes">Color Picker
 Shortcut Key: I</property>
@@ -1880,6 +1884,7 @@ Shortcut Key: I</property>
                     <property name="height-request">32</property>
                     <property name="visible">True</property>
                     <property name="can-focus">True</property>
+                    <property name="name">tool_button</property>
                     <property name="receives-default">False</property>
                     <property name="tooltip-text" translatable="yes">Crop
 Shortcut Key: C</property>
@@ -1905,6 +1910,7 @@ Shortcut Key: C</property>
                     <property name="height-request">32</property>
                     <property name="visible">True</property>
                     <property name="can-focus">False</property>
+                    <property name="name">tool_button</property>
                     <property name="receives-default">False</property>
                     <property name="tooltip-text" translatable="yes">Pencil
 Shortcut Key: P</property>
@@ -1930,6 +1936,7 @@ Shortcut Key: P</property>
                     <property name="height-request">32</property>
                     <property name="visible">True</property>
                     <property name="can-focus">False</property>
+                    <property name="name">tool_button</property>
                     <property name="receives-default">False</property>
                     <property name="tooltip-text" translatable="yes">Paintbrush
 Shortcut Key: B</property>
@@ -1955,6 +1962,7 @@ Shortcut Key: B</property>
                     <property name="height-request">32</property>
                     <property name="visible">True</property>
                     <property name="can-focus">False</property>
+                    <property name="name">tool_button</property>
                     <property name="receives-default">False</property>
                     <property name="tooltip-text" translatable="yes">Eraser
 Shortcut Key: E</property>
@@ -1980,6 +1988,7 @@ Shortcut Key: E</property>
                     <property name="height-request">32</property>
                     <property name="visible">True</property>
                     <property name="can-focus">False</property>
+                    <property name="name">tool_button</property>
                     <property name="receives-default">False</property>
                     <property name="tooltip-text" translatable="yes">Paint bucket
 Shortcut Key: F</property>
@@ -2016,6 +2025,7 @@ Shortcut Key: F</property>
                     <property name="height-request">32</property>
                     <property name="visible">True</property>
                     <property name="can-focus">True</property>
+                    <property name="name">tool_button</property>
                     <property name="receives-default">False</property>
                     <property name="tooltip-text" translatable="yes">Rectangular Selection
 Shortcut Key: S</property>
@@ -2041,6 +2051,7 @@ Shortcut Key: S</property>
                     <property name="height-request">32</property>
                     <property name="visible">True</property>
                     <property name="can-focus">True</property>
+                    <property name="name">tool_button</property>
                     <property name="receives-default">False</property>
                     <property name="tooltip-text" translatable="yes">Elliptical Selection
 Shortcut Key: S</property>
@@ -2078,6 +2089,7 @@ Shortcut Key: S</property>
                     <property name="margin-start">4</property>
                     <property name="margin-end">4</property>
                     <property name="orientation">vertical</property>
+                    <property name="margin-top">5</property>
                     <property name="spacing">2</property>
                     <child>
                       <object class="GtkFixed" id="color_picker_container">
