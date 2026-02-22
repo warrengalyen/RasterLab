@@ -995,6 +995,173 @@ Command* command_create_layer_merge_up(struct ImageDocument* doc, struct ImageLa
 }
 
 /**
+ * Layer visibility command apply callback
+ */
+static void layer_visibility_command_apply(Command* cmd, struct ImageDocument* doc) {
+    LayerVisibilityCommandData* data;
+    GList* iter;
+    LayerVisibilityState* state;
+
+    if (!cmd || !cmd->user_data || !doc) return;
+    data = (LayerVisibilityCommandData*)cmd->user_data;
+
+    for (iter = data->states; iter; iter = iter->next) {
+        state = (LayerVisibilityState*)iter->data;
+        if (state && state->layer)
+            state->layer->visible = state->visible_after;
+    }
+    document_invalidate_composite(doc);
+}
+
+/**
+ * Layer visibility command revert callback
+ */
+static void layer_visibility_command_revert(Command* cmd, struct ImageDocument* doc) {
+    LayerVisibilityCommandData* data;
+    GList* iter;
+    LayerVisibilityState* state;
+
+    if (!cmd || !cmd->user_data || !doc) return;
+    data = (LayerVisibilityCommandData*)cmd->user_data;
+
+    for (iter = data->states; iter; iter = iter->next) {
+        state = (LayerVisibilityState*)iter->data;
+        if (state && state->layer)
+            state->layer->visible = state->visible_before;
+    }
+    document_invalidate_composite(doc);
+}
+
+/**
+ * Layer visibility command destroy callback
+ */
+static void layer_visibility_command_destroy(Command* cmd) {
+    LayerVisibilityCommandData* data;
+    GList* iter;
+
+    if (!cmd || !cmd->user_data) return;
+    data = (LayerVisibilityCommandData*)cmd->user_data;
+    if (data->states) {
+        for (iter = data->states; iter; iter = iter->next)
+            g_free(iter->data);
+        g_list_free(data->states);
+    }
+    g_free(data);
+}
+
+static Command* layer_visibility_command_create(struct ImageDocument* doc,
+                                                GList* states,
+                                                const gchar* name) {
+    Command* cmd;
+    LayerVisibilityCommandData* data;
+
+    if (!doc || !states || !name) return NULL;
+
+    data = (LayerVisibilityCommandData*)g_malloc(sizeof(LayerVisibilityCommandData));
+    data->doc = doc;
+    data->states = states;
+
+    cmd = command_new(name, COMMAND_LAYER_EDIT,
+                      layer_visibility_command_apply,
+                      layer_visibility_command_revert,
+                      layer_visibility_command_destroy);
+    if (!cmd) {
+        for (GList* i = states; i; i = i->next) g_free(i->data);
+        g_list_free(states);
+        g_free(data);
+        return NULL;
+    }
+    cmd->user_data = data;
+    return cmd;
+}
+
+Command* command_create_layer_visibility_toggle(struct ImageDocument* doc, struct ImageLayer* layer) {
+    LayerVisibilityState* state;
+    GList* states;
+
+    if (!doc || !layer) return NULL;
+
+    state = (LayerVisibilityState*)g_malloc(sizeof(LayerVisibilityState));
+    state->layer = layer;
+    state->visible_before = layer->visible;
+    state->visible_after = !layer->visible;
+    states = g_list_append(NULL, state);
+    return layer_visibility_command_create(doc, states, "Toggle layer visibility");
+}
+
+Command* command_create_layer_visibility_show_only(struct ImageDocument* doc, struct ImageLayer* layer) {
+    GList* states = NULL;
+    guint count = document_get_layer_count(doc);
+
+    if (!doc || !layer) return NULL;
+
+    for (guint i = 0; i < count; i++) {
+        ImageLayer* l = document_get_layer(doc, i);
+        if (!l) continue;
+        LayerVisibilityState* state = (LayerVisibilityState*)g_malloc(sizeof(LayerVisibilityState));
+        state->layer = l;
+        state->visible_before = l->visible;
+        state->visible_after = (l == layer);
+        states = g_list_append(states, state);
+    }
+    return layer_visibility_command_create(doc, states, "Show only this layer");
+}
+
+Command* command_create_layer_visibility_hide_only(struct ImageDocument* doc, struct ImageLayer* layer) {
+    GList* states = NULL;
+    guint count = document_get_layer_count(doc);
+
+    if (!doc || !layer) return NULL;
+
+    for (guint i = 0; i < count; i++) {
+        ImageLayer* l = document_get_layer(doc, i);
+        if (!l) continue;
+        LayerVisibilityState* state = (LayerVisibilityState*)g_malloc(sizeof(LayerVisibilityState));
+        state->layer = l;
+        state->visible_before = l->visible;
+        state->visible_after = (l != layer);  /* Hide selected, show all others */
+        states = g_list_append(states, state);
+    }
+    return layer_visibility_command_create(doc, states, "Hide only this layer");
+}
+
+Command* command_create_layer_visibility_show_all(struct ImageDocument* doc) {
+    GList* states = NULL;
+    guint count = document_get_layer_count(doc);
+
+    if (!doc || count == 0) return NULL;
+
+    for (guint i = 0; i < count; i++) {
+        ImageLayer* l = document_get_layer(doc, i);
+        if (!l) continue;
+        LayerVisibilityState* state = (LayerVisibilityState*)g_malloc(sizeof(LayerVisibilityState));
+        state->layer = l;
+        state->visible_before = l->visible;
+        state->visible_after = TRUE;
+        states = g_list_append(states, state);
+    }
+    return layer_visibility_command_create(doc, states, "Show all layers");
+}
+
+Command* command_create_layer_visibility_hide_all(struct ImageDocument* doc) {
+    GList* states = NULL;
+    guint count = document_get_layer_count(doc);
+
+    if (!doc || count == 0) return NULL;
+
+    for (guint i = 0; i < count; i++) {
+        ImageLayer* l = document_get_layer(doc, i);
+        if (!l) continue;
+        LayerVisibilityState* state = (LayerVisibilityState*)g_malloc(sizeof(LayerVisibilityState));
+        state->layer = l;
+        state->visible_before = l->visible;
+        state->visible_after = FALSE;
+        states = g_list_append(states, state);
+    }
+    return layer_visibility_command_create(doc, states, "Hide all layers");
+}
+
+/**
  * Create a paste command (similar to layer add but with "Paste" name)
  */
 Command* command_create_paste(struct ImageDocument* doc, struct ImageLayer* layer) {

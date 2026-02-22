@@ -22,7 +22,27 @@ void on_layer_order_move_down(GtkWidget* widget, gpointer data);
 void on_layer_order_move_bottom(GtkWidget* widget, gpointer data);
 void on_layer_merge_up(GtkWidget* widget, gpointer data);
 void on_layer_merge_down(GtkWidget* widget, gpointer data);
+void on_layer_visibility_show_current(GtkWidget* widget, gpointer data);
+void on_layer_visibility_show_only(GtkWidget* widget, gpointer data);
+void on_layer_visibility_hide_only(GtkWidget* widget, gpointer data);
+void on_layer_visibility_show_all(GtkWidget* widget, gpointer data);
+void on_layer_visibility_hide_all(GtkWidget* widget, gpointer data);
 void on_layer_selection_changed(GtkTreeSelection* selection, gpointer user_data);
+
+/**
+ * Update the "Show this layer" check state to match selected layer visibility.
+ * Safe to call from ui_update_menu_and_button_states (uses toggled-handler block).
+ */
+void layer_visibility_update_check_state(AppContext* ctx);
+
+/**
+ * Toggle layer visibility (used by layers panel and Layer menu).
+ * Creates undo command, executes, updates layers panel and menu states.
+ * @param ctx Application context
+ * @param doc Document containing the layer
+ * @param layer Layer to toggle
+ */
+void layer_visibility_toggle_execute(AppContext* ctx, ImageDocument* doc, ImageLayer* layer);
 
 /**
  * Create the Layer menu (legacy function for programmatic menu creation)

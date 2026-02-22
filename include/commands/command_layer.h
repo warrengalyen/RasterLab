@@ -48,6 +48,23 @@ typedef struct {
  * Merge down: selected layer is composited into the layer below, then removed.
  * Merge up: selected layer is composited into the layer above, then removed.
  */
+/**
+ * Per-layer visibility state for visibility commands
+ */
+typedef struct {
+    struct ImageLayer* layer;
+    gboolean visible_before;
+    gboolean visible_after;
+} LayerVisibilityState;
+
+/**
+ * Data for layer visibility commands (toggle, show only, hide only, show all, hide all)
+ */
+typedef struct {
+    struct ImageDocument* doc;
+    GList* states; /* List of LayerVisibilityState* */
+} LayerVisibilityCommandData;
+
 typedef struct {
     struct ImageDocument* doc;        /* Document containing the layers */
     struct ImageLayer* target_layer;  /* Layer that receives the merge (stays) */
@@ -141,5 +158,30 @@ Command* command_create_layer_merge_up(struct ImageDocument* doc, struct ImageLa
  * @return Newly created Command, or NULL on failure
  */
 Command* command_create_paste(struct ImageDocument* doc, struct ImageLayer* layer);
+
+/**
+ * Create a toggle layer visibility command
+ */
+Command* command_create_layer_visibility_toggle(struct ImageDocument* doc, struct ImageLayer* layer);
+
+/**
+ * Create a show only this layer command
+ */
+Command* command_create_layer_visibility_show_only(struct ImageDocument* doc, struct ImageLayer* layer);
+
+/**
+ * Create a hide only this layer command
+ */
+Command* command_create_layer_visibility_hide_only(struct ImageDocument* doc, struct ImageLayer* layer);
+
+/**
+ * Create a show all layers command
+ */
+Command* command_create_layer_visibility_show_all(struct ImageDocument* doc);
+
+/**
+ * Create a hide all layers command
+ */
+Command* command_create_layer_visibility_hide_all(struct ImageDocument* doc);
 
 #endif /* COMMAND_LAYER_H */

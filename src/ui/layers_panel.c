@@ -1,5 +1,6 @@
 #include "ui/layers_panel.h"
 #include "document.h"
+#include "ui/ui_layer_menu.h"
 #include "ocular.h"
 #include "render/compositor.h"
 #include "render/dirty.h"
@@ -28,10 +29,11 @@ static gboolean on_treeview_button_press(GtkWidget* widget,
     GtkTreePath* path = NULL;
     GtkTreeViewColumn* column = NULL;
     gint cell_x, cell_y;
-    GtkTreeIter iter;
-    gboolean visible;
-    GdkPixbuf* visibility_icon;
+    gint row;
+    guint layer_count;
+    gint layer_index;
     ImageLayer* layer;
+    AppContext* ctx;
 
     if (event->button != 1 || event->type != GDK_BUTTON_PRESS) {
         return FALSE;
@@ -51,55 +53,28 @@ static gboolean on_treeview_button_press(GtkWidget* widget,
         return FALSE;
     }
 
-    /* Get the row */
-    if (!gtk_tree_model_get_iter(GTK_TREE_MODEL(layers_panel->store), &iter, path)) {
+    if (!layers_panel->current_doc || !layers_panel->app_context) {
         gtk_tree_path_free(path);
-        return FALSE;
+        return TRUE;
     }
 
-    /* Get current visibility value */
-    gtk_tree_model_get(GTK_TREE_MODEL(layers_panel->store), &iter,
-                       3, &visible,
-                       -1);
+    /* Get the layer from the clicked row */
+    row = gtk_tree_path_get_indices(path)[0];
+    layer_count = document_get_layer_count(layers_panel->current_doc);
+    layer_index = layer_count - 1 - row;
 
-    /* Toggle visibility */
-    visible = !visible;
-
-    /* Update layer visibility in document */
-    if (layers_panel->current_doc) {
-        /* Get the layer from the row */
-        gint* indices = gtk_tree_path_get_indices(path);
-        gint row = indices[0];
-        guint layer_count = document_get_layer_count(layers_panel->current_doc);
-
-        /* Layers are displayed in reverse order */
-        gint layer_index = layer_count - 1 - row;
-
-        if (layer_index >= 0 && layer_index < (gint)layer_count) {
-            layer = document_get_layer(layers_panel->current_doc, layer_index);
-            if (layer) {
-                layer->visible = visible;
-                /* Mark composite as dirty and trigger redraw */
-                document_invalidate_composite(layers_panel->current_doc);
-
-                /* Update thumbnail with new visibility state */
-                GdkPixbuf* thumbnail = create_layer_thumbnail(layer->surface, 48, visible);
-                visibility_icon = get_visibility_icon(visible);
-
-                if (thumbnail && visibility_icon) {
-                    gtk_list_store_set(layers_panel->store, &iter,
-                                       0, visibility_icon,
-                                       1, thumbnail,
-                                       3, visible,
-                                       -1);
-                    g_object_unref(visibility_icon);
-                    g_object_unref(thumbnail);
-                }
-            }
-        }
+    if (layer_index < 0 || layer_index >= (gint)layer_count) {
+        gtk_tree_path_free(path);
+        return TRUE;
     }
 
+    layer = document_get_layer(layers_panel->current_doc, layer_index);
     gtk_tree_path_free(path);
+
+    if (!layer) return TRUE;
+
+    ctx = (AppContext*)layers_panel->app_context;
+    layer_visibility_toggle_execute(ctx, layers_panel->current_doc, layer);
 
     return TRUE;
 }

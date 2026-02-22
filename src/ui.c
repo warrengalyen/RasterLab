@@ -344,6 +344,11 @@ AppContext* ui_create_main_window(void) {
     ctx->layer_menu_order_move_up = NULL;
     ctx->layer_menu_order_move_down = NULL;
     ctx->layer_menu_order_move_bottom = NULL;
+    ctx->layer_menu_visibility_show_current = NULL;
+    ctx->layer_menu_visibility_show_only = NULL;
+    ctx->layer_menu_visibility_hide_only = NULL;
+    ctx->layer_menu_visibility_show_all = NULL;
+    ctx->layer_menu_visibility_hide_all = NULL;
     ctx->edit_menu_undo = NULL;
     ctx->edit_menu_redo = NULL;
     ctx->workspace = NULL;           /* Initialize workspace early */
@@ -2520,6 +2525,38 @@ void ui_update_menu_and_button_states(AppContext* ctx) {
         gtk_widget_set_sensitive(ctx->layer_menu_order_move_down, can_move_down);
     if (ctx->layer_menu_order_move_bottom && GTK_IS_WIDGET(ctx->layer_menu_order_move_bottom))
         gtk_widget_set_sensitive(ctx->layer_menu_order_move_bottom, can_move_down);
+
+    /* Layer > Visibility submenu */
+    gboolean can_show_all = FALSE;
+    gboolean can_hide_all = FALSE;
+    if (has_document && doc && layer_count > 0) {
+        gboolean any_hidden = FALSE;
+        gboolean any_visible = FALSE;
+        for (guint i = 0; i < layer_count; i++) {
+            ImageLayer* l = document_get_layer(doc, i);
+            if (l) {
+                if (l->visible) any_visible = TRUE;
+                else any_hidden = TRUE;
+            }
+        }
+        can_show_all = any_hidden;  /* Disable when all already visible */
+        can_hide_all = any_visible; /* Disable when all already hidden */
+    }
+    gboolean visibility_has_selection = has_document && has_selection;
+
+    if (ctx->layer_menu_visibility_show_current && GTK_IS_WIDGET(ctx->layer_menu_visibility_show_current)) {
+        gtk_widget_set_sensitive(ctx->layer_menu_visibility_show_current, visibility_has_selection);
+        if (visibility_has_selection)
+            layer_visibility_update_check_state(ctx);
+    }
+    if (ctx->layer_menu_visibility_show_only && GTK_IS_WIDGET(ctx->layer_menu_visibility_show_only))
+        gtk_widget_set_sensitive(ctx->layer_menu_visibility_show_only, visibility_has_selection);
+    if (ctx->layer_menu_visibility_hide_only && GTK_IS_WIDGET(ctx->layer_menu_visibility_hide_only))
+        gtk_widget_set_sensitive(ctx->layer_menu_visibility_hide_only, visibility_has_selection);
+    if (ctx->layer_menu_visibility_show_all && GTK_IS_WIDGET(ctx->layer_menu_visibility_show_all))
+        gtk_widget_set_sensitive(ctx->layer_menu_visibility_show_all, can_show_all);
+    if (ctx->layer_menu_visibility_hide_all && GTK_IS_WIDGET(ctx->layer_menu_visibility_hide_all))
+        gtk_widget_set_sensitive(ctx->layer_menu_visibility_hide_all, can_hide_all);
 }
 
 /**

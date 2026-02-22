@@ -7,6 +7,8 @@
 #include "ui/layers_panel.h"
 #include <glib.h>
 
+static void on_layer_visibility_show_current_toggled(GtkCheckMenuItem* check_item, gpointer data);
+
 /**
  * Layer selection changed callback - proper signal handler signature
  */
@@ -127,6 +129,24 @@ void ui_layer_menu_setup(GtkBuilder* builder, AppContext* ctx) {
         g_signal_connect(ctx->layer_menu_order_move_down, "activate", G_CALLBACK(on_layer_order_move_down), ctx);
     if (ctx->layer_menu_order_move_bottom)
         g_signal_connect(ctx->layer_menu_order_move_bottom, "activate", G_CALLBACK(on_layer_order_move_bottom), ctx);
+
+    /* Get and connect Layer > Visibility submenu items */
+    ctx->layer_menu_visibility_show_current = GTK_WIDGET(gtk_builder_get_object(builder, "layer_menu_visibility_show_current"));
+    ctx->layer_menu_visibility_show_only = GTK_WIDGET(gtk_builder_get_object(builder, "layer_menu_visibility_show_only"));
+    ctx->layer_menu_visibility_hide_only = GTK_WIDGET(gtk_builder_get_object(builder, "layer_menu_visibility_hide_only"));
+    ctx->layer_menu_visibility_show_all = GTK_WIDGET(gtk_builder_get_object(builder, "layer_menu_visibility_show_all"));
+    ctx->layer_menu_visibility_hide_all = GTK_WIDGET(gtk_builder_get_object(builder, "layer_menu_visibility_hide_all"));
+    if (ctx->layer_menu_visibility_show_current)
+        g_signal_connect(ctx->layer_menu_visibility_show_current, "toggled", G_CALLBACK(on_layer_visibility_show_current_toggled), ctx);
+    if (ctx->layer_menu_visibility_show_only)
+        g_signal_connect(ctx->layer_menu_visibility_show_only, "activate", G_CALLBACK(on_layer_visibility_show_only), ctx);
+    if (ctx->layer_menu_visibility_hide_only)
+        g_signal_connect(ctx->layer_menu_visibility_hide_only, "activate", G_CALLBACK(on_layer_visibility_hide_only), ctx);
+    if (ctx->layer_menu_visibility_show_all)
+        g_signal_connect(ctx->layer_menu_visibility_show_all, "activate", G_CALLBACK(on_layer_visibility_show_all), ctx);
+    if (ctx->layer_menu_visibility_hide_all)
+        g_signal_connect(ctx->layer_menu_visibility_hide_all, "activate", G_CALLBACK(on_layer_visibility_hide_all), ctx);
+
 }
 
 /**
@@ -708,5 +728,202 @@ void on_layer_order_move_bottom(GtkWidget* widget, gpointer data) {
     if (layers_panel) layers_panel_update(layers_panel, doc);
     ui_update_menu_and_button_states(ctx);
     ui_update_window_title(ctx, NULL);
+    doc->modified = TRUE;
+}
+
+/* Flag to skip toggle when we programmatically update check state */
+static gboolean visibility_check_updating = FALSE;
+
+/**
+ * Update "Show this layer" check state to match selected layer visibility.
+ * Blocks toggled handler to avoid triggering toggle when we call set_active.
+ */
+void layer_visibility_update_check_state(AppContext* ctx) {
+    ImageDocument* doc;
+    LayersPanel* layers_panel;
+    ImageLayer* selected;
+    GtkCheckMenuItem* check_item;
+
+    if (!ctx || !ctx->layer_menu_visibility_show_current ||
+        !GTK_IS_CHECK_MENU_ITEM(ctx->layer_menu_visibility_show_current))
+        return;
+
+    doc = ui_get_active_document(ctx);
+    layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window), "layers_panel");
+    selected = (layers_panel && doc) ? layers_panel_get_selected_layer(layers_panel) : NULL;
+    if (!selected) return;
+
+    check_item = GTK_CHECK_MENU_ITEM(ctx->layer_menu_visibility_show_current);
+    if (gtk_check_menu_item_get_active(check_item) == selected->visible)
+        return; /* Already in sync */
+
+    visibility_check_updating = TRUE;
+    g_signal_handlers_block_by_func(check_item, G_CALLBACK(on_layer_visibility_show_current_toggled), ctx);
+    gtk_check_menu_item_set_active(check_item, selected->visible);
+    g_signal_handlers_unblock_by_func(check_item, G_CALLBACK(on_layer_visibility_show_current_toggled), ctx);
+    visibility_check_updating = FALSE;
+}
+
+/**
+ * Toggled when user changes the "Show this layer" check - toggle layer visibility
+ */
+static void on_layer_visibility_show_current_toggled(GtkCheckMenuItem* check_item, gpointer data) {
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc;
+    LayersPanel* layers_panel;
+    ImageLayer* selected;
+
+    if (visibility_check_updating) return; /* Programmatic update, ignore */
+
+    doc = ui_get_active_document(ctx);
+    layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window), "layers_panel");
+    selected = layers_panel ? layers_panel_get_selected_layer(layers_panel) : NULL;
+    if (!doc || !selected) return;
+
+    layer_visibility_toggle_execute(ctx, doc, selected);
+}
+
+/**
+ * Toggle layer visibility - shared by layers panel and Layer menu
+ */
+void layer_visibility_toggle_execute(AppContext* ctx, ImageDocument* doc, ImageLayer* layer) {
+    Command* cmd;
+    LayersPanel* layers_panel;
+
+    if (!ctx || !doc || !layer) return;
+
+    cmd = command_create_layer_visibility_toggle(doc, layer);
+    if (!cmd) return;
+
+    command_execute(cmd, doc);
+    if (doc->undo_stack) {
+        command_stack_push(doc->undo_stack, cmd);
+        if (doc->redo_stack) command_stack_clear(doc->redo_stack);
+    } else {
+        command_free(cmd);
+    }
+
+    layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window), "layers_panel");
+    if (layers_panel) layers_panel_update(layers_panel, doc);
+    ui_update_menu_and_button_states(ctx);
+    doc->modified = TRUE;
+}
+
+/**
+ * Layer > Visibility > Show this layer (toggle)
+ */
+void on_layer_visibility_show_current(GtkWidget* widget, gpointer data) {
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc = ui_get_active_document(ctx);
+    LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window), "layers_panel");
+    ImageLayer* selected;
+
+    (void)widget;
+    if (!doc || !doc->layers) return;
+    selected = layers_panel ? layers_panel_get_selected_layer(layers_panel) : NULL;
+    if (!selected) return;
+
+    layer_visibility_toggle_execute(ctx, doc, selected);
+}
+
+/**
+ * Layer > Visibility > Show only this layer
+ */
+void on_layer_visibility_show_only(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc = ui_get_active_document(ctx);
+    LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window), "layers_panel");
+    Command* cmd;
+    ImageLayer* selected;
+    if (!doc || !doc->layers) return;
+    selected = layers_panel ? layers_panel_get_selected_layer(layers_panel) : NULL;
+    if (!selected) return;
+    cmd = command_create_layer_visibility_show_only(doc, selected);
+    if (!cmd) return;
+    command_execute(cmd, doc);
+    if (doc->undo_stack) {
+        command_stack_push(doc->undo_stack, cmd);
+        if (doc->redo_stack) command_stack_clear(doc->redo_stack);
+    } else {
+        command_free(cmd);
+    }
+    if (layers_panel) layers_panel_update(layers_panel, doc);
+    ui_update_menu_and_button_states(ctx);
+    doc->modified = TRUE;
+}
+
+/**
+ * Layer > Visibility > Hide only this layer
+ */
+void on_layer_visibility_hide_only(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc = ui_get_active_document(ctx);
+    LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window), "layers_panel");
+    Command* cmd;
+    ImageLayer* selected;
+    if (!doc || !doc->layers) return;
+    selected = layers_panel ? layers_panel_get_selected_layer(layers_panel) : NULL;
+    if (!selected) return;
+    cmd = command_create_layer_visibility_hide_only(doc, selected);
+    if (!cmd) return;
+    command_execute(cmd, doc);
+    if (doc->undo_stack) {
+        command_stack_push(doc->undo_stack, cmd);
+        if (doc->redo_stack) command_stack_clear(doc->redo_stack);
+    } else {
+        command_free(cmd);
+    }
+    if (layers_panel) layers_panel_update(layers_panel, doc);
+    ui_update_menu_and_button_states(ctx);
+    doc->modified = TRUE;
+}
+
+/**
+ * Layer > Visibility > Show all layers
+ */
+void on_layer_visibility_show_all(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc = ui_get_active_document(ctx);
+    LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window), "layers_panel");
+    Command* cmd;
+    if (!doc || !doc->layers) return;
+    cmd = command_create_layer_visibility_show_all(doc);
+    if (!cmd) return;
+    command_execute(cmd, doc);
+    if (doc->undo_stack) {
+        command_stack_push(doc->undo_stack, cmd);
+        if (doc->redo_stack) command_stack_clear(doc->redo_stack);
+    } else {
+        command_free(cmd);
+    }
+    if (layers_panel) layers_panel_update(layers_panel, doc);
+    ui_update_menu_and_button_states(ctx);
+    doc->modified = TRUE;
+}
+
+/**
+ * Layer > Visibility > Hide all layers
+ */
+void on_layer_visibility_hide_all(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc = ui_get_active_document(ctx);
+    LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window), "layers_panel");
+    Command* cmd;
+    if (!doc || !doc->layers) return;
+    cmd = command_create_layer_visibility_hide_all(doc);
+    if (!cmd) return;
+    command_execute(cmd, doc);
+    if (doc->undo_stack) {
+        command_stack_push(doc->undo_stack, cmd);
+        if (doc->redo_stack) command_stack_clear(doc->redo_stack);
+    } else {
+        command_free(cmd);
+    }
+    if (layers_panel) layers_panel_update(layers_panel, doc);
+    ui_update_menu_and_button_states(ctx);
     doc->modified = TRUE;
 }

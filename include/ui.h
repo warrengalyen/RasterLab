@@ -35,6 +35,11 @@ struct _AppContext {
     GtkWidget* layer_menu_order_move_up;
     GtkWidget* layer_menu_order_move_down;
     GtkWidget* layer_menu_order_move_bottom;
+    GtkWidget* layer_menu_visibility_show_current;
+    GtkWidget* layer_menu_visibility_show_only;
+    GtkWidget* layer_menu_visibility_hide_only;
+    GtkWidget* layer_menu_visibility_show_all;
+    GtkWidget* layer_menu_visibility_hide_all;
     GtkWidget* edit_menu_undo;            /* Edit > Undo menu item */
     GtkWidget* edit_menu_redo;            /* Edit > Redo menu item */
     GtkWidget* file_menu_save;            /* File > Save menu item */

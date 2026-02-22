@@ -1395,7 +1395,7 @@
             <property name="visible">True</property>
             <property name="can-focus">False</property>
             <child>
-              <object class="GtkMenuItem" id="layer_menu_visibility_show_current">
+              <object class="GtkCheckMenuItem" id="layer_menu_visibility_show_current">
                 <property name="visible">True</property>
                 <property name="can-focus">False</property>
                 <property name="label" translatable="yes">Show this layer</property>
