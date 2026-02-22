@@ -34,8 +34,8 @@
 #include "ui/ui_layer_menu.h"
 #include "ui/ui_select_menu.h"
 #include "ui/ui_tools_menu.h"
-#include "ui/ui_view_menu.h"
 #include "ui/ui_utils.h"
+#include "ui/ui_view_menu.h"
 #include "ui/workspace.h"
 #include "undo/undo_disk.h"
 #include <glib.h>
@@ -45,6 +45,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+
 
 /* Log handler to suppress harmless GTK Builder menu warnings */
 static gboolean gtk_builder_menu_warning_handler(const gchar* log_domain,
@@ -335,6 +336,14 @@ AppContext* ui_create_main_window(void) {
     ctx->layer_menu_duplicate = NULL;
     ctx->layer_menu_merge_up = NULL;
     ctx->layer_menu_merge_down = NULL;
+    ctx->layer_menu_order_select_top = NULL;
+    ctx->layer_menu_order_select_above = NULL;
+    ctx->layer_menu_order_select_below = NULL;
+    ctx->layer_menu_order_select_bottom = NULL;
+    ctx->layer_menu_order_move_top = NULL;
+    ctx->layer_menu_order_move_up = NULL;
+    ctx->layer_menu_order_move_down = NULL;
+    ctx->layer_menu_order_move_bottom = NULL;
     ctx->edit_menu_undo = NULL;
     ctx->edit_menu_redo = NULL;
     ctx->workspace = NULL;           /* Initialize workspace early */
@@ -2471,14 +2480,46 @@ void ui_update_menu_and_button_states(AppContext* ctx) {
     }
     if (ctx->layer_menu_merge_up && GTK_IS_WIDGET(ctx->layer_menu_merge_up)) {
         gboolean can_merge_up = has_document && has_selection && selected_layer &&
-            document_layer_can_move_up(doc, selected_layer);
+                                document_layer_can_move_up(doc, selected_layer);
         gtk_widget_set_sensitive(ctx->layer_menu_merge_up, can_merge_up);
     }
     if (ctx->layer_menu_merge_down && GTK_IS_WIDGET(ctx->layer_menu_merge_down)) {
         gboolean can_merge_down = has_document && has_selection && selected_layer &&
-            document_layer_can_move_down(doc, selected_layer);
+                                  document_layer_can_move_down(doc, selected_layer);
         gtk_widget_set_sensitive(ctx->layer_menu_merge_down, can_merge_down);
     }
+
+    /* Layer > Order submenu: select and move commands */
+    guint layer_count = has_document && doc ? document_get_layer_count(doc) : 0;
+    gboolean can_move_up = has_document && has_selection && selected_layer &&
+                           document_layer_can_move_up(doc, selected_layer);
+    gboolean can_move_down = has_document && has_selection && selected_layer &&
+                             document_layer_can_move_down(doc, selected_layer);
+    ImageLayer* top_layer = (has_document && doc && layer_count > 0) ? document_get_layer(doc, layer_count - 1) : NULL;
+    ImageLayer* bottom_layer = (has_document && doc && layer_count > 0) ? document_get_layer(doc, 0) : NULL;
+    gboolean can_select_top = has_document && layer_count > 0 && selected_layer &&
+                              selected_layer != top_layer;
+    gboolean can_select_above = can_move_up;
+    gboolean can_select_below = can_move_down;
+    gboolean can_select_bottom = has_document && layer_count > 0 && selected_layer &&
+                                 selected_layer != bottom_layer;
+
+    if (ctx->layer_menu_order_select_top && GTK_IS_WIDGET(ctx->layer_menu_order_select_top))
+        gtk_widget_set_sensitive(ctx->layer_menu_order_select_top, can_select_top);
+    if (ctx->layer_menu_order_select_above && GTK_IS_WIDGET(ctx->layer_menu_order_select_above))
+        gtk_widget_set_sensitive(ctx->layer_menu_order_select_above, can_select_above);
+    if (ctx->layer_menu_order_select_below && GTK_IS_WIDGET(ctx->layer_menu_order_select_below))
+        gtk_widget_set_sensitive(ctx->layer_menu_order_select_below, can_select_below);
+    if (ctx->layer_menu_order_select_bottom && GTK_IS_WIDGET(ctx->layer_menu_order_select_bottom))
+        gtk_widget_set_sensitive(ctx->layer_menu_order_select_bottom, can_select_bottom);
+    if (ctx->layer_menu_order_move_top && GTK_IS_WIDGET(ctx->layer_menu_order_move_top))
+        gtk_widget_set_sensitive(ctx->layer_menu_order_move_top, can_move_up);
+    if (ctx->layer_menu_order_move_up && GTK_IS_WIDGET(ctx->layer_menu_order_move_up))
+        gtk_widget_set_sensitive(ctx->layer_menu_order_move_up, can_move_up);
+    if (ctx->layer_menu_order_move_down && GTK_IS_WIDGET(ctx->layer_menu_order_move_down))
+        gtk_widget_set_sensitive(ctx->layer_menu_order_move_down, can_move_down);
+    if (ctx->layer_menu_order_move_bottom && GTK_IS_WIDGET(ctx->layer_menu_order_move_bottom))
+        gtk_widget_set_sensitive(ctx->layer_menu_order_move_bottom, can_move_down);
 }
 
 /**

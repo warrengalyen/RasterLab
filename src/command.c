@@ -419,6 +419,8 @@ const gchar* command_get_name_string(CommandName name) {
         "Duplicate Layer",
         "Move Layer Up",
         "Move Layer Down",
+        "Move Layer to Top",
+        "Move Layer to Bottom",
         "Merge Layer Up",
         "Merge Layer Down",
         "Canvas size",

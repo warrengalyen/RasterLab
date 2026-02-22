@@ -677,6 +677,90 @@ Command* command_create_layer_move_down(struct ImageDocument* doc, struct ImageL
 }
 
 /**
+ * Create a layer move to top command
+ */
+Command* command_create_layer_move_to_top(struct ImageDocument* doc, struct ImageLayer* layer) {
+    Command* cmd;
+    LayerMoveUpCommandData* data;
+    gint old_pos;
+    GList* iter;
+    guint count;
+
+    if (!doc || !layer) {
+        return NULL;
+    }
+
+    iter = g_list_find(doc->layers, layer);
+    if (!iter || !iter->next) {
+        return NULL; /* Already at top */
+    }
+
+    count = g_list_length(doc->layers);
+    old_pos = g_list_position(doc->layers, iter);
+
+    data = (LayerMoveUpCommandData*)g_malloc(sizeof(LayerMoveUpCommandData));
+    data->doc = doc;
+    data->layer = layer;
+    data->old_position = old_pos;
+    data->new_position = (gint)count - 1;
+
+    cmd = command_new(command_get_name_string(CMD_NAME_MOVE_LAYER_TO_TOP),
+                      COMMAND_LAYER_EDIT,
+                      layer_move_up_command_apply,
+                      layer_move_up_command_revert,
+                      layer_move_up_command_destroy);
+
+    if (!cmd) {
+        g_free(data);
+        return NULL;
+    }
+
+    cmd->user_data = data;
+    return cmd;
+}
+
+/**
+ * Create a layer move to bottom command
+ */
+Command* command_create_layer_move_to_bottom(struct ImageDocument* doc, struct ImageLayer* layer) {
+    Command* cmd;
+    LayerMoveDownCommandData* data;
+    gint old_pos;
+    GList* iter;
+
+    if (!doc || !layer) {
+        return NULL;
+    }
+
+    iter = g_list_find(doc->layers, layer);
+    if (!iter || !iter->prev) {
+        return NULL; /* Already at bottom */
+    }
+
+    old_pos = g_list_position(doc->layers, iter);
+
+    data = (LayerMoveDownCommandData*)g_malloc(sizeof(LayerMoveDownCommandData));
+    data->doc = doc;
+    data->layer = layer;
+    data->old_position = old_pos;
+    data->new_position = 0;
+
+    cmd = command_new(command_get_name_string(CMD_NAME_MOVE_LAYER_TO_BOTTOM),
+                      COMMAND_LAYER_EDIT,
+                      layer_move_down_command_apply,
+                      layer_move_down_command_revert,
+                      layer_move_down_command_destroy);
+
+    if (!cmd) {
+        g_free(data);
+        return NULL;
+    }
+
+    cmd->user_data = data;
+    return cmd;
+}
+
+/**
  * Layer merge command apply callback (composite source onto target, remove source)
  */
 static void layer_merge_command_apply(Command* cmd, struct ImageDocument* doc) {

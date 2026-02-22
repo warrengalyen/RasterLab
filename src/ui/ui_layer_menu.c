@@ -1,6 +1,7 @@
 #include "ui/ui_layer_menu.h"
 #include "commands/command_layer.h"
 #include "document.h"
+#include "render/layer.h"
 #include "ui.h"
 #include "ui/dialogs/new_layer_dialog.h"
 #include "ui/layers_panel.h"
@@ -100,6 +101,32 @@ void ui_layer_menu_setup(GtkBuilder* builder, AppContext* ctx) {
     if (ctx->layer_menu_merge_down) {
         g_signal_connect(ctx->layer_menu_merge_down, "activate", G_CALLBACK(on_layer_merge_down), ctx);
     }
+
+    /* Get and connect Layer > Order submenu items */
+    ctx->layer_menu_order_select_top = GTK_WIDGET(gtk_builder_get_object(builder, "layer_menu_order_select_top"));
+    ctx->layer_menu_order_select_above = GTK_WIDGET(gtk_builder_get_object(builder, "layer_menu_order_select_above"));
+    ctx->layer_menu_order_select_below = GTK_WIDGET(gtk_builder_get_object(builder, "layer_menu_order_select_below"));
+    ctx->layer_menu_order_select_bottom = GTK_WIDGET(gtk_builder_get_object(builder, "layer_menu_order_select_bottom"));
+    ctx->layer_menu_order_move_top = GTK_WIDGET(gtk_builder_get_object(builder, "layer_menu_order_move_top"));
+    ctx->layer_menu_order_move_up = GTK_WIDGET(gtk_builder_get_object(builder, "layer_menu_order_move_up"));
+    ctx->layer_menu_order_move_down = GTK_WIDGET(gtk_builder_get_object(builder, "layer_menu_order_move_down"));
+    ctx->layer_menu_order_move_bottom = GTK_WIDGET(gtk_builder_get_object(builder, "layer_menu_order_move_bottom"));
+    if (ctx->layer_menu_order_select_top)
+        g_signal_connect(ctx->layer_menu_order_select_top, "activate", G_CALLBACK(on_layer_order_select_top), ctx);
+    if (ctx->layer_menu_order_select_above)
+        g_signal_connect(ctx->layer_menu_order_select_above, "activate", G_CALLBACK(on_layer_order_select_above), ctx);
+    if (ctx->layer_menu_order_select_below)
+        g_signal_connect(ctx->layer_menu_order_select_below, "activate", G_CALLBACK(on_layer_order_select_below), ctx);
+    if (ctx->layer_menu_order_select_bottom)
+        g_signal_connect(ctx->layer_menu_order_select_bottom, "activate", G_CALLBACK(on_layer_order_select_bottom), ctx);
+    if (ctx->layer_menu_order_move_top)
+        g_signal_connect(ctx->layer_menu_order_move_top, "activate", G_CALLBACK(on_layer_order_move_top), ctx);
+    if (ctx->layer_menu_order_move_up)
+        g_signal_connect(ctx->layer_menu_order_move_up, "activate", G_CALLBACK(on_layer_order_move_up), ctx);
+    if (ctx->layer_menu_order_move_down)
+        g_signal_connect(ctx->layer_menu_order_move_down, "activate", G_CALLBACK(on_layer_order_move_down), ctx);
+    if (ctx->layer_menu_order_move_bottom)
+        g_signal_connect(ctx->layer_menu_order_move_bottom, "activate", G_CALLBACK(on_layer_order_move_bottom), ctx);
 }
 
 /**
@@ -533,6 +560,152 @@ void on_layer_move_down(GtkWidget* widget, gpointer data) {
     }
 
     /* Update UI state */
+    ui_update_menu_and_button_states(ctx);
+    ui_update_window_title(ctx, NULL);
+    doc->modified = TRUE;
+}
+
+/**
+ * Layer > Order > Select top layer
+ */
+void on_layer_order_select_top(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc = ui_get_active_document(ctx);
+    LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window), "layers_panel");
+    if (!doc || !layers_panel) return;
+    guint count = document_get_layer_count(doc);
+    if (count == 0) return;
+    ImageLayer* top = document_get_layer(doc, count - 1);
+    if (top) {
+        document_set_selected_layer(doc, top);
+        layers_panel_select_layer(layers_panel, doc, top);
+        ui_update_menu_and_button_states(ctx);
+    }
+}
+
+/**
+ * Layer > Order > Select layer above
+ */
+void on_layer_order_select_above(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc = ui_get_active_document(ctx);
+    LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window), "layers_panel");
+    if (!doc || !layers_panel) return;
+    ImageLayer* selected = layers_panel_get_selected_layer(layers_panel);
+    if (!selected) return;
+    GList* iter = g_list_find(doc->layers, selected);
+    if (!iter || !iter->next) return;
+    ImageLayer* above = (ImageLayer*)iter->next->data;
+    document_set_selected_layer(doc, above);
+    layers_panel_select_layer(layers_panel, doc, above);
+    ui_update_menu_and_button_states(ctx);
+}
+
+/**
+ * Layer > Order > Select layer below
+ */
+void on_layer_order_select_below(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc = ui_get_active_document(ctx);
+    LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window), "layers_panel");
+    if (!doc || !layers_panel) return;
+    ImageLayer* selected = layers_panel_get_selected_layer(layers_panel);
+    if (!selected) return;
+    GList* iter = g_list_find(doc->layers, selected);
+    if (!iter || !iter->prev) return;
+    ImageLayer* below = (ImageLayer*)iter->prev->data;
+    document_set_selected_layer(doc, below);
+    layers_panel_select_layer(layers_panel, doc, below);
+    ui_update_menu_and_button_states(ctx);
+}
+
+/**
+ * Layer > Order > Select bottom layer
+ */
+void on_layer_order_select_bottom(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc = ui_get_active_document(ctx);
+    LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window), "layers_panel");
+    if (!doc || !layers_panel) return;
+    guint count = document_get_layer_count(doc);
+    if (count == 0) return;
+    ImageLayer* bottom = document_get_layer(doc, 0);
+    if (bottom) {
+        document_set_selected_layer(doc, bottom);
+        layers_panel_select_layer(layers_panel, doc, bottom);
+        ui_update_menu_and_button_states(ctx);
+    }
+}
+
+/**
+ * Layer > Order > Move layer to top
+ */
+void on_layer_order_move_top(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc = ui_get_active_document(ctx);
+    LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window), "layers_panel");
+    Command* cmd;
+    ImageLayer* selected;
+    if (!doc || !doc->layers) return;
+    selected = layers_panel ? layers_panel_get_selected_layer(layers_panel) : NULL;
+    if (!selected) return;
+    cmd = command_create_layer_move_to_top(doc, selected);
+    if (!cmd) return;
+    command_execute(cmd, doc);
+    if (doc->undo_stack) {
+        command_stack_push(doc->undo_stack, cmd);
+        if (doc->redo_stack) command_stack_clear(doc->redo_stack);
+    } else {
+        command_free(cmd);
+    }
+    if (layers_panel) layers_panel_update(layers_panel, doc);
+    ui_update_menu_and_button_states(ctx);
+    ui_update_window_title(ctx, NULL);
+    doc->modified = TRUE;
+}
+
+/**
+ * Layer > Order > Move layer up (delegates to on_layer_move_up)
+ */
+void on_layer_order_move_up(GtkWidget* widget, gpointer data) {
+    on_layer_move_up(widget, data);
+}
+
+/**
+ * Layer > Order > Move layer down (delegates to on_layer_move_down)
+ */
+void on_layer_order_move_down(GtkWidget* widget, gpointer data) {
+    on_layer_move_down(widget, data);
+}
+
+/**
+ * Layer > Order > Move layer to bottom
+ */
+void on_layer_order_move_bottom(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc = ui_get_active_document(ctx);
+    LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window), "layers_panel");
+    Command* cmd;
+    ImageLayer* selected;
+    if (!doc || !doc->layers) return;
+    selected = layers_panel ? layers_panel_get_selected_layer(layers_panel) : NULL;
+    if (!selected) return;
+    cmd = command_create_layer_move_to_bottom(doc, selected);
+    if (!cmd) return;
+    command_execute(cmd, doc);
+    if (doc->undo_stack) {
+        command_stack_push(doc->undo_stack, cmd);
+        if (doc->redo_stack) command_stack_clear(doc->redo_stack);
+    } else {
+        command_free(cmd);
+    }
+    if (layers_panel) layers_panel_update(layers_panel, doc);
     ui_update_menu_and_button_states(ctx);
     ui_update_window_title(ctx, NULL);
     doc->modified = TRUE;

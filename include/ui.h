@@ -27,6 +27,14 @@ struct _AppContext {
     GtkWidget* layer_menu_duplicate;      /* Layer > Duplicate Layer menu item */
     GtkWidget* layer_menu_merge_up;       /* Layer > Merge up menu item */
     GtkWidget* layer_menu_merge_down;     /* Layer > Merge down menu item */
+    GtkWidget* layer_menu_order_select_top;
+    GtkWidget* layer_menu_order_select_above;
+    GtkWidget* layer_menu_order_select_below;
+    GtkWidget* layer_menu_order_select_bottom;
+    GtkWidget* layer_menu_order_move_top;
+    GtkWidget* layer_menu_order_move_up;
+    GtkWidget* layer_menu_order_move_down;
+    GtkWidget* layer_menu_order_move_bottom;
     GtkWidget* edit_menu_undo;            /* Edit > Undo menu item */
     GtkWidget* edit_menu_redo;            /* Edit > Redo menu item */
     GtkWidget* file_menu_save;            /* File > Save menu item */

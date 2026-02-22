@@ -109,6 +109,16 @@ Command* command_create_layer_move_up(struct ImageDocument* doc, struct ImageLay
 Command* command_create_layer_move_down(struct ImageDocument* doc, struct ImageLayer* layer);
 
 /**
+ * Create a layer move to top command
+ */
+Command* command_create_layer_move_to_top(struct ImageDocument* doc, struct ImageLayer* layer);
+
+/**
+ * Create a layer move to bottom command
+ */
+Command* command_create_layer_move_to_bottom(struct ImageDocument* doc, struct ImageLayer* layer);
+
+/**
  * Create a layer merge down command (merge selected layer into layer below)
  * @param doc The document
  * @param selected_layer The selected layer to merge (will be removed)
