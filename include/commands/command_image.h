@@ -113,9 +113,34 @@ Command* command_create_rotate_arbitrary_named(const gchar* name,
                                                guchar fill_b);
 
 /**
+ * Image resize command data (resample all layers to new dimensions)
+ */
+typedef struct {
+    guint old_width;
+    guint old_height;
+    guint new_width;
+    guint new_height;
+    gint interpolation_mode; /* OcInterpolationMode */
+    GList* layer_snapshots;  /* cairo_surface_t* per layer (before resize) */
+    GList* layers;           /* ImageLayer* (same order as snapshots) */
+} ImageResizeCommandData;
+
+/**
+ * Create an image resize command (resample image and all layers to new size)
+ * @param doc The document
+ * @param new_width Target width in pixels
+ * @param new_height Target height in pixels
+ * @param interpolation_mode OcInterpolationMode (0=Nearest, 1=Bilinear, 2=Bicubic, 3=Lanczos)
+ * @return Newly created Command, or NULL on failure
+ */
+Command* command_create_image_resize(struct ImageDocument* doc,
+                                     guint new_width, guint new_height,
+                                     gint interpolation_mode);
+
+/**
  * Create a fit canvas to active layer command
  * @param old_width Canvas width before resize
- * @param old_height Canvas height before resize
+ * @param old_height Canvas height before resize 
  * @param new_width Canvas width after resize
  * @param new_height Canvas height after resize
  * @param old_resolution Resolution before resize

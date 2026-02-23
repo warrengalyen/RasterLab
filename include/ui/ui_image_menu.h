@@ -8,6 +8,7 @@
  * Image menu callback functions
  */
 void on_image_canvas_size(GtkWidget* widget, gpointer data);
+void on_image_resize(GtkWidget* widget, gpointer data);
 void on_image_duplicate(GtkWidget* widget, gpointer data);
 void on_image_fit_active_layer(GtkWidget* widget, gpointer data);
 void on_image_fit_all_layers(GtkWidget* widget, gpointer data);

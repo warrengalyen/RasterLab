@@ -8,6 +8,7 @@
 #include "render/tile.h"
 #include "ui.h"
 #include "ui/dialogs/canvas_size_dialog.h"
+#include "ui/dialogs/resize_dialog.h"
 #include "ui/dialogs/rotate_dialog.h"
 #include "ui/layers_panel.h"
 #include <cairo/cairo.h>
@@ -15,6 +16,75 @@
 #include <gtk/gtk.h>
 #include <math.h>
 #include <stdbool.h>
+
+/**
+ * Image > Resize (Image Size) callback – resample image to new dimensions
+ */
+void on_image_resize(GtkWidget* widget, gpointer data) {
+    (void)widget;
+
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc;
+    ResizeDialog* dialog;
+    ResizeDialogResult* result;
+    Command* cmd;
+    gint response;
+    GtkWindow* parent_window = NULL;
+
+    if (!ctx || !ctx->window) {
+        return;
+    }
+
+    doc = ui_get_active_document(ctx);
+    if (!doc) {
+        g_warning("No document open");
+        return;
+    }
+
+    dialog = resize_dialog_new(doc);
+    if (!dialog) {
+        g_warning("Failed to create resize dialog");
+        return;
+    }
+
+    if (GTK_IS_WINDOW(ctx->window)) {
+        parent_window = GTK_WINDOW(ctx->window);
+    }
+
+    response = resize_dialog_run(dialog, parent_window, &result);
+    if (response == GTK_RESPONSE_OK && result) {
+        if (result->width == doc->width && result->height == doc->height) {
+            resize_dialog_result_free(result);
+            resize_dialog_free(dialog);
+            return;
+        }
+        cmd = command_create_image_resize(doc, result->width, result->height, result->interpolation_mode);
+        resize_dialog_result_free(result);
+        resize_dialog_free(dialog);
+        if (cmd) {
+            command_execute(cmd, doc);
+            if (doc->undo_stack) {
+                command_stack_push(doc->undo_stack, cmd);
+                if (doc->redo_stack) {
+                    command_stack_clear(doc->redo_stack);
+                }
+            } else {
+                command_free(cmd);
+            }
+            {
+                LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window), "layers_panel");
+                if (layers_panel) {
+                    layers_panel_update(layers_panel, doc);
+                }
+            }
+            ui_update_menu_and_button_states(ctx);
+            ui_update_status_bar(ctx, NULL);
+            doc->modified = TRUE;
+        }
+    } else {
+        resize_dialog_free(dialog);
+    }
+}
 
 /**
  * Image > Canvas Size callback
@@ -87,7 +157,7 @@ void on_image_canvas_size(GtkWidget* widget, gpointer data) {
         new_resolution = result->resolution;
         anchor = result->anchor;
 
-        /* If dimensions haven't changed, nothing to do */
+        /* If dimensions unchanged, nothing to do */
         if (old_width == new_width && old_height == new_height) {
             canvas_size_dialog_result_free(result);
             canvas_size_dialog_free(dialog);
@@ -1241,6 +1311,11 @@ void ui_image_menu_setup(GtkBuilder* builder, AppContext* ctx) {
     }
 
     /* Connect Image menu signals */
+    GtkWidget* image_menu_resize = GTK_WIDGET(gtk_builder_get_object(builder, "image_menu_resize"));
+    if (image_menu_resize) {
+        g_signal_connect(image_menu_resize, "activate", G_CALLBACK(on_image_resize), ctx);
+    }
+
     GtkWidget* image_menu_canvas_size = GTK_WIDGET(gtk_builder_get_object(builder, "image_menu_canvas_size"));
     if (image_menu_canvas_size) {
         g_signal_connect(image_menu_canvas_size, "activate", G_CALLBACK(on_image_canvas_size), ctx);

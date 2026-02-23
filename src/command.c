@@ -424,6 +424,7 @@ const gchar* command_get_name_string(CommandName name) {
         "Merge Layer Up",
         "Merge Layer Down",
         "Canvas size",
+        "Resize image",
         "Flip Horizontal",
         "Flip Vertical",
         "Transpose",

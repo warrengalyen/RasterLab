@@ -105,6 +105,7 @@ set(SOURCES
     ui.c
     ui/dialogs/beeps_dialog.c
     ui/dialogs/canvas_size_dialog.c
+    ui/dialogs/resize_dialog.c
     ui/dialogs/hdr_image_dialog.c
     ui/dialogs/clouds_dialog.c
     ui/dialogs/channel_mixer_dialog.c

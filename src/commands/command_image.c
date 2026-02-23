@@ -379,6 +379,292 @@ static gboolean transpose_layer_impl(struct ImageLayer* layer) {
 }
 
 /**
+ * Helper: Resize a layer using ocularResamplingFilter
+ */
+static gboolean resize_layer_impl(struct ImageLayer* layer, gint new_width, gint new_height,
+                                 OcInterpolationMode interpolation_mode) {
+    cairo_surface_t* old_surface;
+    cairo_surface_t* new_surface;
+    gint old_width, old_height;
+    guchar* rgba_input;
+    guchar* rgba_output;
+    OC_STATUS status;
+
+    if (!layer || !layer->surface) {
+        return FALSE;
+    }
+
+    old_surface = layer->surface;
+    if (!adjustments_validate_surface(old_surface, &old_width, &old_height)) {
+        return FALSE;
+    }
+
+    if (old_width <= 0 || old_height <= 0 || new_width <= 0 || new_height <= 0) {
+        return FALSE;
+    }
+
+    if (old_width == new_width && old_height == new_height) {
+        return TRUE;
+    }
+
+    rgba_input = (guchar*)g_malloc((gsize)old_width * old_height * 4);
+    rgba_output = (guchar*)g_malloc((gsize)new_width * new_height * 4);
+    if (!rgba_input || !rgba_output) {
+        g_free(rgba_input);
+        g_free(rgba_output);
+        return FALSE;
+    }
+
+    if (!adjustments_cairo_to_rgba(old_surface, rgba_input)) {
+        g_free(rgba_input);
+        g_free(rgba_output);
+        return FALSE;
+    }
+
+    status = ocularResamplingFilter(rgba_input, old_width, old_height, old_width * 4,
+                                   rgba_output, new_width, new_height, new_width * 4,
+                                   interpolation_mode);
+    g_free(rgba_input);
+
+    if (status != OC_STATUS_OK) {
+        g_warning("Resize layer: ocularResamplingFilter returned %d", status);
+        g_free(rgba_output);
+        return FALSE;
+    }
+
+    new_surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, new_width, new_height);
+    if (!new_surface) {
+        g_free(rgba_output);
+        return FALSE;
+    }
+
+    if (!adjustments_rgba_to_cairo(new_surface, rgba_output)) {
+        cairo_surface_destroy(new_surface);
+        g_free(rgba_output);
+        return FALSE;
+    }
+    g_free(rgba_output);
+
+    cairo_surface_destroy(layer->surface);
+    layer->surface = new_surface;
+    layer->width = new_width;
+    layer->height = new_height;
+    layer_invalidate_cache(layer);
+    return TRUE;
+}
+
+/**
+ * Image resize command apply: resize all layers and document to new dimensions
+ */
+static void image_resize_command_apply(Command* cmd, struct ImageDocument* doc) {
+    ImageResizeCommandData* data;
+    GList* iter_snap, *iter_layer;
+    struct ImageLayer* layer;
+
+    if (!cmd || !cmd->user_data || !doc) {
+        return;
+    }
+    data = (ImageResizeCommandData*)cmd->user_data;
+
+    doc->width = data->new_width;
+    doc->height = data->new_height;
+
+    for (iter_snap = data->layer_snapshots, iter_layer = data->layers;
+         iter_snap && iter_layer;
+         iter_snap = iter_snap->next, iter_layer = iter_layer->next) {
+        cairo_surface_t* snapshot = (cairo_surface_t*)iter_snap->data;
+        layer = (struct ImageLayer*)iter_layer->data;
+        if (!layer || !snapshot) {
+            continue;
+        }
+        gint ow = 0, oh = 0;
+        if (!adjustments_validate_surface(snapshot, &ow, &oh)) {
+            continue;
+        }
+        if (!resize_layer_impl(layer, (gint)data->new_width, (gint)data->new_height,
+                              (OcInterpolationMode)data->interpolation_mode)) {
+            continue;
+        }
+    }
+
+    if (doc->tile_grid) {
+        tile_grid_free(doc->tile_grid);
+        doc->tile_grid = NULL;
+    }
+    doc->tile_grid = tile_grid_create(data->new_width, data->new_height, 128);
+    if (!doc->tile_grid) {
+        g_warning("Failed to create tile grid after image resize redo");
+    }
+
+    if (doc->drawing_area) {
+        gint display_width = (gint)(doc->width * doc->zoom_factor);
+        gint display_height = (gint)(doc->height * doc->zoom_factor);
+        gtk_widget_set_size_request(doc->drawing_area, display_width, display_height);
+        gtk_widget_queue_draw(doc->drawing_area);
+    }
+    document_invalidate_composite(doc);
+}
+
+/**
+ * Image resize command revert: restore document size and layer surfaces
+ */
+static void image_resize_command_revert(Command* cmd, struct ImageDocument* doc) {
+    ImageResizeCommandData* data;
+    GList* iter_snap, *iter_layer;
+    struct ImageLayer* layer;
+
+    if (!cmd || !cmd->user_data || !doc) {
+        return;
+    }
+    data = (ImageResizeCommandData*)cmd->user_data;
+
+    doc->width = data->old_width;
+    doc->height = data->old_height;
+
+    for (iter_snap = data->layer_snapshots, iter_layer = data->layers;
+         iter_snap && iter_layer;
+         iter_snap = iter_snap->next, iter_layer = iter_layer->next) {
+        cairo_surface_t* snapshot = (cairo_surface_t*)iter_snap->data;
+        layer = (struct ImageLayer*)iter_layer->data;
+        if (!layer || !snapshot) {
+            continue;
+        }
+        gint w = 0, h = 0;
+        if (!adjustments_validate_surface(snapshot, &w, &h)) {
+            continue;
+        }
+        cairo_surface_t* restored = cairo_surface_snapshot(snapshot);
+        if (restored) {
+            if (layer->surface) {
+                cairo_surface_destroy(layer->surface);
+            }
+            layer->surface = restored;
+            layer->width = w;
+            layer->height = h;
+            layer_invalidate_cache(layer);
+        }
+    }
+
+    if (doc->tile_grid) {
+        tile_grid_free(doc->tile_grid);
+        doc->tile_grid = NULL;
+    }
+    doc->tile_grid = tile_grid_create(data->old_width, data->old_height, 128);
+    if (!doc->tile_grid) {
+        g_warning("Failed to create tile grid after image resize undo");
+    }
+
+    if (doc->drawing_area) {
+        gint display_width = (gint)(doc->width * doc->zoom_factor);
+        gint display_height = (gint)(doc->height * doc->zoom_factor);
+        gtk_widget_set_size_request(doc->drawing_area, display_width, display_height);
+        gtk_widget_queue_draw(doc->drawing_area);
+    }
+    document_invalidate_composite(doc);
+}
+
+/**
+ * Image resize command destroy
+ */
+static void image_resize_command_destroy(Command* cmd) {
+    ImageResizeCommandData* data;
+    GList* iter;
+
+    if (!cmd || !cmd->user_data) {
+        return;
+    }
+    data = (ImageResizeCommandData*)cmd->user_data;
+    if (data->layer_snapshots) {
+        for (iter = data->layer_snapshots; iter; iter = iter->next) {
+            cairo_surface_t* s = (cairo_surface_t*)iter->data;
+            if (s) {
+                cairo_surface_destroy(s);
+            }
+        }
+        g_list_free(data->layer_snapshots);
+    }
+    if (data->layers) {
+        g_list_free(data->layers);
+    }
+    g_free(data);
+}
+
+/**
+ * Create image resize command
+ */
+Command* command_create_image_resize(struct ImageDocument* doc,
+                                     guint new_width, guint new_height,
+                                     gint interpolation_mode) {
+    Command* cmd;
+    ImageResizeCommandData* data;
+    GList* iter;
+    struct ImageLayer* layer;
+
+    if (!doc || !doc->layers) {
+        return NULL;
+    }
+
+    if (new_width == 0 || new_height == 0) {
+        return NULL;
+    }
+
+    if (doc->width == new_width && doc->height == new_height) {
+        return NULL;
+    }
+
+    data = (ImageResizeCommandData*)g_malloc0(sizeof(ImageResizeCommandData));
+    if (!data) {
+        return NULL;
+    }
+
+    data->old_width = doc->width;
+    data->old_height = doc->height;
+    data->new_width = new_width;
+    data->new_height = new_height;
+    data->interpolation_mode = interpolation_mode;
+    if (data->interpolation_mode < 0) data->interpolation_mode = 0;
+    if (data->interpolation_mode > 3) data->interpolation_mode = 3;
+
+    for (iter = doc->layers; iter; iter = iter->next) {
+        layer = (struct ImageLayer*)iter->data;
+        if (!layer || !layer->surface) {
+            continue;
+        }
+        cairo_surface_t* snapshot = cairo_surface_snapshot(layer->surface);
+        if (snapshot) {
+            data->layer_snapshots = g_list_append(data->layer_snapshots, snapshot);
+            data->layers = g_list_append(data->layers, layer);
+        }
+    }
+
+    if (!data->layers) {
+        g_free(data);
+        return NULL;
+    }
+
+    cmd = command_new(command_get_name_string(CMD_NAME_IMAGE_RESIZE),
+                      COMMAND_LAYER_EDIT,
+                      image_resize_command_apply,
+                      image_resize_command_revert,
+                      image_resize_command_destroy);
+    if (!cmd) {
+        if (data->layer_snapshots) {
+            for (iter = data->layer_snapshots; iter; iter = iter->next) {
+                cairo_surface_destroy((cairo_surface_t*)iter->data);
+            }
+            g_list_free(data->layer_snapshots);
+        }
+        if (data->layers) {
+            g_list_free(data->layers);
+        }
+        g_free(data);
+        return NULL;
+    }
+    cmd->user_data = data;
+    return cmd;
+}
+
+/**
  * Helper: Rotate a layer using Ocular library
  */
 static gboolean rotate_layer_impl(struct ImageLayer* layer,
