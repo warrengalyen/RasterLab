@@ -21,6 +21,7 @@
 #include "tools/tool_rect_select.h"
 #include "ui.h"
 #include "ui/layers_panel.h"
+#include "ui/widgets/canvas_ruler.h"
 #include "ui/workspace.h"
 #include "undo/undo_disk.h"
 #include <math.h>
@@ -1149,6 +1150,7 @@ ImageDocument* document_new(const gchar* filename, gboolean create_worker_pool, 
     doc->drawing_area = NULL;
     doc->scrolled_window = NULL;
     doc->viewport = NULL;
+    doc->canvas_container = NULL;
 
     /* Initialize image metadata */
     doc->width = 0;
@@ -1436,7 +1438,13 @@ static gboolean on_drawing_area_key_release(GtkWidget* widget, GdkEventKey* even
 /**
  * Create a drawing area widget for the document
  */
+#define RULER_SIZE_PX 24
+
 GtkWidget* document_create_drawing_area(ImageDocument* doc) {
+    GtkWidget* grid;
+    GtkWidget* corner;
+    GtkWidget* h_ruler;
+    GtkWidget* v_ruler;
     GtkWidget* scrolled_window;
     GtkWidget* viewport;
     GtkWidget* drawing_area;
@@ -1540,6 +1548,32 @@ GtkWidget* document_create_drawing_area(ImageDocument* doc) {
     doc->drawing_area = drawing_area;
     doc->scrolled_window = scrolled_window;
 
+    /* Layout: grid with (0,0) corner, (1,0) horizontal ruler, (0,1) vertical ruler, (1,1) scrolled window */
+    grid = gtk_grid_new();
+    corner = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_widget_set_size_request(corner, RULER_SIZE_PX, RULER_SIZE_PX);
+    gtk_widget_set_halign(corner, GTK_ALIGN_FILL);
+    gtk_widget_set_valign(corner, GTK_ALIGN_FILL);
+
+    h_ruler = canvas_ruler_new(CANVAS_RULER_HORIZONTAL);
+    v_ruler = canvas_ruler_new(CANVAS_RULER_VERTICAL);
+    canvas_ruler_set_document(CANVAS_RULER(h_ruler), doc);
+    canvas_ruler_set_document(CANVAS_RULER(v_ruler), doc);
+
+    gtk_widget_set_hexpand(scrolled_window, TRUE);
+    gtk_widget_set_vexpand(scrolled_window, TRUE);
+    gtk_widget_set_hexpand(h_ruler, TRUE);
+    gtk_widget_set_vexpand(h_ruler, FALSE);
+    gtk_widget_set_hexpand(v_ruler, FALSE);
+    gtk_widget_set_vexpand(v_ruler, TRUE);
+
+    gtk_grid_attach(GTK_GRID(grid), corner, 0, 0, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), h_ruler, 1, 0, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), v_ruler, 0, 1, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), scrolled_window, 1, 1, 1, 1);
+
+    doc->canvas_container = grid;
+
     /* Start animation timer for selection marching ants (using standard speed) */
     doc->selection_animation_timer_id = g_timeout_add(ANT_DASH_SPEED_SLOW, on_selection_animation_timer, doc);
 
@@ -1580,8 +1614,12 @@ GtkWidget* document_create_drawing_area(ImageDocument* doc) {
                      G_CALLBACK(on_drawing_area_key_release), doc);
 
     gtk_widget_show(scrolled_window);
+    gtk_widget_show(corner);
+    gtk_widget_show(h_ruler);
+    gtk_widget_show(v_ruler);
+    gtk_widget_show(grid);
 
-    return scrolled_window;
+    return grid;
 }
 
 /**

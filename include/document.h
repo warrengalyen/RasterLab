@@ -167,6 +167,7 @@ typedef struct ImageDocument {
     GtkWidget* drawing_area;    /* Associated drawing area widget */
     GtkWidget* scrolled_window; /* Parent scrolled window */
     GtkWidget* viewport;        /* Viewport widget (child of scrolled window) */
+    GtkWidget* canvas_container; /* Grid wrapping rulers + scrolled window (notebook page when set) */
 
     /* Image metadata */
     guint width;        /* Image width in pixels */

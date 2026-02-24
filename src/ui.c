@@ -731,8 +731,8 @@ void ui_add_document_to_notebook(AppContext* ctx, ImageDocument* doc) {
         return;
     }
 
-    /* Get the page content (scrolled window) */
-    page_content = doc->scrolled_window;
+    /* Page content is the grid (rulers + scrolled window) when present, else the scrolled window */
+    page_content = doc->canvas_container ? doc->canvas_container : doc->scrolled_window;
 
     /* Create tab label with close button */
     tab_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
@@ -804,12 +804,12 @@ static void ui_close_document_tab_internal(AppContext* ctx, ImageDocument* doc) 
         return;
     }
 
-    /* Store scrolled window pointer before we modify anything */
-    scrolled_window = doc->scrolled_window;
+    /* Store page widget (grid or scrolled window) before we modify anything */
+    scrolled_window = doc->canvas_container ? doc->canvas_container : doc->scrolled_window;
 
     /* Find the page containing this document */
     if (!scrolled_window) {
-        /* Document already has no scrolled window, just free it */
+        /* Document already has no page widget, just free it */
         ctx->documents = g_list_remove(ctx->documents, doc);
         document_free(doc);
         return;
@@ -826,6 +826,7 @@ static void ui_close_document_tab_internal(AppContext* ctx, ImageDocument* doc) 
 
         /* NULL out widget pointers BEFORE removing page to prevent
          * access to destroyed widgets during cleanup and signal handlers */
+        doc->canvas_container = NULL;
         doc->scrolled_window = NULL;
         doc->drawing_area = NULL;
 
@@ -946,7 +947,7 @@ ImageDocument* ui_get_active_document(AppContext* ctx) {
     /* Find the document by scrolled window */
     for (GList* iter = ctx->documents; iter; iter = iter->next) {
         ImageDocument* doc = (ImageDocument*)iter->data;
-        if (doc && doc->scrolled_window == page) {
+        if (doc && (doc->canvas_container ? doc->canvas_container : doc->scrolled_window) == page) {
             return doc;
         }
     }
@@ -967,13 +968,15 @@ void ui_update_document_tab_label(AppContext* ctx, ImageDocument* doc) {
     }
 
     /* Find the page number for this document */
-    page_num = gtk_notebook_page_num(GTK_NOTEBOOK(ctx->notebook), doc->scrolled_window);
+    page_num = gtk_notebook_page_num(GTK_NOTEBOOK(ctx->notebook),
+                                    doc->canvas_container ? doc->canvas_container : doc->scrolled_window);
     if (page_num < 0) {
         return;
     }
 
     /* Get the tab label widget (tab_hbox) for this page */
-    tab_hbox = gtk_notebook_get_tab_label(GTK_NOTEBOOK(ctx->notebook), doc->scrolled_window);
+    tab_hbox = gtk_notebook_get_tab_label(GTK_NOTEBOOK(ctx->notebook),
+                                          doc->canvas_container ? doc->canvas_container : doc->scrolled_window);
     if (!tab_hbox || !GTK_IS_CONTAINER(tab_hbox)) {
         return;
     }
@@ -1527,11 +1530,11 @@ static void on_notebook_switch_page(GtkNotebook* notebook, GtkWidget* page,
     LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window),
                                                                 "layers_panel");
 
-    /* Find the document that matches the page widget (scrolled window) */
+    /* Find the document that matches the page widget (canvas container or scrolled window) */
     if (page) {
         for (GList* iter = ctx->documents; iter; iter = iter->next) {
             ImageDocument* d = (ImageDocument*)iter->data;
-            if (d && d->scrolled_window == page) {
+            if (d && (d->canvas_container ? d->canvas_container : d->scrolled_window) == page) {
                 doc = d;
                 break;
             }

@@ -238,6 +238,7 @@ set(SOURCES
     ui/widgets/hsv_color_wheel.c
     ui/widgets/hsv_scale.c
     ui/widgets/rgb_scale.c
+    ui/widgets/canvas_ruler.c
     ui/widgets/swatches_widget.c
     ui/widgets/vertical_spin_button.c
     undo/undo_disk.c
