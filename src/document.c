@@ -1446,7 +1446,6 @@ static gboolean on_drawing_area_key_release(GtkWidget* widget, GdkEventKey* even
 
 GtkWidget* document_create_drawing_area(ImageDocument* doc) {
     GtkWidget* grid;
-    GtkWidget* corner;
     GtkWidget* h_ruler;
     GtkWidget* v_ruler;
     GtkWidget* scrolled_window;
@@ -1552,12 +1551,8 @@ GtkWidget* document_create_drawing_area(ImageDocument* doc) {
     doc->drawing_area = drawing_area;
     doc->scrolled_window = scrolled_window;
 
-    /* Layout: grid with (0,0) corner, (1,0) horizontal ruler, (0,1) vertical ruler, (1,1) scrolled window */
+    /* Layout: grid with horizontal ruler full width (0,0), vertical ruler (0,1), scrolled window (1,1) */
     grid = gtk_grid_new();
-    corner = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-    gtk_widget_set_size_request(corner, RULER_SIZE_PX, RULER_SIZE_PX);
-    gtk_widget_set_halign(corner, GTK_ALIGN_FILL);
-    gtk_widget_set_valign(corner, GTK_ALIGN_FILL);
 
     h_ruler = canvas_ruler_new(CANVAS_RULER_HORIZONTAL);
     v_ruler = canvas_ruler_new(CANVAS_RULER_VERTICAL);
@@ -1573,8 +1568,8 @@ GtkWidget* document_create_drawing_area(ImageDocument* doc) {
     gtk_widget_set_hexpand(v_ruler, FALSE);
     gtk_widget_set_vexpand(v_ruler, TRUE);
 
-    gtk_grid_attach(GTK_GRID(grid), corner, 0, 0, 1, 1);
-    gtk_grid_attach(GTK_GRID(grid), h_ruler, 1, 0, 1, 1);
+    /* Horizontal ruler spans full width so no space on the left */
+    gtk_grid_attach(GTK_GRID(grid), h_ruler, 0, 0, 2, 1);
     gtk_grid_attach(GTK_GRID(grid), v_ruler, 0, 1, 1, 1);
     gtk_grid_attach(GTK_GRID(grid), scrolled_window, 1, 1, 1, 1);
 
@@ -1620,7 +1615,6 @@ GtkWidget* document_create_drawing_area(ImageDocument* doc) {
                      G_CALLBACK(on_drawing_area_key_release), doc);
 
     gtk_widget_show(scrolled_window);
-    gtk_widget_show(corner);
     gtk_widget_show(h_ruler);
     gtk_widget_show(v_ruler);
     gtk_widget_show(grid);
@@ -1841,6 +1835,10 @@ void document_set_zoom(ImageDocument* doc, gdouble zoom_factor) {
         gtk_widget_set_size_request(doc->drawing_area, scaled_width, scaled_height);
         gtk_widget_queue_draw(doc->drawing_area);
     }
+
+    /* Rulers adapt tick density to zoom; redraw so spacing updates */
+    if (doc->ruler_h && gtk_widget_get_visible(doc->ruler_h)) gtk_widget_queue_draw(doc->ruler_h);
+    if (doc->ruler_v && gtk_widget_get_visible(doc->ruler_v)) gtk_widget_queue_draw(doc->ruler_v);
 }
 
 /**

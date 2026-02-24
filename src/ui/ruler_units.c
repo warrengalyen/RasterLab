@@ -1,4 +1,5 @@
 #include "ui/ruler_units.h"
+#include <math.h>
 
 #define INCH_TO_CM  2.54
 #define INCH_TO_MM  25.4
@@ -38,27 +39,9 @@ gdouble ruler_units_pixel_to_value(gdouble pixel, RulerUnit unit, gdouble dpi, g
 }
 
 gchar* ruler_units_format_value(gdouble value, RulerUnit unit) {
-    switch (unit) {
-        case RULER_UNIT_PIXEL:
-        case RULER_UNIT_PT:
-            return g_strdup_printf("%d", (int)(value + 0.5));
-        case RULER_UNIT_PERCENT:
-            if (value >= 100.0 || (value > -0.01 && value < 0.01))
-                return g_strdup_printf("%.0f", value);
-            return g_strdup_printf("%.1f", value);
-        case RULER_UNIT_INCH:
-        case RULER_UNIT_CM:
-        case RULER_UNIT_PC:
-            if (value >= 100.0) return g_strdup_printf("%.1f", value);
-            if (value >= 10.0) return g_strdup_printf("%.2f", value);
-            return g_strdup_printf("%.3f", value);
-        case RULER_UNIT_MM:
-            if (value >= 100.0) return g_strdup_printf("%.0f", value);
-            if (value >= 10.0) return g_strdup_printf("%.1f", value);
-            return g_strdup_printf("%.2f", value);
-        default:
-            return g_strdup_printf("%.2f", value);
-    }
+    int n = (int)round(value);
+    (void)unit;
+    return g_strdup_printf("%d", n);
 }
 
 RulerUnit ruler_unit_from_string(const gchar* str) {
