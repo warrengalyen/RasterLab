@@ -1,5 +1,6 @@
 #include "ui/widgets/canvas_ruler.h"
 #include "document.h"
+#include "ui/ruler_units.h"
 #include <cairo.h>
 #include <gdk/gdk.h>
 #include <math.h>
@@ -63,33 +64,52 @@ static gboolean canvas_ruler_draw(GtkWidget* widget, cairo_t* cr) {
     zoom = doc->zoom_factor;
     if (zoom <= 0.0) zoom = 1.0;
 
-    /* Offset tick drawing by scroll position so tick "0" aligns with canvas edge */
-    if (ruler->orientation == CANVAS_RULER_HORIZONTAL) {
-        gdouble x;
-        int canvas_val;
-        /* First tick: largest multiple of TICK_CANVAS_STEP such that ruler x >= -1 */
-        int first = (int)floor((-1.0 - canvas_origin_x) / zoom / (gdouble)TICK_CANVAS_STEP) * TICK_CANVAS_STEP;
-        for (canvas_val = first; ; canvas_val += TICK_CANVAS_STEP) {
-            x = canvas_origin_x + canvas_val * zoom;
-            if (x > (gdouble)w + 1.0) break;
-            if (x < -1.0) continue;
-            cairo_move_to(cr, x, (gdouble)h);
-            cairo_line_to(cr, x, (gdouble)h - 8.0);
-            cairo_set_source_rgb(cr, 0.2, 0.2, 0.2);
-            cairo_stroke(cr);
-        }
-    } else {
-        gdouble y;
-        int canvas_val;
-        int first = (int)floor((-1.0 - canvas_origin_y) / zoom / (gdouble)TICK_CANVAS_STEP) * TICK_CANVAS_STEP;
-        for (canvas_val = first; ; canvas_val += TICK_CANVAS_STEP) {
-            y = canvas_origin_y + canvas_val * zoom;
-            if (y > (gdouble)h + 1.0) break;
-            if (y < -1.0) continue;
-            cairo_move_to(cr, (gdouble)w, y);
-            cairo_line_to(cr, (gdouble)w - 8.0, y);
-            cairo_set_source_rgb(cr, 0.2, 0.2, 0.2);
-            cairo_stroke(cr);
+    {
+        RulerUnit unit = document_get_ruler_unit(doc);
+        gdouble dpi = document_get_ruler_dpi(doc);
+        guint extent_h = (guint)(doc->width > 0 ? doc->width : 1);
+        guint extent_v = (guint)(doc->height > 0 ? doc->height : 1);
+        cairo_set_source_rgb(cr, 0.2, 0.2, 0.2);
+        cairo_set_font_size(cr, 8.0);
+        cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
+
+        /* Offset tick drawing by scroll position so tick "0" aligns with canvas edge */
+        if (ruler->orientation == CANVAS_RULER_HORIZONTAL) {
+            gdouble x;
+            int canvas_val;
+            gchar* label;
+            int first = (int)floor((-1.0 - canvas_origin_x) / zoom / (gdouble)TICK_CANVAS_STEP) * TICK_CANVAS_STEP;
+            for (canvas_val = first; ; canvas_val += TICK_CANVAS_STEP) {
+                x = canvas_origin_x + canvas_val * zoom;
+                if (x > (gdouble)w + 1.0) break;
+                if (x < -1.0) continue;
+                cairo_move_to(cr, x, (gdouble)h);
+                cairo_line_to(cr, x, (gdouble)h - 8.0);
+                cairo_stroke(cr);
+                label = ruler_units_format_value(
+                    ruler_units_pixel_to_value((gdouble)canvas_val, unit, dpi, extent_h), unit);
+                cairo_move_to(cr, x + 2.0, (gdouble)h - 11.0);
+                cairo_show_text(cr, label);
+                g_free(label);
+            }
+        } else {
+            gdouble y;
+            int canvas_val;
+            gchar* label;
+            int first = (int)floor((-1.0 - canvas_origin_y) / zoom / (gdouble)TICK_CANVAS_STEP) * TICK_CANVAS_STEP;
+            for (canvas_val = first; ; canvas_val += TICK_CANVAS_STEP) {
+                y = canvas_origin_y + canvas_val * zoom;
+                if (y > (gdouble)h + 1.0) break;
+                if (y < -1.0) continue;
+                cairo_move_to(cr, (gdouble)w, y);
+                cairo_line_to(cr, (gdouble)w - 8.0, y);
+                cairo_stroke(cr);
+                label = ruler_units_format_value(
+                    ruler_units_pixel_to_value((gdouble)canvas_val, unit, dpi, extent_v), unit);
+                cairo_move_to(cr, (gdouble)w - 22.0, y + 4.0);
+                cairo_show_text(cr, label);
+                g_free(label);
+            }
         }
     }
 

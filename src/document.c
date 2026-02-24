@@ -1151,6 +1151,10 @@ ImageDocument* document_new(const gchar* filename, gboolean create_worker_pool, 
     doc->scrolled_window = NULL;
     doc->viewport = NULL;
     doc->canvas_container = NULL;
+    doc->ruler_unit = RULER_UNIT_PIXEL;
+    doc->ruler_dpi = RULER_DPI_DEFAULT;
+    doc->ruler_h = NULL;
+    doc->ruler_v = NULL;
 
     /* Initialize image metadata */
     doc->width = 0;
@@ -1557,6 +1561,8 @@ GtkWidget* document_create_drawing_area(ImageDocument* doc) {
 
     h_ruler = canvas_ruler_new(CANVAS_RULER_HORIZONTAL);
     v_ruler = canvas_ruler_new(CANVAS_RULER_VERTICAL);
+    doc->ruler_h = h_ruler;
+    doc->ruler_v = v_ruler;
     canvas_ruler_set_document(CANVAS_RULER(h_ruler), doc);
     canvas_ruler_set_document(CANVAS_RULER(v_ruler), doc);
 
@@ -1846,6 +1852,23 @@ gdouble document_get_zoom(ImageDocument* doc) {
     }
 
     return doc->zoom_factor;
+}
+
+void document_set_ruler_unit(ImageDocument* doc, RulerUnit unit) {
+    if (!doc) return;
+    doc->ruler_unit = unit;
+    if (doc->ruler_h && gtk_widget_get_visible(doc->ruler_h)) gtk_widget_queue_draw(doc->ruler_h);
+    if (doc->ruler_v && gtk_widget_get_visible(doc->ruler_v)) gtk_widget_queue_draw(doc->ruler_v);
+}
+
+RulerUnit document_get_ruler_unit(ImageDocument* doc) {
+    if (!doc) return RULER_UNIT_PIXEL;
+    return doc->ruler_unit;
+}
+
+gdouble document_get_ruler_dpi(ImageDocument* doc) {
+    if (!doc || doc->ruler_dpi <= 0.0) return RULER_DPI_DEFAULT;
+    return doc->ruler_dpi;
 }
 
 /**

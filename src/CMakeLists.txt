@@ -218,6 +218,7 @@ set(SOURCES
     ui/tool_options_panel.c
     ui/tools_panel.c
     ui/workspace.c
+    ui/ruler_units.c
     ui/ui_edit_menu.c
     ui/ui_file_menu.c
     ui/ui_filter.c

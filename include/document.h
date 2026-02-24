@@ -3,6 +3,7 @@
 
 #include "image_format_plugin.h"
 #include "render/dirty.h"
+#include "ui/ruler_units.h"
 #include <cairo.h>
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <gtk/gtk.h>
@@ -192,6 +193,12 @@ typedef struct ImageDocument {
     gdouble zoom_factor; /* Current zoom level (1.0 = 100%) */
     gint zoom_mode;      /* 0=manual, 1=fit_image, 2=fit_width, 3=fit_height */
 
+    /* Rulers (unit controlled by statusbar) */
+    RulerUnit ruler_unit;   /* Current ruler display unit */
+    gdouble ruler_dpi;      /* DPI for physical units (0 = use RULER_DPI_DEFAULT) */
+    GtkWidget* ruler_h;     /* Horizontal ruler (for queue_draw on unit change) */
+    GtkWidget* ruler_v;     /* Vertical ruler */
+
     /* Selection - mask-based */
     SelectionMask* selection_mask;      /* Pixel-based selection mask */
     gint selection_animation_phase;     /* Animation phase for marching ants (0-3) */
@@ -281,6 +288,21 @@ void document_set_zoom(ImageDocument* doc, gdouble zoom_factor);
  * @return Current zoom level
  */
 gdouble document_get_zoom(ImageDocument* doc);
+
+/**
+ * Set ruler display unit (e.g. from statusbar)
+ */
+void document_set_ruler_unit(ImageDocument* doc, RulerUnit unit);
+
+/**
+ * Get current ruler unit
+ */
+RulerUnit document_get_ruler_unit(ImageDocument* doc);
+
+/**
+ * Get DPI used for ruler physical units (returns RULER_DPI_DEFAULT if not set)
+ */
+gdouble document_get_ruler_dpi(ImageDocument* doc);
 
 /**
  * Render all layers to composite surface

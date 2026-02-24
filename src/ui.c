@@ -5,6 +5,7 @@
 #include "command.h"
 #include "document.h"
 #include "filters.h"
+#include "ui/ruler_units.h"
 #include "ocular.h"
 #include "panels.h"
 #include "render/compositor.h"
@@ -764,6 +765,11 @@ void ui_add_document_to_notebook(AppContext* ctx, ImageDocument* doc) {
                                         page_content, tab_hbox);
     gtk_notebook_set_current_page(GTK_NOTEBOOK(ctx->notebook), page_num);
 
+    /* Sync ruler unit from statusbar so new document's rulers show current unit */
+    if (ctx->size_unit) {
+        document_set_ruler_unit(doc, ruler_unit_from_string(ctx->size_unit));
+    }
+
     /* Store label in close button's data for later reference */
     g_object_set_data(G_OBJECT(close_button), "tab_label", tab_label);
     g_object_set_data(G_OBJECT(close_button), "app_context", ctx);
@@ -827,6 +833,8 @@ static void ui_close_document_tab_internal(AppContext* ctx, ImageDocument* doc) 
         /* NULL out widget pointers BEFORE removing page to prevent
          * access to destroyed widgets during cleanup and signal handlers */
         doc->canvas_container = NULL;
+        doc->ruler_h = NULL;
+        doc->ruler_v = NULL;
         doc->scrolled_window = NULL;
         doc->drawing_area = NULL;
 
@@ -1551,6 +1559,11 @@ static void on_notebook_switch_page(GtkNotebook* notebook, GtkWidget* page,
         ctx->tool_registry->current_doc = doc;
     }
 
+    /* Sync ruler unit from statusbar so rulers on this tab show the current unit */
+    if (doc && ctx->size_unit) {
+        document_set_ruler_unit(doc, ruler_unit_from_string(ctx->size_unit));
+    }
+
     ui_update_window_title(ctx, doc);
     ui_update_status_bar(ctx, doc);
 
@@ -1914,6 +1927,14 @@ static void on_statusbar_size_unit_changed(GtkComboBox* combo, gpointer data) {
         g_free(ctx->size_unit);
     }
     ctx->size_unit = g_strdup(text);
+
+    /* Sync ruler unit to active document so rulers redraw in the new unit */
+    {
+        ImageDocument* doc = ui_get_active_document(ctx);
+        if (doc) {
+            document_set_ruler_unit(doc, ruler_unit_from_string(text));
+        }
+    }
     g_free(text);
 
     /* Refresh status bar to show dimensions in new unit */
