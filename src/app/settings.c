@@ -322,6 +322,16 @@ static void settings_load_tone_mapping(Settings* settings, xmlNode* tone_mapping
 static void settings_save_tone_mapping(xmlTextWriterPtr writer, Settings* settings);
 
 /**
+ * Load Advanced settings from XML (forward declaration)
+ */
+static void settings_load_advanced(Settings* settings, xmlNode* advanced_node);
+
+/**
+ * Save Advanced settings to XML (forward declaration)
+ */
+static void settings_save_advanced(xmlTextWriterPtr writer, Settings* settings);
+
+/**
  * Load recent files from XML
  * Stores RecentFile* entries in Settings->recent_files (includes path and timestamp)
  */
@@ -428,6 +438,8 @@ Settings* settings_load(const char* app_dir) {
             settings_load_view(settings, cur);
         } else if (xmlStrcmp(cur->name, (const xmlChar*)"tone_mapping") == 0) {
             settings_load_tone_mapping(settings, cur);
+        } else if (xmlStrcmp(cur->name, (const xmlChar*)"advanced") == 0) {
+            settings_load_advanced(settings, cur);
         }
     }
 
@@ -453,7 +465,7 @@ static void settings_load_undo(Settings* settings, xmlNode* undo_node) {
         xmlFree(compression_attr);
     }
 
-    /* Load temp directory */
+    /* Load temp directory (backward compat: also in performance/undo) */
     xmlChar* temp_dir_attr = xmlGetProp(undo_node, (const xmlChar*)"temp_directory");
     if (temp_dir_attr) {
         settings_set_undo_temp_directory(settings, (const char*)temp_dir_attr);
@@ -483,11 +495,6 @@ static void settings_save_undo(xmlTextWriterPtr writer, Settings* settings) {
     gchar level_str[16];
     g_snprintf(level_str, sizeof(level_str), "%d", settings->undo_compression_level);
     xmlTextWriterWriteAttribute(writer, (const xmlChar*)"compression_level", (const xmlChar*)level_str);
-
-    /* Save temp directory if set */
-    if (settings->undo_temp_directory) {
-        xmlTextWriterWriteAttribute(writer, (const xmlChar*)"temp_directory", (const xmlChar*)settings->undo_temp_directory);
-    }
 
     /* Save undo levels */
     gchar levels_str[16];
@@ -950,6 +957,9 @@ gboolean settings_save(Settings* settings, const char* app_dir) {
 
     /* Write tone mapping settings */
     settings_save_tone_mapping(writer, settings);
+
+    /* Write Advanced settings (temp file directory, etc.) */
+    settings_save_advanced(writer, settings);
 
     /* Close root element */
     xmlTextWriterEndElement(writer); /* app_settings */
@@ -1662,6 +1672,41 @@ static void settings_save_tone_mapping(xmlTextWriterPtr writer, Settings* settin
     xmlTextWriterWriteAttribute(writer, (const xmlChar*)"color_correction", (const xmlChar*)color_correction_str);
 
     xmlTextWriterEndElement(writer); /* tone_mapping */
+}
+
+/**
+ * Load Advanced settings from XML (temp file directory, etc.)
+ */
+static void settings_load_advanced(Settings* settings, xmlNode* advanced_node) {
+    if (!settings || !advanced_node) {
+        return;
+    }
+
+    /* Load temp_directory for undo/scratch files (default: system temp) */
+    xmlChar* temp_dir_attr = xmlGetProp(advanced_node, (const xmlChar*)"temp_directory");
+    if (temp_dir_attr) {
+        settings_set_undo_temp_directory(settings, (const char*)temp_dir_attr);
+        xmlFree(temp_dir_attr);
+    }
+}
+
+/**
+ * Save Advanced settings to XML
+ */
+static void settings_save_advanced(xmlTextWriterPtr writer, Settings* settings) {
+    if (!writer || !settings) {
+        return;
+    }
+
+    xmlTextWriterStartElement(writer, (const xmlChar*)"advanced");
+
+    /* Save temp directory if set (NULL/empty = use system temp) */
+    if (settings->undo_temp_directory && settings->undo_temp_directory[0] != '\0') {
+        xmlTextWriterWriteAttribute(writer, (const xmlChar*)"temp_directory",
+                                    (const xmlChar*)settings->undo_temp_directory);
+    }
+
+    xmlTextWriterEndElement(writer); /* advanced */
 }
 
 /**

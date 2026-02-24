@@ -23,6 +23,8 @@ enum {
 
 #define SETTINGS_TAB_ICON_SIZE 30
 
+static gboolean temp_path_is_valid(const gchar* path);
+
 /* Set a notebook tab to show icon (from resource) before the existing label. */
 static void set_tab_icon_label(GtkNotebook* notebook, GtkWidget* page_child, GtkWidget* tab_label,
                                const gchar* icon_resource) {
@@ -137,6 +139,19 @@ static void settings_dialog_apply_and_save(GtkDialog* dialog, AppContext* ctx) {
         gint sec = (gint)gtk_adjustment_get_value(recovery_adj);
         settings_set_file_recovery_interval_seconds(ctx->settings, sec);
         autosave_set_interval((guint)sec);
+    }
+
+    /* Temp file directory (Advanced tab): validate; if invalid, save default */
+    GtkEntry* temp_entry = GTK_ENTRY(gtk_builder_get_object(builder, "temp_location_entry"));
+    if (temp_entry) {
+        const gchar* text = gtk_entry_get_text(temp_entry);
+        gchar* trimmed = text ? g_strstrip(g_strdup(text)) : g_strdup("");
+        if (trimmed && trimmed[0] != '\0' && !temp_path_is_valid(trimmed)) {
+            settings_set_undo_temp_directory(ctx->settings, NULL); /* Fallback to system temp */
+        } else {
+            settings_set_undo_temp_directory(ctx->settings, (trimmed && trimmed[0] != '\0') ? trimmed : NULL);
+        }
+        g_free(trimmed);
     }
 
     /* Renderer (GPU device): empty string = system default */
@@ -272,6 +287,71 @@ static void on_settings_dialog_destroy(GtkWidget* widget, gpointer user_data) {
     (void)user_data;
 }
 
+/* Check if temp path is valid: empty (use default) or existing directory */
+static gboolean temp_path_is_valid(const gchar* path) {
+    if (!path || path[0] == '\0') {
+        return TRUE;
+    }
+    return g_file_test(path, G_FILE_TEST_EXISTS) && g_file_test(path, G_FILE_TEST_IS_DIR);
+}
+
+/* Update temp_location_msg_label visibility based on path validity */
+static void temp_location_update_msg_label_visibility(GtkBuilder* builder, const gchar* path) {
+    GtkLabel* msg_label = GTK_LABEL(gtk_builder_get_object(builder, "temp_location_msg_label"));
+    if (!msg_label) {
+        return;
+    }
+    if (temp_path_is_valid(path)) {
+        gtk_widget_set_visible(GTK_WIDGET(msg_label), FALSE);
+    } else {
+        gtk_widget_set_visible(GTK_WIDGET(msg_label), TRUE);
+    }
+}
+
+/* Real-time validation when user types in temp_location_entry */
+static void on_temp_location_changed(GtkEntry* entry, gpointer user_data) {
+    GtkBuilder* builder = (GtkBuilder*)user_data;
+    if (!builder || !entry) {
+        return;
+    }
+    const gchar* text = gtk_entry_get_text(entry);
+    gchar* trimmed = text ? g_strstrip(g_strdup(text)) : g_strdup("");
+    temp_location_update_msg_label_visibility(builder, trimmed);
+    g_free(trimmed);
+}
+
+/* Open folder chooser dialog and update temp_location_entry with selected path */
+static void on_temp_location_browse_clicked(GtkButton* button, gpointer user_data) {
+    GtkEntry* entry = GTK_ENTRY(user_data);
+    if (!entry) {
+        return;
+    }
+    GtkWidget* parent = gtk_widget_get_toplevel(GTK_WIDGET(button));
+    if (!parent || !GTK_IS_WINDOW(parent)) {
+        return;
+    }
+
+    GtkFileChooserNative* chooser = gtk_file_chooser_native_new("Select Temporary File Location",
+                                                                GTK_WINDOW(parent),
+                                                                GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER,
+                                                                "Select",
+                                                                "Cancel");
+    /* Avoid set_current_folder - it triggers GFileInfo bugs in GLib 2.84+ on Windows */
+
+    if (gtk_native_dialog_run(GTK_NATIVE_DIALOG(chooser)) == GTK_RESPONSE_ACCEPT) {
+        gchar* uri = gtk_file_chooser_get_uri(GTK_FILE_CHOOSER(chooser));
+        if (uri) {
+            gchar* path = g_filename_from_uri(uri, NULL, NULL);
+            if (path) {
+                gtk_entry_set_text(entry, path);
+                g_free(path);
+            }
+            g_free(uri);
+        }
+    }
+    g_object_unref(chooser);
+}
+
 /* Open custom color chooser for canvas background; update settings and button appearance */
 static void on_canvas_bgcolor_clicked(GtkButton* button, gpointer user_data) {
     AppContext* ctx = (AppContext*)user_data;
@@ -344,6 +424,7 @@ void settings_dialog_show(AppContext* ctx) {
             "threads_label",
             "renderer_label",
             "hardware_acceleration_label",
+            "temp_location_label",
             NULL};
         for (const char** id = restart_label_ids; *id != NULL; id++) {
             GtkLabel* label = GTK_LABEL(gtk_builder_get_object(builder, *id));
@@ -375,6 +456,11 @@ void settings_dialog_show(AppContext* ctx) {
             if (perf_page && perf_label) {
                 set_tab_icon_label(notebook, perf_page, perf_label, "/icons/settings-performance.png");
             }
+            GtkWidget* advanced_page = GTK_WIDGET(gtk_builder_get_object(builder, "advanced_tab_content_box"));
+            GtkWidget* advanced_label = GTK_WIDGET(gtk_builder_get_object(builder, "advanced_tab_label"));
+            if (advanced_page && advanced_label) {
+                set_tab_icon_label(notebook, advanced_page, advanced_label, "/icons/settings-advanced.png");
+            }
         }
     }
 
@@ -386,6 +472,30 @@ void settings_dialog_show(AppContext* ctx) {
         GdkRGBA rgba = {(float)r, (float)g, (float)b, 1.0f};
         update_color_button_appearance(canvas_bg_btn, &rgba);
         g_signal_connect(canvas_bg_btn, "clicked", G_CALLBACK(on_canvas_bgcolor_clicked), ctx);
+    }
+
+    /* Temp file directory (Advanced tab): load, wire real-time validation */
+    {
+        GtkEntry* temp_entry = GTK_ENTRY(gtk_builder_get_object(builder, "temp_location_entry"));
+        GtkButton* temp_button = GTK_BUTTON(gtk_builder_get_object(builder, "temp_location_button"));
+        GtkLabel* temp_msg_label = GTK_LABEL(gtk_builder_get_object(builder, "temp_location_msg_label"));
+        if (temp_msg_label) {
+            gtk_widget_set_no_show_all(GTK_WIDGET(temp_msg_label), TRUE);
+        }
+        if (temp_entry) {
+            const gchar* temp_dir = settings_get_undo_temp_directory(ctx->settings);
+            const gchar* display_dir = (temp_dir && temp_dir[0] != '\0') ? temp_dir : g_get_tmp_dir();
+            gtk_entry_set_text(temp_entry, display_dir);
+            g_signal_connect(temp_entry, "changed", G_CALLBACK(on_temp_location_changed), builder);
+            temp_location_update_msg_label_visibility(builder, display_dir);
+            if (temp_button) {
+                GtkWidget* img = gtk_image_new_from_icon_name("folder-open", GTK_ICON_SIZE_BUTTON);
+                if (img) {
+                    gtk_button_set_image(temp_button, img);
+                }
+                g_signal_connect(temp_button, "clicked", G_CALLBACK(on_temp_location_browse_clicked), temp_entry);
+            }
+        }
     }
 
     /* Transparency (checkerboard): grid size combo - Small, Medium, Large */
@@ -457,8 +567,8 @@ void settings_dialog_show(AppContext* ctx) {
         gint levels = settings_get_undo_levels(ctx->settings);
         gtk_adjustment_set_value(undo_adj, (gdouble)levels);
     }
-    /* Fix glade typo: undo_limitl_spin */
-    GtkSpinButton* undo_spin = GTK_SPIN_BUTTON(gtk_builder_get_object(builder, "undo_limitl_spin"));
+
+    GtkSpinButton* undo_spin = GTK_SPIN_BUTTON(gtk_builder_get_object(builder, "undo_limit_spin"));
     if (undo_spin && undo_adj) {
         gtk_spin_button_set_adjustment(undo_spin, undo_adj);
     }

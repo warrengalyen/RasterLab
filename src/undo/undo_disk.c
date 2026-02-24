@@ -110,7 +110,8 @@ static gchar* generate_journal_path(struct ImageDocument* doc, const gchar* temp
         journal_name = g_strdup_printf("untitled_%lu.undo", (unsigned long)now);
     }
 
-    if (temp_dir) {
+    /* Use settings temp_dir if non-empty; otherwise use system temp */
+    if (temp_dir && temp_dir[0] != '\0') {
         journal_path = g_build_filename(temp_dir, journal_name, NULL);
     } else {
         gchar* default_temp = undo_journal_get_default_temp_dir();

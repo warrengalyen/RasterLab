@@ -6,6 +6,14 @@
     border-radius: 0;
 }
 
+notebook tab:focus {
+    outline: none;
+}
+
 checkbutton:hover label {
     /* color: #3584e4; */
+}
+
+.warning_message {
+    color: #ff0000;
 }
