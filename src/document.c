@@ -873,6 +873,12 @@ static gboolean on_drawing_area_motion_notify(GtkWidget* widget, GdkEventMotion*
     tool_event.button = 0; /* No button pressed during motion */
     tool_event.state = event->state;
 
+    /* Update ruler mouse indicator (canvas coordinates) */
+    doc->mouse_canvas_x = (gdouble)tool_event.x;
+    doc->mouse_canvas_y = (gdouble)tool_event.y;
+    if (doc->ruler_h && gtk_widget_get_visible(doc->ruler_h)) gtk_widget_queue_draw(doc->ruler_h);
+    if (doc->ruler_v && gtk_widget_get_visible(doc->ruler_v)) gtk_widget_queue_draw(doc->ruler_v);
+
     /* Update cursor position in statusbar */
     ctx = (AppContext*)g_object_get_data(G_OBJECT(doc->drawing_area), "app_context");
     if (ctx) {
@@ -990,6 +996,12 @@ static gboolean on_viewport_leave_notify(GtkWidget* widget, GdkEventCrossing* ev
         ui_hide_cursor_position(ctx);
     }
 
+    /* Clear ruler mouse indicator */
+    doc->mouse_canvas_x = -1e9;
+    doc->mouse_canvas_y = -1e9;
+    if (doc->ruler_h && gtk_widget_get_visible(doc->ruler_h)) gtk_widget_queue_draw(doc->ruler_h);
+    if (doc->ruler_v && gtk_widget_get_visible(doc->ruler_v)) gtk_widget_queue_draw(doc->ruler_v);
+
     return FALSE;
 }
 
@@ -1106,6 +1118,12 @@ static gboolean on_viewport_motion_notify(GtkWidget* widget, GdkEventMotion* eve
     /* Convert to image coordinates (can be negative if outside canvas) */
     widget_to_image_coords(doc, widget_x, widget_y, &image_x, &image_y);
 
+    /* Update ruler mouse indicator (canvas coordinates) */
+    doc->mouse_canvas_x = (gdouble)image_x;
+    doc->mouse_canvas_y = (gdouble)image_y;
+    if (doc->ruler_h && gtk_widget_get_visible(doc->ruler_h)) gtk_widget_queue_draw(doc->ruler_h);
+    if (doc->ruler_v && gtk_widget_get_visible(doc->ruler_v)) gtk_widget_queue_draw(doc->ruler_v);
+
     /* Update cursor position in statusbar */
     ctx = (AppContext*)g_object_get_data(G_OBJECT(doc->drawing_area), "app_context");
     if (ctx) {
@@ -1155,6 +1173,8 @@ ImageDocument* document_new(const gchar* filename, gboolean create_worker_pool, 
     doc->ruler_dpi = RULER_DPI_DEFAULT;
     doc->ruler_h = NULL;
     doc->ruler_v = NULL;
+    doc->mouse_canvas_x = -1e9;
+    doc->mouse_canvas_y = -1e9;
 
     /* Initialize image metadata */
     doc->width = 0;

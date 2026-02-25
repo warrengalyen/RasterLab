@@ -21,6 +21,8 @@
 #define RULER_FG_G (146.0 / 255.0)
 #define RULER_FG_B (146.0 / 255.0)
 #define RULER_TICK_LINE_WIDTH 1.0
+/** for invalid mouse position */
+#define RULER_MOUSE_INVALID (-1e9)
 
 G_DEFINE_TYPE(CanvasRuler, canvas_ruler, GTK_TYPE_DRAWING_AREA)
 
@@ -261,6 +263,30 @@ static gboolean canvas_ruler_draw(GtkWidget* widget, cairo_t* cr) {
         cairo_move_to(cr, 0, (gdouble)h - 0.5);
         cairo_line_to(cr, (gdouble)w, (gdouble)h - 0.5);
         cairo_stroke(cr);
+
+        /* Mouse position crosshair marker (thin line, tick color) */
+        if (doc->mouse_canvas_x >= RULER_MOUSE_INVALID + 1e8 &&
+            doc->mouse_canvas_y >= RULER_MOUSE_INVALID + 1e8) {
+            gdouble mx, my;
+            cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
+            cairo_set_source_rgb(cr, RULER_FG_R, RULER_FG_G, RULER_FG_B);
+            cairo_set_line_width(cr, 1.0);
+            if (ruler->orientation == CANVAS_RULER_HORIZONTAL) {
+                mx = canvas_origin_x + doc->mouse_canvas_x * zoom;
+                if (mx >= -1.0 && mx <= (gdouble)w + 1.0) {
+                    cairo_move_to(cr, mx, 0);
+                    cairo_line_to(cr, mx, (gdouble)h);
+                    cairo_stroke(cr);
+                }
+            } else {
+                my = canvas_origin_y + doc->mouse_canvas_y * zoom;
+                if (my >= -1.0 && my <= (gdouble)h + 1.0) {
+                    cairo_move_to(cr, 0, my);
+                    cairo_line_to(cr, (gdouble)w, my);
+                    cairo_stroke(cr);
+                }
+            }
+        }
     }
 
     return FALSE;
