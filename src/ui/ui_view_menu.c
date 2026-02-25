@@ -118,6 +118,36 @@ void on_view_show_statusbar(GtkCheckMenuItem* check_menu_item, gpointer data) {
 }
 
 /**
+ * View > Show Rulers callback
+ */
+void on_view_show_rulers(GtkCheckMenuItem* check_menu_item, gpointer data) {
+    AppContext* ctx = (AppContext*)data;
+
+    if (!ctx || !ctx->settings) {
+        return;
+    }
+
+    gboolean active = gtk_check_menu_item_get_active(check_menu_item);
+    settings_set_show_rulers(ctx->settings, active);
+
+    /* Apply to all documents */
+    if (ctx->documents) {
+        for (GList* iter = ctx->documents; iter; iter = iter->next) {
+            ImageDocument* doc = (ImageDocument*)iter->data;
+            if (doc && doc->ruler_h && doc->ruler_v) {
+                if (active) {
+                    gtk_widget_show(doc->ruler_h);
+                    gtk_widget_show(doc->ruler_v);
+                } else {
+                    gtk_widget_hide(doc->ruler_h);
+                    gtk_widget_hide(doc->ruler_v);
+                }
+            }
+        }
+    }
+}
+
+/**
  * Helper function for zoom to specific level callbacks
  */
 static void zoom_to_level(AppContext* ctx, gdouble zoom_percent) {
@@ -283,6 +313,7 @@ void ui_view_menu_setup(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* acc
     GtkWidget* view_menu_zoom_fit = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_fit"));
     GtkWidget* view_menu_show_layer_edges = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_show_layer_edges"));
     GtkWidget* view_menu_show_statusbar = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_show_statusbar"));
+    GtkWidget* view_menu_show_rulers = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_show_rulers"));
 
     if (view_menu_zoom_in) {
         g_signal_connect(view_menu_zoom_in, "activate", G_CALLBACK(on_view_zoom_in), ctx);
@@ -340,6 +371,15 @@ void ui_view_menu_setup(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* acc
                     gtk_widget_hide(ctx->status_bar);
                 }
             }
+        }
+    }
+    if (view_menu_show_rulers) {
+        g_signal_connect(view_menu_show_rulers, "toggled", G_CALLBACK(on_view_show_rulers), ctx);
+
+        /* Initialize menu item state from settings */
+        if (ctx->settings) {
+            gboolean show_rulers = settings_get_show_rulers(ctx->settings);
+            gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(view_menu_show_rulers), show_rulers);
         }
     }
 

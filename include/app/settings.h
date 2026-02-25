@@ -35,6 +35,7 @@ typedef struct {
     /* View settings */
     gboolean show_layer_edges; /* Show outline when moving layers (default TRUE) */
     gboolean show_statusbar;   /* Show status bar (default TRUE) */
+    gboolean show_rulers;      /* Show canvas rulers (default TRUE) */
     gboolean show_gpu_stats;   /* Show GPU compositor statistics overlay (default FALSE) */
 
     /* Alpha (transparency) checkerboard: 0=Small (8px), 1=Medium (16px), 2=Large (32px), default 1 */
@@ -268,6 +269,20 @@ void settings_set_show_statusbar(Settings* settings, gboolean show);
  * @return TRUE if status bar should be shown
  */
 gboolean settings_get_show_statusbar(Settings* settings);
+
+/**
+ * Set show rulers setting
+ * @param settings The settings structure
+ * @param show TRUE to show canvas rulers, FALSE to hide
+ */
+void settings_set_show_rulers(Settings* settings, gboolean show);
+
+/**
+ * Get show rulers setting
+ * @param settings The settings structure
+ * @return TRUE if canvas rulers should be shown
+ */
+gboolean settings_get_show_rulers(Settings* settings);
 
 /**
  * Set show GPU stats setting

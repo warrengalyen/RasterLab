@@ -13,6 +13,7 @@ void on_view_zoom_reset(GtkWidget* widget, gpointer data);
 void on_view_zoom_fit(GtkWidget* widget, gpointer data);
 void on_view_show_layer_edges(GtkCheckMenuItem* check_menu_item, gpointer data);
 void on_view_show_statusbar(GtkCheckMenuItem* check_menu_item, gpointer data);
+void on_view_show_rulers(GtkCheckMenuItem* check_menu_item, gpointer data);
 
 /* Zoom to specific level callbacks */
 void on_view_zoom_1600(GtkWidget* widget, gpointer data);

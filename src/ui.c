@@ -770,6 +770,18 @@ void ui_add_document_to_notebook(AppContext* ctx, ImageDocument* doc) {
         document_set_ruler_unit(doc, ruler_unit_from_string(ctx->size_unit));
     }
 
+    /* Apply show rulers setting to new document */
+    if (doc->ruler_h && doc->ruler_v && ctx->settings) {
+        gboolean show_rulers = settings_get_show_rulers(ctx->settings);
+        if (show_rulers) {
+            gtk_widget_show(doc->ruler_h);
+            gtk_widget_show(doc->ruler_v);
+        } else {
+            gtk_widget_hide(doc->ruler_h);
+            gtk_widget_hide(doc->ruler_v);
+        }
+    }
+
     /* Store label in close button's data for later reference */
     g_object_set_data(G_OBJECT(close_button), "tab_label", tab_label);
     g_object_set_data(G_OBJECT(close_button), "app_context", ctx);

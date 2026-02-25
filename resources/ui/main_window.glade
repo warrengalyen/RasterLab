@@ -1706,6 +1706,15 @@
       </object>
     </child>
     <child>
+      <object class="GtkCheckMenuItem" id="view_menu_show_rulers">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Show rulers</property>
+        <property name="use-underline">True</property>
+        <property name="active">True</property>
+      </object>
+    </child>
+    <child>
       <object class="GtkCheckMenuItem" id="view_menu_show_statusbar">
         <property name="visible">True</property>
         <property name="can-focus">False</property>

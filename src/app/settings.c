@@ -81,7 +81,8 @@ static Settings* settings_create_default(void) {
     settings->file_recovery_interval_seconds = DEFAULT_FILE_RECOVERY_INTERVAL_SECONDS;
     settings->show_layer_edges = TRUE; /* Show layer edges by default */
     settings->show_statusbar = TRUE;   /* Show status bar by default */
-    settings->show_gpu_stats = FALSE;  /* Hide GPU stats by default */
+    settings->show_rulers = TRUE;      /* Show canvas rulers by default */
+    settings->show_gpu_stats = FALSE; /* Hide GPU stats by default */
 
     /* Alpha checkerboard: Medium (16px), white + light gray */
     settings->alpha_check_size = 1; /* 0=Small/8, 1=Medium/16, 2=Large/32 */
@@ -690,6 +691,18 @@ static void settings_load_view(Settings* settings, xmlNode* view_node) {
                 xmlFree(value_attr);
             }
         }
+        /* Load show_rulers setting */
+        else if (xmlStrcmp(cur->name, (const xmlChar*)"show_rulers") == 0) {
+            xmlChar* value_attr = xmlGetProp(cur, (const xmlChar*)"value");
+            if (value_attr) {
+                if (xmlStrcmp(value_attr, (const xmlChar*)"true") == 0) {
+                    settings->show_rulers = TRUE;
+                } else if (xmlStrcmp(value_attr, (const xmlChar*)"false") == 0) {
+                    settings->show_rulers = FALSE;
+                }
+                xmlFree(value_attr);
+            }
+        }
         /* Load show_gpu_stats setting */
         else if (xmlStrcmp(cur->name, (const xmlChar*)"show_gpu_stats") == 0) {
             xmlChar* value_attr = xmlGetProp(cur, (const xmlChar*)"value");
@@ -726,6 +739,12 @@ static void settings_save_view(xmlTextWriterPtr writer, Settings* settings) {
     xmlTextWriterWriteAttribute(writer, (const xmlChar*)"value",
                                 (const xmlChar*)(settings->show_statusbar ? "true" : "false"));
     xmlTextWriterEndElement(writer); /* show_statusbar */
+
+    /* Save show_rulers setting */
+    xmlTextWriterStartElement(writer, (const xmlChar*)"show_rulers");
+    xmlTextWriterWriteAttribute(writer, (const xmlChar*)"value",
+                                (const xmlChar*)(settings->show_rulers ? "true" : "false"));
+    xmlTextWriterEndElement(writer); /* show_rulers */
 
     /* Save show_gpu_stats setting */
     xmlTextWriterStartElement(writer, (const xmlChar*)"show_gpu_stats");
@@ -1419,6 +1438,26 @@ void settings_set_show_statusbar(Settings* settings, gboolean show) {
         return;
     }
     settings->show_statusbar = show;
+}
+
+/**
+ * Get show rulers setting
+ */
+gboolean settings_get_show_rulers(Settings* settings) {
+    if (!settings) {
+        return TRUE; /* Default to showing rulers */
+    }
+    return settings->show_rulers;
+}
+
+/**
+ * Set show rulers setting
+ */
+void settings_set_show_rulers(Settings* settings, gboolean show) {
+    if (!settings) {
+        return;
+    }
+    settings->show_rulers = show;
 }
 
 /**
