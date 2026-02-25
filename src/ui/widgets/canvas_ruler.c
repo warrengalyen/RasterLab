@@ -6,13 +6,6 @@
 #include <glib.h>
 #include <math.h>
 
-/** Cache params for label cache invalidation (unit/dpi/extent change) */
-typedef struct {
-    RulerUnit unit;
-    gdouble dpi;
-    guint extent;
-} RulerLabelCacheParams;
-
 #define RULER_SIZE_PX 24
 /** Unit label text size in points */
 #define RULER_LABEL_FONT_SIZE 11.0
@@ -97,40 +90,6 @@ static void get_canvas_origin(ImageDocument* doc, gdouble* out_origin_x, gdouble
         *out_origin_x = ox;
     if (out_origin_y)
         *out_origin_y = oy;
-}
-
-/** Get or create label cache for this ruler; invalidate if unit/dpi/extent changed. */
-static GHashTable* get_label_cache(GtkWidget* ruler_widget, gboolean horizontal,
-                                   RulerUnit unit, gdouble dpi, guint extent) {
-    const char* cache_key = horizontal ? "ruler_label_cache_h" : "ruler_label_cache_v";
-    const char* params_key = horizontal ? "ruler_cache_params_h" : "ruler_cache_params_v";
-    GHashTable* cache = (GHashTable*)g_object_get_data(G_OBJECT(ruler_widget), cache_key);
-    RulerLabelCacheParams* params = (RulerLabelCacheParams*)g_object_get_data(G_OBJECT(ruler_widget), params_key);
-    RulerLabelCacheParams new_params = { unit, dpi, extent };
-
-    if (!cache) {
-        cache = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, (GDestroyNotify)g_free);
-        g_object_set_data_full(G_OBJECT(ruler_widget), cache_key, cache, (GDestroyNotify)g_hash_table_destroy);
-    }
-    if (!params || params->unit != unit || params->dpi != dpi || params->extent != extent) {
-        g_hash_table_remove_all(cache);
-        g_free(params);
-        params = (RulerLabelCacheParams*)g_malloc(sizeof(*params));
-        *params = new_params;
-        g_object_set_data_full(G_OBJECT(ruler_widget), params_key, params, (GDestroyNotify)g_free);
-    }
-    return cache;
-}
-
-/** Return cached or freshly formatted label for canvas_val (caller must not free). */
-static const gchar* get_cached_label(GHashTable* cache, int canvas_val, RulerUnit unit, gdouble dpi, guint extent) {
-    gchar* label = (gchar*)g_hash_table_lookup(cache, GINT_TO_POINTER(canvas_val));
-    if (!label) {
-        label = ruler_units_format_value(
-            ruler_units_pixel_to_value((gdouble)canvas_val, unit, dpi, extent), unit);
-        g_hash_table_insert(cache, GINT_TO_POINTER(canvas_val), label);
-    }
-    return label;
 }
 
 static gboolean canvas_ruler_draw(GtkWidget* widget, cairo_t* cr) {
@@ -219,21 +178,24 @@ static gboolean canvas_ruler_draw(GtkWidget* widget, cairo_t* cr) {
                 cairo_line_to(cr, x, (gdouble)h);
                 cairo_stroke(cr);
             }
-            /* Unit labels in black (antialias on for text); use cache to avoid repeated conversions */
+            /* Unit labels in black (antialias on for text) */
             {
-                GHashTable* label_cache = get_label_cache(widget, TRUE, unit, dpi, extent_h);
                 cairo_set_antialias(cr, CAIRO_ANTIALIAS_DEFAULT);
                 cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
                 for (canvas_val = first_major;; canvas_val += major_step_canvas) {
-                    const gchar* label;
+                    gchar* label;
                     x = canvas_origin_x + canvas_val * zoom;
                     if (x > (gdouble)w + 1.0)
                         break;
                     if (x < -1.0)
                         continue;
-                    label = get_cached_label(label_cache, canvas_val, unit, dpi, extent_h);
-                    cairo_move_to(cr, x + 2.0, (gdouble)h - 12.0);
-                    cairo_show_text(cr, label);
+                    label = ruler_units_format_value(
+                        ruler_units_pixel_to_value((gdouble)canvas_val, unit, dpi, extent_h), unit);
+                    if (label) {
+                        cairo_move_to(cr, x + 2.0, (gdouble)h - 12.0);
+                        cairo_show_text(cr, label);
+                        g_free(label);
+                    }
                 }
             }
         } else {
@@ -276,26 +238,29 @@ static gboolean canvas_ruler_draw(GtkWidget* widget, cairo_t* cr) {
                 cairo_line_to(cr, (gdouble)w, y);
                 cairo_stroke(cr);
             }
-            /* Unit labels in black, rotated -90°; use cache to avoid repeated conversions */
+            /* Unit labels in black, rotated -90° */
             {
-                GHashTable* label_cache = get_label_cache(widget, FALSE, unit, dpi, extent_v);
                 cairo_set_antialias(cr, CAIRO_ANTIALIAS_DEFAULT);
                 cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
                 for (canvas_val = first_major;; canvas_val += major_step_canvas) {
-                    const gchar* label;
+                    gchar* label;
                     y = canvas_origin_y + canvas_val * zoom;
                     if (y > (gdouble)h + 1.0)
                         break;
                     if (y < -1.0)
                         continue;
-                    label = get_cached_label(label_cache, canvas_val, unit, dpi, extent_v);
-                    /* Place at right edge (w-8) to avoid left clipping; 2px above tick to avoid overlap */
-                    cairo_save(cr);
-                    cairo_translate(cr, (gdouble)w - 8.0, y - 2.0);
-                    cairo_rotate(cr, -90.0 * 3.14159265358979323846 / 180.0);
-                    cairo_move_to(cr, 0, 0);
-                    cairo_show_text(cr, label);
-                    cairo_restore(cr);
+                    label = ruler_units_format_value(
+                        ruler_units_pixel_to_value((gdouble)canvas_val, unit, dpi, extent_v), unit);
+                    if (label) {
+                        /* Place at right edge (w-8) to avoid left clipping; 2px above tick to avoid overlap */
+                        cairo_save(cr);
+                        cairo_translate(cr, (gdouble)w - 8.0, y - 2.0);
+                        cairo_rotate(cr, -90.0 * 3.14159265358979323846 / 180.0);
+                        cairo_move_to(cr, 0, 0);
+                        cairo_show_text(cr, label);
+                        cairo_restore(cr);
+                        g_free(label);
+                    }
                 }
             }
         }
