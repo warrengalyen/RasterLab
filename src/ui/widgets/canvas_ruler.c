@@ -93,6 +93,11 @@ static void get_canvas_origin(ImageDocument* doc, gdouble* out_origin_x, gdouble
 }
 
 static gboolean canvas_ruler_draw(GtkWidget* widget, cairo_t* cr) {
+    /* Skip all drawing when rulers are hidden */
+    if (!gtk_widget_get_visible(widget)) {
+        return FALSE;
+    }
+
     CanvasRuler* ruler = CANVAS_RULER(widget);
     gint w = gtk_widget_get_allocated_width(widget);
     gint h = gtk_widget_get_allocated_height(widget);
