@@ -36,6 +36,8 @@ static gboolean on_viewport_button_press(GtkWidget* widget, GdkEventButton* even
 static gboolean on_viewport_button_release(GtkWidget* widget, GdkEventButton* event, gpointer user_data);
 static gboolean on_viewport_motion_notify(GtkWidget* widget, GdkEventMotion* event, gpointer user_data);
 static gboolean on_viewport_leave_notify(GtkWidget* widget, GdkEventCrossing* event, gpointer user_data);
+/** Queue only the ruler strips containing the mouse marker (old and new) for minimal redraw. */
+static void queue_ruler_marker_areas(ImageDocument* doc, gdouble old_cx, gdouble old_cy, gdouble new_cx, gdouble new_cy);
 
 /**
  * Animation timer callback - updates selection marching ants
@@ -873,11 +875,11 @@ static gboolean on_drawing_area_motion_notify(GtkWidget* widget, GdkEventMotion*
     tool_event.button = 0; /* No button pressed during motion */
     tool_event.state = event->state;
 
-    /* Update ruler mouse indicator (canvas coordinates) */
-    doc->mouse_canvas_x = (gdouble)tool_event.x;
-    doc->mouse_canvas_y = (gdouble)tool_event.y;
-    if (doc->ruler_h && gtk_widget_get_visible(doc->ruler_h)) gtk_widget_queue_draw(doc->ruler_h);
-    if (doc->ruler_v && gtk_widget_get_visible(doc->ruler_v)) gtk_widget_queue_draw(doc->ruler_v);
+    /* Update ruler mouse indicator (canvas coordinates); minimal invalidation for marker strips only */
+    queue_ruler_marker_areas(doc, doc->prev_mouse_canvas_x, doc->prev_mouse_canvas_y,
+                             (gdouble)tool_event.x, (gdouble)tool_event.y);
+    doc->prev_mouse_canvas_x = doc->mouse_canvas_x = (gdouble)tool_event.x;
+    doc->prev_mouse_canvas_y = doc->mouse_canvas_y = (gdouble)tool_event.y;
 
     /* Update cursor position in statusbar */
     ctx = (AppContext*)g_object_get_data(G_OBJECT(doc->drawing_area), "app_context");
@@ -976,6 +978,80 @@ static gboolean on_drawing_area_leave_notify(GtkWidget* widget, GdkEventCrossing
     return FALSE;
 }
 
+/** Strip width/height for mouse marker invalidation (covers 1px line + rounding) */
+#define RULER_MARKER_STRIP 3
+#define RULER_SIZE_PX 24
+
+/**
+ * Queue only the ruler strips containing the mouse marker (old and new positions).
+ * Uses gtk_widget_queue_draw_area to avoid full ruler redraw on mouse move.
+ */
+static void queue_ruler_marker_areas(ImageDocument* doc, gdouble old_cx, gdouble old_cy, gdouble new_cx, gdouble new_cy) {
+    GtkAdjustment* hadj_obj;
+    GtkAdjustment* vadj_obj;
+    gdouble hadj = 0.0, vadj = 0.0, zoom;
+    int w, h, x, y, x1, y1, width, height;
+    gboolean old_valid = (old_cx > -1e8 && old_cy > -1e8);
+    gboolean new_valid = (new_cx > -1e8 && new_cy > -1e8);
+
+    if (!doc->scrolled_window || !GTK_IS_SCROLLED_WINDOW(doc->scrolled_window))
+        return;
+    hadj_obj = gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(doc->scrolled_window));
+    vadj_obj = gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(doc->scrolled_window));
+    if (!hadj_obj || !vadj_obj)
+        return;
+    hadj = gtk_adjustment_get_value(hadj_obj);
+    vadj = gtk_adjustment_get_value(vadj_obj);
+    zoom = document_get_zoom(doc);
+    if (zoom <= 0.0)
+        zoom = 1.0;
+
+    if (doc->ruler_h && gtk_widget_get_visible(doc->ruler_h)) {
+        w = gtk_widget_get_allocated_width(doc->ruler_h);
+        h = gtk_widget_get_allocated_height(doc->ruler_h);
+        if (old_valid) {
+            x = (int)(RULER_SIZE_PX - hadj + old_cx * zoom);
+            x1 = x - 1;
+            if (x1 < 0) x1 = 0;
+            width = RULER_MARKER_STRIP;
+            if (x1 + width > w) width = w - x1;
+            if (width > 0)
+                gtk_widget_queue_draw_area(doc->ruler_h, x1, 0, width, h);
+        }
+        if (new_valid) {
+            x = (int)(RULER_SIZE_PX - hadj + new_cx * zoom);
+            x1 = x - 1;
+            if (x1 < 0) x1 = 0;
+            width = RULER_MARKER_STRIP;
+            if (x1 + width > w) width = w - x1;
+            if (width > 0)
+                gtk_widget_queue_draw_area(doc->ruler_h, x1, 0, width, h);
+        }
+    }
+    if (doc->ruler_v && gtk_widget_get_visible(doc->ruler_v)) {
+        w = gtk_widget_get_allocated_width(doc->ruler_v);
+        h = gtk_widget_get_allocated_height(doc->ruler_v);
+        if (old_valid) {
+            y = (int)(-vadj + old_cy * zoom);
+            y1 = y - 1;
+            if (y1 < 0) y1 = 0;
+            height = RULER_MARKER_STRIP;
+            if (y1 + height > h) height = h - y1;
+            if (height > 0)
+                gtk_widget_queue_draw_area(doc->ruler_v, 0, y1, w, height);
+        }
+        if (new_valid) {
+            y = (int)(-vadj + new_cy * zoom);
+            y1 = y - 1;
+            if (y1 < 0) y1 = 0;
+            height = RULER_MARKER_STRIP;
+            if (y1 + height > h) height = h - y1;
+            if (height > 0)
+                gtk_widget_queue_draw_area(doc->ruler_v, 0, y1, w, height);
+        }
+    }
+}
+
 /**
  * Viewport leave notify callback - hide cursor position
  */
@@ -996,11 +1072,10 @@ static gboolean on_viewport_leave_notify(GtkWidget* widget, GdkEventCrossing* ev
         ui_hide_cursor_position(ctx);
     }
 
-    /* Clear ruler mouse indicator */
-    doc->mouse_canvas_x = -1e9;
-    doc->mouse_canvas_y = -1e9;
-    if (doc->ruler_h && gtk_widget_get_visible(doc->ruler_h)) gtk_widget_queue_draw(doc->ruler_h);
-    if (doc->ruler_v && gtk_widget_get_visible(doc->ruler_v)) gtk_widget_queue_draw(doc->ruler_v);
+    /* Clear ruler mouse indicator; invalidate only the previous marker strips */
+    queue_ruler_marker_areas(doc, doc->prev_mouse_canvas_x, doc->prev_mouse_canvas_y, -1e9, -1e9);
+    doc->mouse_canvas_x = doc->prev_mouse_canvas_x = -1e9;
+    doc->mouse_canvas_y = doc->prev_mouse_canvas_y = -1e9;
 
     return FALSE;
 }
@@ -1118,11 +1193,11 @@ static gboolean on_viewport_motion_notify(GtkWidget* widget, GdkEventMotion* eve
     /* Convert to image coordinates (can be negative if outside canvas) */
     widget_to_image_coords(doc, widget_x, widget_y, &image_x, &image_y);
 
-    /* Update ruler mouse indicator (canvas coordinates) */
-    doc->mouse_canvas_x = (gdouble)image_x;
-    doc->mouse_canvas_y = (gdouble)image_y;
-    if (doc->ruler_h && gtk_widget_get_visible(doc->ruler_h)) gtk_widget_queue_draw(doc->ruler_h);
-    if (doc->ruler_v && gtk_widget_get_visible(doc->ruler_v)) gtk_widget_queue_draw(doc->ruler_v);
+    /* Update ruler mouse indicator (canvas coordinates); minimal invalidation for marker strips only */
+    queue_ruler_marker_areas(doc, doc->prev_mouse_canvas_x, doc->prev_mouse_canvas_y,
+                             (gdouble)image_x, (gdouble)image_y);
+    doc->prev_mouse_canvas_x = doc->mouse_canvas_x = (gdouble)image_x;
+    doc->prev_mouse_canvas_y = doc->mouse_canvas_y = (gdouble)image_y;
 
     /* Update cursor position in statusbar */
     ctx = (AppContext*)g_object_get_data(G_OBJECT(doc->drawing_area), "app_context");
@@ -1175,6 +1250,8 @@ ImageDocument* document_new(const gchar* filename, gboolean create_worker_pool, 
     doc->ruler_v = NULL;
     doc->mouse_canvas_x = -1e9;
     doc->mouse_canvas_y = -1e9;
+    doc->prev_mouse_canvas_x = -1e9;
+    doc->prev_mouse_canvas_y = -1e9;
 
     /* Initialize image metadata */
     doc->width = 0;
@@ -1462,8 +1539,6 @@ static gboolean on_drawing_area_key_release(GtkWidget* widget, GdkEventKey* even
 /**
  * Create a drawing area widget for the document
  */
-#define RULER_SIZE_PX 24
-
 GtkWidget* document_create_drawing_area(ImageDocument* doc) {
     GtkWidget* grid;
     GtkWidget* h_ruler;

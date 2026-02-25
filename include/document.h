@@ -198,8 +198,10 @@ typedef struct ImageDocument {
     gdouble ruler_dpi;      /* DPI for physical units (0 = use RULER_DPI_DEFAULT) */
     GtkWidget* ruler_h;     /* Horizontal ruler (for queue_draw on unit change) */
     GtkWidget* ruler_v;     /* Vertical ruler */
-    gdouble mouse_canvas_x; /* Last mouse position in canvas coords (invalid if < -1e8) */
+    gdouble mouse_canvas_x;   /* Last mouse position in canvas coords (invalid if < -1e8) */
     gdouble mouse_canvas_y;
+    gdouble prev_mouse_canvas_x; /* Previous position for minimal ruler invalidation */
+    gdouble prev_mouse_canvas_y;
 
     /* Selection - mask-based */
     SelectionMask* selection_mask;      /* Pixel-based selection mask */
