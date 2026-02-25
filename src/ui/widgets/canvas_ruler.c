@@ -245,7 +245,7 @@ static gboolean canvas_ruler_draw(GtkWidget* widget, cairo_t* cr) {
             }
             /* Unit labels in black, rotated -90° */
             {
-                cairo_set_antialias(cr, CAIRO_ANTIALIAS_DEFAULT);
+                cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
                 cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
                 for (canvas_val = first_major;; canvas_val += major_step_canvas) {
                     gchar* label;
