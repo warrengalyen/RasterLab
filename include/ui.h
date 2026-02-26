@@ -125,6 +125,15 @@ void ui_update_recent_files_menu(AppContext* ctx);
 void ui_update_status_bar(AppContext* ctx, ImageDocument* doc);
 
 /**
+ * Update the status bar selection/crop size label (sb_label_select_size).
+ * Call after tool motion or when status bar is refreshed so selection preview,
+ * crop preview, or total selection mask dimensions are shown when applicable.
+ * @param ctx The application context
+ * @param doc The active document (or NULL to hide the select size box)
+ */
+void ui_update_status_bar_select_size(AppContext* ctx, ImageDocument* doc);
+
+/**
  * Update menu and button sensitivity based on document and layer state
  * @param ctx The application context
  */

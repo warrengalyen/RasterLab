@@ -5,7 +5,6 @@
 #include "command.h"
 #include "document.h"
 #include "filters.h"
-#include "ui/ruler_units.h"
 #include "ocular.h"
 #include "panels.h"
 #include "render/compositor.h"
@@ -18,11 +17,15 @@
 #include "selection/selection_undo.h"
 #include "tool_manager.h"
 #include "tool_options.h"
+#include "tools/tool_crop.h"
+#include "tools/tool_ellipse_select.h"
+#include "tools/tool_rect_select.h"
 #include "ui/dialogs/canvas_size_dialog.h"
 #include "ui/dialogs/new_layer_dialog.h"
 #include "ui/dialogs/recovery_dialog.h"
 #include "ui/dialogs/selection_radius_dialog.h"
 #include "ui/layers_panel.h"
+#include "ui/ruler_units.h"
 #include "ui/swatches.h"
 #include "ui/tool_options_panel.h"
 #include "ui/tools_panel.h"
@@ -40,13 +43,13 @@
 #include "ui/workspace.h"
 #include "undo/undo_disk.h"
 #include <glib.h>
+#include <limits.h>
 #include <math.h>
 #include <pango/pango.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-
 
 /* Log handler to suppress harmless GTK Builder menu warnings */
 static gboolean gtk_builder_menu_warning_handler(const gchar* log_domain,
@@ -989,7 +992,7 @@ void ui_update_document_tab_label(AppContext* ctx, ImageDocument* doc) {
 
     /* Find the page number for this document */
     page_num = gtk_notebook_page_num(GTK_NOTEBOOK(ctx->notebook),
-                                    doc->canvas_container ? doc->canvas_container : doc->scrolled_window);
+                                     doc->canvas_container ? doc->canvas_container : doc->scrolled_window);
     if (page_num < 0) {
         return;
     }
@@ -2008,6 +2011,12 @@ void ui_update_status_bar(AppContext* ctx, ImageDocument* doc) {
         if (status_label) {
             gtk_widget_hide(status_label);
         }
+        {
+            GtkWidget* sb_select_size_box = GTK_WIDGET(gtk_builder_get_object(builder, "sb_select_size_box"));
+            if (sb_select_size_box) {
+                gtk_widget_hide(sb_select_size_box);
+            }
+        }
 
         size_text = g_strdup("—");
     } else {
@@ -2120,6 +2129,116 @@ void ui_update_status_bar(AppContext* ctx, ImageDocument* doc) {
     gtk_label_set_text(GTK_LABEL(size_label), size_text);
 
     g_free(size_text);
+
+    /* Update selection/crop size label and visibility of its container */
+    ui_update_status_bar_select_size(ctx, doc);
+}
+
+/**
+ * Update the status bar selection/crop size label (sb_label_select_size).
+ * Shows sb_select_size_box only when dimensions > 0. Priority: crop preview or
+ * selection preview first; if neither, total selection mask bounds when selections exist.
+ */
+void ui_update_status_bar_select_size(AppContext* ctx, ImageDocument* doc) {
+    GtkWidget* select_size_box;
+    GtkWidget* select_size_label;
+    GtkBuilder* builder;
+    gint show_w = 0, show_h = 0;
+    gdouble dpi = 96.0;
+    gchar* width_str = NULL;
+    gchar* height_str = NULL;
+    gchar* size_text = NULL;
+
+    if (!ctx || !ctx->status_bar) {
+        return;
+    }
+
+    builder = GTK_BUILDER(g_object_get_data(G_OBJECT(ctx->window), "main_builder"));
+    if (!builder) {
+        return;
+    }
+
+    select_size_box = GTK_WIDGET(gtk_builder_get_object(builder, "sb_select_size_box"));
+    select_size_label = GTK_WIDGET(gtk_builder_get_object(builder, "sb_label_select_size"));
+    if (!select_size_box || !select_size_label) {
+        return;
+    }
+
+    if (!doc || doc->width == 0) {
+        gtk_widget_hide(select_size_box);
+        return;
+    }
+
+    Tool* active_tool = ctx->tool_registry ? tool_manager_get_active(ctx->tool_registry) : NULL;
+
+    /* 1) Crop preview when crop tool is selected and has an active rect */
+    if (active_tool && active_tool->type == TOOL_CROP && active_tool->user_data) {
+        CropToolState* crop_state = (CropToolState*)active_tool->user_data;
+        if (crop_state->is_active && crop_state->rect_w > 0 && crop_state->rect_h > 0) {
+            show_w = crop_state->rect_w;
+            show_h = crop_state->rect_h;
+        }
+    }
+
+    /* 2) Selection preview when rect/ellipse selection tool is selected and editing */
+    if (show_w <= 0 && active_tool && active_tool->user_data) {
+        if (active_tool->type == TOOL_RECT_SELECT) {
+            RectSelectToolState* rs = (RectSelectToolState*)active_tool->user_data;
+            if (rs->is_editing && rs->selection_w > 0 && rs->selection_h > 0) {
+                show_w = rs->selection_w;
+                show_h = rs->selection_h;
+            }
+        } else if (active_tool->type == TOOL_ELLIPSE_SELECT) {
+            EllipseSelectToolState* es = (EllipseSelectToolState*)active_tool->user_data;
+            if (es->is_editing && es->selection_w > 0 && es->selection_h > 0) {
+                show_w = es->selection_w;
+                show_h = es->selection_h;
+            }
+        }
+    }
+
+    /* 3) Total selection size from selection mask if no preview dimensions and selections exist */
+    if (show_w <= 0 && doc->selection_mask && !selection_mask_is_empty(doc->selection_mask)) {
+        GList* selections = selection_mask_get_selections(doc->selection_mask);
+        int min_x = INT_MAX, min_y = INT_MAX;
+        int max_x = INT_MIN, max_y = INT_MIN;
+
+        for (GList* l = selections; l != NULL; l = l->next) {
+            Selection* s = (Selection*)l->data;
+            if (s->x < min_x) {
+                min_x = s->x;
+            }
+            if (s->y < min_y) {
+                min_y = s->y;
+            }
+            if (s->x + s->width > max_x) {
+                max_x = s->x + s->width;
+            }
+            if (s->y + s->height > max_y) {
+                max_y = s->y + s->height;
+            }
+        }
+        if (min_x != INT_MAX && max_x >= min_x && max_y >= min_y) {
+            show_w = max_x - min_x;
+            show_h = max_y - min_y;
+        }
+    }
+
+    if (show_w > 0 && show_h > 0) {
+        gdouble zoom = doc->zoom_factor;
+        gdouble w_converted = convert_dimension((guint)show_w, ctx->size_unit, zoom, dpi);
+        gdouble h_converted = convert_dimension((guint)show_h, ctx->size_unit, zoom, dpi);
+        width_str = format_dimension(w_converted, ctx->size_unit);
+        height_str = format_dimension(h_converted, ctx->size_unit);
+        size_text = g_strdup_printf("%s × %s", width_str, height_str);
+        gtk_label_set_text(GTK_LABEL(select_size_label), size_text);
+        gtk_widget_show(select_size_box);
+        g_free(width_str);
+        g_free(height_str);
+        g_free(size_text);
+    } else {
+        gtk_widget_hide(select_size_box);
+    }
 }
 
 /**
@@ -2571,8 +2690,10 @@ void ui_update_menu_and_button_states(AppContext* ctx) {
         for (guint i = 0; i < layer_count; i++) {
             ImageLayer* l = document_get_layer(doc, i);
             if (l) {
-                if (l->visible) any_visible = TRUE;
-                else any_hidden = TRUE;
+                if (l->visible)
+                    any_visible = TRUE;
+                else
+                    any_hidden = TRUE;
             }
         }
         can_show_all = any_hidden;  /* Disable when all already visible */

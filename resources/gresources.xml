@@ -45,6 +45,7 @@
     <file preprocess="to-pixdata">icons/sb-zoom-out.png</file>
     <file preprocess="to-pixdata">icons/sb-dimensions.png</file>
     <file preprocess="to-pixdata">icons/sb-pointer.png</file>
+    <file preprocess="to-pixdata">icons/sb-select-size.png</file>
     <file preprocess="to-pixdata">icons/swatches-add.png</file>
     <file preprocess="to-pixdata">icons/swatches-delete.png</file>
     <file preprocess="to-pixdata">icons/swatches-reset.png</file>

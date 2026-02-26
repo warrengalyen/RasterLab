@@ -908,6 +908,11 @@ static gboolean on_drawing_area_motion_notify(GtkWidget* widget, GdkEventMotion*
         gtk_widget_queue_draw(doc->drawing_area);
     }
 
+    /* Update statusbar selection/crop size during drag/preview */
+    if (ctx) {
+        ui_update_status_bar_select_size(ctx, doc);
+    }
+
     return TRUE;
 }
 
