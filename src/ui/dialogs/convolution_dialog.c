@@ -1,10 +1,10 @@
 #include "ui/dialogs/convolution_dialog.h"
-#include "ui/ui_utils.h"
 #include "document.h"
 #include "render/compositor.h"
 #include "render/layer.h"
 #include "ui/filters/filter_convolution.h"
 #include "ui/filters/filter_utils.h"
+#include "ui/ui_utils.h"
 #include "ui/widgets/filter_preview.h"
 #include "ui/widgets/vertical_spin_button.h"
 #include <cairo.h>
@@ -209,21 +209,7 @@ static void set_scaled_reset_button_icon(GtkButton* button, gint size) {
     }
 
     GError* error = NULL;
-    GBytes* icon_bytes = g_resources_lookup_data("/icons/reset.svg", G_RESOURCE_LOOKUP_FLAGS_NONE, &error);
-    if (!icon_bytes) {
-        if (error) {
-            g_error_free(error);
-        }
-        return;
-    }
-
-    GInputStream* stream = g_memory_input_stream_new_from_data(g_bytes_get_data(icon_bytes, NULL),
-                                                               g_bytes_get_size(icon_bytes),
-                                                               NULL);
-    GdkPixbuf* pixbuf = gdk_pixbuf_new_from_stream(stream, NULL, &error);
-    g_object_unref(stream);
-    g_bytes_unref(icon_bytes);
-
+    GdkPixbuf* pixbuf = gdk_pixbuf_new_from_resource("/icons/reset.png", &error);
     if (!pixbuf) {
         if (error) {
             g_error_free(error);
@@ -483,9 +469,9 @@ ConvolutionDialog* convolution_dialog_new(const gchar* title) {
 
         gtk_widget_set_hexpand(button_box, TRUE);
 
-        /* Create reset button with reset.svg icon */
+        /* Create reset button with icon */
         reset_button = gtk_button_new();
-        GtkWidget* reset_icon = gtk_image_new_from_resource("/icons/reset.svg");
+        GtkWidget* reset_icon = gtk_image_new_from_resource("/icons/reset.png");
         if (reset_icon) {
             gtk_button_set_image(GTK_BUTTON(reset_button), reset_icon);
             gtk_button_set_always_show_image(GTK_BUTTON(reset_button), TRUE);

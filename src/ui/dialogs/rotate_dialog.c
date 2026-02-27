@@ -173,10 +173,10 @@ RotateDialog* rotate_dialog_new(const gchar* title) {
 
     dialog->dialog = gtk_dialog_new();
     gtk_window_set_title(GTK_WINDOW(dialog->dialog), title);
-    
+
     /* Replace default titlebar with header bar - must be done before other window properties */
     ui_utils_set_header_bar(GTK_WINDOW(dialog->dialog), title);
-    
+
     gtk_dialog_add_button(GTK_DIALOG(dialog->dialog), "_OK", GTK_RESPONSE_OK);
     gtk_dialog_add_button(GTK_DIALOG(dialog->dialog), "_Cancel", GTK_RESPONSE_CANCEL);
     gtk_window_set_modal(GTK_WINDOW(dialog->dialog), TRUE);
@@ -228,7 +228,7 @@ RotateDialog* rotate_dialog_new(const gchar* title) {
         g_signal_connect(dialog->angle_spin, "value-changed", G_CALLBACK(on_angle_spin_changed), dialog);
 
         dialog->angle_reset_button = gtk_button_new();
-        GtkWidget* reset_icon = gtk_image_new_from_resource("/icons/reset.svg");
+        GtkWidget* reset_icon = gtk_image_new_from_resource("/icons/reset.png");
         if (reset_icon) {
             gtk_button_set_image(GTK_BUTTON(dialog->angle_reset_button), reset_icon);
             gtk_button_set_always_show_image(GTK_BUTTON(dialog->angle_reset_button), TRUE);

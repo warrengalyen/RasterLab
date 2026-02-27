@@ -354,22 +354,19 @@ static void update_aspect_ratio_label(ResizeDialog* dialog) {
 
 static void update_preserve_ratio_icon(ResizeDialog* dialog) {
     GError* error = NULL;
-    const gchar* icon_resource = dialog->preserve_aspect ? "/icons/padlock-locked.svg" : "/icons/padlock-unlocked.svg";
-    GBytes* icon_bytes = g_resources_lookup_data(icon_resource, G_RESOURCE_LOOKUP_FLAGS_NONE, &error);
-    if (!icon_bytes) {
-        if (error)
-            g_error_free(error);
-        return;
-    }
-    GInputStream* stream = g_memory_input_stream_new_from_data(g_bytes_get_data(icon_bytes, NULL), g_bytes_get_size(icon_bytes), NULL);
-    GdkPixbuf* pixbuf = gdk_pixbuf_new_from_stream(stream, NULL, &error);
-    g_object_unref(stream);
-    g_bytes_unref(icon_bytes);
+    const gchar* icon_resource = dialog->preserve_aspect ? "/icons/padlock-locked.png" : "/icons/padlock-unlocked.png";
+    GdkPixbuf* pixbuf = gdk_pixbuf_new_from_resource(icon_resource, &error);
     if (!pixbuf) {
         if (error)
             g_error_free(error);
         return;
     }
+    /* Scale to 20x20 */
+    GdkPixbuf* scaled = gdk_pixbuf_scale_simple(pixbuf, 20, 20, GDK_INTERP_BILINEAR);
+    g_object_unref(pixbuf);
+    pixbuf = scaled;
+    if (!pixbuf)
+        return;
     GtkWidget* child = gtk_bin_get_child(GTK_BIN(dialog->preserve_ratio_toggle));
     if (child && GTK_IS_IMAGE(child)) {
         gtk_image_set_from_pixbuf(GTK_IMAGE(child), pixbuf);
@@ -387,16 +384,7 @@ static void set_reset_button_icon(GtkButton* button) {
     if (!button)
         return;
     GError* error = NULL;
-    GBytes* icon_bytes = g_resources_lookup_data("/icons/reset.svg", G_RESOURCE_LOOKUP_FLAGS_NONE, &error);
-    if (!icon_bytes) {
-        if (error)
-            g_error_free(error);
-        return;
-    }
-    GInputStream* stream = g_memory_input_stream_new_from_data(g_bytes_get_data(icon_bytes, NULL), g_bytes_get_size(icon_bytes), NULL);
-    GdkPixbuf* pixbuf = gdk_pixbuf_new_from_stream(stream, NULL, &error);
-    g_object_unref(stream);
-    g_bytes_unref(icon_bytes);
+    GdkPixbuf* pixbuf = gdk_pixbuf_new_from_resource("/icons/reset.png", &error);
     if (!pixbuf) {
         if (error)
             g_error_free(error);

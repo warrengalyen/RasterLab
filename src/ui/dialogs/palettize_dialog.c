@@ -1,15 +1,16 @@
 #include "ui/dialogs/palettize_dialog.h"
-#include "ui/ui_utils.h"
 #include "document.h"
 #include "filters.h"
 #include "render/compositor.h"
 #include "render/layer.h"
 #include "ui/filters/filter_utils.h"
+#include "ui/ui_utils.h"
 #include "ui/widgets/filter_preview.h"
 #include <cairo.h>
 #include <glib.h>
 #include <stdlib.h>
 #include <string.h>
+
 
 /**
  * Palettize dialog structure
@@ -720,9 +721,9 @@ PalettizeDialog* palettize_dialog_new(const gchar* title) {
 
         gtk_widget_set_hexpand(button_box, TRUE);
 
-        /* Create reset button with reset.svg icon */
+        /* Create reset button with icon */
         reset_button = gtk_button_new();
-        GtkWidget* reset_icon = gtk_image_new_from_resource("/icons/reset.svg");
+        GtkWidget* reset_icon = gtk_image_new_from_resource("/icons/reset.png");
         if (reset_icon) {
             gtk_button_set_image(GTK_BUTTON(reset_button), reset_icon);
             gtk_button_set_always_show_image(GTK_BUTTON(reset_button), TRUE);

@@ -559,18 +559,16 @@ static void update_preserve_ratio_icon(NewImageDialog* dialog) {
     GtkImage* image;
     GError* error = NULL;
     GdkPixbuf* pixbuf;
-    GInputStream* stream;
-    GBytes* icon_bytes;
     const gchar* icon_resource;
 
     if (dialog->preserve_aspect) {
-        icon_resource = "/icons/padlock-locked.svg";
+        icon_resource = "/icons/padlock-locked.png";
     } else {
-        icon_resource = "/icons/padlock-unlocked.svg";
+        icon_resource = "/icons/padlock-unlocked.png";
     }
 
-    icon_bytes = g_resources_lookup_data(icon_resource, G_RESOURCE_LOOKUP_FLAGS_NONE, &error);
-    if (!icon_bytes) {
+    pixbuf = gdk_pixbuf_new_from_resource(icon_resource, &error);
+    if (!pixbuf) {
         g_warning("Failed to load %s: %s", icon_resource, error ? error->message : "Unknown error");
         if (error) {
             g_error_free(error);
@@ -578,18 +576,11 @@ static void update_preserve_ratio_icon(NewImageDialog* dialog) {
         return;
     }
 
-    stream = g_memory_input_stream_new_from_data(g_bytes_get_data(icon_bytes, NULL),
-                                                 g_bytes_get_size(icon_bytes),
-                                                 NULL);
-    pixbuf = gdk_pixbuf_new_from_stream(stream, NULL, &error);
-    g_object_unref(stream);
-    g_bytes_unref(icon_bytes);
-
+    /* Scale to 20x20 */
+    GdkPixbuf* scaled = gdk_pixbuf_scale_simple(pixbuf, 20, 20, GDK_INTERP_BILINEAR);
+    g_object_unref(pixbuf);
+    pixbuf = scaled;
     if (!pixbuf) {
-        g_warning("Failed to create pixbuf from %s: %s", icon_resource, error ? error->message : "Unknown error");
-        if (error) {
-            g_error_free(error);
-        }
         return;
     }
 
@@ -611,7 +602,7 @@ static void update_preserve_ratio_icon(NewImageDialog* dialog) {
 }
 
 /**
- * Helper function to set reset button icon from SVG resource
+ * Helper function to set reset button icon from resource (to-pixdata format).
  */
 static void set_reset_button_icon(GtkButton* button) {
     if (!button) {
@@ -619,24 +610,9 @@ static void set_reset_button_icon(GtkButton* button) {
     }
 
     GError* error = NULL;
-    GBytes* icon_bytes = g_resources_lookup_data("/icons/reset.svg", G_RESOURCE_LOOKUP_FLAGS_NONE, &error);
-    if (!icon_bytes) {
-        g_warning("Failed to load reset.svg: %s", error ? error->message : "Unknown error");
-        if (error) {
-            g_error_free(error);
-        }
-        return;
-    }
-
-    GInputStream* stream = g_memory_input_stream_new_from_data(g_bytes_get_data(icon_bytes, NULL),
-                                                               g_bytes_get_size(icon_bytes),
-                                                               NULL);
-    GdkPixbuf* pixbuf = gdk_pixbuf_new_from_stream(stream, NULL, &error);
-    g_object_unref(stream);
-    g_bytes_unref(icon_bytes);
-
+    GdkPixbuf* pixbuf = gdk_pixbuf_new_from_resource("/icons/reset.png", &error);
     if (!pixbuf) {
-        g_warning("Failed to create pixbuf from reset.svg: %s", error ? error->message : "Unknown error");
+        g_warning("Failed to load reset.png: %s", error ? error->message : "Unknown error");
         if (error) {
             g_error_free(error);
         }

@@ -396,7 +396,7 @@ ChannelMixerDialog* channel_mixer_dialog_new(const gchar* title) {
         gtk_widget_set_margin_end(button_box, 5);
         gtk_widget_set_hexpand(button_box, TRUE);
         reset_btn = gtk_button_new();
-        GtkWidget* reset_icon = gtk_image_new_from_resource("/icons/reset.svg");
+        GtkWidget* reset_icon = gtk_image_new_from_resource("/icons/reset.png");
         if (reset_icon) {
             gtk_button_set_image(GTK_BUTTON(reset_btn), reset_icon);
             gtk_button_set_always_show_image(GTK_BUTTON(reset_btn), TRUE);

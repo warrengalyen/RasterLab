@@ -18,15 +18,15 @@ struct _AnchorPositionWidget {
  * The icons represent directions relative to center
  */
 static const gchar* icon_resources[9] = {
-    "/icons/anchor-315.svg",    /* TOP_LEFT */
-    "/icons/anchor-0.svg",      /* TOP_CENTER */
-    "/icons/anchor-45.svg",     /* TOP_RIGHT */
-    "/icons/anchor-270.svg",    /* MIDDLE_LEFT */
-    "/icons/anchor-center.svg", /* CENTER */
-    "/icons/anchor-90.svg",     /* MIDDLE_RIGHT */
-    "/icons/anchor-225.svg",    /* BOTTOM_LEFT */
-    "/icons/anchor-180.svg",    /* BOTTOM_CENTER */
-    "/icons/anchor-135.svg"     /* BOTTOM_RIGHT */
+    "/icons/anchor-315.png",    /* TOP_LEFT */
+    "/icons/anchor-0.png",      /* TOP_CENTER */
+    "/icons/anchor-45.png",     /* TOP_RIGHT */
+    "/icons/anchor-270.png",    /* MIDDLE_LEFT */
+    "/icons/anchor-center.png", /* CENTER */
+    "/icons/anchor-90.png",     /* MIDDLE_RIGHT */
+    "/icons/anchor-225.png",    /* BOTTOM_LEFT */
+    "/icons/anchor-180.png",    /* BOTTOM_CENTER */
+    "/icons/anchor-135.png"     /* BOTTOM_RIGHT */
 };
 
 /**
@@ -41,8 +41,6 @@ static void update_button_icons(AnchorPositionWidget* widget) {
     GtkImage* btn_image;
     GError* icon_error = NULL;
     GdkPixbuf* icon_pixbuf;
-    GInputStream* icon_stream;
-    GBytes* icon_bytes;
 
     if (selected_index < 0 || selected_index >= 9) {
         selected_index = 4; /* Default to center */
@@ -54,7 +52,7 @@ static void update_button_icons(AnchorPositionWidget* widget) {
 
         if (i == selected_index) {
             /* Selected position gets the center icon */
-            icon_resource = "/icons/anchor-center.svg";
+            icon_resource = "/icons/anchor-center.png";
             should_show_icon = TRUE;
         } else {
             /* Calculate relative position from selected to this button */
@@ -74,28 +72,28 @@ static void update_button_icons(AnchorPositionWidget* widget) {
                 /* The icon represents the direction FROM the selected position TO this button (pointing away) */
                 if (delta_row == -1 && delta_col == -1) {
                     /* This button is top-left of selected, so icon should point top-left */
-                    icon_resource = "/icons/anchor-315.svg";
+                    icon_resource = "/icons/anchor-315.png";
                 } else if (delta_row == -1 && delta_col == 0) {
                     /* This button is above selected, so icon should point up */
-                    icon_resource = "/icons/anchor-0.svg";
+                    icon_resource = "/icons/anchor-0.png";
                 } else if (delta_row == -1 && delta_col == 1) {
                     /* This button is top-right of selected, so icon should point top-right */
-                    icon_resource = "/icons/anchor-45.svg";
+                    icon_resource = "/icons/anchor-45.png";
                 } else if (delta_row == 0 && delta_col == -1) {
                     /* This button is left of selected, so icon should point left */
-                    icon_resource = "/icons/anchor-270.svg";
+                    icon_resource = "/icons/anchor-270.png";
                 } else if (delta_row == 0 && delta_col == 1) {
                     /* This button is right of selected, so icon should point right */
-                    icon_resource = "/icons/anchor-90.svg";
+                    icon_resource = "/icons/anchor-90.png";
                 } else if (delta_row == 1 && delta_col == -1) {
                     /* This button is bottom-left of selected, so icon should point bottom-left */
-                    icon_resource = "/icons/anchor-225.svg";
+                    icon_resource = "/icons/anchor-225.png";
                 } else if (delta_row == 1 && delta_col == 0) {
                     /* This button is below selected, so icon should point down */
-                    icon_resource = "/icons/anchor-180.svg";
+                    icon_resource = "/icons/anchor-180.png";
                 } else if (delta_row == 1 && delta_col == 1) {
                     /* This button is bottom-right of selected, so icon should point bottom-right */
-                    icon_resource = "/icons/anchor-135.svg";
+                    icon_resource = "/icons/anchor-135.png";
                 }
             } else {
                 /* Position is not adjacent - no icon */
@@ -107,28 +105,8 @@ static void update_button_icons(AnchorPositionWidget* widget) {
         btn_image = GTK_IMAGE(gtk_bin_get_child(GTK_BIN(widget->buttons[i])));
 
         if (should_show_icon && icon_resource) {
-            /* Load icon */
-            icon_bytes = g_resources_lookup_data(icon_resource, G_RESOURCE_LOOKUP_FLAGS_NONE, &icon_error);
-            if (!icon_bytes) {
-                g_warning("Failed to load %s: %s", icon_resource, icon_error ? icon_error->message : "Unknown error");
-                if (icon_error) {
-                    g_error_free(icon_error);
-                    icon_error = NULL;
-                }
-                /* Clear icon if we can't load it */
-                if (btn_image) {
-                    gtk_image_clear(btn_image);
-                }
-                continue;
-            }
-
-            icon_stream = g_memory_input_stream_new_from_data(g_bytes_get_data(icon_bytes, NULL),
-                                                              g_bytes_get_size(icon_bytes),
-                                                              NULL);
-            icon_pixbuf = gdk_pixbuf_new_from_stream(icon_stream, NULL, &icon_error);
-            g_object_unref(icon_stream);
-            g_bytes_unref(icon_bytes);
-
+            /* Load icon (resource is to-pixdata format) */
+            icon_pixbuf = gdk_pixbuf_new_from_resource(icon_resource, &icon_error);
             if (!icon_pixbuf) {
                 g_warning("Failed to create pixbuf from %s: %s", icon_resource, icon_error ? icon_error->message : "Unknown error");
                 if (icon_error) {
@@ -136,6 +114,17 @@ static void update_button_icons(AnchorPositionWidget* widget) {
                     icon_error = NULL;
                 }
                 /* Clear icon if we can't create pixbuf */
+                if (btn_image) {
+                    gtk_image_clear(btn_image);
+                }
+                continue;
+            }
+
+            /* Scale to 20x20 */
+            GdkPixbuf* scaled = gdk_pixbuf_scale_simple(icon_pixbuf, 20, 20, GDK_INTERP_BILINEAR);
+            g_object_unref(icon_pixbuf);
+            icon_pixbuf = scaled;
+            if (!icon_pixbuf) {
                 if (btn_image) {
                     gtk_image_clear(btn_image);
                 }
@@ -217,8 +206,6 @@ AnchorPositionWidget* anchor_position_widget_new(void) {
     gint i, row, col;
     GError* error = NULL;
     GdkPixbuf* pixbuf;
-    GInputStream* stream;
-    GBytes* icon_bytes;
 
     widget = (AnchorPositionWidget*)g_malloc(sizeof(AnchorPositionWidget));
     if (!widget) {
@@ -247,27 +234,17 @@ AnchorPositionWidget* anchor_position_widget_new(void) {
         gtk_widget_set_margin_top(button, 2);
         gtk_widget_set_margin_bottom(button, 2);
 
-        /* Load icon */
-        icon_bytes = g_resources_lookup_data(icon_resources[i], G_RESOURCE_LOOKUP_FLAGS_NONE, &error);
-        if (icon_bytes) {
-            stream = g_memory_input_stream_new_from_data(g_bytes_get_data(icon_bytes, NULL),
-                                                         g_bytes_get_size(icon_bytes),
-                                                         NULL);
-            pixbuf = gdk_pixbuf_new_from_stream(stream, NULL, &error);
-            g_object_unref(stream);
-            g_bytes_unref(icon_bytes);
-
-            if (pixbuf) {
-                image = GTK_IMAGE(gtk_image_new_from_pixbuf(pixbuf));
-                gtk_container_add(GTK_CONTAINER(button), GTK_WIDGET(image));
-                g_object_unref(pixbuf);
-            } else {
-                g_warning("Failed to create pixbuf from %s: %s", icon_resources[i], error ? error->message : "Unknown error");
-                if (error) {
-                    g_error_free(error);
-                    error = NULL;
-                }
-            }
+        /* Load icon (resource is to-pixdata format) and scale to 20x20 */
+        pixbuf = gdk_pixbuf_new_from_resource(icon_resources[i], &error);
+        if (pixbuf) {
+            GdkPixbuf* scaled = gdk_pixbuf_scale_simple(pixbuf, 20, 20, GDK_INTERP_BILINEAR);
+            g_object_unref(pixbuf);
+            pixbuf = scaled;
+        }
+        if (pixbuf) {
+            image = GTK_IMAGE(gtk_image_new_from_pixbuf(pixbuf));
+            gtk_container_add(GTK_CONTAINER(button), GTK_WIDGET(image));
+            g_object_unref(pixbuf);
         } else {
             g_warning("Failed to load %s: %s", icon_resources[i], error ? error->message : "Unknown error");
             if (error) {

@@ -1,10 +1,12 @@
 build/
 bin/
+dist/
 *.md
 !README.md
 !TODO.md
 *.glade~
 *.txt
 *.imgtmp
+
 
 scripts/

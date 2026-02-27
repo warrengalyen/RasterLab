@@ -1,6 +1,5 @@
 #include "ui/layers_panel.h"
 #include "document.h"
-#include "ui/ui_layer_menu.h"
 #include "ocular.h"
 #include "render/compositor.h"
 #include "render/dirty.h"
@@ -8,6 +7,7 @@
 #include "render/render_utils.h"
 #include "ui.h"
 #include "ui/tools_panel.h"
+#include "ui/ui_layer_menu.h"
 #include "ui/ui_utils.h"
 #include <glib/gstdio.h>
 #include <math.h>
@@ -71,7 +71,8 @@ static gboolean on_treeview_button_press(GtkWidget* widget,
     layer = document_get_layer(layers_panel->current_doc, layer_index);
     gtk_tree_path_free(path);
 
-    if (!layer) return TRUE;
+    if (!layer)
+        return TRUE;
 
     ctx = (AppContext*)layers_panel->app_context;
     layer_visibility_toggle_execute(ctx, layers_panel->current_doc, layer);
@@ -527,9 +528,6 @@ static GdkPixbuf* get_visibility_icon(gboolean visible) {
     GError* error = NULL;
     GdkPixbuf* pixbuf = gdk_pixbuf_new_from_resource(resource_path, &error);
     if (pixbuf) {
-        /* Ensure pixbuf is fully loaded by accessing its data
-         * This forces librsvg to complete all operations before we unref
-         * For SVG files, this ensures the critical section is unlocked */
         (void)gdk_pixbuf_get_width(pixbuf);
         (void)gdk_pixbuf_get_height(pixbuf);
         (void)gdk_pixbuf_get_has_alpha(pixbuf);
@@ -538,8 +536,6 @@ static GdkPixbuf* get_visibility_icon(gboolean visible) {
         /* Scale to 16x16 for treeview */
         GdkPixbuf* scaled = gdk_pixbuf_scale_simple(pixbuf, 16, 16, GDK_INTERP_BILINEAR);
 
-        /* Unref original pixbuf before returning scaled
-         * This ensures librsvg cleanup happens while we still have control */
         g_object_unref(pixbuf);
 
         return scaled;
@@ -569,7 +565,7 @@ static void on_panel_btn_duplicate_clicked(GtkButton* button, gpointer user_data
 }
 
 /**
- * Helper function to set icon on a button from SVG resource and remove padding
+ * Helper function to set icon on a button from resource and remove padding
  */
 static void set_button_icon(GtkButton* button, const gchar* resource_path, gint width, gint height) {
     if (!button) {
@@ -598,9 +594,6 @@ static void set_button_icon(GtkButton* button, const gchar* resource_path, gint 
     GError* error = NULL;
     GdkPixbuf* pixbuf = gdk_pixbuf_new_from_resource(resource_path, &error);
     if (pixbuf) {
-        /* Ensure pixbuf is fully loaded by accessing its data
-         * This forces librsvg to complete all operations before we unref
-         * For SVG files, this ensures the critical section is unlocked */
         (void)gdk_pixbuf_get_width(pixbuf);
         (void)gdk_pixbuf_get_height(pixbuf);
         (void)gdk_pixbuf_get_has_alpha(pixbuf);
@@ -609,8 +602,6 @@ static void set_button_icon(GtkButton* button, const gchar* resource_path, gint 
         /* Scale to specified size */
         GdkPixbuf* scaled = gdk_pixbuf_scale_simple(pixbuf, width, height, GDK_INTERP_BILINEAR);
 
-        /* Unref original pixbuf BEFORE creating image
-         * This ensures librsvg cleanup happens while we still have control */
         g_object_unref(pixbuf);
 
         if (scaled) {
@@ -756,21 +747,21 @@ LayersPanel* create_layers_panel(AppContext* ctx) {
     /* Store panel reference in buttons for callback access and set icons */
     if (layers_panel->btn_new) {
         g_object_set_data(G_OBJECT(layers_panel->btn_new), "layers_panel", layers_panel);
-        set_button_icon(GTK_BUTTON(layers_panel->btn_new), "/icons/layer-add.svg", 32, 32);
+        set_button_icon(GTK_BUTTON(layers_panel->btn_new), "/icons/layer-add.png", 32, 32);
     }
     if (layers_panel->btn_delete) {
         g_object_set_data(G_OBJECT(layers_panel->btn_delete), "layers_panel", layers_panel);
-        set_button_icon(GTK_BUTTON(layers_panel->btn_delete), "/icons/layer-delete.svg", 32, 32);
+        set_button_icon(GTK_BUTTON(layers_panel->btn_delete), "/icons/layer-delete.png", 32, 32);
     }
     if (layers_panel->btn_duplicate) {
         g_object_set_data(G_OBJECT(layers_panel->btn_duplicate), "layers_panel", layers_panel);
-        set_button_icon(GTK_BUTTON(layers_panel->btn_duplicate), "/icons/layer-duplicate.svg", 32, 32);
+        set_button_icon(GTK_BUTTON(layers_panel->btn_duplicate), "/icons/layer-duplicate.png", 32, 32);
     }
     if (layers_panel->btn_up) {
-        set_button_icon(GTK_BUTTON(layers_panel->btn_up), "/icons/layer-up.svg", 32, 32);
+        set_button_icon(GTK_BUTTON(layers_panel->btn_up), "/icons/layer-up.png", 32, 32);
     }
     if (layers_panel->btn_down) {
-        set_button_icon(GTK_BUTTON(layers_panel->btn_down), "/icons/layer-down.svg", 32, 32);
+        set_button_icon(GTK_BUTTON(layers_panel->btn_down), "/icons/layer-down.png", 32, 32);
     }
 
     /* Set up opacity controls */
@@ -804,7 +795,7 @@ LayersPanel* create_layers_panel(AppContext* ctx) {
     }
 
     if (layers_panel->btn_opacity_reset) {
-        set_button_icon(GTK_BUTTON(layers_panel->btn_opacity_reset), "/icons/reset.svg", 16, 16);
+        set_button_icon(GTK_BUTTON(layers_panel->btn_opacity_reset), "/icons/reset.png", 16, 16);
         g_signal_connect(layers_panel->btn_opacity_reset, "clicked",
                          G_CALLBACK(on_opacity_reset_clicked), layers_panel);
     }

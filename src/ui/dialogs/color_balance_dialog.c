@@ -1,8 +1,8 @@
 #include "ui/dialogs/color_balance_dialog.h"
-#include "ui/ui_utils.h"
 #include "render/compositor.h"
 #include "render/layer.h"
 #include "ui/filters/filter_utils.h"
+#include "ui/ui_utils.h"
 #include "ui/widgets/filter_preview.h"
 #include <cairo.h>
 #include <glib.h>
@@ -426,9 +426,9 @@ ColorBalanceDialog* color_balance_dialog_new(const gchar* title) {
         /* Make action area expand horizontally to fill width */
         gtk_widget_set_hexpand(button_box, TRUE);
 
-        /* Create reset button with reset.svg icon and add it to the left side of action area */
+        /* Create reset button with icon and add it to the left side of action area */
         reset_button = gtk_button_new();
-        GtkWidget* reset_icon = gtk_image_new_from_resource("/icons/reset.svg");
+        GtkWidget* reset_icon = gtk_image_new_from_resource("/icons/reset.png");
         if (reset_icon) {
             gtk_button_set_image(GTK_BUTTON(reset_button), reset_icon);
             gtk_button_set_always_show_image(GTK_BUTTON(reset_button), TRUE);

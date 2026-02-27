@@ -25,11 +25,44 @@ static void load_global_css(void) {
     g_object_unref(provider);
 }
 /**
+ * Set GDK_PIXBUF_MODULE_FILE to loaders.cache next to the executable so pixbuf loaders
+ * are found when running from Windows cmd regardless of cwd.
+ */
+static void setup_gdk_pixbuf_loaders(void) {
+#ifdef _WIN32
+    gchar* exe_dir = settings_get_executable_dir();
+    if (exe_dir) {
+        gchar* loaders_dir = g_build_filename(
+            exe_dir, "lib", "gdk-pixbuf-2.0", "2.10.0", "loaders", NULL);
+        gchar* cache_path = g_build_filename(
+            exe_dir, "lib", "gdk-pixbuf-2.0", "2.10.0", "loaders.cache", NULL);
+        if (g_file_test(loaders_dir, G_FILE_TEST_IS_DIR) && g_file_test(cache_path, G_FILE_TEST_EXISTS)) {
+            /* Absolute paths so resolution works from any cwd */
+            gchar* abs_loaders = g_canonicalize_filename(loaders_dir, NULL);
+            gchar* abs_cache = g_canonicalize_filename(cache_path, NULL);
+            if (abs_loaders && abs_cache) {
+                g_setenv("GDK_PIXBUF_MODULEDIR", abs_loaders, TRUE);
+                g_setenv("GDK_PIXBUF_MODULE_FILE", abs_cache, TRUE);
+            }
+            g_free(abs_loaders);
+            g_free(abs_cache);
+        }
+        g_free(loaders_dir);
+        g_free(cache_path);
+        g_free(exe_dir);
+    }
+#endif
+}
+
+/**
  * Application initialization
  */
 int main(int argc, char* argv[]) {
     AppContext* app;
     gchar* app_dir;
+
+    /* Set pixbuf loaders path before gtk_init so loaders work from any cwd (Windows cmd) */
+    setup_gdk_pixbuf_loaders();
 
     /* Print GTK version information */
     printf("GTK Version: %d.%d.%d\n",
