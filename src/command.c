@@ -220,7 +220,6 @@ static void draw_command_apply(Command* cmd, struct ImageDocument* doc) {
     data = (DrawCommandData*)cmd->user_data;
 
     if (!data->layer || !data->after_snapshot) {
-        // printf("Draw command apply: missing data\n");
         return;
     }
 
@@ -235,13 +234,11 @@ static void draw_command_apply(Command* cmd, struct ImageDocument* doc) {
     }
 
     if (!layer_found) {
-        // printf("Draw command apply: layer has been deleted, cannot redo\n");
         return;
     }
 
     /* Verify layer surface still exists */
     if (!data->layer->surface) {
-        // printf("Draw command apply: layer surface is NULL, cannot redo\n");
         return;
     }
 

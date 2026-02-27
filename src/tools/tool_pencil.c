@@ -484,7 +484,8 @@ static void pencil_tool_mouse_down(Tool* tool, struct ImageDocument* doc,
     /* Flush Cairo surface to ensure drawing is written to pixel buffer */
     cairo_surface_flush(active_layer->surface);
 
-    active_layer->cache_dirty = TRUE;
+    /* Invalidate layer cache so GPU compositor re-uploads layer texture */
+    layer_invalidate_cache(active_layer);
 
     /* Mark initial dot area as dirty */
     gint margin = (gint)(pencil_size / 2.0f) + 3;
@@ -554,8 +555,8 @@ static void pencil_tool_mouse_move(Tool* tool, struct ImageDocument* doc,
     /* Flush Cairo surface to ensure drawing is written to pixel buffer */
     cairo_surface_flush(active_layer->surface);
 
-    /* Mark layer cache as dirty */
-    active_layer->cache_dirty = TRUE;
+    /* Invalidate layer cache so GPU compositor re-uploads layer texture */
+    layer_invalidate_cache(active_layer);
 
     /* Calculate dirty rectangle */
     gint margin = (gint)(pencil_size / 2.0f) + 3;

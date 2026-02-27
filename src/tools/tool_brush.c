@@ -495,7 +495,8 @@ static void brush_tool_mouse_down(Tool* tool, struct ImageDocument* doc,
        Worker threads will read the raw pixels, so we must flush first */
     cairo_surface_flush(active_layer->surface);
 
-    active_layer->cache_dirty = TRUE;
+    /* Invalidate layer cache so GPU compositor re-uploads layer texture */
+    layer_invalidate_cache(active_layer);
 
     /* Mark initial dot area as dirty */
     gint margin = (gint)(brush_size / 2.0f) + 3;
@@ -570,10 +571,8 @@ static void brush_tool_mouse_move(Tool* tool, struct ImageDocument* doc,
        Worker threads will read the raw pixels, so we must flush first */
     cairo_surface_flush(active_layer->surface);
 
-    /* Mark layer cache as dirty but don't destroy it yet
-        We'll regenerate it lazily only when needed for compositing
-        This avoids expensive cache regeneration on every mouse move */
-    active_layer->cache_dirty = TRUE;
+    /* Invalidate layer cache so GPU compositor re-uploads layer texture */
+    layer_invalidate_cache(active_layer);
 
     /* Calculate dirty rectangle BEFORE updating last_x/y
         Use the previous position and current position */
