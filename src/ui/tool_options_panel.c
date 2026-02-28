@@ -478,20 +478,11 @@ static GtkWidget* load_panel_from_glade(const gchar* resource_path, const gchar*
     g_object_set_data_full(G_OBJECT(panel), "builder", builder, g_object_unref);
 
     /* Get widget references */
-    const gchar* title_id = (g_strcmp0(panel_id, "brush_options_panel") == 0) ? "brush_title_label" : "eraser_title_label";
     const gchar* size_id = (g_strcmp0(panel_id, "brush_options_panel") == 0) ? "brush_size_scale" : "eraser_size_scale";
     const gchar* opacity_id = (g_strcmp0(panel_id, "brush_options_panel") == 0) ? "brush_opacity_scale" : "eraser_opacity_scale";
     const gchar* hardness_id = (g_strcmp0(panel_id, "brush_options_panel") == 0) ? "brush_hardness_scale" : "eraser_hardness_scale";
     const gchar* flow_id = (g_strcmp0(panel_id, "brush_options_panel") == 0) ? "brush_flow_scale" : "eraser_flow_scale";
     const gchar* spacing_id = (g_strcmp0(panel_id, "brush_options_panel") == 0) ? "brush_spacing_scale" : "eraser_spacing_scale";
-
-    if (title_label) {
-        GtkWidget* widget = GTK_WIDGET(gtk_builder_get_object(builder, title_id));
-        if (!widget) {
-            g_warning("Failed to get %s from builder", title_id);
-        }
-        *title_label = widget;
-    }
 
     if (size_scale) {
         GtkWidget* widget = GTK_WIDGET(gtk_builder_get_object(builder, size_id));
@@ -1300,7 +1291,7 @@ static void on_crop_link_toggled(GtkToggleButton* button, gpointer user_data) {
     GtkWidget* img = gtk_bin_get_child(GTK_BIN(button));
     if (img && GTK_IS_IMAGE(img)) {
         gtk_image_set_from_resource(GTK_IMAGE(img),
-            active ? "/icons/lock.png" : "/icons/unlock.png");
+                                    active ? "/icons/lock.png" : "/icons/unlock.png");
     }
 }
 

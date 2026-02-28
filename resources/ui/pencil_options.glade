@@ -20,19 +20,19 @@
     <property name="can-focus">False</property>
     <property name="margin-top">8</property>
     <property name="margin-bottom">8</property>
-    <property name="spacing">15</property>
+    <property name="spacing">20</property>
     <child>
-      <object class="GtkLabel" id="pencil_title_label">
+      <object class="GtkImage" id="pencil_icon">
         <property name="visible">True</property>
         <property name="can-focus">False</property>
-        <property name="halign">start</property>
-        <property name="margin-left">10</property>
-        <property name="label">&lt;b&gt;Pencil&lt;/b&gt;</property>
-        <property name="use-markup">True</property>
+        <property name="resource">/icons/tool-pencil.png</property>
+        <style>
+          <class name="tool-panel-options-icon"/>
+        </style>
       </object>
       <packing>
         <property name="expand">False</property>
-        <property name="fill">False</property>
+        <property name="fill">True</property>
         <property name="position">0</property>
       </packing>
     </child>
@@ -50,7 +50,6 @@
     </child>
     <child>
       <object class="GtkBox" id="pencil_size_box">
-        <property name="width-request">180</property>
         <property name="visible">True</property>
         <property name="can-focus">False</property>
         <property name="orientation">vertical</property>
@@ -60,8 +59,8 @@
             <property name="visible">True</property>
             <property name="can-focus">False</property>
             <property name="tooltip-text">Pencil size in pixels</property>
+            <property name="halign">start</property>
             <property name="label">size</property>
-            <property name="xalign">0</property>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -73,10 +72,9 @@
           <object class="GtkBox" id="pencil_size_control_box">
             <property name="visible">True</property>
             <property name="can-focus">False</property>
-            <property name="orientation">horizontal</property>
-            <property name="spacing">2</property>
             <property name="halign">start</property>
             <property name="hexpand">False</property>
+            <property name="spacing">2</property>
             <child>
               <object class="GtkScale" id="pencil_size_scale">
                 <property name="width-request">88</property>
@@ -107,7 +105,6 @@
     </child>
     <child>
       <object class="GtkBox" id="pencil_opacity_box">
-        <property name="width-request">180</property>
         <property name="visible">True</property>
         <property name="can-focus">False</property>
         <property name="orientation">vertical</property>
@@ -117,8 +114,8 @@
             <property name="visible">True</property>
             <property name="can-focus">False</property>
             <property name="tooltip-text">Tool opacity (0-100%)</property>
+            <property name="halign">start</property>
             <property name="label">opacity</property>
-            <property name="xalign">0</property>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -130,10 +127,9 @@
           <object class="GtkBox" id="pencil_opacity_control_box">
             <property name="visible">True</property>
             <property name="can-focus">False</property>
-            <property name="orientation">horizontal</property>
-            <property name="spacing">2</property>
             <property name="halign">start</property>
             <property name="hexpand">False</property>
+            <property name="spacing">2</property>
             <child>
               <object class="GtkScale" id="pencil_opacity_scale">
                 <property name="width-request">88</property>
@@ -165,7 +161,6 @@
     </child>
     <child>
       <object class="GtkBox" id="pencil_options_box">
-        <property name="width-request">180</property>
         <property name="visible">True</property>
         <property name="can-focus">False</property>
         <property name="orientation">vertical</property>

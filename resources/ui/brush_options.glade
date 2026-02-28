@@ -40,19 +40,19 @@
     <property name="can-focus">False</property>
     <property name="margin-top">8</property>
     <property name="margin-bottom">8</property>
-    <property name="spacing">15</property>
+    <property name="spacing">20</property>
     <child>
-      <object class="GtkLabel" id="brush_title_label">
+      <object class="GtkImage" id="brush_icon">
         <property name="visible">True</property>
         <property name="can-focus">False</property>
-        <property name="halign">start</property>
-        <property name="margin-left">10</property>
-        <property name="label">&lt;b&gt;Brush&lt;/b&gt;</property>
-        <property name="use-markup">True</property>
+        <property name="resource">/icons/tool-paintbrush.png</property>
+        <style>
+          <class name="tool-panel-options-icon"/>
+        </style>
       </object>
       <packing>
         <property name="expand">False</property>
-        <property name="fill">False</property>
+        <property name="fill">True</property>
         <property name="position">0</property>
       </packing>
     </child>
@@ -70,7 +70,6 @@
     </child>
     <child>
       <object class="GtkBox" id="brush_size_box">
-        <property name="width-request">180</property>
         <property name="visible">True</property>
         <property name="can-focus">False</property>
         <property name="orientation">vertical</property>
@@ -80,8 +79,8 @@
             <property name="visible">True</property>
             <property name="can-focus">False</property>
             <property name="tooltip-text">Brush size in pixels</property>
+            <property name="halign">start</property>
             <property name="label">size</property>
-            <property name="xalign">0</property>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -93,10 +92,9 @@
           <object class="GtkBox" id="brush_size_control_box">
             <property name="visible">True</property>
             <property name="can-focus">False</property>
-            <property name="orientation">horizontal</property>
-            <property name="spacing">2</property>
             <property name="halign">start</property>
             <property name="hexpand">False</property>
+            <property name="spacing">2</property>
             <child>
               <object class="GtkScale" id="brush_size_scale">
                 <property name="width-request">88</property>
@@ -127,7 +125,6 @@
     </child>
     <child>
       <object class="GtkBox" id="brush_opacity_box">
-        <property name="width-request">180</property>
         <property name="visible">True</property>
         <property name="can-focus">False</property>
         <property name="orientation">vertical</property>
@@ -137,8 +134,8 @@
             <property name="visible">True</property>
             <property name="can-focus">False</property>
             <property name="tooltip-text">Tool opacity (0-100%)</property>
+            <property name="halign">start</property>
             <property name="label">opacity</property>
-            <property name="xalign">0</property>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -150,10 +147,9 @@
           <object class="GtkBox" id="brush_opacity_control_box">
             <property name="visible">True</property>
             <property name="can-focus">False</property>
-            <property name="orientation">horizontal</property>
-            <property name="spacing">2</property>
             <property name="halign">start</property>
             <property name="hexpand">False</property>
+            <property name="spacing">2</property>
             <child>
               <object class="GtkScale" id="brush_opacity_scale">
                 <property name="width-request">88</property>
@@ -185,7 +181,6 @@
     </child>
     <child>
       <object class="GtkBox" id="brush_hardness_box">
-        <property name="width-request">180</property>
         <property name="visible">True</property>
         <property name="can-focus">False</property>
         <property name="orientation">vertical</property>
@@ -195,8 +190,8 @@
             <property name="visible">True</property>
             <property name="can-focus">False</property>
             <property name="tooltip-text">Brush hardness (0=soft, 100=hard)</property>
+            <property name="halign">start</property>
             <property name="label">hardness</property>
-            <property name="xalign">0</property>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -208,10 +203,9 @@
           <object class="GtkBox" id="brush_hardness_control_box">
             <property name="visible">True</property>
             <property name="can-focus">False</property>
-            <property name="orientation">horizontal</property>
-            <property name="spacing">2</property>
             <property name="halign">start</property>
             <property name="hexpand">False</property>
+            <property name="spacing">2</property>
             <child>
               <object class="GtkScale" id="brush_hardness_scale">
                 <property name="width-request">88</property>
@@ -243,7 +237,6 @@
     </child>
     <child>
       <object class="GtkBox" id="brush_flow_box">
-        <property name="width-request">180</property>
         <property name="visible">True</property>
         <property name="can-focus">False</property>
         <property name="orientation">vertical</property>
@@ -253,8 +246,8 @@
             <property name="visible">True</property>
             <property name="can-focus">False</property>
             <property name="tooltip-text">Brush hardness (0=soft, 100=hard)</property>
+            <property name="halign">start</property>
             <property name="label">flow</property>
-            <property name="xalign">0</property>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -266,10 +259,9 @@
           <object class="GtkBox" id="brush_flow_control_box">
             <property name="visible">True</property>
             <property name="can-focus">False</property>
-            <property name="orientation">horizontal</property>
-            <property name="spacing">2</property>
             <property name="halign">start</property>
             <property name="hexpand">False</property>
+            <property name="spacing">2</property>
             <child>
               <object class="GtkScale" id="brush_flow_scale">
                 <property name="width-request">88</property>
@@ -302,7 +294,6 @@
     </child>
     <child>
       <object class="GtkBox" id="brush_spacing_box">
-        <property name="width-request">180</property>
         <property name="visible">True</property>
         <property name="can-focus">False</property>
         <property name="orientation">vertical</property>
@@ -312,8 +303,8 @@
             <property name="visible">True</property>
             <property name="can-focus">False</property>
             <property name="tooltip-text">Brush hardness (0=soft, 100=hard)</property>
+            <property name="halign">start</property>
             <property name="label">spacing</property>
-            <property name="xalign">0</property>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -325,10 +316,9 @@
           <object class="GtkBox" id="brush_spacing_control_box">
             <property name="visible">True</property>
             <property name="can-focus">False</property>
-            <property name="orientation">horizontal</property>
-            <property name="spacing">2</property>
             <property name="halign">start</property>
             <property name="hexpand">False</property>
+            <property name="spacing">2</property>
             <child>
               <object class="GtkScale" id="brush_spacing_scale">
                 <property name="width-request">88</property>

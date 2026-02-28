@@ -10,10 +10,12 @@ notebook tab:focus {
     outline: none;
 }
 
-checkbutton:hover label {
-    /* color: #3584e4; */
-}
-
 .warning_message {
     color: #ff0000;
+}
+
+.tool-panel-options-icon {
+    margin-left: 10px;
+    padding-right: 0;
+    margin-right: 0;
 }

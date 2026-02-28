@@ -7,19 +7,19 @@
     <property name="can-focus">False</property>
     <property name="margin-top">8</property>
     <property name="margin-bottom">8</property>
-    <property name="spacing">15</property>
+    <property name="spacing">20</property>
     <child>
-      <object class="GtkLabel" id="move_title_label">
+      <object class="GtkImage" id="move_icon">
         <property name="visible">True</property>
         <property name="can-focus">False</property>
-        <property name="halign">start</property>
-        <property name="margin-left">10</property>
-        <property name="label">&lt;b&gt;Move&lt;/b&gt;</property>
-        <property name="use-markup">True</property>
+        <property name="resource">/icons/tool-move.png</property>
+        <style>
+          <class name="tool-panel-options-icon"/>
+        </style>
       </object>
       <packing>
         <property name="expand">False</property>
-        <property name="fill">False</property>
+        <property name="fill">True</property>
         <property name="position">0</property>
       </packing>
     </child>
@@ -37,9 +37,9 @@
     </child>
     <child>
       <object class="GtkBox" id="move_options_box">
-        <property name="width-request">180</property>
         <property name="visible">True</property>
         <property name="can-focus">False</property>
+        <property name="valign">center</property>
         <property name="orientation">vertical</property>
         <property name="spacing">3</property>
         <child>
@@ -49,8 +49,8 @@
             <property name="can-focus">True</property>
             <property name="receives-default">False</property>
             <property name="tooltip-text">Automatically select layer under cursor based on pixel visibility</property>
-            <property name="draw-indicator">True</property>
             <property name="active">True</property>
+            <property name="draw-indicator">True</property>
           </object>
           <packing>
             <property name="expand">False</property>

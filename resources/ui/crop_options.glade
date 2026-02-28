@@ -46,15 +46,15 @@
     <property name="can-focus">False</property>
     <property name="margin-top">8</property>
     <property name="margin-bottom">8</property>
-    <property name="spacing">15</property>
+    <property name="spacing">20</property>
     <child>
-      <object class="GtkLabel">
+      <object class="GtkImage" id="crop_icon">
         <property name="visible">True</property>
         <property name="can-focus">False</property>
-        <property name="halign">start</property>
-        <property name="margin-left">10</property>
-        <property name="label">&lt;b&gt;Crop&lt;/b&gt;</property>
-        <property name="use-markup">True</property>
+        <property name="resource">/icons/tool-crop.png</property>
+        <style>
+          <class name="tool-panel-options-icon"/>
+        </style>
       </object>
       <packing>
         <property name="expand">False</property>
@@ -131,7 +131,6 @@
                       <object class="GtkSpinButton" id="crop_ratio_width_spin">
                         <property name="width-request">60</property>
                         <property name="can-focus">True</property>
-                        <property name="editable">True</property>
                         <property name="adjustment">crop_ratio_width_adjustment</property>
                       </object>
                       <packing>
@@ -155,7 +154,6 @@
                       <object class="GtkSpinButton" id="crop_ratio_height_spin">
                         <property name="width-request">60</property>
                         <property name="can-focus">True</property>
-                        <property name="editable">True</property>
                         <property name="adjustment">crop_ratio_height_adjustment</property>
                       </object>
                       <packing>
@@ -191,7 +189,6 @@
                       <object class="GtkSpinButton" id="crop_width_spin">
                         <property name="width-request">70</property>
                         <property name="can-focus">True</property>
-                        <property name="editable">True</property>
                         <property name="adjustment">crop_width_adjustment</property>
                       </object>
                       <packing>
@@ -225,7 +222,6 @@
                       <object class="GtkSpinButton" id="crop_height_spin">
                         <property name="width-request">70</property>
                         <property name="can-focus">True</property>
-                        <property name="editable">True</property>
                         <property name="adjustment">crop_height_adjustment</property>
                       </object>
                       <packing>
@@ -263,7 +259,7 @@
       </packing>
     </child>
     <child>
-      <object class="GtkBox">
+      <object class="GtkBox" id="guide_overlay_box">
         <property name="width-request">180</property>
         <property name="can-focus">False</property>
         <property name="orientation">vertical</property>
