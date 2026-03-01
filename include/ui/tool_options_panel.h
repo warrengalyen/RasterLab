@@ -43,6 +43,17 @@ typedef struct {
     GtkWidget* ellipse_combine_intersect_button; /* Combine mode INTERSECT toggle button (ellipse select only) */
     GtkWidget* ellipse_smooth_combo;             /* Smoothing mode combo (ellipse select only) */
     GtkWidget* ellipse_feather_scale;            /* Feather radius slider (ellipse select only) */
+    GtkWidget* polygon_select_panel;             /* Polygon select tool options panel (from Glade) */
+    GtkWidget* polygon_combine_new_button;
+    GtkWidget* polygon_combine_add_button;
+    GtkWidget* polygon_combine_subtract_button;
+    GtkWidget* polygon_combine_intersect_button;
+    GtkWidget* polygon_smooth_combo;
+    GtkWidget* polygon_feather_scale;
+    GtkWidget* polygon_animate_checkbox;
+    GtkWidget* polygon_curvature_scale;
+    GtkWidget* polygon_area_combo;
+    GtkWidget* polygon_border_scale;
     GtkWidget* move_auto_select_checkbox;        /* Auto-select layer checkbox (move tool only) */
     ToolType current_tool_type;                  /* Currently displayed tool type */
     ToolRegistry* tool_registry;                 /* Tool registry for cursor updates */

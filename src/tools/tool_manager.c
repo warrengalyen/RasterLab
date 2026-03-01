@@ -10,6 +10,7 @@
 #include "tools/tool_move.h"
 #include "tools/tool_pencil.h"
 #include "tools/tool_rect_select.h"
+#include "tools/tool_polygon_select.h"
 #include "tools/tool_zoom.h"
 
 #include <stdio.h>
@@ -111,6 +112,13 @@ gboolean tool_manager_init_defaults(ToolRegistry* registry) {
     }
     tool_manager_register(registry, tool, TOOL_ELLIPSE_SELECT);
 
+    /* Create Polygon Selection tool */
+    tool = tool_polygon_select_create();
+    if (!tool) {
+        return FALSE;
+    }
+    tool_manager_register(registry, tool, TOOL_POLYGON_SELECT);
+
     /* Create Crop tool */
     tool = tool_crop_create();
     if (!tool) {
@@ -167,10 +175,14 @@ gboolean tool_manager_activate(ToolRegistry* registry, ToolType type) {
 
     /* Finalize ellipse select if switching away from it */
     if (prev_tool && prev_tool->type == TOOL_ELLIPSE_SELECT && registry->current_doc) {
-        /* Finalize any preview selection in edit mode to the mask */
         tool_ellipse_select_finalize(prev_tool, registry->current_doc);
-        /* Reset tool state to clear preview */
         tool_ellipse_select_reset(prev_tool);
+    }
+
+    /* Finalize polygon select if switching away from it */
+    if (prev_tool && prev_tool->type == TOOL_POLYGON_SELECT && registry->current_doc) {
+        tool_polygon_select_finalize(prev_tool, registry->current_doc);
+        tool_polygon_select_reset(prev_tool);
     }
 
     /* Reset crop tool if switching away from it */

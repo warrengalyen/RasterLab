@@ -12,6 +12,7 @@
     <file preprocess="to-pixdata">icons/tool-paintbucket.png</file>
     <file preprocess="to-pixdata">icons/tool-rect-select.png</file>
     <file preprocess="to-pixdata">icons/tool-elliptical-select.png</file>
+    <file preprocess="to-pixdata">icons/tool-polygon-select.png</file>
     <file preprocess="to-pixdata">icons/chevron.png</file>
     <file preprocess="to-pixdata">icons/layer-add.png</file>
     <file preprocess="to-pixdata">icons/layer-delete.png</file>
@@ -66,6 +67,7 @@
     <file>cursors/hand_up_cursor.cur</file>
     <file>cursors/hand_down_cursor.cur</file>
     <file>cursors/colorpicker_cursor.cur</file>
+    <file>cursors/polygon_select_cursor.cur</file>
     <file>ui/layers_panel.glade</file>
     <file>ui/swatches_panel.glade</file>
     <file>ui/brush_options.glade</file>
@@ -74,6 +76,7 @@
     <file>ui/paintbucket_options.glade</file>
     <file>ui/rect_select_options.glade</file>
     <file>ui/elliptical_select_options.glade</file>
+    <file>ui/polygon_select_options.glade</file>
     <file>ui/crop_options.glade</file>
     <file>ui/color_picker_options.glade</file>
     <file>ui/move_options.glade</file>

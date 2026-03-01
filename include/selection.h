@@ -55,6 +55,16 @@ void selection_draw_marching_ants_ellipse(cairo_t* cr, gdouble x, gdouble y,
                                           gdouble line_width, gdouble animation_phase, gdouble zoom);
 
 /**
+ * Draw marching ants outline along a polygonal path (same style as rect/ellipse).
+ * points: GArray of GdkPoint. closed: if FALSE, also draw from last point to (cursor_x, cursor_y).
+ * @param cr Cairo context (expected in image space with scale(zoom) already applied)
+ * @param zoom Zoom factor; dash size = ANT_DASH_SIZE/zoom
+ */
+void selection_draw_marching_ants_path(cairo_t* cr, GArray* points, gboolean closed,
+                                       gint cursor_x, gint cursor_y,
+                                       gdouble animation_phase, gdouble zoom);
+
+/**
  * Detect which handle (if any) is at the given point
  * Used by rectangular and elliptical selection tools for handle detection
  * @param x Point X coordinate in image space

@@ -1,4 +1,5 @@
 #include "selection/selection_mask.h"
+#include <cairo.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -615,6 +616,169 @@ void selection_mask_fill_ellipse(
         /* Mark affected region as dirty */
         selection_mask_mark_dirty(mask, x1, y1, clamped_width, clamped_height);
     }
+}
+
+/**
+ * Fill polygon from list of points (image space).
+ * area_mode: 0=interior, 1=exterior, 2=border (border_width in pixels).
+ * curvature: 0=straight sides; >0 curved (0..1, bulge amount).
+ */
+void selection_mask_fill_polygon(
+    SelectionMask* mask,
+    const double* points_x,
+    const double* points_y,
+    int n_points,
+    SelectionCombineMode combine,
+    SelectionSmoothingMode smoothing,
+    float feather_radius,
+    float curvature,
+    int area_mode,
+    int border_width,
+    gboolean direct_modify) {
+    (void)direct_modify; /* Always create Selection for polygon */
+    if (!mask || !mask->base_mask || n_points < 3)
+        return;
+    if (!points_x || !points_y)
+        return;
+
+    int w = mask->width;
+    int h = mask->height;
+    int stride = mask->stride;
+
+    /* Bounding box of polygon (expand for curvature bulge) */
+    double min_x = points_x[0], max_x = points_x[0];
+    double min_y = points_y[0], max_y = points_y[0];
+    for (int i = 1; i < n_points; i++) {
+        if (points_x[i] < min_x)
+            min_x = points_x[i];
+        if (points_x[i] > max_x)
+            max_x = points_x[i];
+        if (points_y[i] < min_y)
+            min_y = points_y[i];
+        if (points_y[i] > max_y)
+            max_y = points_y[i];
+    }
+    int x1 = (int)floor(min_x);
+    int y1 = (int)floor(min_y);
+    int x2 = (int)ceil(max_x);
+    int y2 = (int)ceil(max_y);
+    if (x1 < 0)
+        x1 = 0;
+    if (y1 < 0)
+        y1 = 0;
+    if (x2 > w)
+        x2 = w;
+    if (y2 > h)
+        y2 = h;
+    int box_w = x2 - x1;
+    int box_h = y2 - y1;
+    if (box_w <= 0 || box_h <= 0)
+        return;
+
+    /* Create selection with full-size mask */
+    Selection* sel = selection_new(x1, y1, box_w, box_h, combine, smoothing, feather_radius);
+    if (!sel)
+        return;
+    sel->mask = g_malloc0(stride * (size_t)h);
+
+    /* Rasterize polygon with Cairo A8 surface */
+    cairo_surface_t* surf = cairo_image_surface_create(CAIRO_FORMAT_A8, w, h);
+    if (!surf) {
+        g_free(sel->mask);
+        sel->mask = NULL;
+        selection_unref(sel);
+        return;
+    }
+    cairo_t* cr = cairo_create(surf);
+    if (!cr) {
+        cairo_surface_destroy(surf);
+        g_free(sel->mask);
+        sel->mask = NULL;
+        selection_unref(sel);
+        return;
+    }
+    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+    cairo_set_source_rgba(cr, 1, 1, 1, 1);
+    cairo_move_to(cr, points_x[0], points_y[0]);
+
+    if (curvature > 1e-6f) {
+        /* Curved sides: quadratic Bezier per edge, control point bulges outward */
+        double cx = 0, cy = 0;
+        for (int i = 0; i < n_points; i++) {
+            cx += points_x[i];
+            cy += points_y[i];
+        }
+        cx /= n_points;
+        cy /= n_points;
+        for (int i = 0; i < n_points; i++) {
+            int a = i;
+            int b = (i + 1) % n_points;
+            double ax = points_x[a], ay = points_y[a];
+            double bx = points_x[b], by = points_y[b];
+            double mx = (ax + bx) * 0.5;
+            double my = (ay + by) * 0.5;
+            double tx = bx - ax;
+            double ty = by - ay;
+            double len = sqrt(tx * tx + ty * ty);
+            if (len < 1e-9) {
+                cairo_line_to(cr, bx, by);
+                continue;
+            }
+            /* Perpendicular pointing outward (away from centroid) */
+            double px = -ty / len;
+            double py = tx / len;
+            double dot = (mx - cx) * px + (my - cy) * py;
+            if (dot < 0) {
+                px = -px;
+                py = -py;
+            }
+            /* Control point: midpoint + curvature * edge_length * 0.25 outward */
+            double k = (double)curvature * len * 0.25;
+            double ctrl_x = mx + k * px;
+            double ctrl_y = my + k * py;
+            /* Quadratic to cubic: P1 = A + (2/3)(C-A), P2 = B + (2/3)(C-B) */
+            double p1x = ax + (2.0 / 3.0) * (ctrl_x - ax);
+            double p1y = ay + (2.0 / 3.0) * (ctrl_y - ay);
+            double p2x = bx + (2.0 / 3.0) * (ctrl_x - bx);
+            double p2y = by + (2.0 / 3.0) * (ctrl_y - by);
+            cairo_curve_to(cr, p1x, p1y, p2x, p2y, bx, by);
+        }
+    } else {
+        /* Straight sides */
+        for (int i = 1; i < n_points; i++)
+            cairo_line_to(cr, points_x[i], points_y[i]);
+    }
+    cairo_close_path(cr);
+    cairo_fill(cr);
+
+    /* Copy A8 alpha to sel->mask */
+    int cairo_stride = cairo_image_surface_get_stride(surf);
+    unsigned char* data = cairo_image_surface_get_data(surf);
+    for (int y = 0; y < h; y++) {
+        memcpy(sel->mask + (size_t)y * stride, data + (size_t)y * cairo_stride, (size_t)w);
+    }
+    cairo_destroy(cr);
+    cairo_surface_destroy(surf);
+
+    /* Area mode: 1=exterior (invert), 2=border (dilate then subtract interior) */
+    if (area_mode == 1) {
+        for (int i = 0; i < h * stride; i++)
+            sel->mask[i] = (uint8_t)(255 - sel->mask[i]);
+    } else if (area_mode == 2 && border_width > 0) {
+        SelectionMask* tmp = selection_mask_new(w, h);
+        if (tmp) {
+            Selection* interior = selection_ref(sel);
+            selection_mask_add_selection(tmp, interior);
+            selection_unref(interior);
+            selection_mask_border(tmp, border_width, NULL, NULL);
+            memcpy(sel->mask, tmp->base_mask, (size_t)stride * (size_t)h);
+            selection_mask_free(tmp);
+        }
+    }
+
+    selection_mask_add_selection(mask, sel);
+    selection_unref(sel);
+    selection_mask_mark_dirty(mask, x1, y1, box_w, box_h);
 }
 
 /**

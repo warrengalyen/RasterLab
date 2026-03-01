@@ -134,6 +134,24 @@ void selection_mask_fill_ellipse(
     gboolean direct_modify);
 
 /**
+ * Fill polygon from list of points (x,y pairs in image space).
+ * area_mode: 0=interior, 1=exterior, 2=border (border_width in pixels).
+ * curvature: 0=straight sides; >0 curved (0..1, bulge amount).
+ */
+void selection_mask_fill_polygon(
+    SelectionMask* mask,
+    const double* points_x,
+    const double* points_y,
+    int n_points,
+    SelectionCombineMode combine,
+    SelectionSmoothingMode smoothing,
+    float feather_radius,
+    float curvature,
+    int area_mode,
+    int border_width,
+    gboolean direct_modify);
+
+/**
  * Apply one mask to another using combine mode
  * @param dest Destination mask (modified in place)
  * @param src Source mask to apply

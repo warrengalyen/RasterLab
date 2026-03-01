@@ -1,6 +1,8 @@
 #include "selection.h"
 #include <gdk/gdk.h>
+#include <glib.h>
 #include <math.h>
+#include <stdlib.h>
 
 /**
  * Draw marching ants outline for a rectangle using alternating pixels
@@ -126,6 +128,79 @@ void selection_draw_marching_ants_ellipse(cairo_t* cr, gdouble x, gdouble y,
 
         prev_px = px;
         prev_py = py;
+    }
+}
+
+/**
+ * Rasterize line (x0,y0)->(x1,y1) and draw marching ants at each pixel.
+ * Uses path-length-based pattern for consistent dash lengths at all angles.
+ * @param path_pos_start Accumulated path length at start of this segment
+ * @return Accumulated path length at end of this segment
+ */
+static gdouble draw_marching_ants_line(cairo_t* cr, int x0, int y0, int x1, int y1,
+                                       gdouble dash_size, gint dash_phase,
+                                       gdouble path_pos_start) {
+    double dx = x1 - x0;
+    double dy = y1 - y0;
+    double len = sqrt(dx * dx + dy * dy);
+    if (len < 1e-9) {
+        return path_pos_start;
+    }
+    int steps = (int)ceil(len);
+    if (steps < 1) {
+        steps = 1;
+    }
+    for (int i = 0; i <= steps; i++) {
+        double t = (steps > 0) ? (double)i / steps : 0;
+        double px = x0 + t * dx;
+        double py = y0 + t * dy;
+        int x = (int)round(px);
+        int y = (int)round(py);
+        double path_pos = path_pos_start + t * len;
+        int pattern = ((int)(path_pos / dash_size) + dash_phase) % 2;
+        cairo_set_source_rgb(cr, pattern ? 0.0 : 1.0, pattern ? 0.0 : 1.0, pattern ? 0.0 : 1.0);
+        cairo_rectangle(cr, (gdouble)x, (gdouble)y, 1.0, 1.0);
+        cairo_fill(cr);
+    }
+    return path_pos_start + len;
+}
+
+/**
+ * Draw marching ants outline along a polygonal path - same style as closed selection.
+ * Uses path-length-based pattern for consistent dash lengths at all angles.
+ */
+void selection_draw_marching_ants_path(cairo_t* cr, GArray* points, gboolean closed,
+                                       gint cursor_x, gint cursor_y,
+                                       gdouble animation_phase, gdouble zoom) {
+    if (!cr || !points || points->len < 1) {
+        return;
+    }
+
+    gint dash_phase = (gint)animation_phase;
+    gdouble dash_size = ANT_DASH_SIZE / zoom;
+    if (dash_size < 1.0) {
+        dash_size = 1.0;
+    }
+
+    guint n = points->len;
+    gdouble path_pos = 0.0;
+
+    /* Draw each edge - path-length-based pattern for consistent dash lengths */
+    for (guint i = 0; i < n; i++) {
+        GdkPoint* a = &g_array_index(points, GdkPoint, i);
+        GdkPoint* b = &g_array_index(points, GdkPoint, (i + 1) % n);
+        if (!closed && (i + 1) == n) {
+            break;
+        }
+        path_pos = draw_marching_ants_line(cr, a->x, a->y, b->x, b->y,
+                                          dash_size, dash_phase, path_pos);
+    }
+
+    /* When not closed, draw from last point to cursor */
+    if (!closed && n >= 1) {
+        GdkPoint* a = &g_array_index(points, GdkPoint, n - 1);
+        draw_marching_ants_line(cr, a->x, a->y, cursor_x, cursor_y,
+                               dash_size, dash_phase, path_pos);
     }
 }
 

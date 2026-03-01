@@ -44,6 +44,15 @@ ToolOptions* tool_options_new(void) {
     opts->ellipse_select_feather = 0.0f;
     opts->ellipse_select_animate = TRUE;
 
+    /* Initialize polygon select tool options */
+    opts->polygon_select_combine = SELECTION_COMBINE_NEW;
+    opts->polygon_select_smooth = SELECTION_SMOOTH_ANTIALIASED;
+    opts->polygon_select_feather = 0.0f;
+    opts->polygon_select_animate = TRUE;
+    opts->polygon_select_curvature = 0.0f;
+    opts->polygon_select_area = 0;   /* 0=interior */
+    opts->polygon_select_border_width = 1;
+
     /* Initialize move tool options */
     opts->move_auto_select_layer = TRUE; /* Default: auto-select enabled */
 
@@ -337,6 +346,67 @@ gboolean tool_options_get_ellipse_select_animate(ToolOptions* opts) {
         return TRUE; /* Default to animated */
     }
     return opts->ellipse_select_animate;
+}
+
+/* Polygon select tool options */
+void tool_options_set_polygon_select_combine(ToolOptions* opts, SelectionCombineMode combine) {
+    if (opts) {
+        opts->polygon_select_combine = combine;
+    }
+}
+SelectionCombineMode tool_options_get_polygon_select_combine(ToolOptions* opts) {
+    return opts ? opts->polygon_select_combine : SELECTION_COMBINE_NEW;
+}
+void tool_options_set_polygon_select_smooth(ToolOptions* opts, SelectionSmoothingMode smooth) {
+    if (opts) {
+        opts->polygon_select_smooth = smooth;
+    }
+}
+SelectionSmoothingMode tool_options_get_polygon_select_smooth(ToolOptions* opts) {
+    return opts ? opts->polygon_select_smooth : SELECTION_SMOOTH_ANTIALIASED;
+}
+void tool_options_set_polygon_select_feather(ToolOptions* opts, gfloat feather) {
+    if (opts) {
+        opts->polygon_select_feather = fmaxf(0.0f, feather);
+    }
+}
+gfloat tool_options_get_polygon_select_feather(ToolOptions* opts) {
+    return opts ? opts->polygon_select_feather : 0.0f;
+}
+void tool_options_set_polygon_select_animate(ToolOptions* opts, gboolean animate) {
+    if (opts) {
+        opts->polygon_select_animate = animate ? TRUE : FALSE;
+    }
+}
+gboolean tool_options_get_polygon_select_animate(ToolOptions* opts) {
+    if (!opts) {
+        return TRUE;
+    }
+    return opts->polygon_select_animate;
+}
+void tool_options_set_polygon_select_curvature(ToolOptions* opts, gfloat curvature) {
+    if (opts) {
+        opts->polygon_select_curvature = fmaxf(0.0f, fminf(1.0f, curvature));
+    }
+}
+gfloat tool_options_get_polygon_select_curvature(ToolOptions* opts) {
+    return opts ? opts->polygon_select_curvature : 0.0f;
+}
+void tool_options_set_polygon_select_area(ToolOptions* opts, gint area) {
+    if (opts && area >= 0 && area <= 2) {
+        opts->polygon_select_area = area;
+    }
+}
+gint tool_options_get_polygon_select_area(ToolOptions* opts) {
+    return opts ? opts->polygon_select_area : 0;
+}
+void tool_options_set_polygon_select_border_width(ToolOptions* opts, gint width) {
+    if (opts && width >= 1 && width <= 1000) {
+        opts->polygon_select_border_width = width;
+    }
+}
+gint tool_options_get_polygon_select_border_width(ToolOptions* opts) {
+    return opts ? opts->polygon_select_border_width : 1;
 }
 
 /**

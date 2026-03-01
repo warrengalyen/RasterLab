@@ -18,6 +18,7 @@
 #include "tools/tool_crop.h"
 #include "tools/tool_ellipse_select.h"
 #include "tools/tool_move.h"
+#include "tools/tool_polygon_select.h"
 #include "tools/tool_rect_select.h"
 #include "ui.h"
 #include "ui/layers_panel.h"
@@ -598,6 +599,9 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
     /* Draw ellipse select tool preview during drag */
     tool_ellipse_select_draw_preview(doc, cr, zoom);
 
+    /* Draw polygon select tool preview */
+    tool_polygon_select_draw_preview(doc, cr, zoom);
+
     /* Render selection overlays after all content is drawn */
     if (doc->selection_mask && !selection_mask_is_empty(doc->selection_mask)) {
         selection_mask_render_outline(cr, doc->selection_mask,
@@ -1017,18 +1021,22 @@ static void queue_ruler_marker_areas(ImageDocument* doc, gdouble old_cx, gdouble
         if (old_valid) {
             x = (int)(RULER_SIZE_PX - hadj + old_cx * zoom);
             x1 = x - 1;
-            if (x1 < 0) x1 = 0;
+            if (x1 < 0)
+                x1 = 0;
             width = RULER_MARKER_STRIP;
-            if (x1 + width > w) width = w - x1;
+            if (x1 + width > w)
+                width = w - x1;
             if (width > 0)
                 gtk_widget_queue_draw_area(doc->ruler_h, x1, 0, width, h);
         }
         if (new_valid) {
             x = (int)(RULER_SIZE_PX - hadj + new_cx * zoom);
             x1 = x - 1;
-            if (x1 < 0) x1 = 0;
+            if (x1 < 0)
+                x1 = 0;
             width = RULER_MARKER_STRIP;
-            if (x1 + width > w) width = w - x1;
+            if (x1 + width > w)
+                width = w - x1;
             if (width > 0)
                 gtk_widget_queue_draw_area(doc->ruler_h, x1, 0, width, h);
         }
@@ -1039,18 +1047,22 @@ static void queue_ruler_marker_areas(ImageDocument* doc, gdouble old_cx, gdouble
         if (old_valid) {
             y = (int)(-vadj + old_cy * zoom);
             y1 = y - 1;
-            if (y1 < 0) y1 = 0;
+            if (y1 < 0)
+                y1 = 0;
             height = RULER_MARKER_STRIP;
-            if (y1 + height > h) height = h - y1;
+            if (y1 + height > h)
+                height = h - y1;
             if (height > 0)
                 gtk_widget_queue_draw_area(doc->ruler_v, 0, y1, w, height);
         }
         if (new_valid) {
             y = (int)(-vadj + new_cy * zoom);
             y1 = y - 1;
-            if (y1 < 0) y1 = 0;
+            if (y1 < 0)
+                y1 = 0;
             height = RULER_MARKER_STRIP;
-            if (y1 + height > h) height = h - y1;
+            if (y1 + height > h)
+                height = h - y1;
             if (height > 0)
                 gtk_widget_queue_draw_area(doc->ruler_v, 0, y1, w, height);
         }
@@ -1421,8 +1433,18 @@ static gboolean on_drawing_area_key_press(GtkWidget* widget, GdkEventKey* event,
     }
 
     Tool* active_tool = tool_manager_get_active(tool_registry);
-    if (!active_tool || (active_tool->type != TOOL_RECT_SELECT && active_tool->type != TOOL_ELLIPSE_SELECT)) {
+    if (!active_tool || (active_tool->type != TOOL_RECT_SELECT && active_tool->type != TOOL_ELLIPSE_SELECT && active_tool->type != TOOL_POLYGON_SELECT)) {
         return FALSE;
+    }
+
+    /* ESC: cancel unclosed polygon selection */
+    if (event->keyval == GDK_KEY_Escape && active_tool->type == TOOL_POLYGON_SELECT && active_tool->user_data) {
+        PolygonSelectToolState* state = (PolygonSelectToolState*)active_tool->user_data;
+        if (!state->closed && state->points && state->points->len > 0) {
+            tool_polygon_select_reset(active_tool);
+            gtk_widget_queue_draw(doc->drawing_area);
+            return TRUE;
+        }
     }
 
     /* Check if this is a modifier key press (Shift or Alt) */
@@ -1462,6 +1484,11 @@ static gboolean on_drawing_area_key_press(GtkWidget* widget, GdkEventKey* event,
         if (opts) {
             opts->ellipse_select_combine = temp_mode;
         }
+    } else if (active_tool->type == TOOL_POLYGON_SELECT) {
+        ToolOptions* opts = tool_options_get_for_tool(TOOL_POLYGON_SELECT);
+        if (opts) {
+            opts->polygon_select_combine = temp_mode;
+        }
     }
 
     /* Update UI buttons to show the temporary mode */
@@ -1489,7 +1516,7 @@ static gboolean on_drawing_area_key_release(GtkWidget* widget, GdkEventKey* even
     }
 
     Tool* active_tool = tool_manager_get_active(tool_registry);
-    if (!active_tool || (active_tool->type != TOOL_RECT_SELECT && active_tool->type != TOOL_ELLIPSE_SELECT)) {
+    if (!active_tool || (active_tool->type != TOOL_RECT_SELECT && active_tool->type != TOOL_ELLIPSE_SELECT && active_tool->type != TOOL_POLYGON_SELECT)) {
         return FALSE;
     }
 
@@ -1529,6 +1556,11 @@ static gboolean on_drawing_area_key_release(GtkWidget* widget, GdkEventKey* even
         ToolOptions* opts = tool_options_get_for_tool(TOOL_ELLIPSE_SELECT);
         if (opts) {
             opts->ellipse_select_combine = temp_mode;
+        }
+    } else if (active_tool->type == TOOL_POLYGON_SELECT) {
+        ToolOptions* opts = tool_options_get_for_tool(TOOL_POLYGON_SELECT);
+        if (opts) {
+            opts->polygon_select_combine = temp_mode;
         }
     }
 
@@ -1937,8 +1969,10 @@ void document_set_zoom(ImageDocument* doc, gdouble zoom_factor) {
     }
 
     /* Rulers adapt tick density to zoom; redraw so spacing updates */
-    if (doc->ruler_h && gtk_widget_get_visible(doc->ruler_h)) gtk_widget_queue_draw(doc->ruler_h);
-    if (doc->ruler_v && gtk_widget_get_visible(doc->ruler_v)) gtk_widget_queue_draw(doc->ruler_v);
+    if (doc->ruler_h && gtk_widget_get_visible(doc->ruler_h))
+        gtk_widget_queue_draw(doc->ruler_h);
+    if (doc->ruler_v && gtk_widget_get_visible(doc->ruler_v))
+        gtk_widget_queue_draw(doc->ruler_v);
 }
 
 /**
@@ -1953,19 +1987,24 @@ gdouble document_get_zoom(ImageDocument* doc) {
 }
 
 void document_set_ruler_unit(ImageDocument* doc, RulerUnit unit) {
-    if (!doc) return;
+    if (!doc)
+        return;
     doc->ruler_unit = unit;
-    if (doc->ruler_h && gtk_widget_get_visible(doc->ruler_h)) gtk_widget_queue_draw(doc->ruler_h);
-    if (doc->ruler_v && gtk_widget_get_visible(doc->ruler_v)) gtk_widget_queue_draw(doc->ruler_v);
+    if (doc->ruler_h && gtk_widget_get_visible(doc->ruler_h))
+        gtk_widget_queue_draw(doc->ruler_h);
+    if (doc->ruler_v && gtk_widget_get_visible(doc->ruler_v))
+        gtk_widget_queue_draw(doc->ruler_v);
 }
 
 RulerUnit document_get_ruler_unit(ImageDocument* doc) {
-    if (!doc) return RULER_UNIT_PIXEL;
+    if (!doc)
+        return RULER_UNIT_PIXEL;
     return doc->ruler_unit;
 }
 
 gdouble document_get_ruler_dpi(ImageDocument* doc) {
-    if (!doc || doc->ruler_dpi <= 0.0) return RULER_DPI_DEFAULT;
+    if (!doc || doc->ruler_dpi <= 0.0)
+        return RULER_DPI_DEFAULT;
     return doc->ruler_dpi;
 }
 

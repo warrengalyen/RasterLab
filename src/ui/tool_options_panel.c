@@ -1068,6 +1068,151 @@ static void on_ellipse_select_animate_toggled(GtkToggleButton* button, gpointer 
     }
 }
 
+/* --- Polygon select tool callbacks --- */
+static void on_polygon_select_combine_button_toggled(GtkToggleButton* button, gpointer user_data) {
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    if (!gtk_toggle_button_get_active(button))
+        return;
+    SelectionCombineMode mode = SELECTION_COMBINE_NEW;
+    if (button == GTK_TOGGLE_BUTTON(panel->polygon_combine_new_button))
+        mode = SELECTION_COMBINE_NEW;
+    else if (panel->polygon_combine_add_button && button == GTK_TOGGLE_BUTTON(panel->polygon_combine_add_button))
+        mode = SELECTION_COMBINE_ADD;
+    else if (panel->polygon_combine_subtract_button && button == GTK_TOGGLE_BUTTON(panel->polygon_combine_subtract_button))
+        mode = SELECTION_COMBINE_SUBTRACT;
+    else if (panel->polygon_combine_intersect_button && button == GTK_TOGGLE_BUTTON(panel->polygon_combine_intersect_button))
+        mode = SELECTION_COMBINE_INTERSECT;
+
+    g_signal_handlers_block_by_func(panel->polygon_combine_new_button, G_CALLBACK(on_polygon_select_combine_button_toggled), panel);
+    if (panel->polygon_combine_add_button)
+        g_signal_handlers_block_by_func(panel->polygon_combine_add_button, G_CALLBACK(on_polygon_select_combine_button_toggled), panel);
+    if (panel->polygon_combine_subtract_button)
+        g_signal_handlers_block_by_func(panel->polygon_combine_subtract_button, G_CALLBACK(on_polygon_select_combine_button_toggled), panel);
+    if (panel->polygon_combine_intersect_button)
+        g_signal_handlers_block_by_func(panel->polygon_combine_intersect_button, G_CALLBACK(on_polygon_select_combine_button_toggled), panel);
+
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->polygon_combine_new_button), (mode == SELECTION_COMBINE_NEW));
+    if (panel->polygon_combine_add_button)
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->polygon_combine_add_button), (mode == SELECTION_COMBINE_ADD));
+    if (panel->polygon_combine_subtract_button)
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->polygon_combine_subtract_button), (mode == SELECTION_COMBINE_SUBTRACT));
+    if (panel->polygon_combine_intersect_button)
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->polygon_combine_intersect_button), (mode == SELECTION_COMBINE_INTERSECT));
+
+    g_signal_handlers_unblock_by_func(panel->polygon_combine_new_button, G_CALLBACK(on_polygon_select_combine_button_toggled), panel);
+    if (panel->polygon_combine_add_button)
+        g_signal_handlers_unblock_by_func(panel->polygon_combine_add_button, G_CALLBACK(on_polygon_select_combine_button_toggled), panel);
+    if (panel->polygon_combine_subtract_button)
+        g_signal_handlers_unblock_by_func(panel->polygon_combine_subtract_button, G_CALLBACK(on_polygon_select_combine_button_toggled), panel);
+    if (panel->polygon_combine_intersect_button)
+        g_signal_handlers_unblock_by_func(panel->polygon_combine_intersect_button, G_CALLBACK(on_polygon_select_combine_button_toggled), panel);
+
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_POLYGON_SELECT);
+    if (opts)
+        tool_options_set_polygon_select_combine(opts, mode);
+}
+
+static void update_polygon_combine_mode_buttons(ToolOptionsPanel* panel, SelectionCombineMode mode) {
+    if (!panel || !panel->polygon_combine_new_button)
+        return;
+    g_signal_handlers_block_by_func(panel->polygon_combine_new_button, G_CALLBACK(on_polygon_select_combine_button_toggled), panel);
+    if (panel->polygon_combine_add_button)
+        g_signal_handlers_block_by_func(panel->polygon_combine_add_button, G_CALLBACK(on_polygon_select_combine_button_toggled), panel);
+    if (panel->polygon_combine_subtract_button)
+        g_signal_handlers_block_by_func(panel->polygon_combine_subtract_button, G_CALLBACK(on_polygon_select_combine_button_toggled), panel);
+    if (panel->polygon_combine_intersect_button)
+        g_signal_handlers_block_by_func(panel->polygon_combine_intersect_button, G_CALLBACK(on_polygon_select_combine_button_toggled), panel);
+
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->polygon_combine_new_button), (mode == SELECTION_COMBINE_NEW));
+    if (panel->polygon_combine_add_button)
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->polygon_combine_add_button), (mode == SELECTION_COMBINE_ADD));
+    if (panel->polygon_combine_subtract_button)
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->polygon_combine_subtract_button), (mode == SELECTION_COMBINE_SUBTRACT));
+    if (panel->polygon_combine_intersect_button)
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->polygon_combine_intersect_button), (mode == SELECTION_COMBINE_INTERSECT));
+
+    g_signal_handlers_unblock_by_func(panel->polygon_combine_new_button, G_CALLBACK(on_polygon_select_combine_button_toggled), panel);
+    if (panel->polygon_combine_add_button)
+        g_signal_handlers_unblock_by_func(panel->polygon_combine_add_button, G_CALLBACK(on_polygon_select_combine_button_toggled), panel);
+    if (panel->polygon_combine_subtract_button)
+        g_signal_handlers_unblock_by_func(panel->polygon_combine_subtract_button, G_CALLBACK(on_polygon_select_combine_button_toggled), panel);
+    if (panel->polygon_combine_intersect_button)
+        g_signal_handlers_unblock_by_func(panel->polygon_combine_intersect_button, G_CALLBACK(on_polygon_select_combine_button_toggled), panel);
+}
+
+static void polygon_select_trigger_redraw(ToolOptionsPanel* panel) {
+    if (!panel || !panel->panel)
+        return;
+    GtkWidget* window = gtk_widget_get_toplevel(panel->panel);
+    if (!window)
+        return;
+    AppContext* ctx = (AppContext*)g_object_get_data(G_OBJECT(window), "app_context");
+    if (!ctx)
+        return;
+    ImageDocument* doc = ui_get_active_document(ctx);
+    if (doc && doc->drawing_area) {
+        gtk_widget_queue_draw(doc->drawing_area);
+    }
+}
+
+static void on_polygon_select_smooth_changed(GtkComboBox* combo_box, gpointer user_data) {
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    gint active = gtk_combo_box_get_active(combo_box);
+    if (active < 0 || active >= 3)
+        return;
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_POLYGON_SELECT);
+    if (opts)
+        tool_options_set_polygon_select_smooth(opts, (SelectionSmoothingMode)active);
+    polygon_select_trigger_redraw(panel);
+}
+
+static void on_polygon_select_feather_changed(GtkRange* range, gpointer user_data) {
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    gdouble value = gtk_range_get_value(range);
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_POLYGON_SELECT);
+    if (opts)
+        tool_options_set_polygon_select_feather(opts, (gfloat)value);
+    polygon_select_trigger_redraw(panel);
+}
+
+static void on_polygon_select_animate_toggled(GtkToggleButton* button, gpointer user_data) {
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    gboolean active = gtk_toggle_button_get_active(button);
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_POLYGON_SELECT);
+    if (opts)
+        tool_options_set_polygon_select_animate(opts, active);
+    polygon_select_trigger_redraw(panel);
+}
+
+static void on_polygon_select_curvature_changed(GtkRange* range, gpointer user_data) {
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    gdouble value = gtk_range_get_value(range);
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_POLYGON_SELECT);
+    if (opts)
+        tool_options_set_polygon_select_curvature(opts, (gfloat)value);
+    polygon_select_trigger_redraw(panel);
+}
+
+static void on_polygon_select_area_changed(GtkComboBox* combo_box, gpointer user_data) {
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    gint active = gtk_combo_box_get_active(combo_box);
+    if (active < 0 || active > 2)
+        return;
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_POLYGON_SELECT);
+    if (opts)
+        tool_options_set_polygon_select_area(opts, active);
+    polygon_select_trigger_redraw(panel);
+}
+
+static void on_polygon_select_border_changed(GtkRange* range, gpointer user_data) {
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    gint value = (gint)gtk_range_get_value(range);
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_POLYGON_SELECT);
+    if (opts)
+        tool_options_set_polygon_select_border_width(opts, value);
+    polygon_select_trigger_redraw(panel);
+}
+
 static gboolean crop_panel_do_redraw_idle(gpointer user_data) {
     ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
     if (!panel || !panel->panel) {
@@ -1497,6 +1642,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
     tool_opts_panel->color_picker_panel = NULL;
     tool_opts_panel->rect_select_panel = NULL;
     tool_opts_panel->ellipse_select_panel = NULL;
+    tool_opts_panel->polygon_select_panel = NULL;
     tool_opts_panel->crop_panel = NULL;
     tool_opts_panel->move_panel = NULL;
     tool_opts_panel->title_label = NULL;
@@ -1522,6 +1668,16 @@ ToolOptionsPanel* create_tool_options_panel(void) {
     tool_opts_panel->ellipse_combine_intersect_button = NULL;
     tool_opts_panel->ellipse_smooth_combo = NULL;
     tool_opts_panel->ellipse_feather_scale = NULL;
+    tool_opts_panel->polygon_combine_new_button = NULL;
+    tool_opts_panel->polygon_combine_add_button = NULL;
+    tool_opts_panel->polygon_combine_subtract_button = NULL;
+    tool_opts_panel->polygon_combine_intersect_button = NULL;
+    tool_opts_panel->polygon_smooth_combo = NULL;
+    tool_opts_panel->polygon_feather_scale = NULL;
+    tool_opts_panel->polygon_animate_checkbox = NULL;
+    tool_opts_panel->polygon_curvature_scale = NULL;
+    tool_opts_panel->polygon_area_combo = NULL;
+    tool_opts_panel->polygon_border_scale = NULL;
     tool_opts_panel->move_auto_select_checkbox = NULL;
     tool_opts_panel->current_tool_type = TOOL_MOVE; /* Start with no tool selected */
 
@@ -2008,6 +2164,72 @@ ToolOptionsPanel* create_tool_options_panel(void) {
         }
     }
 
+    /* Load polygon select options panel from Glade */
+    GtkBuilder* polygon_select_builder = gtk_builder_new();
+    GError* polygon_select_error = NULL;
+    if (gtk_builder_add_from_resource(polygon_select_builder, "/ui/polygon_select_options.glade", &polygon_select_error)) {
+        tool_opts_panel->polygon_select_panel = GTK_WIDGET(gtk_builder_get_object(polygon_select_builder, "polygon_select_options_panel"));
+        if (tool_opts_panel->polygon_select_panel) {
+            gtk_container_add(GTK_CONTAINER(container), tool_opts_panel->polygon_select_panel);
+
+            tool_opts_panel->polygon_combine_new_button = GTK_WIDGET(gtk_builder_get_object(polygon_select_builder, "polygon_select_combine_new_button"));
+            tool_opts_panel->polygon_combine_add_button = GTK_WIDGET(gtk_builder_get_object(polygon_select_builder, "polygon_select_combine_add_button"));
+            tool_opts_panel->polygon_combine_subtract_button = GTK_WIDGET(gtk_builder_get_object(polygon_select_builder, "polygon_select_combine_subtract_button"));
+            tool_opts_panel->polygon_combine_intersect_button = GTK_WIDGET(gtk_builder_get_object(polygon_select_builder, "polygon_select_combine_intersect_button"));
+            tool_opts_panel->polygon_smooth_combo = GTK_WIDGET(gtk_builder_get_object(polygon_select_builder, "polygon_select_smooth_combo"));
+            tool_opts_panel->polygon_feather_scale = GTK_WIDGET(gtk_builder_get_object(polygon_select_builder, "polygon_select_feather_scale"));
+            tool_opts_panel->polygon_animate_checkbox = GTK_WIDGET(gtk_builder_get_object(polygon_select_builder, "polygon_select_animate_checkbox"));
+            tool_opts_panel->polygon_curvature_scale = GTK_WIDGET(gtk_builder_get_object(polygon_select_builder, "polygon_select_curvature_scale"));
+            tool_opts_panel->polygon_area_combo = GTK_WIDGET(gtk_builder_get_object(polygon_select_builder, "polygon_select_area_combo"));
+            tool_opts_panel->polygon_border_scale = GTK_WIDGET(gtk_builder_get_object(polygon_select_builder, "polygon_select_border_scale"));
+
+            if (tool_opts_panel->polygon_combine_new_button)
+                g_signal_connect(tool_opts_panel->polygon_combine_new_button, "toggled", G_CALLBACK(on_polygon_select_combine_button_toggled), tool_opts_panel);
+            if (tool_opts_panel->polygon_combine_add_button)
+                g_signal_connect(tool_opts_panel->polygon_combine_add_button, "toggled", G_CALLBACK(on_polygon_select_combine_button_toggled), tool_opts_panel);
+            if (tool_opts_panel->polygon_combine_subtract_button)
+                g_signal_connect(tool_opts_panel->polygon_combine_subtract_button, "toggled", G_CALLBACK(on_polygon_select_combine_button_toggled), tool_opts_panel);
+            if (tool_opts_panel->polygon_combine_intersect_button)
+                g_signal_connect(tool_opts_panel->polygon_combine_intersect_button, "toggled", G_CALLBACK(on_polygon_select_combine_button_toggled), tool_opts_panel);
+
+            if (tool_opts_panel->polygon_smooth_combo) {
+                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(tool_opts_panel->polygon_smooth_combo), "None");
+                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(tool_opts_panel->polygon_smooth_combo), "Antialiased");
+                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(tool_opts_panel->polygon_smooth_combo), "Feathered");
+                gtk_combo_box_set_active(GTK_COMBO_BOX(tool_opts_panel->polygon_smooth_combo), 1);
+                g_signal_connect(tool_opts_panel->polygon_smooth_combo, "changed", G_CALLBACK(on_polygon_select_smooth_changed), tool_opts_panel);
+            }
+            if (tool_opts_panel->polygon_feather_scale)
+                g_signal_connect(tool_opts_panel->polygon_feather_scale, "value-changed", G_CALLBACK(on_polygon_select_feather_changed), tool_opts_panel);
+            if (tool_opts_panel->polygon_animate_checkbox)
+                g_signal_connect(tool_opts_panel->polygon_animate_checkbox, "toggled", G_CALLBACK(on_polygon_select_animate_toggled), tool_opts_panel);
+            if (tool_opts_panel->polygon_curvature_scale)
+                g_signal_connect(tool_opts_panel->polygon_curvature_scale, "value-changed", G_CALLBACK(on_polygon_select_curvature_changed), tool_opts_panel);
+            if (tool_opts_panel->polygon_area_combo) {
+                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(tool_opts_panel->polygon_area_combo), "Interior");
+                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(tool_opts_panel->polygon_area_combo), "Exterior");
+                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(tool_opts_panel->polygon_area_combo), "Border");
+                gtk_combo_box_set_active(GTK_COMBO_BOX(tool_opts_panel->polygon_area_combo), 0);
+                g_signal_connect(tool_opts_panel->polygon_area_combo, "changed", G_CALLBACK(on_polygon_select_area_changed), tool_opts_panel);
+            }
+            if (tool_opts_panel->polygon_border_scale)
+                g_signal_connect(tool_opts_panel->polygon_border_scale, "value-changed", G_CALLBACK(on_polygon_select_border_changed), tool_opts_panel);
+
+            gtk_widget_set_visible(tool_opts_panel->polygon_select_panel, FALSE);
+            gtk_widget_set_no_show_all(tool_opts_panel->polygon_select_panel, TRUE);
+            add_spin_button_to_scale(polygon_select_builder, "polygon_select_feather_scale", "polygon_select_feather_control_box");
+            add_spin_button_to_scale(polygon_select_builder, "polygon_select_curvature_scale", "polygon_select_curvature_control_box");
+            add_spin_button_to_scale(polygon_select_builder, "polygon_select_border_scale", "polygon_select_border_control_box");
+        }
+        g_object_unref(polygon_select_builder);
+    } else {
+        g_warning("Failed to load polygon select options panel: %s", polygon_select_error ? polygon_select_error->message : "Unknown error");
+        if (polygon_select_error)
+            g_error_free(polygon_select_error);
+        if (polygon_select_builder)
+            g_object_unref(polygon_select_builder);
+    }
+
     /* Load crop panel from Glade */
     GtkBuilder* crop_builder = gtk_builder_new();
     GError* crop_error = NULL;
@@ -2208,6 +2430,8 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
         new_tool_type = TOOL_RECT_SELECT;
     } else if (g_strcmp0(tool_name, "Elliptical Select") == 0) {
         new_tool_type = TOOL_ELLIPSE_SELECT;
+    } else if (g_strcmp0(tool_name, "Polygon Select") == 0) {
+        new_tool_type = TOOL_POLYGON_SELECT;
     } else if (g_strcmp0(tool_name, "Move") == 0) {
         new_tool_type = TOOL_MOVE;
     } else if (g_strcmp0(tool_name, "Crop") == 0) {
@@ -2244,6 +2468,9 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
     }
     if (panel->ellipse_select_panel) {
         gtk_widget_set_visible(panel->ellipse_select_panel, FALSE);
+    }
+    if (panel->polygon_select_panel) {
+        gtk_widget_set_visible(panel->polygon_select_panel, FALSE);
     }
     if (panel->crop_panel) {
         gtk_widget_set_visible(panel->crop_panel, FALSE);
@@ -2384,6 +2611,68 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
             }
         }
 
+        return;
+    }
+
+    /* For polygon select tool, show the options panel */
+    if (new_tool_type == TOOL_POLYGON_SELECT && panel->polygon_select_panel) {
+        if (panel->panel) {
+            gtk_widget_set_visible(panel->panel, TRUE);
+        }
+        gtk_widget_set_no_show_all(panel->polygon_select_panel, FALSE);
+        gtk_widget_set_visible(panel->polygon_select_panel, TRUE);
+        gtk_widget_show_all(panel->polygon_select_panel);
+
+        ToolOptions* opts = tool_options_get_for_tool(TOOL_POLYGON_SELECT);
+        if (opts) {
+            if (panel->polygon_combine_new_button) {
+                update_polygon_combine_mode_buttons(panel, (SelectionCombineMode)opts->polygon_select_combine);
+            }
+            if (panel->polygon_smooth_combo) {
+                g_signal_handlers_block_by_func(panel->polygon_smooth_combo,
+                                                G_CALLBACK(on_polygon_select_smooth_changed), panel);
+                gtk_combo_box_set_active(GTK_COMBO_BOX(panel->polygon_smooth_combo),
+                                         (gint)opts->polygon_select_smooth);
+                g_signal_handlers_unblock_by_func(panel->polygon_smooth_combo,
+                                                  G_CALLBACK(on_polygon_select_smooth_changed), panel);
+            }
+            if (panel->polygon_feather_scale) {
+                g_signal_handlers_block_by_func(panel->polygon_feather_scale,
+                                                G_CALLBACK(on_polygon_select_feather_changed), panel);
+                gtk_range_set_value(GTK_RANGE(panel->polygon_feather_scale), opts->polygon_select_feather);
+                g_signal_handlers_unblock_by_func(panel->polygon_feather_scale,
+                                                  G_CALLBACK(on_polygon_select_feather_changed), panel);
+            }
+            if (panel->polygon_animate_checkbox) {
+                g_signal_handlers_block_by_func(panel->polygon_animate_checkbox,
+                                                G_CALLBACK(on_polygon_select_animate_toggled), panel);
+                gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->polygon_animate_checkbox),
+                                             opts->polygon_select_animate);
+                g_signal_handlers_unblock_by_func(panel->polygon_animate_checkbox,
+                                                  G_CALLBACK(on_polygon_select_animate_toggled), panel);
+            }
+            if (panel->polygon_curvature_scale) {
+                g_signal_handlers_block_by_func(panel->polygon_curvature_scale,
+                                                G_CALLBACK(on_polygon_select_curvature_changed), panel);
+                gtk_range_set_value(GTK_RANGE(panel->polygon_curvature_scale), opts->polygon_select_curvature);
+                g_signal_handlers_unblock_by_func(panel->polygon_curvature_scale,
+                                                  G_CALLBACK(on_polygon_select_curvature_changed), panel);
+            }
+            if (panel->polygon_area_combo) {
+                g_signal_handlers_block_by_func(panel->polygon_area_combo,
+                                                G_CALLBACK(on_polygon_select_area_changed), panel);
+                gtk_combo_box_set_active(GTK_COMBO_BOX(panel->polygon_area_combo), opts->polygon_select_area);
+                g_signal_handlers_unblock_by_func(panel->polygon_area_combo,
+                                                  G_CALLBACK(on_polygon_select_area_changed), panel);
+            }
+            if (panel->polygon_border_scale) {
+                g_signal_handlers_block_by_func(panel->polygon_border_scale,
+                                                G_CALLBACK(on_polygon_select_border_changed), panel);
+                gtk_range_set_value(GTK_RANGE(panel->polygon_border_scale), (gdouble)opts->polygon_select_border_width);
+                g_signal_handlers_unblock_by_func(panel->polygon_border_scale,
+                                                  G_CALLBACK(on_polygon_select_border_changed), panel);
+            }
+        }
         return;
     }
 
@@ -2758,6 +3047,10 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
             gtk_widget_set_no_show_all(panel->ellipse_select_panel, TRUE);
             gtk_widget_hide(panel->ellipse_select_panel);
         }
+        if (panel->polygon_select_panel) {
+            gtk_widget_set_no_show_all(panel->polygon_select_panel, TRUE);
+            gtk_widget_hide(panel->polygon_select_panel);
+        }
         if (panel->crop_panel) {
             gtk_widget_set_no_show_all(panel->crop_panel, TRUE);
             gtk_widget_hide(panel->crop_panel);
@@ -2800,8 +3093,13 @@ void tool_options_panel_set_combine_mode(ToolOptionsPanel* panel, SelectionCombi
     if (!panel) {
         return;
     }
-
-    update_combine_mode_buttons(panel, mode);
+    if (panel->current_tool_type == TOOL_POLYGON_SELECT && panel->polygon_combine_new_button) {
+        update_polygon_combine_mode_buttons(panel, mode);
+    } else if (panel->current_tool_type == TOOL_ELLIPSE_SELECT && panel->ellipse_combine_new_button) {
+        update_ellipse_combine_mode_buttons(panel, mode);
+    } else {
+        update_combine_mode_buttons(panel, mode);
+    }
 }
 
 void tool_options_panel_set_color_picker_preview(ToolOptionsPanel* panel,

@@ -35,6 +35,15 @@ typedef struct {
     gfloat ellipse_select_feather;                /* Feather radius in pixels */
     gboolean ellipse_select_animate;              /* Animate marching ants */
 
+    /* Polygon select tool options */
+    SelectionCombineMode polygon_select_combine;  /* How to combine with existing selection */
+    SelectionSmoothingMode polygon_select_smooth; /* Edge smoothing mode */
+    gfloat polygon_select_feather;                /* Feather radius in pixels */
+    gboolean polygon_select_animate;              /* Animate marching ants */
+    gfloat polygon_select_curvature;               /* Side curvature 0.00-1.00, default 0 */
+    gint polygon_select_area;                     /* 0=interior, 1=exterior, 2=border */
+    gint polygon_select_border_width;             /* Border width in pixels (1-1000), for area=border */
+
     /* Move tool options */
     gboolean move_auto_select_layer; /* Auto-select layer under cursor based on visibility */
 
@@ -249,6 +258,27 @@ void tool_options_set_ellipse_select_animate(ToolOptions* opts, gboolean animate
  * @return TRUE if animation enabled, FALSE otherwise
  */
 gboolean tool_options_get_ellipse_select_animate(ToolOptions* opts);
+
+/**
+ * Polygon select: set/get combine, smooth, feather, animate (same as rect/ellipse)
+ */
+void tool_options_set_polygon_select_combine(ToolOptions* opts, SelectionCombineMode combine);
+SelectionCombineMode tool_options_get_polygon_select_combine(ToolOptions* opts);
+void tool_options_set_polygon_select_smooth(ToolOptions* opts, SelectionSmoothingMode smooth);
+SelectionSmoothingMode tool_options_get_polygon_select_smooth(ToolOptions* opts);
+void tool_options_set_polygon_select_feather(ToolOptions* opts, gfloat feather);
+gfloat tool_options_get_polygon_select_feather(ToolOptions* opts);
+void tool_options_set_polygon_select_animate(ToolOptions* opts, gboolean animate);
+gboolean tool_options_get_polygon_select_animate(ToolOptions* opts);
+/**
+ * Polygon select: curvature 0.00-1.00, area (0=interior, 1=exterior, 2=border), border width 1-1000
+ */
+void tool_options_set_polygon_select_curvature(ToolOptions* opts, gfloat curvature);
+gfloat tool_options_get_polygon_select_curvature(ToolOptions* opts);
+void tool_options_set_polygon_select_area(ToolOptions* opts, gint area);
+gint tool_options_get_polygon_select_area(ToolOptions* opts);
+void tool_options_set_polygon_select_border_width(ToolOptions* opts, gint width);
+gint tool_options_get_polygon_select_border_width(ToolOptions* opts);
 
 /**
  * Set move tool auto select layer
