@@ -488,7 +488,7 @@ void tool_polygon_select_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble z
         cairo_arc(cr, p->x, p->y, handle_radius, 0, 2 * M_PI);
         if (highlight_first) {
             /* Fill interior of first node until polygon closed */
-            cairo_set_source_rgba(cr, 0.2, 0.8, 0.2, 0.6);
+            cairo_set_source_rgba(cr, 0.0, 0.5, 1.0, 0.8);
             cairo_fill_preserve(cr);
         }
         cairo_set_source_rgba(cr, 0.2, 0.2, 0.2, 1.0);
