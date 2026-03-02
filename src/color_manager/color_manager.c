@@ -272,3 +272,39 @@ void cm_convert_sdr_to_srgb_argb32(uint8_t* buffer, size_t pixel_count,
     cm_profile_destroy(dst);
     cm_profile_destroy(src);
 }
+
+/* -------------------------------------------------------------------------
+ * HDR linear conversion (linear space only; no tone mapping / gamma / 8-bit)
+ * ------------------------------------------------------------------------- */
+
+void cm_convert_hdr_linear_to_linear_srgb(float* buffer, size_t pixel_count,
+                                         const void* icc_data, size_t icc_size) {
+    if (!buffer)
+        return;
+
+    if (!icc_data || icc_size == 0)
+        return; /* assume already linear sRGB */
+
+    ColorProfile* src = cm_profile_from_memory(icc_data, icc_size);
+    if (!src)
+        return;
+
+    ColorProfile* dst = cm_profile_create_linear_srgb();
+    if (!dst) {
+        cm_profile_destroy(src);
+        return;
+    }
+
+    ColorTransform* transform = cm_transform_create(src, dst, CM_PIXELFORMAT_RGB_FLOAT);
+    if (!transform) {
+        cm_profile_destroy(dst);
+        cm_profile_destroy(src);
+        return;
+    }
+
+    cm_transform_apply(transform, buffer, pixel_count);
+
+    cm_transform_destroy(transform);
+    cm_profile_destroy(dst);
+    cm_profile_destroy(src);
+}

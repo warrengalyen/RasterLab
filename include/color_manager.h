@@ -143,6 +143,27 @@ void cm_premultiply_argb32(uint8_t* buffer, size_t pixel_count);
 void cm_convert_sdr_to_srgb_argb32(uint8_t* buffer, size_t pixel_count,
                                    const void* icc_data, size_t icc_size);
 
+/* -------------------------------------------------------------------------
+ * HDR linear conversion (before tone mapping)
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Convert linear HDR RGB buffer from embedded ICC profile space to linear sRGB.
+ * Use this before tone mapping; no gamma encoding or 8-bit quantization is done.
+ *
+ * Buffer layout: interleaved float RGB, 3 floats per pixel (R, G, B).
+ *
+ * If \a icc_data is NULL (or \a icc_size is 0), the buffer is assumed
+ * already linear sRGB and no conversion is performed.
+ *
+ * \param buffer       Linear float RGB buffer (modified in place), 3 floats per pixel
+ * \param pixel_count  Number of pixels
+ * \param icc_data     Embedded ICC profile bytes, or NULL to assume linear sRGB
+ * \param icc_size     Size of ICC data in bytes (ignored if icc_data is NULL)
+ */
+void cm_convert_hdr_linear_to_linear_srgb(float* buffer, size_t pixel_count,
+                                         const void* icc_data, size_t icc_size);
+
 #ifdef __cplusplus
 }
 #endif
