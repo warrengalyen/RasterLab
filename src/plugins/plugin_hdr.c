@@ -464,6 +464,19 @@ static PluginError load_hdr(ImageDocument* doc, const char* filename) {
 
     fclose(infile);
 
+    /* Decode RGBE to linear float RGB (scene-referred). Radiance HDR: assume Linear Rec.709, no color conversion. */
+    size_t num_pixels = (size_t)width * (size_t)height;
+    float* linear_rgb = (float*)g_malloc(num_pixels * 3 * sizeof(float));
+    if (!linear_rgb) {
+        g_free(rgbe_data);
+        return PLUGIN_ERROR_OUT_OF_MEMORY;
+    }
+    for (size_t i = 0; i < num_pixels; i++) {
+        uint8_t* p = rgbe_data + i * 4;
+        rgbe_to_rgb_float(p[0], p[1], p[2], p[3],
+                          &linear_rgb[i * 3 + 0], &linear_rgb[i * 3 + 1], &linear_rgb[i * 3 + 2]);
+    }
+
     /* Get tone mapping parameters - check settings first */
     ToneMapParams tone_params;
     tone_map_params_init(&tone_params);
@@ -562,30 +575,24 @@ static PluginError load_hdr(ImageDocument* doc, const char* filename) {
         return PLUGIN_ERROR_OUT_OF_MEMORY;
     }
 
-    /* Convert RGBE to ARGB32 */
+    /* Tone map linear float to 8-bit, then premultiply for Cairo blending */
     for (uint32_t y = 0; y < height; y++) {
         guchar* dst_row = surface_data + y * surface_stride;
-        uint8_t* src_row = rgbe_data + y * width * 4;
-
         for (uint32_t x = 0; x < width; x++) {
-            uint8_t r_gbe = src_row[x * 4 + 0];
-            uint8_t g_gbe = src_row[x * 4 + 1];
-            uint8_t b_gbe = src_row[x * 4 + 2];
-            uint8_t e_gbe = src_row[x * 4 + 3];
+            size_t idx = (size_t)y * width + x;
+            float r_float = linear_rgb[idx * 3 + 0];
+            float g_float = linear_rgb[idx * 3 + 1];
+            float b_float = linear_rgb[idx * 3 + 2];
 
-            /* Convert RGBE to linear RGB float */
-            float r_float, g_float, b_float;
-            rgbe_to_rgb_float(r_gbe, g_gbe, b_gbe, e_gbe, &r_float, &g_float, &b_float);
-
-            /* Tone map to 8-bit using tone mapping handler */
+            /* Tone map to 8-bit  */
             uint8_t r, g, b;
             tone_map_rgb(r_float, g_float, b_float, &tone_params, &r, &g, &b);
             uint8_t a = 255; /* No alpha in HDR */
 
-            /* Cairo ARGB32: BGRA in memory (little-endian) */
-            dst_row[x * 4 + 0] = b;
-            dst_row[x * 4 + 1] = g;
-            dst_row[x * 4 + 2] = r;
+            /* Cairo ARGB32: BGRA in memory; premultiply for blending */
+            dst_row[x * 4 + 0] = (guchar)((b * (uint32_t)a + 127) / 255);
+            dst_row[x * 4 + 1] = (guchar)((g * (uint32_t)a + 127) / 255);
+            dst_row[x * 4 + 2] = (guchar)((r * (uint32_t)a + 127) / 255);
             dst_row[x * 4 + 3] = a;
         }
     }
@@ -594,6 +601,7 @@ static PluginError load_hdr(ImageDocument* doc, const char* filename) {
     cairo_surface_mark_dirty(temp_surface);
 
     /* Cleanup */
+    g_free(linear_rgb);
     g_free(rgbe_data);
 
     /* Add layer to document */

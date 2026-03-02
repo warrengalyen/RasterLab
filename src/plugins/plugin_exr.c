@@ -2,6 +2,7 @@
 
 #include "plugins/plugin_exr.h"
 #include "app/settings.h"
+#include "color_manager.h"
 #include "document.h"
 #include "image_format_plugin.h"
 #include "plugins/plugin_host_api.h"
@@ -797,7 +798,62 @@ static PluginError load_exr(ImageDocument* doc, const char* filename) {
         return PLUGIN_ERROR_FILE_READ_ERROR;
     }
 
+    /* Detect source color space from chromaticities (before closing context). If none, assume Linear Rec.709. */
+    bool have_chromaticities = false;
+    float chroma_white_x = 0.3127f, chroma_white_y = 0.3290f; /* D65 default */
+    float chroma_red_x = 0.64f, chroma_red_y = 0.33f;
+    float chroma_green_x = 0.30f, chroma_green_y = 0.60f;
+    float chroma_blue_x = 0.15f, chroma_blue_y = 0.06f;
+    {
+        exr_attr_chromaticities_t chroma;
+        if (exr_attr_get_chromaticities(ctxt, 0, "chromaticities", &chroma) == EXR_ERR_SUCCESS) {
+            have_chromaticities = true;
+            chroma_white_x = chroma.white_x;
+            chroma_white_y = chroma.white_y;
+            chroma_red_x = chroma.red_x;
+            chroma_red_y = chroma.red_y;
+            chroma_green_x = chroma.green_x;
+            chroma_green_y = chroma.green_y;
+            chroma_blue_x = chroma.blue_x;
+            chroma_blue_y = chroma.blue_y;
+        }
+    }
+
     exr_finish(&ctxt);
+
+#if HAVE_LCMS2
+    /* Convert linear float from source primaries to linear sRGB before tone mapping (tone mapping must run in linear sRGB) */
+    {
+        ColorProfile* src_profile = NULL;
+        if (have_chromaticities) {
+            src_profile = cm_profile_create_linear_from_primaries(
+                chroma_white_x, chroma_white_y,
+                chroma_red_x, chroma_red_y,
+                chroma_green_x, chroma_green_y,
+                chroma_blue_x, chroma_blue_y);
+        }
+        if (src_profile) {
+            size_t num_pixels_rgb = num_pixels * 3;
+            float* interleaved = (float*)g_malloc(num_pixels_rgb * sizeof(float));
+            if (interleaved) {
+                for (size_t i = 0; i < num_pixels; i++) {
+                    interleaved[i * 3 + 0] = r_plane[i];
+                    interleaved[i * 3 + 1] = g_plane[i];
+                    interleaved[i * 3 + 2] = b_plane[i];
+                }
+                cm_convert_hdr_linear_to_linear_srgb_from_profile(interleaved, num_pixels, src_profile);
+                for (size_t i = 0; i < num_pixels; i++) {
+                    r_plane[i] = interleaved[i * 3 + 0];
+                    g_plane[i] = interleaved[i * 3 + 1];
+                    b_plane[i] = interleaved[i * 3 + 2];
+                }
+                g_free(interleaved);
+            }
+            cm_profile_destroy(src_profile);
+        }
+        /* If no chromaticities or profile creation failed: assume Linear Rec.709, no conversion */
+    }
+#endif
 
     /* Build RGBE buffer for HDR tone mapping dialog */
     size_t rgbe_size = width * height * 4;
@@ -932,9 +988,10 @@ static PluginError load_exr(ImageDocument* doc, const char* filename) {
             tone_map_rgb(r, g, b, &tone_params, &r8, &g8, &b8);
             uint8_t a8 = has_alpha ? (uint8_t)(a * 255.f) : 255;
 
-            dst_row[px * 4 + 0] = (guchar)b8;
-            dst_row[px * 4 + 1] = (guchar)g8;
-            dst_row[px * 4 + 2] = (guchar)r8;
+            /* Premultiply for Cairo blending */
+            dst_row[px * 4 + 0] = (guchar)((b8 * (uint32_t)a8 + 127) / 255);
+            dst_row[px * 4 + 1] = (guchar)((g8 * (uint32_t)a8 + 127) / 255);
+            dst_row[px * 4 + 2] = (guchar)((r8 * (uint32_t)a8 + 127) / 255);
             dst_row[px * 4 + 3] = (guchar)a8;
         }
     }

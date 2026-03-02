@@ -115,6 +115,49 @@ ColorProfile* cm_profile_create_linear_srgb(void) {
     return p;
 }
 
+ColorProfile* cm_profile_create_linear_from_primaries(float white_x, float white_y,
+                                                     float red_x, float red_y,
+                                                     float green_x, float green_y,
+                                                     float blue_x, float blue_y) {
+    cmsToneCurve* linear = cmsBuildGamma(0, 1.0);
+    if (!linear)
+        return NULL;
+
+    cmsCIExyY white_pt;
+    white_pt.x = (cmsFloat64Number)white_x;
+    white_pt.y = (cmsFloat64Number)white_y;
+    white_pt.Y = 1.0;
+
+    cmsCIExyYTRIPLE primaries;
+    primaries.Red.x  = (cmsFloat64Number)red_x;
+    primaries.Red.y  = (cmsFloat64Number)red_y;
+    primaries.Red.Y  = 1.0;
+    primaries.Green.x = (cmsFloat64Number)green_x;
+    primaries.Green.y = (cmsFloat64Number)green_y;
+    primaries.Green.Y = 1.0;
+    primaries.Blue.x  = (cmsFloat64Number)blue_x;
+    primaries.Blue.y  = (cmsFloat64Number)blue_y;
+    primaries.Blue.Y  = 1.0;
+
+    cmsToneCurve* transfer[3] = { linear, linear, linear };
+    cmsHPROFILE h = cmsCreateRGBProfile(&white_pt, &primaries, transfer);
+    cmsFreeToneCurve(linear);
+
+    if (!h)
+        return NULL;
+
+    ColorProfile* p = (ColorProfile*)malloc(sizeof(ColorProfile));
+    if (!p) {
+        cmsCloseProfile(h);
+        return NULL;
+    }
+
+    p->handle   = (void*)h;
+    p->raw_data = NULL;
+    p->size     = 0;
+    return p;
+}
+
 void cm_profile_destroy(ColorProfile* profile) {
     if (!profile)
         return;
@@ -277,28 +320,21 @@ void cm_convert_sdr_to_srgb_argb32(uint8_t* buffer, size_t pixel_count,
  * HDR linear conversion (linear space only; no tone mapping / gamma / 8-bit)
  * ------------------------------------------------------------------------- */
 
-void cm_convert_hdr_linear_to_linear_srgb(float* buffer, size_t pixel_count,
-                                         const void* icc_data, size_t icc_size) {
+void cm_convert_hdr_linear_to_linear_srgb_from_profile(float* buffer, size_t pixel_count,
+                                                       ColorProfile* source) {
     if (!buffer)
         return;
 
-    if (!icc_data || icc_size == 0)
-        return; /* assume already linear sRGB */
-
-    ColorProfile* src = cm_profile_from_memory(icc_data, icc_size);
-    if (!src)
-        return;
+    if (!source)
+        return; /* assume already linear sRGB / Linear Rec.709 */
 
     ColorProfile* dst = cm_profile_create_linear_srgb();
-    if (!dst) {
-        cm_profile_destroy(src);
+    if (!dst)
         return;
-    }
 
-    ColorTransform* transform = cm_transform_create(src, dst, CM_PIXELFORMAT_RGB_FLOAT);
+    ColorTransform* transform = cm_transform_create(source, dst, CM_PIXELFORMAT_RGB_FLOAT);
     if (!transform) {
         cm_profile_destroy(dst);
-        cm_profile_destroy(src);
         return;
     }
 
@@ -306,5 +342,4 @@ void cm_convert_hdr_linear_to_linear_srgb(float* buffer, size_t pixel_count,
 
     cm_transform_destroy(transform);
     cm_profile_destroy(dst);
-    cm_profile_destroy(src);
 }

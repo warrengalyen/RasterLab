@@ -61,6 +61,25 @@ ColorProfile* cm_profile_create_srgb(void);
 ColorProfile* cm_profile_create_linear_srgb(void);
 
 /**
+ * Create a linear RGB profile from CIE (x,y) chromaticities (e.g. from EXR chromaticities attribute).
+ * White point and R,G,B primaries in CIE xy; gamma is linear (1.0).
+ *
+ * \param white_x  White point x
+ * \param white_y  White point y
+ * \param red_x    Red primary x
+ * \param red_y    Red primary y
+ * \param green_x  Green primary x
+ * \param green_y  Green primary y
+ * \param blue_x   Blue primary x
+ * \param blue_y   Blue primary y
+ * \return         New ColorProfile*, or NULL on error
+ */
+ColorProfile* cm_profile_create_linear_from_primaries(float white_x, float white_y,
+                                                      float red_x, float red_y,
+                                                      float green_x, float green_y,
+                                                      float blue_x, float blue_y);
+
+/**
  * Destroy a color profile and release resources.
  * Safe to call with NULL (no-op).
  *
@@ -148,21 +167,20 @@ void cm_convert_sdr_to_srgb_argb32(uint8_t* buffer, size_t pixel_count,
  * ------------------------------------------------------------------------- */
 
 /**
- * Convert linear HDR RGB buffer from embedded ICC profile space to linear sRGB.
+ * Convert linear HDR RGB buffer from a source color profile to linear sRGB.
  * Use this before tone mapping; no gamma encoding or 8-bit quantization is done.
  *
  * Buffer layout: interleaved float RGB, 3 floats per pixel (R, G, B).
  *
- * If \a icc_data is NULL (or \a icc_size is 0), the buffer is assumed
- * already linear sRGB and no conversion is performed.
+ * If \a source is NULL, the buffer is assumed already linear sRGB (e.g. Linear Rec.709)
+ * and no conversion is performed.
  *
  * \param buffer       Linear float RGB buffer (modified in place), 3 floats per pixel
  * \param pixel_count  Number of pixels
- * \param icc_data     Embedded ICC profile bytes, or NULL to assume linear sRGB
- * \param icc_size     Size of ICC data in bytes (ignored if icc_data is NULL)
+ * \param source       Source color profile (linear primaries), or NULL to assume linear sRGB
  */
-void cm_convert_hdr_linear_to_linear_srgb(float* buffer, size_t pixel_count,
-                                         const void* icc_data, size_t icc_size);
+void cm_convert_hdr_linear_to_linear_srgb_from_profile(float* buffer, size_t pixel_count,
+                                                       ColorProfile* source);
 
 #ifdef __cplusplus
 }
