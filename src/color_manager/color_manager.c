@@ -21,11 +21,13 @@ static cmsHPROFILE profile_handle(const ColorProfile* p) {
     return (cmsHPROFILE)p->handle;
 }
 
-/* Map public pixel format to lcms type (straight, non-premultiplied). */
+/* Map public pixel format to lcms type (straight, non-premultiplied). Add new formats here when needed. */
 static cmsUInt32Number pixel_format_to_lcms(CMPixelFormat fmt) {
     switch (fmt) {
-        case CM_PIXELFORMAT_RGBA8:    return TYPE_RGBA_8;
+        case CM_PIXELFORMAT_RGBA8:     return TYPE_RGBA_8;
         case CM_PIXELFORMAT_RGB_FLOAT: return TYPE_RGB_FLT;
+        case CM_PIXELFORMAT_RGBA16:    return TYPE_RGBA_16;
+        case CM_PIXELFORMAT_RGBAF:     return TYPE_RGBA_FLT;
         default: return (cmsUInt32Number)-1;
     }
 }
@@ -228,7 +230,7 @@ ColorTransform* cm_transform_create(ColorProfile* src, ColorProfile* dst, CMPixe
         return NULL;
 
     cmsUInt32Number flags = 0;
-    if (fmt == CM_PIXELFORMAT_RGBA8)
+    if (fmt == CM_PIXELFORMAT_RGBA8 || fmt == CM_PIXELFORMAT_RGBA16 || fmt == CM_PIXELFORMAT_RGBAF)
         flags = cmsFLAGS_COPY_ALPHA; /* pass alpha through unchanged */
 
     cmsHTRANSFORM h = cmsCreateTransform(
