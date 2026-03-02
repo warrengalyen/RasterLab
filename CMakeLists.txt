@@ -1411,6 +1411,109 @@ else()
     set(HAVE_OPENEXR 0)
 endif()
 
+# ---------------------------------------------------------------------------
+# Little CMS (lcms2)
+# ---------------------------------------------------------------------------
+set(LCMS2_FOUND FALSE)
+set(LCMS2_TARGET "")
+
+if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/lcms/CMakeLists.txt")
+    message(STATUS "Little CMS (lcms) submodule found, building from source as shared library")
+
+    set(LCMS2_BUILD_DIR "${CMAKE_BINARY_DIR}/lcms2_build")
+    set(LCMS2_INSTALL_DIR "${CMAKE_BINARY_DIR}/lcms2_install")
+
+    if(WIN32)
+        set(LCMS2_DLL_NAME "${CMAKE_SHARED_LIBRARY_PREFIX}lcms2${CMAKE_SHARED_LIBRARY_SUFFIX}")
+        set(LCMS2_DLL_PATH "${LCMS2_INSTALL_DIR}/bin/${LCMS2_DLL_NAME}")
+        if(MINGW)
+            set(LCMS2_IMPLIB_NAME "liblcms2.dll.a")
+        else()
+            set(LCMS2_IMPLIB_NAME "lcms2.lib")
+        endif()
+        set(LCMS2_IMPLIB_PATH "${LCMS2_INSTALL_DIR}/lib/${LCMS2_IMPLIB_NAME}")
+    else()
+        set(LCMS2_LIB_NAME "${CMAKE_SHARED_LIBRARY_PREFIX}lcms2${CMAKE_SHARED_LIBRARY_SUFFIX}")
+        set(LCMS2_LIB_PATH "${LCMS2_INSTALL_DIR}/lib/${LCMS2_LIB_NAME}")
+    endif()
+
+    set(LCMS2_CMAKE_ARGS
+        -DCMAKE_INSTALL_PREFIX=${LCMS2_INSTALL_DIR}
+        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+        -DLCMS2_BUILD_SHARED=ON
+        -DLCMS2_BUILD_STATIC=OFF
+        -DLCMS2_BUILD_TOOLS=OFF
+        -DLCMS2_BUILD_TESTS=OFF
+        -DLCMS2_BUILD_JPGICC=OFF
+        -DLCMS2_BUILD_TIFICC=OFF
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+    )
+
+    ExternalProject_Add(
+        lcms2_external
+        SOURCE_DIR "${CMAKE_SOURCE_DIR}/lib/lcms"
+        BINARY_DIR "${LCMS2_BUILD_DIR}"
+        INSTALL_DIR "${LCMS2_INSTALL_DIR}"
+        CMAKE_ARGS ${LCMS2_CMAKE_ARGS}
+        BUILD_ALWAYS FALSE
+    )
+
+    if(EXISTS "${CMAKE_SOURCE_DIR}/lib/lcms/include")
+        set(LCMS2_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/lib/lcms/include")
+    else()
+        set(LCMS2_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/lib/lcms")
+    endif()
+
+    include_directories(${LCMS2_INCLUDE_DIRS})
+
+    add_library(lcms2 SHARED IMPORTED GLOBAL)
+
+    if(WIN32)
+        set_target_properties(lcms2 PROPERTIES
+            INTERFACE_INCLUDE_DIRECTORIES "${LCMS2_INCLUDE_DIRS}"
+            IMPORTED_LOCATION "${LCMS2_DLL_PATH}"
+            IMPORTED_IMPLIB "${LCMS2_IMPLIB_PATH}"
+        )
+        add_custom_command(TARGET lcms2_external POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${LCMS2_DLL_PATH}"
+                "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/"
+            COMMENT "Copying Little CMS DLL to bin directory"
+        )
+    else()
+        set_target_properties(lcms2 PROPERTIES
+            INTERFACE_INCLUDE_DIRECTORIES "${LCMS2_INCLUDE_DIRS}"
+            IMPORTED_LOCATION "${LCMS2_LIB_PATH}"
+        )
+        add_custom_command(TARGET lcms2_external POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${LCMS2_LIB_PATH}"
+                "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/"
+            COMMENT "Copying Little CMS shared library to bin directory"
+        )
+    endif()
+
+    set(LCMS2_FOUND TRUE)
+    set(LCMS2_TARGET lcms2)
+    message(STATUS "Little CMS include dirs: ${LCMS2_INCLUDE_DIRS}")
+else()
+    pkg_check_modules(LCMS2 lcms2)
+    if(LCMS2_FOUND)
+        include_directories(${LCMS2_INCLUDE_DIRS})
+        message(STATUS "Using system Little CMS: ${LCMS2_INCLUDE_DIRS}")
+    else()
+        message(STATUS "Little CMS not found. Color management (lcms2) will not be available.")
+    endif()
+endif()
+
+if(LCMS2_FOUND)
+    set(HAVE_LCMS2 1)
+else()
+    set(HAVE_LCMS2 0)
+endif()
+
 # Find GTK3, GdkPixbuf, libxml2, and LZ4 using pkg-config
 # NOTE: This is done AFTER zlib/libpng configuration to ensure our libpng headers
 # are set up before GTK3's pkg-config adds system libpng headers to CFLAGS

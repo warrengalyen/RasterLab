@@ -32,3 +32,6 @@
 	path = lib/openexr
 	url = https://github.com/AcademySoftwareFoundation/openexr.git
     ignore = dirty
+[submodule "lib/lcms"]
+	path = lib/lcms
+	url = https://github.com/mm2/Little-CMS.git
