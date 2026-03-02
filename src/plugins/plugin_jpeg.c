@@ -474,6 +474,23 @@ static PluginError save_jpeg(ImageDocument* doc, const char* filename, const Sav
     /* Start compression */
     jpeg_start_compress(&cinfo, TRUE);
 
+#if defined(HAVE_LIBJPEG) && defined(HAVE_LCMS2)
+    /* Embed fresh sRGB ICC on every save (color only); do not preserve original profile */
+    if (!is_grayscale) {
+        void* icc_data = NULL;
+        size_t icc_size = 0;
+        cmsHPROFILE srgb = icc_create_srgb_profile();
+        if (srgb && icc_profile_to_memory(srgb, &icc_data, &icc_size) && icc_data && icc_size > 0) {
+            icc_destroy(srgb);
+            jpeg_write_icc_profile(&cinfo, (const JOCTET*)icc_data, (unsigned int)icc_size);
+            free(icc_data);
+        } else {
+            if (srgb) icc_destroy(srgb);
+            if (icc_data) free(icc_data);
+        }
+    }
+#endif
+
     /* Write JFIF APP0 marker with thumbnail if requested */
     if (embed_thumbnail && !is_grayscale) {
         /* Create thumbnail (typically 1/8th size, max 255x255) */

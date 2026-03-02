@@ -14,6 +14,10 @@
 #include <webp/decode.h>
 #include <webp/demux.h>
 #include <webp/encode.h>
+#include <webp/mux.h>
+#if defined(HAVE_LCMS2)
+#include "color_manager/icc_utils.h"
+#endif
 #if defined(HAVE_LCMS2)
 #include "color_manager/icc_utils.h"
 #endif
@@ -449,6 +453,9 @@ static PluginError save_webp(ImageDocument* doc, const char* filename, const Sav
     WebPPicture picture;
     int width, height;
     int result;
+#if defined(HAVE_LIBWEBP) && defined(HAVE_LCMS2)
+    WebPData assembled_webp = { NULL, 0 };
+#endif
 
     if (!doc || !filename) {
         return PLUGIN_ERROR_INVALID_PARAMETERS;
@@ -602,10 +609,43 @@ static PluginError save_webp(ImageDocument* doc, const char* filename, const Sav
     webp_data = writer.mem;
     webp_size = writer.size;
 
+#if defined(HAVE_LIBWEBP) && defined(HAVE_LCMS2)
+    /* Embed fresh sRGB ICC in container; do not preserve original profile */
+    {
+        void* icc_data = NULL;
+        size_t icc_size = 0;
+        cmsHPROFILE srgb = icc_create_srgb_profile();
+        if (srgb && icc_profile_to_memory(srgb, &icc_data, &icc_size) && icc_data && icc_size > 0) {
+            icc_destroy(srgb);
+            WebPData encoded = { webp_data, webp_size };
+            WebPMux* mux = WebPMuxCreate(&encoded, 0);
+            if (mux) {
+                WebPData icc = { (uint8_t*)icc_data, icc_size };
+                if (WebPMuxSetChunk(mux, "ICCP", &icc, 1) == WEBP_MUX_OK) {
+                    if (WebPMuxAssemble(mux, &assembled_webp) == WEBP_MUX_OK) {
+                        webp_data = assembled_webp.bytes;
+                        webp_size = assembled_webp.size;
+                    }
+                }
+                WebPMuxDelete(mux);
+            }
+            free(icc_data);
+        } else {
+            if (srgb) icc_destroy(srgb);
+            if (icc_data) free(icc_data);
+        }
+    }
+#endif
+
     /* Write to file */
     outfile = g_fopen(filename, "wb");
     if (!outfile) {
         g_warning("WebP plugin: Failed to open file for writing: %s", filename);
+#if defined(HAVE_LIBWEBP) && defined(HAVE_LCMS2)
+        if (assembled_webp.bytes)
+            WebPDataClear(&assembled_webp);
+        else
+#endif
         WebPMemoryWriterClear(&writer);
         g_free(rgba_data);
         WebPPictureFree(&picture);
@@ -618,6 +658,11 @@ static PluginError save_webp(ImageDocument* doc, const char* filename, const Sav
 
     if (result != (int)webp_size) {
         g_warning("WebP plugin: Failed to write entire file (wrote %d of %zu bytes)", result, webp_size);
+#if defined(HAVE_LIBWEBP) && defined(HAVE_LCMS2)
+        if (assembled_webp.bytes)
+            WebPDataClear(&assembled_webp);
+        else
+#endif
         WebPMemoryWriterClear(&writer);
         g_free(rgba_data);
         WebPPictureFree(&picture);
@@ -626,6 +671,11 @@ static PluginError save_webp(ImageDocument* doc, const char* filename, const Sav
     }
 
     /* Cleanup */
+#if defined(HAVE_LIBWEBP) && defined(HAVE_LCMS2)
+    if (assembled_webp.bytes)
+        WebPDataClear(&assembled_webp);
+    else
+#endif
     WebPMemoryWriterClear(&writer);
     g_free(rgba_data);
     WebPPictureFree(&picture);

@@ -383,10 +383,12 @@ static void cairo_argb32_to_heif_rgba(const uint8_t* src, uint8_t* dst,
 }
 
 /**
- * Create heif_image from cairo_surface_t (ARGB32)
+ * Create heif_image from cairo_surface_t (ARGB32).
+ * icc_data/icc_size: optional sRGB ICC to embed; NULL/0 to skip.
  */
 static heif_image* create_heif_image_from_surface(cairo_surface_t* surface,
-                                                  guint width, guint height) {
+                                                  guint width, guint height,
+                                                  const void* icc_data, size_t icc_size) {
     heif_image* img = NULL;
     heif_error err;
 
@@ -408,6 +410,15 @@ static heif_image* create_heif_image_from_surface(cairo_surface_t* surface,
         heif_image_release(img);
         return NULL;
     }
+
+#if defined(HAVE_LCMS2)
+    if (icc_data != NULL && icc_size > 0) {
+        err = heif_image_set_raw_color_profile(img, "prof", icc_data, icc_size);
+        if (err.code != heif_error_Ok) {
+            /* Non-fatal; continue without embedded profile */
+        }
+    }
+#endif
 
     int dst_stride;
     uint8_t* dst = heif_image_get_plane(img, heif_channel_interleaved, &dst_stride);
@@ -433,8 +444,23 @@ static PluginError save_heic_impl(ImageDocument* doc, const char* filename, cons
     int quality = 90;
     bool multiframe = false;
     PluginError ret = PLUGIN_ERROR_NONE;
+#if defined(HAVE_LCMS2)
+    void* icc_data = NULL;
+    size_t icc_size = 0;
+    cmsHPROFILE srgb = icc_create_srgb_profile();
+    if (srgb && icc_profile_to_memory(srgb, &icc_data, &icc_size)) {
+        icc_destroy(srgb);
+    } else {
+        if (srgb) icc_destroy(srgb);
+        icc_data = NULL;
+        icc_size = 0;
+    }
+#endif
 
     if (!doc || !filename || doc->width == 0 || doc->height == 0) {
+#if defined(HAVE_LCMS2)
+        if (icc_data) free(icc_data);
+#endif
         return PLUGIN_ERROR_INVALID_PARAMETERS;
     }
 
@@ -452,12 +478,18 @@ static PluginError save_heic_impl(ImageDocument* doc, const char* filename, cons
 
     ctx = heif_context_alloc();
     if (!ctx) {
+#if defined(HAVE_LCMS2)
+        if (icc_data) free(icc_data);
+#endif
         return PLUGIN_ERROR_OUT_OF_MEMORY;
     }
 
     heif_error err = heif_context_get_encoder_for_format(ctx, heif_compression_HEVC, &encoder);
     if (err.code != heif_error_Ok || !encoder) {
         heif_context_free(ctx);
+#if defined(HAVE_LCMS2)
+        if (icc_data) free(icc_data);
+#endif
         g_warning("HEIC plugin: No HEVC encoder available (x265 development libraries required)");
         return PLUGIN_ERROR_UNSUPPORTED_FEATURE;
     }
@@ -473,6 +505,9 @@ static PluginError save_heic_impl(ImageDocument* doc, const char* filename, cons
     if (err.code != heif_error_Ok) {
         heif_encoder_release(encoder);
         heif_context_free(ctx);
+#if defined(HAVE_LCMS2)
+        if (icc_data) free(icc_data);
+#endif
         return PLUGIN_ERROR_UNSUPPORTED_FEATURE;
     }
 
@@ -480,6 +515,9 @@ static PluginError save_heic_impl(ImageDocument* doc, const char* filename, cons
     if (!enc_opts) {
         heif_encoder_release(encoder);
         heif_context_free(ctx);
+#if defined(HAVE_LCMS2)
+        if (icc_data) free(icc_data);
+#endif
         return PLUGIN_ERROR_OUT_OF_MEMORY;
     }
     enc_opts->version = 1;
@@ -491,6 +529,9 @@ static PluginError save_heic_impl(ImageDocument* doc, const char* filename, cons
             heif_encoding_options_free(enc_opts);
             heif_encoder_release(encoder);
             heif_context_free(ctx);
+#if defined(HAVE_LCMS2)
+            if (icc_data) free(icc_data);
+#endif
             return PLUGIN_ERROR_INVALID_PARAMETERS;
         }
 
@@ -504,7 +545,13 @@ static PluginError save_heic_impl(ImageDocument* doc, const char* filename, cons
             }
 
             heif_image* img = create_heif_image_from_surface(layer->cache_surface,
-                                                             layer->width, layer->height);
+                                                             layer->width, layer->height,
+#if defined(HAVE_LCMS2)
+                                                             icc_data, icc_size
+#else
+                                                             NULL, 0
+#endif
+            );
             if (!img) {
                 ret = PLUGIN_ERROR_FILE_WRITE_ERROR;
                 break;
@@ -529,16 +576,28 @@ static PluginError save_heic_impl(ImageDocument* doc, const char* filename, cons
             heif_encoding_options_free(enc_opts);
             heif_encoder_release(encoder);
             heif_context_free(ctx);
+#if defined(HAVE_LCMS2)
+            if (icc_data) free(icc_data);
+#endif
             return PLUGIN_ERROR_FILE_WRITE_ERROR;
         }
 
-        heif_image* img = create_heif_image_from_surface(composite, doc->width, doc->height);
+        heif_image* img = create_heif_image_from_surface(composite, doc->width, doc->height,
+#if defined(HAVE_LCMS2)
+                                                         icc_data, icc_size
+#else
+                                                         NULL, 0
+#endif
+        );
         cairo_surface_destroy(composite);
 
         if (!img) {
             heif_encoding_options_free(enc_opts);
             heif_encoder_release(encoder);
             heif_context_free(ctx);
+#if defined(HAVE_LCMS2)
+            if (icc_data) free(icc_data);
+#endif
             return PLUGIN_ERROR_FILE_WRITE_ERROR;
         }
 
@@ -562,6 +621,11 @@ static PluginError save_heic_impl(ImageDocument* doc, const char* filename, cons
             ret = PLUGIN_ERROR_FILE_WRITE_ERROR;
         }
     }
+
+#if defined(HAVE_LCMS2)
+    if (icc_data)
+        free(icc_data);
+#endif
 
     heif_encoding_options_free(enc_opts);
     heif_encoder_release(encoder);

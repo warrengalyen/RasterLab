@@ -707,6 +707,9 @@ static GByteArray* save_png_to_memory(ImageDocument* doc,
     struct png_memory_buffer mem_buf;
     GByteArray* result = NULL;
     png_uint_32 rowbytes;
+#if defined(HAVE_LIBPNG) && defined(HAVE_LCMS2)
+    void* icc_data = NULL;
+#endif
 
     /* Initialize libpng structures */
     png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, &error_info, png_error_handler, png_warning_handler);
@@ -749,6 +752,26 @@ static GByteArray* save_png_to_memory(ImageDocument* doc,
                  png_color_type, PNG_INTERLACE_NONE,
                  PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
 
+#if defined(HAVE_LIBPNG) && defined(HAVE_LCMS2)
+    /* Embed fresh sRGB ICC on every save; do not preserve original profile */
+    {
+        size_t icc_size = 0;
+        cmsHPROFILE srgb = icc_create_srgb_profile();
+        if (srgb && icc_profile_to_memory(srgb, &icc_data, &icc_size) && icc_data && icc_size > 0) {
+            icc_destroy(srgb);
+            png_set_iCCP(png_ptr, info_ptr, (png_const_charp) "sRGB IEC61966-2.1", PNG_COMPRESSION_TYPE_BASE,
+                         (png_bytep)icc_data, (png_uint_32)icc_size);
+        } else {
+            if (srgb)
+                icc_destroy(srgb);
+            if (icc_data) {
+                free(icc_data);
+                icc_data = NULL;
+            }
+        }
+    }
+#endif
+
     /* Write info */
     png_write_info(png_ptr, info_ptr);
 
@@ -767,6 +790,12 @@ static GByteArray* save_png_to_memory(ImageDocument* doc,
 
     /* Get the result */
     result = mem_buf.buffer;
+
+#if defined(HAVE_LIBPNG) && defined(HAVE_LCMS2)
+    if (icc_data) {
+        free(icc_data);
+    }
+#endif
 
     /* Cleanup */
     png_destroy_write_struct(&png_ptr, &info_ptr);
@@ -788,6 +817,9 @@ static PluginError save_png(ImageDocument* doc, const char* filename, const Save
     png_bytep* row_pointers = NULL;
     png_bytep image_data = NULL;
     PNGSaveOptions* png_opts = NULL;
+#if defined(HAVE_LIBPNG) && defined(HAVE_LCMS2)
+    void* icc_data = NULL;
+#endif
     int compression_level = 9;
     int filter_type = PNG_FILTER_NONE;
     int compression_strategy = PNG_Z_DEFAULT_STRATEGY;
@@ -1090,6 +1122,26 @@ static PluginError save_png(ImageDocument* doc, const char* filename, const Save
                  png_color_type, PNG_INTERLACE_NONE,
                  PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
 
+#if defined(HAVE_LIBPNG) && defined(HAVE_LCMS2)
+    /* Embed fresh sRGB ICC on every save; do not preserve original profile */
+    {
+        size_t icc_size = 0;
+        cmsHPROFILE srgb = icc_create_srgb_profile();
+        if (srgb && icc_profile_to_memory(srgb, &icc_data, &icc_size) && icc_data && icc_size > 0) {
+            icc_destroy(srgb);
+            png_set_iCCP(png_ptr, info_ptr, (png_const_charp) "sRGB IEC61966-2.1", PNG_COMPRESSION_TYPE_BASE,
+                         (png_bytep)icc_data, (png_uint_32)icc_size);
+        } else {
+            if (srgb)
+                icc_destroy(srgb);
+            if (icc_data) {
+                free(icc_data);
+                icc_data = NULL;
+            }
+        }
+    }
+#endif
+
     /* Add bKGD chunk if requested */
     if (use_converted_data && png_opts && png_opts->embed_background_color) {
         png_color_16 background;
@@ -1137,6 +1189,12 @@ static PluginError save_png(ImageDocument* doc, const char* filename, const Save
 
     /* Finish writing */
     png_write_end(png_ptr, NULL);
+
+#if defined(HAVE_LIBPNG) && defined(HAVE_LCMS2)
+    if (icc_data) {
+        free(icc_data);
+    }
+#endif
 
     /* Cleanup */
     if (use_converted_data) {

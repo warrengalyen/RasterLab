@@ -450,11 +450,13 @@ static bool is_image_grayscale(guchar* surface_data, int surface_stride, guint w
 /**
  * Write a single page to TIFF file
  * Helper function for save_tiff
+ * icc_data/icc_size: optional sRGB ICC to embed (color only); NULL/0 to skip
  */
 static PluginError write_tiff_page(TIFF* tif, cairo_surface_t* surface, guint width, guint height,
                                    TIFFSaveOptions* tiff_opts, TIFFColorCompression color_compression,
                                    TIFFMonochromeCompression mono_compression, TIFFColorFormat color_format,
-                                   TIFFTransparencyFormat transparency_format) {
+                                   TIFFTransparencyFormat transparency_format,
+                                   const void* icc_data, size_t icc_size) {
     guchar* surface_data;
     int surface_stride;
     bool is_grayscale = false;
@@ -567,6 +569,12 @@ static PluginError write_tiff_page(TIFF* tif, cairo_surface_t* surface, guint wi
         TIFFSetField(tif, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB);
         TIFFSetField(tif, TIFFTAG_SAMPLESPERPIXEL, use_alpha ? 4 : 3);
     }
+
+#if defined(HAVE_LIBTIFF) && defined(HAVE_LCMS2)
+    if (!is_grayscale && icc_data != NULL && icc_size > 0) {
+        TIFFSetField(tif, TIFFTAG_ICCPROFILE, (uint32_t)icc_size, icc_data);
+    }
+#endif
 
     /* Allocate scanline buffer */
     uint32_t bytes_per_pixel = is_grayscale ? (use_alpha ? 2 : 1) : (use_alpha ? 4 : 3);
@@ -706,17 +714,39 @@ static PluginError save_tiff(ImageDocument* doc, const char* filename, const Sav
         return PLUGIN_ERROR_FILE_WRITE_ERROR;
     }
 
+#if defined(HAVE_LIBTIFF) && defined(HAVE_LCMS2)
+    void* icc_data = NULL;
+    size_t icc_size = 0;
+    cmsHPROFILE srgb = icc_create_srgb_profile();
+    if (srgb && icc_profile_to_memory(srgb, &icc_data, &icc_size)) {
+        icc_destroy(srgb);
+    } else {
+        if (srgb) icc_destroy(srgb);
+        icc_data = NULL;
+        icc_size = 0;
+    }
+#endif
+
     /* Determine if we're saving single page or multipage */
     if (page_format == TIFF_PAGE_FORMAT_SINGLE_PAGE) {
         /* Single page mode: save composited image */
         composite = document_export_composite_surface(doc);
         if (!composite) {
             TIFFClose(tif);
+#if defined(HAVE_LIBTIFF) && defined(HAVE_LCMS2)
+            if (icc_data) free(icc_data);
+#endif
             return PLUGIN_ERROR_FILE_WRITE_ERROR;
         }
 
         error = write_tiff_page(tif, composite, doc->width, doc->height, tiff_opts,
-                                color_compression, mono_compression, color_format, transparency_format);
+                                color_compression, mono_compression, color_format, transparency_format,
+#if defined(HAVE_LIBTIFF) && defined(HAVE_LCMS2)
+                                icc_data, icc_size
+#else
+                                NULL, 0
+#endif
+        );
         cairo_surface_destroy(composite);
     } else {
         /* Multipage mode: save one page per layer */
@@ -739,7 +769,13 @@ static PluginError save_tiff(ImageDocument* doc, const char* filename, const Sav
 
             /* Write this layer as a page */
             error = write_tiff_page(tif, layer->cache_surface, layer->width, layer->height, tiff_opts,
-                                    color_compression, mono_compression, color_format, transparency_format);
+                                    color_compression, mono_compression, color_format, transparency_format,
+#if defined(HAVE_LIBTIFF) && defined(HAVE_LCMS2)
+                                    icc_data, icc_size
+#else
+                                    NULL, 0
+#endif
+            );
             if (error != PLUGIN_ERROR_NONE) {
                 break; /* Stop on error */
             }
@@ -756,6 +792,11 @@ static PluginError save_tiff(ImageDocument* doc, const char* filename, const Sav
 
     /* Close file (writes final directory) */
     TIFFClose(tif);
+
+#if defined(HAVE_LIBTIFF) && defined(HAVE_LCMS2)
+    if (icc_data)
+        free(icc_data);
+#endif
 
     return error;
 }
