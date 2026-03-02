@@ -31,3 +31,4 @@
 [submodule "lib/openexr"]
 	path = lib/openexr
 	url = https://github.com/AcademySoftwareFoundation/openexr.git
+    ignore = dirty
