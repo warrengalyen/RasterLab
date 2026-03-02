@@ -11,6 +11,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#if defined(HAVE_LIBJPEG) && defined(HAVE_LCMS2)
+#include "color_manager/icc_utils.h"
+#endif
 
 #ifdef HAVE_LIBJPEG
 #include <jerror.h>
@@ -144,7 +147,34 @@ static PluginError load_jpeg(ImageDocument* doc, const char* filename) {
     /* Initialize JPEG decompression */
     jpeg_create_decompress(&cinfo);
     jpeg_stdio_src(&cinfo, infile);
+    jpeg_save_markers(&cinfo, JPEG_APP0 + 2, 0xFFFF); /* APP2 for ICC profile */
     jpeg_read_header(&cinfo, TRUE);
+
+#if defined(HAVE_LIBJPEG) && defined(HAVE_LCMS2)
+    /* JPEG: libjpeg marker parsing. jpeg_save_markers(APP2) + jpeg_read_icc_profile() collects
+     * APP2 segments labeled "ICC_PROFILE" and reassembles multi-part ICC in correct sequence.
+     * Pass reassembled buffer to icc_profile_from_memory(). Fall back to NULL profile (sRGB) on any failure. */
+    {
+        JOCTET* icc_data = NULL;
+        unsigned int icc_len = 0;
+        if (jpeg_read_icc_profile(&cinfo, &icc_data, &icc_len) && icc_data != NULL && icc_len > 0) {
+            cmsHPROFILE profile = icc_profile_from_memory(icc_data, (size_t)icc_len);
+            free(icc_data);
+            icc_data = NULL;
+            if (profile) {
+                g_message("JPEG: embedded ICC profile found (%u bytes), will convert to sRGB", (unsigned)icc_len);
+                ImageFormatHostAPI* api = plugin_host_api_get();
+                if (api && api->document_set_load_icc_profile)
+                    api->document_set_load_icc_profile(doc, profile);
+                else
+                    icc_destroy(profile);
+            } else {
+                g_warning("JPEG plugin: Invalid or non-RGB embedded ICC profile; assuming sRGB");
+            }
+        }
+        /* No APP2 ICC or malformed */
+    }
+#endif
 
     /* Start decompression */
     jpeg_start_decompress(&cinfo);

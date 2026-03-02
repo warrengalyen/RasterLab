@@ -179,6 +179,18 @@ void cm_premultiply_argb32(uint8_t* buffer, size_t pixel_count);
 void cm_convert_sdr_to_srgb_argb32(uint8_t* buffer, size_t pixel_count,
                                    const void* icc_data, size_t icc_size);
 
+/**
+ * Convert SDR ARGB32 buffer from embedded profile (cmsHPROFILE) to sRGB.
+ * Same buffer layout as cm_convert_sdr_to_srgb_argb32. Caller retains ownership
+ * of \a source_profile_handle (do not destroy it before calling this).
+ *
+ * \param buffer              ARGB32 pixel buffer (modified in place)
+ * \param pixel_count         Number of pixels
+ * \param source_profile_handle  Source ICC profile (cmsHPROFILE), not owned
+ */
+void cm_convert_sdr_to_srgb_argb32_from_profile(uint8_t* buffer, size_t pixel_count,
+                                                void* source_profile_handle);
+
 /* -------------------------------------------------------------------------
  * HDR linear conversion (before tone mapping)
  * ------------------------------------------------------------------------- */

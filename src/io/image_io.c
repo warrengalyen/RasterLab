@@ -1,6 +1,10 @@
 #include "document.h"
 #include "image_format_plugin.h"
 #include "plugins/format_registry.h"
+#if HAVE_LCMS2
+#include "color_manager.h"
+#include "color_manager/icc_utils.h"
+#endif
 #include <glib.h>
 #include <glib/gstdio.h>
 #include <stdio.h>
@@ -129,6 +133,24 @@ gboolean image_io_load(ImageDocument* doc, const char* filename, PluginError* er
     gchar* basename = g_path_get_basename(filename);
     g_free(doc->filename);
     doc->filename = basename;
+
+#if HAVE_LCMS2
+    /* Apply load-time ICC conversion if plugin set a profile */
+    if (doc->load_icc_profile && document_get_layer_count(doc) > 0) {
+        ImageLayer* layer = document_get_layer(doc, 0);
+        if (layer && layer->surface) {
+            cairo_surface_flush(layer->surface);
+            guchar* data = cairo_image_surface_get_data(layer->surface);
+            if (data) {
+                size_t pixel_count = (size_t)doc->width * (size_t)doc->height;
+                cm_convert_sdr_to_srgb_argb32_from_profile(data, pixel_count, doc->load_icc_profile);
+                cairo_surface_mark_dirty(layer->surface);
+            }
+            icc_destroy((cmsHPROFILE)doc->load_icc_profile);
+        }
+        doc->load_icc_profile = NULL;
+    }
+#endif
 
     if (error_out) {
         *error_out = PLUGIN_ERROR_NONE;

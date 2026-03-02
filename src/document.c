@@ -1276,6 +1276,7 @@ ImageDocument* document_new(const gchar* filename, gboolean create_worker_pool, 
     doc->channels = 0;
     doc->bit_depth = 0;
     doc->has_alpha = FALSE;
+    doc->load_icc_profile = NULL;
 
     /* Initialize rendering pipeline */
     doc->layers = NULL;

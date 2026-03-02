@@ -362,6 +362,35 @@ void cm_convert_sdr_to_srgb_argb32(uint8_t* buffer, size_t pixel_count,
     cm_profile_destroy(src);
 }
 
+void cm_convert_sdr_to_srgb_argb32_from_profile(uint8_t* buffer, size_t pixel_count,
+                                                void* source_profile_handle) {
+    if (!buffer || !source_profile_handle)
+        return;
+
+    cmsHPROFILE src = (cmsHPROFILE)source_profile_handle;
+    cmsHPROFILE dst = cmsCreate_sRGBProfile();
+    if (!dst)
+        return;
+
+    cmsHTRANSFORM transform = cmsCreateTransform(
+        src,  TYPE_RGBA_8,
+        dst, TYPE_RGBA_8,
+        INTENT_PERCEPTUAL,
+        cmsFLAGS_COPY_ALPHA
+    );
+    cmsCloseProfile(dst);
+    if (!transform)
+        return;
+
+    cm_unpremultiply_argb32(buffer, pixel_count);
+    argb32_swap_rb(buffer, pixel_count);
+    cmsDoTransform(transform, buffer, buffer, (cmsUInt32Number)pixel_count);
+    argb32_swap_rb(buffer, pixel_count);
+    cm_premultiply_argb32(buffer, pixel_count);
+
+    cmsDeleteTransform(transform);
+}
+
 /* -------------------------------------------------------------------------
  * HDR linear conversion (linear space only; no tone mapping / gamma / 8-bit)
  * ------------------------------------------------------------------------- */

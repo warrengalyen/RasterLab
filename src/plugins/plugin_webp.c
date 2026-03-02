@@ -14,6 +14,9 @@
 #include <webp/decode.h>
 #include <webp/demux.h>
 #include <webp/encode.h>
+#if defined(HAVE_LCMS2)
+#include "color_manager/icc_utils.h"
+#endif
 
 /**
  * WebP compression method
@@ -194,6 +197,35 @@ static PluginError load_webp(ImageDocument* doc, const char* filename) {
     canvas_width = WebPDemuxGetI(demux, WEBP_FF_CANVAS_WIDTH);
     canvas_height = WebPDemuxGetI(demux, WEBP_FF_CANVAS_HEIGHT);
     frame_count = WebPDemuxGetI(demux, WEBP_FF_FRAME_COUNT);
+
+#if defined(HAVE_LIBWEBP) && defined(HAVE_LCMS2)
+    /* WebP: libwebp demux API. Extract ICC chunk from container (ICCP chunk).
+     * Pass raw data to icc_profile_from_memory(). Fall back to NULL profile (sRGB) on any failure. */
+    {
+        WebPChunkIterator chunk_iter;
+        if (WebPDemuxGetChunk(demux, "ICCP", 1, &chunk_iter)) {
+            size_t icc_size = (size_t)chunk_iter.chunk.size;
+            const void* icc_bytes = chunk_iter.chunk.bytes;
+            if (icc_bytes != NULL && icc_size > 0) {
+                cmsHPROFILE profile = icc_profile_from_memory(icc_bytes, icc_size);
+                WebPDemuxReleaseChunkIterator(&chunk_iter);
+                if (profile) {
+                    g_message("WebP: embedded ICC profile found (%zu bytes), will convert to sRGB", icc_size);
+                    ImageFormatHostAPI* api = plugin_host_api_get();
+                    if (api && api->document_set_load_icc_profile)
+                        api->document_set_load_icc_profile(doc, profile);
+                    else
+                        icc_destroy(profile);
+                } else {
+                    g_warning("WebP plugin: Invalid or non-RGB embedded ICC profile; assuming sRGB");
+                }
+            } else {
+                WebPDemuxReleaseChunkIterator(&chunk_iter);
+            }
+        }
+        /* No ICCP chunk or malformed */
+    }
+#endif
 
     if (canvas_width <= 0 || canvas_height <= 0 || canvas_width > 65535 || canvas_height > 65535) {
         g_warning("WebP plugin: Invalid canvas dimensions: %ux%u", canvas_width, canvas_height);

@@ -27,6 +27,9 @@
 #ifdef HAVE_LIBHEIF
 #include <libheif/heif.h>
 #include <libheif/heif_sequences.h>
+#if defined(HAVE_LCMS2)
+#include "color_manager/icc_utils.h"
+#endif
 
 /* ISO Base Media / HEIC file structure: ftyp box at offset 4 */
 static const uint8_t HEIC_FTYP[4] = {'f', 't', 'y', 'p'};
@@ -280,6 +283,34 @@ static PluginError load_heic(ImageDocument* doc, const char* filename) {
         err = heif_context_get_image_handle(ctx, ids[i], &handle);
         if (err.code != heif_error_Ok || !handle)
             continue;
+
+#if defined(HAVE_LCMS2)
+        /* HEIF: heif_image_handle_get_raw_color_profile_size(); allocate buffer; get profile;
+         * pass to icc_profile_from_memory(). Fall back to NULL profile (sRGB) on any failure. */
+        if (loaded_count == 0) {
+            size_t profile_size = heif_image_handle_get_raw_color_profile_size(handle);
+            if (profile_size > 0 && profile_size <= 16 * 1024 * 1024) { /* cap 16MB to avoid malformed */
+                uint8_t* profile_buf = g_malloc(profile_size);
+                if (profile_buf) {
+                    heif_error prof_err = heif_image_handle_get_raw_color_profile(handle, profile_buf);
+                    if (prof_err.code == heif_error_Ok) {
+                        cmsHPROFILE profile = icc_profile_from_memory(profile_buf, profile_size);
+                        if (profile) {
+                            g_message("HEIC: embedded ICC profile found (%zu bytes), will convert to sRGB", profile_size);
+                            ImageFormatHostAPI* api = plugin_host_api_get();
+                            if (api && api->document_set_load_icc_profile)
+                                api->document_set_load_icc_profile(doc, profile);
+                            else
+                                icc_destroy(profile);
+                        } else {
+                            g_warning("HEIC plugin: Invalid or non-RGB embedded ICC profile; assuming sRGB");
+                        }
+                    }
+                    g_free(profile_buf);
+                }
+            }
+        }
+#endif
 
         const char* name = (filled > 1) ? (loaded_count == 0 ? "Frame 1" : NULL) : "Background";
         if (name != NULL)

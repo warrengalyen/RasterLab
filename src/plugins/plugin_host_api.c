@@ -130,6 +130,16 @@ static void host_document_set_metadata(ImageDocument* doc, uint32_t width, uint3
 }
 
 /**
+ * Set load-time ICC profile (opaque cmsHPROFILE). Host applies conversion and destroys profile.
+ */
+static void host_document_set_load_icc_profile(ImageDocument* doc, void* profile) {
+    if (!doc) {
+        return;
+    }
+    doc->load_icc_profile = profile;
+}
+
+/**
  * Get number of layers
  */
 static uint32_t host_document_get_layer_count(ImageDocument* doc) {
@@ -238,6 +248,7 @@ ImageFormatHostAPI* plugin_host_api_get(void) {
     host_api.layer_get_pixel_buffer = host_layer_get_pixel_buffer;
     host_api.document_get_composite_pixels = host_document_get_composite_pixels;
     host_api.document_set_metadata = host_document_set_metadata;
+    host_api.document_set_load_icc_profile = host_document_set_load_icc_profile;
     host_api.document_get_layer_count = host_document_get_layer_count;
     host_api.document_get_layer_descriptor = host_document_get_layer_descriptor;
     host_api.layer_descriptor_free = host_layer_descriptor_free;

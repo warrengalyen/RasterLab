@@ -14,6 +14,9 @@
 #ifdef HAVE_LIBTIFF
 #include <tiff.h>
 #include <tiffio.h>
+#if defined(HAVE_LCMS2)
+#include "color_manager/icc_utils.h"
+#endif
 
 /**
  * TIFF color compression options
@@ -330,6 +333,29 @@ static PluginError load_tiff(ImageDocument* doc, const char* filename) {
     if (!TIFFGetField(tif, TIFFTAG_PLANARCONFIG, &planar_config)) {
         planar_config = PLANARCONFIG_CONTIG;
     }
+
+#if defined(HAVE_LIBTIFF) && defined(HAVE_LCMS2)
+    /* TIFF: libtiff TIFFGetField(tif, TIFFTAG_ICCPROFILE, &len, &data). Pass to icc_profile_from_memory().
+     * Fall back to NULL profile (sRGB) on any failure or malformed ICC. */
+    {
+        uint32_t icc_len = 0;
+        void* icc_data = NULL;
+        if (TIFFGetField(tif, TIFFTAG_ICCPROFILE, &icc_len, &icc_data) && icc_data != NULL && icc_len > 0) {
+            cmsHPROFILE profile = icc_profile_from_memory(icc_data, (size_t)icc_len);
+            if (profile) {
+                g_message("TIFF: embedded ICC profile found (%u bytes), will convert to sRGB", (unsigned)icc_len);
+                ImageFormatHostAPI* api = plugin_host_api_get();
+                if (api && api->document_set_load_icc_profile)
+                    api->document_set_load_icc_profile(doc, profile);
+                else
+                    icc_destroy(profile);
+            } else {
+                g_warning("TIFF plugin: Invalid or non-RGB embedded ICC profile; assuming sRGB");
+            }
+        }
+        /* No ICC profile tag or malformed */
+    }
+#endif
 
     /* Set document metadata based on first page */
     doc->width = width;

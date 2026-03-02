@@ -11,6 +11,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#if defined(HAVE_LIBPNG) && defined(HAVE_LCMS2)
+#include "color_manager/icc_utils.h"
+#endif
 
 #ifdef HAVE_LIBPNG
 #include <png.h>
@@ -267,6 +270,32 @@ static PluginError load_png(ImageDocument* doc, const char* filename) {
 
     /* Get updated properties */
     png_get_IHDR(png_ptr, info_ptr, &width, &height, &bit_depth, &color_type, &interlace_type, NULL, NULL);
+
+#if defined(HAVE_LIBPNG) && defined(HAVE_LCMS2)
+    /* PNG: use libpng png_get_iCCP(); get name, compression type, profile data, length.
+     * Pass raw profile to icc_profile_from_memory(). Fall back to NULL profile (sRGB) on any failure. */
+    {
+        png_charp iccp_name = NULL;
+        int iccp_compression = 0;
+        png_bytep iccp_profile = NULL;
+        png_uint_32 iccp_proflen = 0;
+        if (png_get_iCCP(png_ptr, info_ptr, &iccp_name, &iccp_compression, &iccp_profile, &iccp_proflen) &&
+            iccp_profile != NULL && iccp_proflen > 0) {
+            cmsHPROFILE profile = icc_profile_from_memory(iccp_profile, (size_t)iccp_proflen);
+            if (profile) {
+                g_message("PNG: embedded ICC profile found (%u bytes), will convert to sRGB", (unsigned)iccp_proflen);
+                ImageFormatHostAPI* api = plugin_host_api_get();
+                if (api && api->document_set_load_icc_profile)
+                    api->document_set_load_icc_profile(doc, profile);
+                else
+                    icc_destroy(profile);
+            } else {
+                g_warning("PNG plugin: Invalid or non-RGB embedded ICC profile; assuming sRGB");
+            }
+        }
+        /* No iCCP chunk or malformed */
+    }
+#endif
 
     /* Set document metadata */
     doc->width = width;

@@ -163,6 +163,9 @@ typedef struct ImageFormatHostAPI {
     void (*document_set_metadata)(ImageDocument* doc, uint32_t width, uint32_t height,
                                   uint32_t channels, uint32_t bit_depth, bool has_alpha);
 
+    /* Set load-time ICC profile (opaque cmsHPROFILE). Host applies conversion and destroys profile. */
+    void (*document_set_load_icc_profile)(ImageDocument* doc, void* profile);
+
     /* Get number of layers in document */
     uint32_t (*document_get_layer_count)(ImageDocument* doc);
 

@@ -177,6 +177,9 @@ typedef struct ImageDocument {
     guint bit_depth;    /* Bits per channel (usually 8) */
     gboolean has_alpha; /* Whether image has alpha channel */
 
+    /* Load-time ICC profile (opaque cmsHPROFILE). Set by format plugin, applied and freed by host. */
+    void* load_icc_profile;
+
     /* Rendering pipeline */
     GList* layers;                      /* List of ImageLayer objects */
     ImageLayer* selected_layer;         /* Currently selected layer for tools */
