@@ -8,6 +8,7 @@
 #include <lcms2.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 
 /* Internal: ColorProfile holds lcms handle and optional ICC blob. */
 struct ColorProfile {
@@ -176,4 +177,48 @@ void cm_transform_destroy(ColorTransform* transform) {
         cmsDeleteTransform((cmsHTRANSFORM)transform->xform);
 
     free(transform);
+}
+
+/* -------------------------------------------------------------------------
+ * Premultiplied ARGB32 utilities (Cairo layout: BGRA in memory)
+ * ------------------------------------------------------------------------- */
+
+void cm_unpremultiply_argb32(uint8_t* buffer, size_t pixel_count) {
+    if (!buffer)
+        return;
+
+    for (size_t i = 0; i < pixel_count; i++) {
+        uint8_t* p = buffer + (i * 4);
+        uint8_t b = p[0], g = p[1], r = p[2], a = p[3];
+
+        if (a == 0) {
+            p[0] = 0;
+            p[1] = 0;
+            p[2] = 0;
+            /* p[3] stays 0 */
+            continue;
+        }
+
+        /* Straight = (premul * 255 + a/2) / a; use uint32_t to avoid overflow */
+        p[0] = (uint8_t)(((uint32_t)b * 255 + (a / 2)) / a);
+        p[1] = (uint8_t)(((uint32_t)g * 255 + (a / 2)) / a);
+        p[2] = (uint8_t)(((uint32_t)r * 255 + (a / 2)) / a);
+        /* p[3] = a unchanged */
+    }
+}
+
+void cm_premultiply_argb32(uint8_t* buffer, size_t pixel_count) {
+    if (!buffer)
+        return;
+
+    for (size_t i = 0; i < pixel_count; i++) {
+        uint8_t* p = buffer + (i * 4);
+        uint8_t b = p[0], g = p[1], r = p[2], a = p[3];
+
+        /* Premul = (c * a + 127) / 255 */
+        p[0] = (uint8_t)((b * (uint32_t)a + 127) / 255);
+        p[1] = (uint8_t)((g * (uint32_t)a + 127) / 255);
+        p[2] = (uint8_t)((r * (uint32_t)a + 127) / 255);
+        /* p[3] = a unchanged */
+    }
 }

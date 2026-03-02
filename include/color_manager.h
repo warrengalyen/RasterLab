@@ -9,6 +9,7 @@
 #define COLOR_MANAGER_H
 
 #include <stddef.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -96,6 +97,28 @@ void cm_transform_apply(ColorTransform* transform, void* buffer, size_t pixel_co
  * \param transform  Transform to destroy, or NULL
  */
 void cm_transform_destroy(ColorTransform* transform);
+
+/* -------------------------------------------------------------------------
+ * Premultiplied ARGB32 utilities (Cairo-compatible).
+ * Memory layout: 4 bytes per pixel, BGRA order (byte 0 = B, 1 = G, 2 = R, 3 = A).
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Convert a Cairo ARGB32 buffer from premultiplied to straight (unpremultiplied) alpha.
+ * When alpha is 0, R/G/B are set to 0 to avoid divide-by-zero.
+ *
+ * \param buffer       ARGB32 pixel buffer (modified in place)
+ * \param pixel_count  Number of pixels
+ */
+void cm_unpremultiply_argb32(uint8_t* buffer, size_t pixel_count);
+
+/**
+ * Convert a Cairo ARGB32 buffer from straight to premultiplied alpha.
+ *
+ * \param buffer       ARGB32 pixel buffer (modified in place)
+ * \param pixel_count  Number of pixels
+ */
+void cm_premultiply_argb32(uint8_t* buffer, size_t pixel_count);
 
 #ifdef __cplusplus
 }
