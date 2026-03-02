@@ -372,16 +372,19 @@ void cm_convert_sdr_to_srgb_argb32_from_profile(uint8_t* buffer, size_t pixel_co
     if (!dst)
         return;
 
+    /* INTENT_PERCEPTUAL, cmsFLAGS_BLACKPOINTCOMPENSATION; alpha copied, no premultiplied data through CMS */
+    cmsUInt32Number flags = cmsFLAGS_COPY_ALPHA | cmsFLAGS_BLACKPOINTCOMPENSATION;
     cmsHTRANSFORM transform = cmsCreateTransform(
         src,  TYPE_RGBA_8,
         dst, TYPE_RGBA_8,
         INTENT_PERCEPTUAL,
-        cmsFLAGS_COPY_ALPHA
+        flags
     );
     cmsCloseProfile(dst);
     if (!transform)
         return;
 
+    /* Do NOT allow premultiplied data through CMS: convert to straight alpha, transform, then premultiply for Cairo */
     cm_unpremultiply_argb32(buffer, pixel_count);
     argb32_swap_rb(buffer, pixel_count);
     cmsDoTransform(transform, buffer, buffer, (cmsUInt32Number)pixel_count);
