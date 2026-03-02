@@ -517,23 +517,32 @@ if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/libwebp/CMakeLists
         # libwebpdemux outputs libwebpdemux.dll
         set(LIBWEBPDEMUX_DLL_NAME "libwebpdemux.dll")
         set(LIBWEBPDEMUX_DLL_PATH "${LIBWEBP_INSTALL_DIR}/bin/${LIBWEBPDEMUX_DLL_NAME}")
-        
+
+        # libwebpmux outputs libwebpmux.dll
+        set(LIBWEBPMUX_DLL_NAME "libwebpmux.dll")
+        set(LIBWEBPMUX_DLL_PATH "${LIBWEBP_INSTALL_DIR}/bin/${LIBWEBPMUX_DLL_NAME}")
+
         # For MinGW, the import library is libwebp.dll.a
         if(MINGW)
             set(LIBWEBP_IMPLIB_NAME "libwebp.dll.a")
             set(LIBWEBPDEMUX_IMPLIB_NAME "libwebpdemux.dll.a")
+            set(LIBWEBPMUX_IMPLIB_NAME "libwebpmux.dll.a")
         else()
             set(LIBWEBP_IMPLIB_NAME "webp.lib")
             set(LIBWEBPDEMUX_IMPLIB_NAME "webpdemux.lib")
+            set(LIBWEBPMUX_IMPLIB_NAME "webpmux.lib")
         endif()
         set(LIBWEBP_IMPLIB_PATH "${LIBWEBP_INSTALL_DIR}/lib/${LIBWEBP_IMPLIB_NAME}")
         set(LIBWEBPDEMUX_IMPLIB_PATH "${LIBWEBP_INSTALL_DIR}/lib/${LIBWEBPDEMUX_IMPLIB_NAME}")
+        set(LIBWEBPMUX_IMPLIB_PATH "${LIBWEBP_INSTALL_DIR}/lib/${LIBWEBPMUX_IMPLIB_NAME}")
     else()
         # On Unix-like systems, shared library is in lib/
         set(LIBWEBP_LIB_NAME "libwebp${CMAKE_SHARED_LIBRARY_SUFFIX}")
         set(LIBWEBP_LIB_PATH "${LIBWEBP_INSTALL_DIR}/lib/${LIBWEBP_LIB_NAME}")
         set(LIBWEBPDEMUX_LIB_NAME "libwebpdemux${CMAKE_SHARED_LIBRARY_SUFFIX}")
         set(LIBWEBPDEMUX_LIB_PATH "${LIBWEBP_INSTALL_DIR}/lib/${LIBWEBPDEMUX_LIB_NAME}")
+        set(LIBWEBPMUX_LIB_NAME "libwebpmux${CMAKE_SHARED_LIBRARY_SUFFIX}")
+        set(LIBWEBPMUX_LIB_PATH "${LIBWEBP_INSTALL_DIR}/lib/${LIBWEBPMUX_LIB_NAME}")
     endif()
     
     # Configure CMake arguments for libwebp
@@ -549,7 +558,7 @@ if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/libwebp/CMakeLists
         -DWEBP_BUILD_IMG2WEBP=OFF
         -DWEBP_BUILD_VWEBP=OFF
         -DWEBP_BUILD_WEBPINFO=OFF
-        -DWEBP_BUILD_WEBPMUX=OFF
+        -DWEBP_BUILD_WEBPMUX=ON
         -DWEBP_BUILD_EXTRAS=OFF
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON
     )
@@ -588,6 +597,7 @@ if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/libwebp/CMakeLists
     # Create imported target for linking
     add_library(webp SHARED IMPORTED GLOBAL)
     add_library(webpdemux SHARED IMPORTED GLOBAL)
+    add_library(webpmux SHARED IMPORTED GLOBAL)
     
     # Set properties
     if(WIN32)
@@ -603,6 +613,12 @@ if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/libwebp/CMakeLists
             IMPORTED_LOCATION "${LIBWEBPDEMUX_DLL_PATH}"
             IMPORTED_IMPLIB "${LIBWEBPDEMUX_IMPLIB_PATH}"
         )
+
+        set_target_properties(webpmux PROPERTIES
+            INTERFACE_INCLUDE_DIRECTORIES "${LIBWEBP_INCLUDE_DIRS}"
+            IMPORTED_LOCATION "${LIBWEBPMUX_DLL_PATH}"
+            IMPORTED_IMPLIB "${LIBWEBPMUX_IMPLIB_PATH}"
+        )
         
         # Copy DLLs to bin directory at build time
         add_custom_command(TARGET libwebp_external POST_BUILD
@@ -612,6 +628,9 @@ if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/libwebp/CMakeLists
                 "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/"
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 "${LIBWEBPDEMUX_DLL_PATH}"
+                "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${LIBWEBPMUX_DLL_PATH}"
                 "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/"
             COMMENT "Copying libwebp DLLs to bin directory"
         )
@@ -626,6 +645,11 @@ if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/libwebp/CMakeLists
             INTERFACE_INCLUDE_DIRECTORIES "${LIBWEBP_INCLUDE_DIRS}"
             IMPORTED_LOCATION "${LIBWEBPDEMUX_LIB_PATH}"
         )
+
+        set_target_properties(webpmux PROPERTIES
+            INTERFACE_INCLUDE_DIRECTORIES "${LIBWEBP_INCLUDE_DIRS}"
+            IMPORTED_LOCATION "${LIBWEBPMUX_LIB_PATH}"
+        )
         
         # Copy shared libraries to bin directory at build time
         add_custom_command(TARGET libwebp_external POST_BUILD
@@ -636,12 +660,18 @@ if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/libwebp/CMakeLists
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 "${LIBWEBPDEMUX_LIB_PATH}"
                 "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${LIBWEBPMUX_LIB_PATH}"
+                "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/"
             COMMENT "Copying libwebp shared libraries to bin directory"
         )
     endif()
     
-    # Set dependency: webpdemux depends on webp
+    # Set dependency: webpdemux and webpmux depend on webp
     set_target_properties(webpdemux PROPERTIES
+        INTERFACE_LINK_LIBRARIES webp
+    )
+    set_target_properties(webpmux PROPERTIES
         INTERFACE_LINK_LIBRARIES webp
     )
     
@@ -661,6 +691,7 @@ else()
     message(STATUS "libwebp submodule not found, trying system libwebp")
     pkg_check_modules(LIBWEBP libwebp)
     pkg_check_modules(LIBWEBPDEMUX libwebpdemux)
+    pkg_check_modules(LIBWEBPMUX libwebpmux)
     
     if(LIBWEBP_FOUND)
         include_directories(${LIBWEBP_INCLUDE_DIRS})
@@ -669,6 +700,11 @@ else()
             message(STATUS "Using system libwebpdemux: ${LIBWEBPDEMUX_LIBRARIES}")
         else()
             message(WARNING "libwebpdemux not found. Animated WebP support may not work.")
+        endif()
+        if(LIBWEBPMUX_FOUND)
+            message(STATUS "Using system libwebpmux: ${LIBWEBPMUX_LIBRARIES}")
+        else()
+            message(WARNING "libwebpmux not found. WebP ICC embedding may not work.")
         endif()
     else()
         message(WARNING "libwebp not found. WebP plugin will not be available.")

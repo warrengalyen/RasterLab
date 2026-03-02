@@ -20,6 +20,9 @@
 #if HAVE_LIBHEIF && HAVE_LIBAOM
 #include <libheif/heif.h>
 #include <libheif/heif_sequences.h>
+#if defined(HAVE_LCMS2)
+#include "color_manager/icc_utils.h"
+#endif
 #endif
 
 /* ISO Base Media / AVIF file structure: ftyp box at offset 4 */
@@ -106,10 +109,12 @@ static void cairo_argb32_to_heif_rgba(const uint8_t* src, uint8_t* dst,
 }
 
 /**
- * Create heif_image from cairo_surface_t (ARGB32)
+ * Create heif_image from cairo_surface_t (ARGB32).
+ * icc_data/icc_size: optional sRGB ICC to embed; NULL/0 to skip.
  */
 static heif_image* create_heif_image_from_surface(cairo_surface_t* surface,
-                                                  guint width, guint height) {
+                                                  guint width, guint height,
+                                                  const void* icc_data, size_t icc_size) {
     heif_image* img = NULL;
     heif_error err;
 
@@ -131,6 +136,15 @@ static heif_image* create_heif_image_from_surface(cairo_surface_t* surface,
         heif_image_release(img);
         return NULL;
     }
+
+#if defined(HAVE_LCMS2)
+    if (icc_data != NULL && icc_size > 0) {
+        heif_error prof_err = heif_image_set_raw_color_profile(img, "prof", icc_data, icc_size);
+        if (prof_err.code != heif_error_Ok) {
+            /* Non-fatal; continue without embedded profile */
+        }
+    }
+#endif
 
     int dst_stride;
     uint8_t* dst = heif_image_get_plane(img, heif_channel_interleaved, &dst_stride);
@@ -275,6 +289,33 @@ static PluginError load_avif(ImageDocument* doc, const char* filename) {
         if (err.code != heif_error_Ok || !h)
             continue;
 
+#if defined(HAVE_LCMS2)
+        /* AVIF: heif_image_handle_get_raw_color_profile_size(); get profile;
+         * pass to icc_profile_from_memory(). Fall back to NULL profile (sRGB) on any failure. */
+        if (loaded_count == 0) {
+            size_t profile_size = heif_image_handle_get_raw_color_profile_size(h);
+            if (profile_size > 0 && profile_size <= 16 * 1024 * 1024) {
+                uint8_t* profile_buf = g_malloc(profile_size);
+                if (profile_buf) {
+                    heif_error prof_err = heif_image_handle_get_raw_color_profile(h, profile_buf);
+                    if (prof_err.code == heif_error_Ok) {
+                        cmsHPROFILE profile = icc_profile_from_memory(profile_buf, profile_size);
+                        if (profile) {
+                            ImageFormatHostAPI* api = plugin_host_api_get();
+                            if (api && api->document_set_load_icc_profile)
+                                api->document_set_load_icc_profile(doc, profile);
+                            else
+                                icc_destroy(profile);
+                        } else {
+                            g_warning("AVIF plugin: Invalid or non-RGB embedded ICC profile; assuming sRGB");
+                        }
+                    }
+                    g_free(profile_buf);
+                }
+            }
+        }
+#endif
+
         const char* name = (n > 1) ? (loaded_count == 0 ? "Frame 1" : NULL) : "Background";
         if (name == NULL)
             g_snprintf(layer_name, sizeof(layer_name), "Frame %d", loaded_count + 1);
@@ -348,8 +389,23 @@ static PluginError save_avif_impl(ImageDocument* doc, const char* filename, cons
     AVIFSaveOptions* avif_opts = NULL;
     int quality = 63;
     PluginError ret = PLUGIN_ERROR_NONE;
+#if defined(HAVE_LCMS2)
+    void* icc_data = NULL;
+    size_t icc_size = 0;
+    cmsHPROFILE srgb = icc_create_srgb_profile();
+    if (srgb && icc_profile_to_memory(srgb, &icc_data, &icc_size)) {
+        icc_destroy(srgb);
+    } else {
+        if (srgb) icc_destroy(srgb);
+        icc_data = NULL;
+        icc_size = 0;
+    }
+#endif
 
     if (!doc || !filename || doc->width == 0 || doc->height == 0) {
+#if defined(HAVE_LCMS2)
+        if (icc_data) free(icc_data);
+#endif
         return PLUGIN_ERROR_INVALID_PARAMETERS;
     }
 
@@ -365,12 +421,18 @@ static PluginError save_avif_impl(ImageDocument* doc, const char* filename, cons
 
     ctx = heif_context_alloc();
     if (!ctx) {
+#if defined(HAVE_LCMS2)
+        if (icc_data) free(icc_data);
+#endif
         return PLUGIN_ERROR_OUT_OF_MEMORY;
     }
 
     heif_error err = heif_context_get_encoder_for_format(ctx, heif_compression_AV1, &encoder);
     if (err.code != heif_error_Ok || !encoder) {
         heif_context_free(ctx);
+#if defined(HAVE_LCMS2)
+        if (icc_data) free(icc_data);
+#endif
         g_warning("AVIF plugin: No AV1 encoder available (libaom required)");
         return PLUGIN_ERROR_UNSUPPORTED_FEATURE;
     }
@@ -379,6 +441,9 @@ static PluginError save_avif_impl(ImageDocument* doc, const char* filename, cons
     if (err.code != heif_error_Ok) {
         heif_encoder_release(encoder);
         heif_context_free(ctx);
+#if defined(HAVE_LCMS2)
+        if (icc_data) free(icc_data);
+#endif
         return PLUGIN_ERROR_UNSUPPORTED_FEATURE;
     }
 
@@ -386,6 +451,9 @@ static PluginError save_avif_impl(ImageDocument* doc, const char* filename, cons
     if (!enc_opts) {
         heif_encoder_release(encoder);
         heif_context_free(ctx);
+#if defined(HAVE_LCMS2)
+        if (icc_data) free(icc_data);
+#endif
         return PLUGIN_ERROR_OUT_OF_MEMORY;
     }
     enc_opts->version = 1;
@@ -396,10 +464,22 @@ static PluginError save_avif_impl(ImageDocument* doc, const char* filename, cons
         heif_encoding_options_free(enc_opts);
         heif_encoder_release(encoder);
         heif_context_free(ctx);
+#if defined(HAVE_LCMS2)
+        if (icc_data) free(icc_data);
+#endif
         return PLUGIN_ERROR_FILE_WRITE_ERROR;
     }
 
-    heif_image* img = create_heif_image_from_surface(composite, doc->width, doc->height);
+    heif_image* img = create_heif_image_from_surface(composite, doc->width, doc->height,
+#if defined(HAVE_LCMS2)
+                                                     icc_data, icc_size
+#else
+                                                     NULL, 0
+#endif
+    );
+#if defined(HAVE_LCMS2)
+    if (icc_data) free(icc_data);
+#endif
     cairo_surface_destroy(composite);
 
     if (!img) {

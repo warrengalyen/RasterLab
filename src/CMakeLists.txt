@@ -434,8 +434,8 @@ if(LIBWEBP_FOUND)
             target_include_directories(rasterlab PRIVATE BEFORE SYSTEM ${WEBP_INCLUDE_DIRS})
             message(STATUS "Using libwebp include directories (BEFORE SYSTEM): ${WEBP_INCLUDE_DIRS}")
         endif()
-        target_link_libraries(rasterlab ${LIBWEBP_TARGET} webpdemux)
-        message(STATUS "Linking against libwebp target: ${LIBWEBP_TARGET} and webpdemux")
+        target_link_libraries(rasterlab ${LIBWEBP_TARGET} webpdemux webpmux)
+        message(STATUS "Linking against libwebp target: ${LIBWEBP_TARGET}, webpdemux, and webpmux")
         
         # Add dependency to ensure libwebp is built before the application
         if(TARGET libwebp_external)
@@ -448,11 +448,16 @@ if(LIBWEBP_FOUND)
         target_link_libraries(rasterlab ${LIBWEBP_LIBRARIES})
         target_compile_options(rasterlab PRIVATE ${LIBWEBP_CFLAGS_OTHER})
         message(STATUS "Linking against system libwebp: ${LIBWEBP_LIBRARIES}")
-        # Also link webpdemux if available
+        # Also link webpdemux and webpmux if available
         if(LIBWEBPDEMUX_FOUND AND LIBWEBPDEMUX_LIBRARIES)
             target_link_libraries(rasterlab ${LIBWEBPDEMUX_LIBRARIES})
             target_compile_options(rasterlab PRIVATE ${LIBWEBPDEMUX_CFLAGS_OTHER})
             message(STATUS "Linking against system libwebpdemux: ${LIBWEBPDEMUX_LIBRARIES}")
+        endif()
+        if(LIBWEBPMUX_FOUND AND LIBWEBPMUX_LIBRARIES)
+            target_link_libraries(rasterlab ${LIBWEBPMUX_LIBRARIES})
+            target_compile_options(rasterlab PRIVATE ${LIBWEBPMUX_CFLAGS_OTHER})
+            message(STATUS "Linking against system libwebpmux: ${LIBWEBPMUX_LIBRARIES}")
         endif()
     else()
         # Try to find and link webp library directly
@@ -477,11 +482,26 @@ if(LIBWEBP_FOUND)
             )
             if(WEBPDEMUX_LIB)
                 target_link_libraries(rasterlab ${WEBPDEMUX_LIB})
-                message(STATUS "Linking against libwebp: ${WEBP_LIB} and ${WEBPDEMUX_LIB}")
+            endif()
+            find_library(WEBPMUX_LIB
+                NAMES webpmux libwebpmux
+                PATHS "${CMAKE_SOURCE_DIR}/lib/libwebp/.libs"
+                      "${CMAKE_SOURCE_DIR}/lib/libwebp/build"
+                      /usr/lib
+                      /usr/local/lib
+                      /opt/local/lib
+            )
+            if(WEBPMUX_LIB)
+                target_link_libraries(rasterlab ${WEBPMUX_LIB})
+            endif()
+            if(WEBPDEMUX_LIB)
+                message(STATUS "Linking against libwebp: ${WEBP_LIB}, webpdemux, webpmux")
             else()
-                target_link_libraries(rasterlab ${WEBP_LIB})
                 message(STATUS "Linking against libwebp: ${WEBP_LIB}")
                 message(WARNING "libwebpdemux not found. Animated WebP support may not work.")
+            endif()
+            if(NOT WEBPMUX_LIB)
+                message(WARNING "libwebpmux not found. WebP ICC embedding may not work.")
             endif()
         else()
             message(WARNING "libwebp library not found, but headers were found. WebP plugin may not work.")

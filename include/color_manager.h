@@ -8,6 +8,7 @@
 #ifndef COLOR_MANAGER_H
 #define COLOR_MANAGER_H
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -187,8 +188,9 @@ void cm_convert_sdr_to_srgb_argb32(uint8_t* buffer, size_t pixel_count,
  * \param buffer              ARGB32 pixel buffer (modified in place)
  * \param pixel_count         Number of pixels
  * \param source_profile_handle  Source ICC profile (cmsHPROFILE), not owned
+ * \return  true on success, false on transform failure (caller should assume sRGB)
  */
-void cm_convert_sdr_to_srgb_argb32_from_profile(uint8_t* buffer, size_t pixel_count,
+bool cm_convert_sdr_to_srgb_argb32_from_profile(uint8_t* buffer, size_t pixel_count,
                                                 void* source_profile_handle);
 
 /* -------------------------------------------------------------------------

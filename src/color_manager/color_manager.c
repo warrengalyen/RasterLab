@@ -362,15 +362,15 @@ void cm_convert_sdr_to_srgb_argb32(uint8_t* buffer, size_t pixel_count,
     cm_profile_destroy(src);
 }
 
-void cm_convert_sdr_to_srgb_argb32_from_profile(uint8_t* buffer, size_t pixel_count,
+bool cm_convert_sdr_to_srgb_argb32_from_profile(uint8_t* buffer, size_t pixel_count,
                                                 void* source_profile_handle) {
     if (!buffer || !source_profile_handle)
-        return;
+        return false;
 
     cmsHPROFILE src = (cmsHPROFILE)source_profile_handle;
     cmsHPROFILE dst = cmsCreate_sRGBProfile();
     if (!dst)
-        return;
+        return false;
 
     /* INTENT_PERCEPTUAL, cmsFLAGS_BLACKPOINTCOMPENSATION; alpha copied, no premultiplied data through CMS */
     cmsUInt32Number flags = cmsFLAGS_COPY_ALPHA | cmsFLAGS_BLACKPOINTCOMPENSATION;
@@ -382,7 +382,7 @@ void cm_convert_sdr_to_srgb_argb32_from_profile(uint8_t* buffer, size_t pixel_co
     );
     cmsCloseProfile(dst);
     if (!transform)
-        return;
+        return false;
 
     /* Do NOT allow premultiplied data through CMS: convert to straight alpha, transform, then premultiply for Cairo */
     cm_unpremultiply_argb32(buffer, pixel_count);
@@ -392,6 +392,7 @@ void cm_convert_sdr_to_srgb_argb32_from_profile(uint8_t* buffer, size_t pixel_co
     cm_premultiply_argb32(buffer, pixel_count);
 
     cmsDeleteTransform(transform);
+    return true;
 }
 
 /* -------------------------------------------------------------------------

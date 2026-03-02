@@ -5,9 +5,56 @@
  */
 
 #include "color_manager/icc_utils.h"
+#include <glib.h>
 #include <stdlib.h>
 #include <string.h>
 #include <wchar.h>
+
+/* Get ICC locale (language + country) from user's system. Fills lang[3] and country[3].
+ * Uses g_get_language_names() — respects LC_ALL, LC_MESSAGES, LANG, and OS locale.
+ * Fallback "en"/"US" if system locale is C or unknown. */
+static void icc_get_system_locale(char lang[3], char country[3])
+{
+    lang[0] = lang[1] = lang[2] = '\0';
+    country[0] = country[1] = country[2] = '\0';
+
+    const gchar* const* names = g_get_language_names();
+    if (!names)
+        goto fallback;
+
+    for (; *names; names++) {
+        const char* s = *names;
+        if (!s || !s[0] || (s[0] == 'C' && !s[1]))
+            continue;
+
+        /* Parse "en_US" or "en" */
+        size_t i = 0;
+        while (s[i] && s[i] != '_' && s[i] != '-' && s[i] != '.' && i < 2) {
+            lang[i] = (char)s[i];
+            i++;
+        }
+        lang[i < 2 ? i : 2] = '\0';
+        if (i == 0)
+            continue;
+
+        if (s[i] == '_' || s[i] == '-') {
+            s += i + 1;
+            i = 0;
+            while (s[i] && s[i] != '.' && i < 2) {
+                country[i] = (char)s[i];
+                i++;
+            }
+            country[i < 2 ? i : 2] = '\0';
+        }
+        return;
+    }
+
+fallback:
+    lang[0] = 'e';
+    lang[1] = 'n';
+    country[0] = 'U';
+    country[1] = 'S';
+}
 
 cmsHPROFILE icc_profile_from_memory(const void *data, size_t size)
 {
@@ -62,10 +109,16 @@ cmsHPROFILE icc_create_srgb_profile(void)
 
 static bool description_contains_srgb(cmsHPROFILE profile)
 {
+    char lang[3], country[3];
+    icc_get_system_locale(lang, country);
     wchar_t buf[256];
-    if (!cmsGetProfileInfo(profile, cmsInfoDescription, "en", "US", buf, (cmsUInt32Number)sizeof(buf)))
-        return false;
-    return wcsstr(buf, L"sRGB") != NULL;
+    if (cmsGetProfileInfo(profile, cmsInfoDescription, lang, country, buf, (cmsUInt32Number)sizeof(buf)))
+        return wcsstr(buf, L"sRGB") != NULL;
+    /* Many profiles only have en/US; try fallback */
+    if ((lang[0] != 'e' || lang[1] != 'n') &&
+        cmsGetProfileInfo(profile, cmsInfoDescription, "en", "US", buf, (cmsUInt32Number)sizeof(buf)))
+        return wcsstr(buf, L"sRGB") != NULL;
+    return false;
 }
 
 bool icc_is_profile_srgb(cmsHPROFILE profile)
@@ -77,6 +130,32 @@ bool icc_is_profile_srgb(cmsHPROFILE profile)
         return false;
 
     return description_contains_srgb(profile);
+}
+
+bool icc_get_profile_description(cmsHPROFILE profile, char* buf, size_t buf_size)
+{
+    if (!profile || !buf || buf_size == 0) {
+        if (buf && buf_size > 0)
+            buf[0] = '\0';
+        return false;
+    }
+
+    buf[0] = '\0';
+    char lang[3], country[3];
+    icc_get_system_locale(lang, country);
+    wchar_t wbuf[256];
+    if (!cmsGetProfileInfo(profile, cmsInfoDescription, lang, country, wbuf, (cmsUInt32Number)(sizeof(wbuf) / sizeof(wbuf[0])))) {
+        /* Many profiles only have en/US; try fallback */
+        if (!cmsGetProfileInfo(profile, cmsInfoDescription, "en", "US", wbuf, (cmsUInt32Number)(sizeof(wbuf) / sizeof(wbuf[0]))))
+            return false;
+    }
+
+    size_t i = 0;
+    for (; wbuf[i] && i < buf_size - 1; i++) {
+        buf[i] = (wbuf[i] > 0 && wbuf[i] < 128) ? (char)wbuf[i] : '?';
+    }
+    buf[i] = '\0';
+    return i > 0;
 }
 
 void icc_destroy(cmsHPROFILE profile)

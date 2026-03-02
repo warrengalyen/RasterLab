@@ -137,28 +137,41 @@ gboolean image_io_load(ImageDocument* doc, const char* filename, PluginError* er
 #if HAVE_LCMS2
     /*
      * Central image load pipeline: after decoding, apply embedded ICC if present.
-     * If embedded_profile != NULL and NOT sRGB: create transform (embedded -> sRGB, TYPE_RGBA_8,
-     * INTENT_PERCEPTUAL, BLACKPOINT_COMPENSATION), perform in straight alpha, then premultiply.
-     * If embedded is sRGB or NULL: assume pixels already sRGB. Store result in CAIRO_FORMAT_ARGB32.
+     * Never abort load due to ICC failure alone. Always call icc_destroy on profile.
      */
-    if (doc->load_icc_profile && document_get_layer_count(doc) > 0) {
+    if (doc->load_icc_profile) {
         cmsHPROFILE embedded = (cmsHPROFILE)doc->load_icc_profile;
-        if (!icc_is_profile_srgb(embedded)) {
+        char desc_buf[256];
+
+        if (icc_get_profile_description(embedded, desc_buf, sizeof(desc_buf))) {
+            g_message("Loaded ICC profile: %s", desc_buf);
+        }
+
+        if (document_get_layer_count(doc) > 0 && !icc_is_profile_srgb(embedded)) {
             ImageLayer* layer = document_get_layer(doc, 0);
             if (layer && layer->surface) {
                 cairo_surface_flush(layer->surface);
                 guchar* data = cairo_image_surface_get_data(layer->surface);
                 if (data) {
                     size_t pixel_count = (size_t)doc->width * (size_t)doc->height;
-                    /* Transform: straight alpha through CMS, then premultiply for ARGB32 */
-                    cm_convert_sdr_to_srgb_argb32_from_profile(data, pixel_count, embedded);
-                    cairo_surface_mark_dirty(layer->surface);
+                    if (cm_convert_sdr_to_srgb_argb32_from_profile(data, pixel_count, embedded)) {
+                        const char* name = desc_buf[0] ? desc_buf : "(embedded)";
+                        g_message("Converted from: %s → sRGB", name);
+                        cairo_surface_mark_dirty(layer->surface);
+                    } else {
+                        g_warning("ICC transform failed, assuming sRGB");
+                        /* Fallback: pixels remain in source space; treat as sRGB for display */
+                    }
                 }
             }
+        } else if (document_get_layer_count(doc) > 0) {
+            g_message("Profile is sRGB, no conversion needed");
         }
-        /* Else: assume pixels already sRGB; no transform */
+
         icc_destroy(embedded);
         doc->load_icc_profile = NULL;
+    } else {
+        g_message("No ICC found, assuming sRGB");
     }
 #endif
 
