@@ -20,6 +20,20 @@ static cmsHPROFILE profile_handle(const ColorProfile* p) {
     return (cmsHPROFILE)p->handle;
 }
 
+/* Map public pixel format to lcms type (straight, non-premultiplied). */
+static cmsUInt32Number pixel_format_to_lcms(CMPixelFormat fmt) {
+    switch (fmt) {
+        case CM_PIXELFORMAT_RGBA8:    return TYPE_RGBA_8;
+        case CM_PIXELFORMAT_RGB_FLOAT: return TYPE_RGB_FLT;
+        default: return (cmsUInt32Number)-1;
+    }
+}
+
+/* Internal: ColorTransform wraps cmsHTRANSFORM. */
+struct ColorTransform {
+    void* xform; /* cmsHTRANSFORM */
+};
+
 ColorProfile* cm_profile_from_memory(const void* data, size_t size) {
     if (!data || size == 0 || size > (size_t)(cmsUInt32Number)(-1))
         return NULL;
@@ -111,4 +125,55 @@ void cm_profile_destroy(ColorProfile* profile) {
         free(profile->raw_data);
 
     free(profile);
+}
+
+/* -------------------------------------------------------------------------
+ * Color transforms
+ * ------------------------------------------------------------------------- */
+
+ColorTransform* cm_transform_create(ColorProfile* src, ColorProfile* dst, CMPixelFormat fmt) {
+    if (!src || !dst || !profile_handle(src) || !profile_handle(dst))
+        return NULL;
+
+    cmsUInt32Number lcms_fmt = pixel_format_to_lcms(fmt);
+    if (lcms_fmt == (cmsUInt32Number)-1)
+        return NULL;
+
+    cmsUInt32Number flags = 0;
+    if (fmt == CM_PIXELFORMAT_RGBA8)
+        flags = cmsFLAGS_COPY_ALPHA; /* pass alpha through unchanged */
+
+    cmsHTRANSFORM h = cmsCreateTransform(
+        profile_handle(src),  lcms_fmt,
+        profile_handle(dst), lcms_fmt,
+        INTENT_PERCEPTUAL,
+        flags
+    );
+    if (!h)
+        return NULL;
+
+    ColorTransform* t = (ColorTransform*)malloc(sizeof(ColorTransform));
+    if (!t) {
+        cmsDeleteTransform(h);
+        return NULL;
+    }
+    t->xform = (void*)h;
+    return t;
+}
+
+void cm_transform_apply(ColorTransform* transform, void* buffer, size_t pixel_count) {
+    if (!transform || !transform->xform || !buffer || pixel_count == 0)
+        return;
+
+    cmsDoTransform((cmsHTRANSFORM)transform->xform, buffer, buffer, (cmsUInt32Number)pixel_count);
+}
+
+void cm_transform_destroy(ColorTransform* transform) {
+    if (!transform)
+        return;
+
+    if (transform->xform)
+        cmsDeleteTransform((cmsHTRANSFORM)transform->xform);
+
+    free(transform);
 }
