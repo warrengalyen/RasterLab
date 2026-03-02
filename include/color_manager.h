@@ -88,6 +88,20 @@ ColorProfile* cm_profile_create_linear_from_primaries(float white_x, float white
 void cm_profile_destroy(ColorProfile* profile);
 
 /* -------------------------------------------------------------------------
+ * sRGB profile embedding (for export)
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Return a pointer to a standard sRGB ICC profile blob for embedding in saved images.
+ * The profile is generated once and cached; safe for repeated use.
+ *
+ * \param out_size  On success, set to the ICC blob size in bytes. May be NULL.
+ * \return          Pointer to the ICC data (read-only), or NULL on error.
+ *                  The pointer remains valid for the lifetime of the process.
+ */
+const void* cm_get_embedded_srgb_profile(size_t* out_size);
+
+/* -------------------------------------------------------------------------
  * Color transforms (SDR + HDR). All data is straight, non-premultiplied.
  * ------------------------------------------------------------------------- */
 

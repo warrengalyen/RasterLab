@@ -172,6 +172,50 @@ void cm_profile_destroy(ColorProfile* profile) {
 }
 
 /* -------------------------------------------------------------------------
+ * sRGB profile embedding (cached ICC blob)
+ * ------------------------------------------------------------------------- */
+
+static uint8_t* s_srgb_icc_blob = NULL;
+static size_t s_srgb_icc_size = 0;
+
+const void* cm_get_embedded_srgb_profile(size_t* out_size) {
+    if (out_size)
+        *out_size = 0;
+
+    if (s_srgb_icc_blob == NULL) {
+        cmsHPROFILE h = cmsCreate_sRGBProfile();
+        if (!h)
+            return NULL;
+
+        cmsUInt32Number size = 0;
+        if (!cmsSaveProfileToMem(h, NULL, &size) || size == 0) {
+            cmsCloseProfile(h);
+            return NULL;
+        }
+
+        uint8_t* blob = (uint8_t*)malloc((size_t)size);
+        if (!blob) {
+            cmsCloseProfile(h);
+            return NULL;
+        }
+
+        if (!cmsSaveProfileToMem(h, blob, &size)) {
+            free(blob);
+            cmsCloseProfile(h);
+            return NULL;
+        }
+        cmsCloseProfile(h);
+
+        s_srgb_icc_blob = blob;
+        s_srgb_icc_size = (size_t)size;
+    }
+
+    if (out_size)
+        *out_size = s_srgb_icc_size;
+    return s_srgb_icc_blob;
+}
+
+/* -------------------------------------------------------------------------
  * Color transforms
  * ------------------------------------------------------------------------- */
 
