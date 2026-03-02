@@ -38,6 +38,7 @@ set(SOURCES
     app/recent_files.c
     app/settings.c
     command.c
+    color_manager/color_manager.c
     commands/command_image.c
     commands/command_layer.c
     commands/command_move.c
@@ -248,6 +249,11 @@ set(SOURCES
 
 # Add the generated gresources file
 list(APPEND SOURCES ${GRESOURCE_FILE})
+
+# color_manager module requires Little CMS; drop it when lcms2 not available
+if(NOT LCMS2_FOUND)
+    list(REMOVE_ITEM SOURCES color_manager/color_manager.c)
+endif()
 
 # Add Windows resource file for application icon
 if(WIN32)
@@ -555,6 +561,24 @@ if(OPENEXR_FOUND)
     target_compile_definitions(rasterlab PRIVATE HAVE_OPENEXR=1)
 else()
     target_compile_definitions(rasterlab PRIVATE HAVE_OPENEXR=0)
+endif()
+
+# Link Little CMS (lcms2) if available — used by color_manager module
+if(LCMS2_FOUND)
+    if(LCMS2_TARGET AND TARGET ${LCMS2_TARGET})
+        target_link_libraries(rasterlab ${LCMS2_TARGET})
+        if(TARGET lcms2_external)
+            add_dependencies(rasterlab lcms2_external)
+        endif()
+        message(STATUS "Linking against Little CMS (lcms2) target: ${LCMS2_TARGET}")
+    elseif(LCMS2_LIBRARIES)
+        target_link_libraries(rasterlab ${LCMS2_LIBRARIES})
+        target_compile_options(rasterlab PRIVATE ${LCMS2_CFLAGS_OTHER})
+        message(STATUS "Linking against system Little CMS: ${LCMS2_LIBRARIES}")
+    endif()
+    target_compile_definitions(rasterlab PRIVATE HAVE_LCMS2=1)
+else()
+    target_compile_definitions(rasterlab PRIVATE HAVE_LCMS2=0)
 endif()
 
 # Link libtiff if available
