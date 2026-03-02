@@ -26,10 +26,10 @@ typedef struct ColorProfile ColorProfile;
  * Expandable for future 16-bit and float RGBA pipelines.
  */
 typedef enum {
-    CM_PIXELFORMAT_RGBA8,    /**< 8-bit RGBA, 4 bytes per pixel */
-    CM_PIXELFORMAT_RGB_FLOAT,/**< 32-bit float RGB, 12 bytes per pixel (HDR) */
-    CM_PIXELFORMAT_RGBA16,   /**< 16-bit RGBA, 8 bytes per pixel (future) */
-    CM_PIXELFORMAT_RGBAF     /**< 32-bit float RGBA, 16 bytes per pixel (future) */
+    CM_PIXELFORMAT_RGBA8,     /**< 8-bit RGBA, 4 bytes per pixel */
+    CM_PIXELFORMAT_RGB_FLOAT, /**< 32-bit float RGB, 12 bytes per pixel (HDR) */
+    CM_PIXELFORMAT_RGBA16,    /**< 16-bit RGBA, 8 bytes per pixel (future) */
+    CM_PIXELFORMAT_RGBAF      /**< 32-bit float RGBA, 16 bytes per pixel (future) */
 } CMPixelFormat;
 
 /**
