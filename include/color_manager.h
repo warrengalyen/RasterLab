@@ -120,6 +120,29 @@ void cm_unpremultiply_argb32(uint8_t* buffer, size_t pixel_count);
  */
 void cm_premultiply_argb32(uint8_t* buffer, size_t pixel_count);
 
+/* -------------------------------------------------------------------------
+ * SDR load-time conversion to internal sRGB
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Convert SDR image buffer from embedded ICC profile space to sRGB.
+ * Buffer must be Cairo ARGB32 (BGRA in memory, premultiplied).
+ *
+ * If \a icc_data is NULL (or \a icc_size is 0), the buffer is assumed
+ * already sRGB and no conversion is performed.
+ *
+ * If ICC data is provided: unpremultiplies, converts via profile transform,
+ * then premultiplies again. All temporary profiles and transform are freed
+ * before return.
+ *
+ * \param buffer       ARGB32 pixel buffer (modified in place)
+ * \param pixel_count  Number of pixels
+ * \param icc_data     Embedded ICC profile bytes, or NULL to assume sRGB
+ * \param icc_size     Size of ICC data in bytes (ignored if icc_data is NULL)
+ */
+void cm_convert_sdr_to_srgb_argb32(uint8_t* buffer, size_t pixel_count,
+                                   const void* icc_data, size_t icc_size);
+
 #ifdef __cplusplus
 }
 #endif

@@ -179,6 +179,16 @@ void cm_transform_destroy(ColorTransform* transform) {
     free(transform);
 }
 
+/* Swap R and B in each pixel (BGRA <-> RGBA) for lcms RGBA8 transform. */
+static void argb32_swap_rb(uint8_t* buffer, size_t pixel_count) {
+    for (size_t i = 0; i < pixel_count; i++) {
+        uint8_t* p = buffer + (i * 4);
+        uint8_t t = p[0];
+        p[0] = p[2];
+        p[2] = t;
+    }
+}
+
 /* -------------------------------------------------------------------------
  * Premultiplied ARGB32 utilities (Cairo layout: BGRA in memory)
  * ------------------------------------------------------------------------- */
@@ -221,4 +231,44 @@ void cm_premultiply_argb32(uint8_t* buffer, size_t pixel_count) {
         p[2] = (uint8_t)((r * (uint32_t)a + 127) / 255);
         /* p[3] = a unchanged */
     }
+}
+
+/* -------------------------------------------------------------------------
+ * SDR load-time conversion to sRGB
+ * ------------------------------------------------------------------------- */
+
+void cm_convert_sdr_to_srgb_argb32(uint8_t* buffer, size_t pixel_count,
+                                   const void* icc_data, size_t icc_size) {
+    if (!buffer)
+        return;
+
+    if (!icc_data || icc_size == 0)
+        return; /* assume sRGB, no conversion */
+
+    ColorProfile* src = cm_profile_from_memory(icc_data, icc_size);
+    if (!src)
+        return;
+
+    ColorProfile* dst = cm_profile_create_srgb();
+    if (!dst) {
+        cm_profile_destroy(src);
+        return;
+    }
+
+    ColorTransform* transform = cm_transform_create(src, dst, CM_PIXELFORMAT_RGBA8);
+    if (!transform) {
+        cm_profile_destroy(dst);
+        cm_profile_destroy(src);
+        return;
+    }
+
+    cm_unpremultiply_argb32(buffer, pixel_count);
+    argb32_swap_rb(buffer, pixel_count);           /* BGRA -> RGBA for lcms */
+    cm_transform_apply(transform, buffer, pixel_count);
+    argb32_swap_rb(buffer, pixel_count);           /* RGBA -> BGRA (Cairo) */
+    cm_premultiply_argb32(buffer, pixel_count);
+
+    cm_transform_destroy(transform);
+    cm_profile_destroy(dst);
+    cm_profile_destroy(src);
 }
