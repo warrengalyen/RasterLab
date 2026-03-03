@@ -88,6 +88,30 @@ cmsHPROFILE icc_profile_from_file(const char* path)
     return h;
 }
 
+bool icc_profile_file_is_valid(const char* path)
+{
+    if (!path || !path[0])
+        return false;
+
+    gchar* data = NULL;
+    gsize size = 0;
+    if (!g_file_get_contents(path, &data, &size, NULL))
+        return false;
+
+    if (size == 0 || size > (size_t)(cmsUInt32Number)(-1)) {
+        g_free(data);
+        return false;
+    }
+
+    cmsHPROFILE h = cmsOpenProfileFromMem(data, (cmsUInt32Number)size);
+    g_free(data);
+    if (!h)
+        return false;
+
+    cmsCloseProfile(h);
+    return true;
+}
+
 bool icc_profile_to_memory(cmsHPROFILE profile, void **out_data, size_t *out_size)
 {
     if (!profile || !out_data || !out_size) {

@@ -10,10 +10,15 @@
 #include "ui.h"
 #include "ui/dialogs/color_chooser_dialog.h"
 #include "ui/ui_utils.h"
+#include <gdk/gdk.h>
 #include <glib.h>
 #include <gtk/gtk.h>
 #include <math.h>
 #include <string.h>
+
+#if HAVE_LCMS2
+#include "color_manager/icc_utils.h"
+#endif
 
 enum {
     RENDERER_COLUMN_LABEL,
@@ -21,9 +26,22 @@ enum {
     RENDERER_N_COLUMNS
 };
 
+enum {
+    CMS_DISPLAY_COLUMN_LABEL,
+    CMS_DISPLAY_COLUMN_ID,
+    CMS_DISPLAY_N_COLUMNS
+};
+
 #define SETTINGS_TAB_ICON_SIZE 30
 
 static gboolean temp_path_is_valid(const gchar* path);
+
+typedef enum {
+    CMS_PROFILE_VALID,
+    CMS_PROFILE_INVALID_FILE,
+    CMS_PROFILE_INVALID_NON_RGB
+} CmsProfileValidationResult;
+static CmsProfileValidationResult cms_icc_path_validate(const gchar* path);
 
 /* Set a notebook tab to show icon (from resource) before the existing label. */
 static void set_tab_icon_label(GtkNotebook* notebook, GtkWidget* page_child, GtkWidget* tab_label,
@@ -96,11 +114,12 @@ static gint alpha_check_preset_from_settings(Settings* s) {
     return 0;
 }
 
-/* Apply dialog values to settings and save; then update UI (e.g. canvas bg) */
-static void settings_dialog_apply_and_save(GtkDialog* dialog, AppContext* ctx) {
+/* Apply dialog values to settings and save; then update UI (e.g. canvas bg).
+ * Returns TRUE on success, FALSE if validation failed (e.g. invalid CMS profile path). */
+static gboolean settings_dialog_apply_and_save(GtkDialog* dialog, AppContext* ctx) {
     GtkBuilder* builder = (GtkBuilder*)g_object_get_data(G_OBJECT(dialog), "settings_builder");
     if (!builder || !ctx || !ctx->settings) {
-        return;
+        return FALSE;
     }
 
     /* Canvas background color is already in settings when user picked it via custom color chooser */
@@ -196,20 +215,85 @@ static void settings_dialog_apply_and_save(GtkDialog* dialog, AppContext* ctx) {
     /* Apply checkerboard to global render state so canvas updates immediately */
     render_utils_set_alpha_check_from_settings(ctx->settings);
 
+    /* CMS: validate profile path before saving; if custom mode and invalid path, abort */
+    GtkComboBox* cms_display_combo = GTK_COMBO_BOX(gtk_builder_get_object(builder, "cms_available_displays_combo"));
+    GtkEntry* cms_profile_entry = GTK_ENTRY(gtk_builder_get_object(builder, "cms_color_profile_text"));
+    GtkToggleButton* cms_custom_radio = GTK_TOGGLE_BUTTON(gtk_builder_get_object(builder, "cms_mode_custom_radio"));
+    if (cms_custom_radio && gtk_toggle_button_get_active(cms_custom_radio) && cms_profile_entry) {
+        const gchar* profile_path = gtk_entry_get_text(cms_profile_entry);
+        gchar* trimmed = profile_path ? g_strstrip(g_strdup(profile_path)) : g_strdup("");
+        if (trimmed && trimmed[0] != '\0') {
+            CmsProfileValidationResult r = cms_icc_path_validate(trimmed);
+            if (r != CMS_PROFILE_VALID) {
+                GtkWidget* parent = gtk_widget_get_toplevel(GTK_WIDGET(dialog));
+                const gchar* msg = (r == CMS_PROFILE_INVALID_NON_RGB)
+                    ? "The color profile is not an RGB profile.\nDisplay profiles must be RGB (e.g. sRGB, Adobe RGB)."
+                    : "The color profile path is invalid or the file is not a valid ICC/ICM profile.\nPlease choose a valid profile or clear the field.";
+                GtkWidget* err_dlg = gtk_message_dialog_new(GTK_WINDOW(parent),
+                                                            GTK_DIALOG_MODAL,
+                                                            GTK_MESSAGE_ERROR,
+                                                            GTK_BUTTONS_OK,
+                                                            "%s", msg);
+                gtk_dialog_run(GTK_DIALOG(err_dlg));
+                gtk_widget_destroy(err_dlg);
+                gtk_entry_set_text(cms_profile_entry, "");
+                g_free(trimmed);
+                return FALSE;
+            }
+        }
+        g_free(trimmed);
+    }
+
+    /* CMS: apply mode, rendering intent, checkboxes, and display profile */
+    if (cms_custom_radio) {
+        settings_set_cm_mode(ctx->settings, gtk_toggle_button_get_active(cms_custom_radio) ? 1 : 0);
+    }
+    GtkComboBox* cms_intent_combo = GTK_COMBO_BOX(gtk_builder_get_object(builder, "cms_rendering_intent_combo"));
+    if (cms_intent_combo) {
+        gint idx = gtk_combo_box_get_active(cms_intent_combo);
+        if (idx >= 0 && idx <= 3) {
+            settings_set_cm_rendering_intent(ctx->settings, idx);
+        }
+    }
+    GtkCheckButton* cms_bpc = GTK_CHECK_BUTTON(gtk_builder_get_object(builder, "cms_use_black_point_checkbox"));
+    if (cms_bpc) {
+        settings_set_cm_black_point_compensation(ctx->settings, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(cms_bpc)));
+    }
+    GtkCheckButton* cms_embedded = GTK_CHECK_BUTTON(gtk_builder_get_object(builder, "cms_use_embedded_icc_checkbox"));
+    if (cms_embedded) {
+        settings_set_cm_use_embedded_icc(ctx->settings, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(cms_embedded)));
+    }
+    if (cms_custom_radio && gtk_toggle_button_get_active(cms_custom_radio) && cms_display_combo && cms_profile_entry) {
+        GtkTreeIter iter;
+        if (gtk_combo_box_get_active_iter(cms_display_combo, &iter)) {
+            GtkTreeModel* model = gtk_combo_box_get_model(cms_display_combo);
+            gchar* display_id = NULL;
+            gtk_tree_model_get(model, &iter, CMS_DISPLAY_COLUMN_ID, &display_id, -1);
+            if (display_id) {
+                const gchar* path = gtk_entry_get_text(cms_profile_entry);
+                gchar* path_trimmed = path ? g_strstrip(g_strdup(path)) : g_strdup("");
+                settings_set_cm_display_profile(ctx->settings, display_id,
+                                                (path_trimmed && path_trimmed[0] != '\0') ? path_trimmed : NULL);
+                g_free(path_trimmed);
+                g_free(display_id);
+            }
+        }
+    }
+
     if (ctx->app_dir) {
         settings_save(ctx->settings, ctx->app_dir);
     }
 
     /* Refresh canvas background on all documents */
     ui_update_canvas_background_color(ctx);
+    return TRUE;
 }
 
 static void on_settings_ok_clicked(GtkButton* button, gpointer user_data) {
     (void)button;
     AppContext* ctx = (AppContext*)user_data;
     GtkWidget* dialog = (GtkWidget*)g_object_get_data(G_OBJECT(button), "settings_dialog");
-    if (dialog && ctx) {
-        settings_dialog_apply_and_save(GTK_DIALOG(dialog), ctx);
+    if (dialog && ctx && settings_dialog_apply_and_save(GTK_DIALOG(dialog), ctx)) {
         gtk_widget_destroy(dialog);
     }
 }
@@ -287,6 +371,37 @@ static void on_settings_dialog_destroy(GtkWidget* widget, gpointer user_data) {
     (void)user_data;
 }
 
+/* Validate ICC/ICM profile path for display use. Empty is valid (no custom profile).
+ * Non-empty must be a valid RGB ICC profile. Returns rejection reason if invalid. */
+static CmsProfileValidationResult cms_icc_path_validate(const gchar* path) {
+    if (!path || path[0] == '\0') {
+        return CMS_PROFILE_VALID;
+    }
+    if (!g_file_test(path, G_FILE_TEST_EXISTS) || !g_file_test(path, G_FILE_TEST_IS_REGULAR)) {
+        return CMS_PROFILE_INVALID_FILE;
+    }
+#if HAVE_LCMS2
+    {
+        cmsHPROFILE prof = icc_profile_from_file(path);
+        if (prof) {
+            icc_destroy(prof);
+            return CMS_PROFILE_VALID;
+        }
+        /* icc_profile_from_file returns NULL for non-RGB; check if it's valid ICC at all */
+        if (icc_profile_file_is_valid(path)) {
+            return CMS_PROFILE_INVALID_NON_RGB;
+        }
+        return CMS_PROFILE_INVALID_FILE;
+    }
+#else
+    {
+        const gchar* ext = strrchr(path, '.');
+        return (ext && (g_ascii_strcasecmp(ext, ".icc") == 0 || g_ascii_strcasecmp(ext, ".icm") == 0))
+            ? CMS_PROFILE_VALID : CMS_PROFILE_INVALID_FILE;
+    }
+#endif
+}
+
 /* Check if temp path is valid: empty (use default) or existing directory */
 static gboolean temp_path_is_valid(const gchar* path) {
     if (!path || path[0] == '\0') {
@@ -350,6 +465,82 @@ static void on_temp_location_browse_clicked(GtkButton* button, gpointer user_dat
         }
     }
     g_object_unref(chooser);
+}
+
+/* CMS: browse for ICC/ICM profile and set path into text entry */
+static void on_cms_profile_browse_clicked(GtkButton* button, gpointer user_data) {
+    GtkEntry* entry = GTK_ENTRY(user_data);
+    if (!entry) {
+        return;
+    }
+    GtkWidget* parent = gtk_widget_get_toplevel(GTK_WIDGET(button));
+    if (!parent || !GTK_IS_WINDOW(parent)) {
+        return;
+    }
+    GtkFileChooserNative* chooser = gtk_file_chooser_native_new("Select a color profile",
+                                                                GTK_WINDOW(parent),
+                                                                GTK_FILE_CHOOSER_ACTION_OPEN,
+                                                                "Select",
+                                                                "Cancel");
+    GtkFileFilter* filter = gtk_file_filter_new();
+    gtk_file_filter_set_name(filter, "ICC profile (.icc, .icm)");
+    gtk_file_filter_add_pattern(filter, "*.icc");
+    gtk_file_filter_add_pattern(filter, "*.icm");
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(chooser), filter);
+    gtk_file_chooser_set_filter(GTK_FILE_CHOOSER(chooser), filter);
+
+    if (gtk_native_dialog_run(GTK_NATIVE_DIALOG(chooser)) == GTK_RESPONSE_ACCEPT) {
+        gchar* uri = gtk_file_chooser_get_uri(GTK_FILE_CHOOSER(chooser));
+        if (uri) {
+            gchar* path = g_filename_from_uri(uri, NULL, NULL);
+            if (path) {
+                gtk_entry_set_text(entry, path);
+                g_free(path);
+            }
+            g_free(uri);
+        }
+    }
+    g_object_unref(chooser);
+}
+
+/* CMS: when display combo changes, load profile path for that display into text entry */
+static void on_cms_display_changed(GtkComboBox* combo, gpointer user_data) {
+    AppContext* ctx = (AppContext*)user_data;
+    if (!ctx || !ctx->settings) {
+        return;
+    }
+    GtkWidget* toplevel = gtk_widget_get_toplevel(GTK_WIDGET(combo));
+    GtkBuilder* builder = (GtkBuilder*)g_object_get_data(G_OBJECT(toplevel), "settings_builder");
+    if (!builder) {
+        return;
+    }
+    GtkEntry* entry = GTK_ENTRY(gtk_builder_get_object(builder, "cms_color_profile_text"));
+    if (!entry) {
+        return;
+    }
+    GtkTreeIter iter;
+    if (!gtk_combo_box_get_active_iter(combo, &iter)) {
+        gtk_entry_set_text(entry, "");
+        return;
+    }
+    GtkTreeModel* model = gtk_combo_box_get_model(combo);
+    gchar* display_id = NULL;
+    gtk_tree_model_get(model, &iter, CMS_DISPLAY_COLUMN_ID, &display_id, -1);
+    if (display_id) {
+        const gchar* path = settings_get_cm_display_profile(ctx->settings, display_id);
+        gtk_entry_set_text(entry, path ? path : "");
+        g_free(display_id);
+    } else {
+        gtk_entry_set_text(entry, "");
+    }
+}
+
+/* CMS: when mode changes, enable/disable custom profile controls */
+static void on_cms_mode_toggled(GtkToggleButton* button, gpointer user_data) {
+    GtkWidget* custom_box = (GtkWidget*)user_data;
+    if (custom_box) {
+        gtk_widget_set_sensitive(custom_box, gtk_toggle_button_get_active(button));
+    }
 }
 
 /* Open custom color chooser for canvas background; update settings and button appearance */
@@ -460,6 +651,11 @@ void settings_dialog_show(AppContext* ctx) {
             GtkWidget* advanced_label = GTK_WIDGET(gtk_builder_get_object(builder, "advanced_tab_label"));
             if (advanced_page && advanced_label) {
                 set_tab_icon_label(notebook, advanced_page, advanced_label, "/icons/settings-advanced.png");
+            }
+            GtkWidget* cms_page = GTK_WIDGET(gtk_builder_get_object(builder, "cms_tab_content_box"));
+            GtkWidget* cms_label = GTK_WIDGET(gtk_builder_get_object(builder, "cms_tab_label"));
+            if (cms_page && cms_label) {
+                set_tab_icon_label(notebook, cms_page, cms_label, "/icons/settings-cms.png");
             }
         }
     }
@@ -659,6 +855,117 @@ void settings_dialog_show(AppContext* ctx) {
     /* Hardware acceleration checkbox */
     if (gpu_checkbox) {
         gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(gpu_checkbox), settings_get_gpu_acceleration_enabled(ctx->settings));
+    }
+
+    /* CMS tab: populate displays combo, rendering intent, wire mode/profile controls */
+    {
+        g_object_set_data(G_OBJECT(dialog), "settings_ctx", ctx);
+        GtkComboBox* cms_display_combo = GTK_COMBO_BOX(gtk_builder_get_object(builder, "cms_available_displays_combo"));
+        GtkWidget* cms_custom_box = GTK_WIDGET(gtk_builder_get_object(builder, "cms_custom_profile_controls_box"));
+        GtkRadioButton* cms_system_radio = GTK_RADIO_BUTTON(gtk_builder_get_object(builder, "cms_mode_system_radio"));
+        GtkRadioButton* cms_custom_radio = GTK_RADIO_BUTTON(gtk_builder_get_object(builder, "cms_mode_custom_radio"));
+        GtkEntry* cms_profile_entry = GTK_ENTRY(gtk_builder_get_object(builder, "cms_color_profile_text"));
+        GtkButton* cms_profile_btn = GTK_BUTTON(gtk_builder_get_object(builder, "cms_color_profile_button"));
+
+        /* Populate display combo */
+        if (cms_display_combo) {
+            GtkListStore* store = gtk_list_store_new(CMS_DISPLAY_N_COLUMNS, G_TYPE_STRING, G_TYPE_STRING);
+            GdkDisplay* gdk_display = gdk_display_get_default();
+            GdkMonitor* primary = gdk_display ? gdk_display_get_primary_monitor(gdk_display) : NULL;
+            gint n = gdk_display ? (gint)gdk_display_get_n_monitors(gdk_display) : 0;
+            for (gint i = 0; i < n; i++) {
+                GdkMonitor* mon = gdk_display_get_monitor(gdk_display, i);
+                if (!mon) {
+                    continue;
+                }
+                GdkRectangle geom;
+                gdk_monitor_get_geometry(mon, &geom);
+                /* Use monitor index as stable display_id (gdk_monitor_get_connector is GDK4-only) */
+                gchar* display_id = g_strdup_printf("monitor-%d", i);
+                const gchar* model = gdk_monitor_get_model(mon);
+                gchar* base_name = (model && model[0] != '\0') ? g_strdup(model) : g_strdup_printf("Monitor %d", i + 1);
+                gchar* label = g_strdup_printf("%s%s (%d x %d)",
+                    (primary && mon == primary) ? "Primary display: " : "",
+                    base_name,
+                    geom.width,
+                    geom.height);
+                g_free(base_name);
+                GtkTreeIter iter;
+                gtk_list_store_append(store, &iter);
+                gtk_list_store_set(store, &iter, CMS_DISPLAY_COLUMN_LABEL, label, CMS_DISPLAY_COLUMN_ID, display_id, -1);
+                g_free(label);
+                g_free(display_id);
+            }
+            gtk_combo_box_set_model(cms_display_combo, GTK_TREE_MODEL(store));
+            g_object_unref(store);
+            GtkCellRenderer* cell = gtk_cell_renderer_text_new();
+            gtk_cell_layout_clear(GTK_CELL_LAYOUT(cms_display_combo));
+            gtk_cell_layout_pack_start(GTK_CELL_LAYOUT(cms_display_combo), cell, TRUE);
+            gtk_cell_layout_set_attributes(GTK_CELL_LAYOUT(cms_display_combo), cell, "text", CMS_DISPLAY_COLUMN_LABEL, NULL);
+            gtk_combo_box_set_active(cms_display_combo, n > 0 ? 0 : -1);
+            g_signal_connect(cms_display_combo, "changed", G_CALLBACK(on_cms_display_changed), ctx);
+        }
+
+        /* Rendering intent combo */
+        GtkComboBox* cms_intent_combo = GTK_COMBO_BOX(gtk_builder_get_object(builder, "cms_rendering_intent_combo"));
+        if (cms_intent_combo) {
+            GtkListStore* store = gtk_list_store_new(1, G_TYPE_STRING);
+            const gchar* intents[] = {"Perceptual", "Relative colorimetric", "Saturation", "Absolute colorimetric", NULL};
+            for (int k = 0; intents[k] != NULL; k++) {
+                GtkTreeIter iter;
+                gtk_list_store_append(store, &iter);
+                gtk_list_store_set(store, &iter, 0, intents[k], -1);
+            }
+            gtk_combo_box_set_model(cms_intent_combo, GTK_TREE_MODEL(store));
+            g_object_unref(store);
+            GtkCellRenderer* cell = gtk_cell_renderer_text_new();
+            gtk_cell_layout_clear(GTK_CELL_LAYOUT(cms_intent_combo));
+            gtk_cell_layout_pack_start(GTK_CELL_LAYOUT(cms_intent_combo), cell, TRUE);
+            gtk_cell_layout_set_attributes(GTK_CELL_LAYOUT(cms_intent_combo), cell, "text", 0, NULL);
+            gint intent = settings_get_cm_rendering_intent(ctx->settings);
+            if (intent < 0 || intent > 3) {
+                intent = 1;
+            }
+            gtk_combo_box_set_active(cms_intent_combo, intent);
+        }
+
+        /* Mode radios: load from settings, enable/disable custom box */
+        if (cms_system_radio && cms_custom_radio) {
+            gint mode = settings_get_cm_mode(ctx->settings);
+            gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(mode == 1 ? cms_custom_radio : cms_system_radio), TRUE);
+        }
+        if (cms_custom_box && cms_custom_radio) {
+            gtk_widget_set_sensitive(cms_custom_box, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(cms_custom_radio)));
+            g_signal_connect(cms_custom_radio, "toggled", G_CALLBACK(on_cms_mode_toggled), cms_custom_box);
+        }
+
+        /* Black point and embedded ICC checkboxes */
+        GtkCheckButton* cms_bpc = GTK_CHECK_BUTTON(gtk_builder_get_object(builder, "cms_use_black_point_checkbox"));
+        if (cms_bpc) {
+            gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(cms_bpc), settings_get_cm_black_point_compensation(ctx->settings));
+        }
+        GtkCheckButton* cms_embedded = GTK_CHECK_BUTTON(gtk_builder_get_object(builder, "cms_use_embedded_icc_checkbox"));
+        if (cms_embedded) {
+            gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(cms_embedded), settings_get_cm_use_embedded_icc(ctx->settings));
+        }
+
+        /* Profile text: load for selected display (triggered by combo changed which fires after set_active) */
+        if (cms_display_combo && cms_profile_entry) {
+            GtkTreeIter iter;
+            if (gtk_combo_box_get_active_iter(cms_display_combo, &iter)) {
+                GtkTreeModel* model = gtk_combo_box_get_model(cms_display_combo);
+                gchar* display_id = NULL;
+                gtk_tree_model_get(model, &iter, CMS_DISPLAY_COLUMN_ID, &display_id, -1);
+                if (display_id) {
+                    const gchar* path = settings_get_cm_display_profile(ctx->settings, display_id);
+                    gtk_entry_set_text(cms_profile_entry, path ? path : "");
+                    g_free(display_id);
+                }
+            }
+        }
+        if (cms_profile_btn && cms_profile_entry) {
+            g_signal_connect(cms_profile_btn, "clicked", G_CALLBACK(on_cms_profile_browse_clicked), cms_profile_entry);
+        }
     }
 
     GtkWidget* ok_btn = GTK_WIDGET(gtk_builder_get_object(builder, "settings_ok_button"));

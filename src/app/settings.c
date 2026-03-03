@@ -82,7 +82,7 @@ static Settings* settings_create_default(void) {
     settings->show_layer_edges = TRUE; /* Show layer edges by default */
     settings->show_statusbar = TRUE;   /* Show status bar by default */
     settings->show_rulers = TRUE;      /* Show canvas rulers by default */
-    settings->show_gpu_stats = FALSE; /* Hide GPU stats by default */
+    settings->show_gpu_stats = FALSE;  /* Hide GPU stats by default */
 
     /* Alpha checkerboard: Medium (16px), white + light gray */
     settings->alpha_check_size = 1; /* 0=Small/8, 1=Medium/16, 2=Large/32 */
@@ -640,16 +640,14 @@ static void settings_load_ui(Settings* settings, xmlNode* ui_node) {
 
         if (xmlStrcmp(cur->name, (const xmlChar*)"canvas") == 0) {
             settings_load_canvas(settings, cur);
-        }
-        else if (xmlStrcmp(cur->name, (const xmlChar*)"alpha_check_size") == 0) {
+        } else if (xmlStrcmp(cur->name, (const xmlChar*)"alpha_check_size") == 0) {
             xmlChar* value_attr = xmlGetProp(cur, (const xmlChar*)"value");
             if (value_attr) {
                 gint v = (gint)strtol((const char*)value_attr, NULL, 10);
                 settings_set_alpha_check_size(settings, v);
                 xmlFree(value_attr);
             }
-        }
-        else if (xmlStrcmp(cur->name, (const xmlChar*)"alpha_color_one") == 0) {
+        } else if (xmlStrcmp(cur->name, (const xmlChar*)"alpha_color_one") == 0) {
             xmlChar* value_attr = xmlGetProp(cur, (const xmlChar*)"value");
             if (value_attr) {
                 gdouble r, g, b;
@@ -658,8 +656,7 @@ static void settings_load_ui(Settings* settings, xmlNode* ui_node) {
                 }
                 xmlFree(value_attr);
             }
-        }
-        else if (xmlStrcmp(cur->name, (const xmlChar*)"alpha_color_two") == 0) {
+        } else if (xmlStrcmp(cur->name, (const xmlChar*)"alpha_color_two") == 0) {
             xmlChar* value_attr = xmlGetProp(cur, (const xmlChar*)"value");
             if (value_attr) {
                 gdouble r, g, b;
@@ -1537,9 +1534,18 @@ static gboolean parse_rgb_string(const char* str, gdouble* r, gdouble* g, gdoubl
     if (sscanf(str, "%d,%d,%d", &ri, &gi, &bi) != 3) {
         return FALSE;
     }
-    if (ri < 0) ri = 0; if (ri > 255) ri = 255;
-    if (gi < 0) gi = 0; if (gi > 255) gi = 255;
-    if (bi < 0) bi = 0; if (bi > 255) bi = 255;
+    if (ri < 0)
+        ri = 0;
+    if (ri > 255)
+        ri = 255;
+    if (gi < 0)
+        gi = 0;
+    if (gi > 255)
+        gi = 255;
+    if (bi < 0)
+        bi = 0;
+    if (bi > 255)
+        bi = 255;
     *r = (gdouble)ri / 255.0;
     *g = (gdouble)gi / 255.0;
     *b = (gdouble)bi / 255.0;
@@ -1825,12 +1831,30 @@ static void settings_load_color_management(Settings* settings, xmlNode* color_ma
         xmlChar* id_attr = xmlGetProp(cur, (const xmlChar*)"id");
         xmlChar* path_attr = xmlGetProp(cur, (const xmlChar*)"profile_path");
         if (id_attr && path_attr) {
+            const char* id_str = (const char*)id_attr;
+            const char* path_str = (const char*)path_attr;
+            /* Strip " (display_id)" suffix if present (format we write for human readability) */
+            gchar* path = g_strdup(path_str);
+            size_t id_len = strlen(id_str);
+            size_t path_len = strlen(path);
+            if (path_len > id_len + 3) {
+                const char* suffix = path + path_len - id_len - 3;
+                if (suffix[0] == ' ' && suffix[1] == '(' &&
+                    strncmp(suffix + 2, id_str, id_len) == 0 && suffix[2 + id_len] == ')') {
+                    path[path_len - id_len - 3] = '\0';
+                    if (path[path_len - id_len - 4] == ' ') {
+                        path[path_len - id_len - 4] = '\0';
+                    }
+                }
+            }
             g_hash_table_insert(settings->cm_display_profiles,
-                                g_strdup((const char*)id_attr),
-                                g_strdup((const char*)path_attr));
+                                g_strdup(id_str),
+                                path);
         }
-        if (id_attr) xmlFree(id_attr);
-        if (path_attr) xmlFree(path_attr);
+        if (id_attr)
+            xmlFree(id_attr);
+        if (path_attr)
+            xmlFree(path_attr);
     }
 }
 
@@ -1868,7 +1892,10 @@ static void settings_save_color_management(xmlTextWriterPtr writer, Settings* se
             if (display_id && profile_path) {
                 xmlTextWriterStartElement(writer, (const xmlChar*)"display");
                 xmlTextWriterWriteAttribute(writer, (const xmlChar*)"id", (const xmlChar*)display_id);
-                xmlTextWriterWriteAttribute(writer, (const xmlChar*)"profile_path", (const xmlChar*)profile_path);
+                /* Append display_id to profile_path so we know what display it is assigned to */
+                gchar* profile_with_display = g_strdup_printf("%s (%s)", profile_path, display_id);
+                xmlTextWriterWriteAttribute(writer, (const xmlChar*)"profile_path", (const xmlChar*)profile_with_display);
+                g_free(profile_with_display);
                 xmlTextWriterEndElement(writer); /* display */
             }
         }
@@ -2068,51 +2095,60 @@ void settings_set_gpu_device_name(Settings* settings, const gchar* device_name) 
 /* Color management getters/setters */
 
 void settings_set_cm_rendering_intent(Settings* settings, gint intent) {
-    if (!settings) return;
+    if (!settings)
+        return;
     if (intent >= 0 && intent <= 3) {
         settings->cm_rendering_intent = intent;
     }
 }
 
 gint settings_get_cm_rendering_intent(Settings* settings) {
-    if (!settings) return 1; /* RELATIVE_COLORIMETRIC */
+    if (!settings)
+        return 1; /* RELATIVE_COLORIMETRIC */
     return settings->cm_rendering_intent;
 }
 
 void settings_set_cm_black_point_compensation(Settings* settings, gboolean use) {
-    if (!settings) return;
+    if (!settings)
+        return;
     settings->cm_black_point_compensation = use;
 }
 
 gboolean settings_get_cm_black_point_compensation(Settings* settings) {
-    if (!settings) return TRUE;
+    if (!settings)
+        return TRUE;
     return settings->cm_black_point_compensation;
 }
 
 void settings_set_cm_use_embedded_icc(Settings* settings, gboolean use) {
-    if (!settings) return;
+    if (!settings)
+        return;
     settings->cm_use_embedded_icc = use;
 }
 
 gboolean settings_get_cm_use_embedded_icc(Settings* settings) {
-    if (!settings) return TRUE;
+    if (!settings)
+        return TRUE;
     return settings->cm_use_embedded_icc;
 }
 
 void settings_set_cm_mode(Settings* settings, gint mode) {
-    if (!settings) return;
+    if (!settings)
+        return;
     if (mode >= 0 && mode <= 1) {
         settings->cm_mode = mode;
     }
 }
 
 gint settings_get_cm_mode(Settings* settings) {
-    if (!settings) return 0; /* CM_MODE_SYSTEM_PROFILE */
+    if (!settings)
+        return 0; /* CM_MODE_SYSTEM_PROFILE */
     return settings->cm_mode;
 }
 
 void settings_set_cm_display_profile(Settings* settings, const gchar* display_id, const gchar* profile_path) {
-    if (!settings || !display_id) return;
+    if (!settings || !display_id)
+        return;
     if (profile_path && profile_path[0] != '\0') {
         if (!settings->cm_display_profiles) {
             settings->cm_display_profiles = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
@@ -2124,6 +2160,7 @@ void settings_set_cm_display_profile(Settings* settings, const gchar* display_id
 }
 
 const gchar* settings_get_cm_display_profile(Settings* settings, const gchar* display_id) {
-    if (!settings || !display_id || !settings->cm_display_profiles) return NULL;
+    if (!settings || !display_id || !settings->cm_display_profiles)
+        return NULL;
     return (const gchar*)g_hash_table_lookup(settings->cm_display_profiles, display_id);
 }

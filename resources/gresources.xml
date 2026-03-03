@@ -54,6 +54,7 @@
     <file preprocess="to-pixdata">icons/settings-general.png</file>
     <file preprocess="to-pixdata">icons/settings-ui.png</file>
     <file preprocess="to-pixdata">icons/settings-performance.png</file>
+    <file preprocess="to-pixdata">icons/settings-cms.png</file>
     <file preprocess="to-pixdata">icons/settings-advanced.png</file>
     <file preprocess="to-pixdata">icons/checkmark.png</file>
     <file preprocess="to-pixdata">icons/reset.png</file>

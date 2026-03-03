@@ -16,6 +16,10 @@ cmsHPROFILE icc_profile_from_memory(const void* data, size_t size);
 // Caller must call icc_destroy() on the result.
 cmsHPROFILE icc_profile_from_file(const char* path);
 
+// Returns true if path points to a valid ICC/ICM profile file (any color space).
+// Use for validation; icc_profile_from_file() may still reject non-RGB profiles.
+bool icc_profile_file_is_valid(const char* path);
+
 // Serialize profile to memory buffer allocated with malloc.
 // Caller owns returned buffer.
 bool icc_profile_to_memory(cmsHPROFILE profile,
