@@ -166,6 +166,9 @@ typedef struct ImageFormatHostAPI {
     /* Set load-time ICC profile (opaque cmsHPROFILE). Host applies conversion and destroys profile. */
     void (*document_set_load_icc_profile)(ImageDocument* doc, void* profile);
 
+    /* If non-NULL: return whether to use embedded ICC profiles when loading. If false, plugins must not set profile (assume sRGB). */
+    bool (*get_use_embedded_icc)(void);
+
     /* Get number of layers in document */
     uint32_t (*document_get_layer_count)(ImageDocument* doc);
 

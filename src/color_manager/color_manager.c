@@ -363,7 +363,9 @@ void cm_convert_sdr_to_srgb_argb32(uint8_t* buffer, size_t pixel_count,
 }
 
 bool cm_convert_sdr_to_srgb_argb32_from_profile(uint8_t* buffer, size_t pixel_count,
-                                                void* source_profile_handle) {
+                                                void* source_profile_handle,
+                                                int rendering_intent,
+                                                bool use_black_point_comp) {
     if (!buffer || !source_profile_handle)
         return false;
 
@@ -372,12 +374,16 @@ bool cm_convert_sdr_to_srgb_argb32_from_profile(uint8_t* buffer, size_t pixel_co
     if (!dst)
         return false;
 
-    /* INTENT_PERCEPTUAL, cmsFLAGS_BLACKPOINTCOMPENSATION; alpha copied, no premultiplied data through CMS */
-    cmsUInt32Number flags = cmsFLAGS_COPY_ALPHA | cmsFLAGS_BLACKPOINTCOMPENSATION;
+    /* Clamp intent to 0-3 (perceptual, relative colorimetric, saturation, absolute) */
+    if (rendering_intent < 0) rendering_intent = 0;
+    if (rendering_intent > 3) rendering_intent = 3;
+    cmsUInt32Number flags = cmsFLAGS_COPY_ALPHA;
+    if (use_black_point_comp)
+        flags |= cmsFLAGS_BLACKPOINTCOMPENSATION;
     cmsHTRANSFORM transform = cmsCreateTransform(
         src,  TYPE_RGBA_8,
         dst, TYPE_RGBA_8,
-        INTENT_PERCEPTUAL,
+        (cmsUInt32Number)rendering_intent,
         flags
     );
     cmsCloseProfile(dst);

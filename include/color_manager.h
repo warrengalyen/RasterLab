@@ -185,13 +185,17 @@ void cm_convert_sdr_to_srgb_argb32(uint8_t* buffer, size_t pixel_count,
  * Same buffer layout as cm_convert_sdr_to_srgb_argb32. Caller retains ownership
  * of \a source_profile_handle (do not destroy it before calling this).
  *
- * \param buffer              ARGB32 pixel buffer (modified in place)
- * \param pixel_count         Number of pixels
- * \param source_profile_handle  Source ICC profile (cmsHPROFILE), not owned
+ * \param buffer                  ARGB32 pixel buffer (modified in place)
+ * \param pixel_count             Number of pixels
+ * \param source_profile_handle    Source ICC profile (cmsHPROFILE), not owned
+ * \param rendering_intent        ICC intent (0-3): perceptual, relative colorimetric, saturation, absolute
+ * \param use_black_point_comp    If true, use cmsFLAGS_BLACKPOINTCOMPENSATION
  * \return  true on success, false on transform failure (caller should assume sRGB)
  */
 bool cm_convert_sdr_to_srgb_argb32_from_profile(uint8_t* buffer, size_t pixel_count,
-                                                void* source_profile_handle);
+                                                void* source_profile_handle,
+                                                int rendering_intent,
+                                                bool use_black_point_comp);
 
 /* -------------------------------------------------------------------------
  * HDR linear conversion (before tone mapping)

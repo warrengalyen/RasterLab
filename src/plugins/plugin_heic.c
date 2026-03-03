@@ -296,12 +296,17 @@ static PluginError load_heic(ImageDocument* doc, const char* filename) {
                     if (prof_err.code == heif_error_Ok) {
                         cmsHPROFILE profile = icc_profile_from_memory(profile_buf, profile_size);
                         if (profile) {
-                            g_message("HEIC: embedded ICC profile found (%zu bytes), will convert to sRGB", profile_size);
                             ImageFormatHostAPI* api = plugin_host_api_get();
-                            if (api && api->document_set_load_icc_profile)
-                                api->document_set_load_icc_profile(doc, profile);
-                            else
+                            if (api && api->document_set_load_icc_profile) {
+                                if (api->get_use_embedded_icc && !api->get_use_embedded_icc())
+                                    icc_destroy(profile);
+                                else {
+                                    g_message("HEIC: embedded ICC profile found, will convert to sRGB");
+                                    api->document_set_load_icc_profile(doc, profile);
+                                }
+                            } else {
                                 icc_destroy(profile);
+                            }
                         } else {
                             g_warning("HEIC plugin: Invalid or non-RGB embedded ICC profile; assuming sRGB");
                         }
@@ -451,7 +456,8 @@ static PluginError save_heic_impl(ImageDocument* doc, const char* filename, cons
     if (srgb && icc_profile_to_memory(srgb, &icc_data, &icc_size)) {
         icc_destroy(srgb);
     } else {
-        if (srgb) icc_destroy(srgb);
+        if (srgb)
+            icc_destroy(srgb);
         icc_data = NULL;
         icc_size = 0;
     }
@@ -459,7 +465,8 @@ static PluginError save_heic_impl(ImageDocument* doc, const char* filename, cons
 
     if (!doc || !filename || doc->width == 0 || doc->height == 0) {
 #if defined(HAVE_LCMS2)
-        if (icc_data) free(icc_data);
+        if (icc_data)
+            free(icc_data);
 #endif
         return PLUGIN_ERROR_INVALID_PARAMETERS;
     }
@@ -479,7 +486,8 @@ static PluginError save_heic_impl(ImageDocument* doc, const char* filename, cons
     ctx = heif_context_alloc();
     if (!ctx) {
 #if defined(HAVE_LCMS2)
-        if (icc_data) free(icc_data);
+        if (icc_data)
+            free(icc_data);
 #endif
         return PLUGIN_ERROR_OUT_OF_MEMORY;
     }
@@ -488,7 +496,8 @@ static PluginError save_heic_impl(ImageDocument* doc, const char* filename, cons
     if (err.code != heif_error_Ok || !encoder) {
         heif_context_free(ctx);
 #if defined(HAVE_LCMS2)
-        if (icc_data) free(icc_data);
+        if (icc_data)
+            free(icc_data);
 #endif
         g_warning("HEIC plugin: No HEVC encoder available (x265 development libraries required)");
         return PLUGIN_ERROR_UNSUPPORTED_FEATURE;
@@ -506,7 +515,8 @@ static PluginError save_heic_impl(ImageDocument* doc, const char* filename, cons
         heif_encoder_release(encoder);
         heif_context_free(ctx);
 #if defined(HAVE_LCMS2)
-        if (icc_data) free(icc_data);
+        if (icc_data)
+            free(icc_data);
 #endif
         return PLUGIN_ERROR_UNSUPPORTED_FEATURE;
     }
@@ -516,7 +526,8 @@ static PluginError save_heic_impl(ImageDocument* doc, const char* filename, cons
         heif_encoder_release(encoder);
         heif_context_free(ctx);
 #if defined(HAVE_LCMS2)
-        if (icc_data) free(icc_data);
+        if (icc_data)
+            free(icc_data);
 #endif
         return PLUGIN_ERROR_OUT_OF_MEMORY;
     }
@@ -530,7 +541,8 @@ static PluginError save_heic_impl(ImageDocument* doc, const char* filename, cons
             heif_encoder_release(encoder);
             heif_context_free(ctx);
 #if defined(HAVE_LCMS2)
-            if (icc_data) free(icc_data);
+            if (icc_data)
+                free(icc_data);
 #endif
             return PLUGIN_ERROR_INVALID_PARAMETERS;
         }
@@ -577,7 +589,8 @@ static PluginError save_heic_impl(ImageDocument* doc, const char* filename, cons
             heif_encoder_release(encoder);
             heif_context_free(ctx);
 #if defined(HAVE_LCMS2)
-            if (icc_data) free(icc_data);
+            if (icc_data)
+                free(icc_data);
 #endif
             return PLUGIN_ERROR_FILE_WRITE_ERROR;
         }
@@ -596,7 +609,8 @@ static PluginError save_heic_impl(ImageDocument* doc, const char* filename, cons
             heif_encoder_release(encoder);
             heif_context_free(ctx);
 #if defined(HAVE_LCMS2)
-            if (icc_data) free(icc_data);
+            if (icc_data)
+                free(icc_data);
 #endif
             return PLUGIN_ERROR_FILE_WRITE_ERROR;
         }

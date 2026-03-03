@@ -1,3 +1,4 @@
+#include "app/settings.h"
 #include "document.h"
 #include "image_format_plugin.h"
 #include "plugins/format_registry.h"
@@ -139,6 +140,18 @@ static void host_document_set_load_icc_profile(ImageDocument* doc, void* profile
     doc->load_icc_profile = profile;
 }
 
+/** Settings pointer for color management (use embedded ICC). Set via plugin_host_api_set_cm_settings(). */
+static Settings* s_cm_settings = NULL;
+
+void plugin_host_api_set_cm_settings(void* settings) {
+    s_cm_settings = (Settings*)settings;
+}
+
+/** Return true if embedded ICC profiles should be used when loading. Default true when no settings. */
+static bool host_get_use_embedded_icc(void) {
+    return !s_cm_settings || settings_get_cm_use_embedded_icc(s_cm_settings);
+}
+
 /**
  * Get number of layers
  */
@@ -249,6 +262,7 @@ ImageFormatHostAPI* plugin_host_api_get(void) {
     host_api.document_get_composite_pixels = host_document_get_composite_pixels;
     host_api.document_set_metadata = host_document_set_metadata;
     host_api.document_set_load_icc_profile = host_document_set_load_icc_profile;
+    host_api.get_use_embedded_icc = host_get_use_embedded_icc;
     host_api.document_get_layer_count = host_document_get_layer_count;
     host_api.document_get_layer_descriptor = host_document_get_layer_descriptor;
     host_api.layer_descriptor_free = host_layer_descriptor_free;

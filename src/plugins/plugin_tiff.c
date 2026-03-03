@@ -343,12 +343,17 @@ static PluginError load_tiff(ImageDocument* doc, const char* filename) {
         if (TIFFGetField(tif, TIFFTAG_ICCPROFILE, &icc_len, &icc_data) && icc_data != NULL && icc_len > 0) {
             cmsHPROFILE profile = icc_profile_from_memory(icc_data, (size_t)icc_len);
             if (profile) {
-                g_message("TIFF: embedded ICC profile found (%u bytes), will convert to sRGB", (unsigned)icc_len);
                 ImageFormatHostAPI* api = plugin_host_api_get();
-                if (api && api->document_set_load_icc_profile)
-                    api->document_set_load_icc_profile(doc, profile);
-                else
+                if (api && api->document_set_load_icc_profile) {
+                    if (api->get_use_embedded_icc && !api->get_use_embedded_icc())
+                        icc_destroy(profile);
+                    else {
+                        g_message("TIFF: embedded ICC profile found, will convert to sRGB", (unsigned)icc_len);
+                        api->document_set_load_icc_profile(doc, profile);
+                    }
+                } else {
                     icc_destroy(profile);
+                }
             } else {
                 g_warning("TIFF plugin: Invalid or non-RGB embedded ICC profile; assuming sRGB");
             }
@@ -721,7 +726,8 @@ static PluginError save_tiff(ImageDocument* doc, const char* filename, const Sav
     if (srgb && icc_profile_to_memory(srgb, &icc_data, &icc_size)) {
         icc_destroy(srgb);
     } else {
-        if (srgb) icc_destroy(srgb);
+        if (srgb)
+            icc_destroy(srgb);
         icc_data = NULL;
         icc_size = 0;
     }
@@ -734,7 +740,8 @@ static PluginError save_tiff(ImageDocument* doc, const char* filename, const Sav
         if (!composite) {
             TIFFClose(tif);
 #if defined(HAVE_LIBTIFF) && defined(HAVE_LCMS2)
-            if (icc_data) free(icc_data);
+            if (icc_data)
+                free(icc_data);
 #endif
             return PLUGIN_ERROR_FILE_WRITE_ERROR;
         }

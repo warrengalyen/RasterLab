@@ -1,6 +1,7 @@
 #ifndef IMAGE_IO_H
 #define IMAGE_IO_H
 
+#include "app/settings.h"
 #include "document.h"
 #include "image_format_plugin.h"
 #include <glib.h>
@@ -14,9 +15,10 @@ extern "C" {
  * @param doc Document to load image into
  * @param filename Path to the image file
  * @param error_out Optional pointer to receive the plugin error code (can be NULL)
+ * @param settings Optional color management settings (use embedded ICC, rendering intent, BPC). If NULL, defaults are used.
  * @return TRUE on success, FALSE on failure
  */
-gboolean image_io_load(ImageDocument* doc, const char* filename, PluginError* error_out);
+gboolean image_io_load(ImageDocument* doc, const char* filename, PluginError* error_out, const Settings* settings);
 
 /**
  * Get user-friendly error message from plugin error code

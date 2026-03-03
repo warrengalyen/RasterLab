@@ -12,6 +12,10 @@ extern "C" {
 // Returns NULL if invalid.
 cmsHPROFILE icc_profile_from_memory(const void* data, size_t size);
 
+// Load ICC profile from file (ICC or ICM). Returns NULL on error.
+// Caller must call icc_destroy() on the result.
+cmsHPROFILE icc_profile_from_file(const char* path);
+
 // Serialize profile to memory buffer allocated with malloc.
 // Caller owns returned buffer.
 bool icc_profile_to_memory(cmsHPROFILE profile,

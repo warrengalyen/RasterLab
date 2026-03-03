@@ -162,12 +162,17 @@ static PluginError load_jpeg(ImageDocument* doc, const char* filename) {
             free(icc_data);
             icc_data = NULL;
             if (profile) {
-                g_message("JPEG: embedded ICC profile found (%u bytes), will convert to sRGB", (unsigned)icc_len);
                 ImageFormatHostAPI* api = plugin_host_api_get();
-                if (api && api->document_set_load_icc_profile)
-                    api->document_set_load_icc_profile(doc, profile);
-                else
+                if (api && api->document_set_load_icc_profile) {
+                    if (api->get_use_embedded_icc && !api->get_use_embedded_icc())
+                        icc_destroy(profile);
+                    else {
+                        g_message("JPEG: embedded ICC profile found, will convert to sRGB");
+                        api->document_set_load_icc_profile(doc, profile);
+                    }
+                } else {
                     icc_destroy(profile);
+                }
             } else {
                 g_warning("JPEG plugin: Invalid or non-RGB embedded ICC profile; assuming sRGB");
             }
@@ -485,8 +490,10 @@ static PluginError save_jpeg(ImageDocument* doc, const char* filename, const Sav
             jpeg_write_icc_profile(&cinfo, (const JOCTET*)icc_data, (unsigned int)icc_size);
             free(icc_data);
         } else {
-            if (srgb) icc_destroy(srgb);
-            if (icc_data) free(icc_data);
+            if (srgb)
+                icc_destroy(srgb);
+            if (icc_data)
+                free(icc_data);
         }
     }
 #endif

@@ -5,6 +5,7 @@
 #include "color_manager.h"
 #include "color_manager/icc_utils.h"
 #endif
+#include "app/settings.h"
 #include <glib.h>
 #include <glib/gstdio.h>
 #include <stdio.h>
@@ -79,7 +80,7 @@ const char* image_io_get_error_message(PluginError error, const char* filename) 
 /* Header probe size: must be at least 132 for DICOM (128-byte preamble + "DICM") */
 #define IMAGE_IO_HEADER_PROBE_SIZE 256
 
-gboolean image_io_load(ImageDocument* doc, const char* filename, PluginError* error_out) {
+gboolean image_io_load(ImageDocument* doc, const char* filename, PluginError* error_out, const Settings* settings) {
     FormatHandler* handler;
     uint8_t header[IMAGE_IO_HEADER_PROBE_SIZE];
     size_t header_size = 0;
@@ -137,9 +138,15 @@ gboolean image_io_load(ImageDocument* doc, const char* filename, PluginError* er
 #if HAVE_LCMS2
     /*
      * Central image load pipeline: after decoding, apply embedded ICC if present.
+     * Respect settings: use embedded ICC (cm_use_embedded_icc), rendering intent, black point compensation.
      * Never abort load due to ICC failure alone. Always call icc_destroy on profile.
+     * If no profile (or settings say don't use embedded), assume sRGB.
      */
-    if (doc->load_icc_profile) {
+    gboolean use_embedded = !settings ? TRUE : settings_get_cm_use_embedded_icc((Settings*)settings);
+    int intent = settings ? settings_get_cm_rendering_intent((Settings*)settings) : 1; /* relative colorimetric */
+    gboolean use_bpc = !settings ? TRUE : settings_get_cm_black_point_compensation((Settings*)settings);
+
+    if (doc->load_icc_profile && use_embedded) {
         cmsHPROFILE embedded = (cmsHPROFILE)doc->load_icc_profile;
         char desc_buf[256];
 
@@ -154,7 +161,7 @@ gboolean image_io_load(ImageDocument* doc, const char* filename, PluginError* er
                 guchar* data = cairo_image_surface_get_data(layer->surface);
                 if (data) {
                     size_t pixel_count = (size_t)doc->width * (size_t)doc->height;
-                    if (cm_convert_sdr_to_srgb_argb32_from_profile(data, pixel_count, embedded)) {
+                    if (cm_convert_sdr_to_srgb_argb32_from_profile(data, pixel_count, embedded, intent, use_bpc)) {
                         const char* name = desc_buf[0] ? desc_buf : "(embedded)";
                         g_message("Converted from: %s → sRGB", name);
                         cairo_surface_mark_dirty(layer->surface);
@@ -171,7 +178,11 @@ gboolean image_io_load(ImageDocument* doc, const char* filename, PluginError* er
         icc_destroy(embedded);
         doc->load_icc_profile = NULL;
     } else {
-        g_message("No ICC found, assuming sRGB");
+        if (doc->load_icc_profile) {
+            icc_destroy((cmsHPROFILE)doc->load_icc_profile);
+            doc->load_icc_profile = NULL;
+        }
+        g_message("No ICC found or use embedded ICC disabled, assuming sRGB");
     }
 #endif
 

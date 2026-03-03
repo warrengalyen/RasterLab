@@ -85,7 +85,7 @@ void on_recent_file_activate(GtkMenuItem* menu_item, gpointer user_data) {
     if (doc) {
         /* Load the image into the document using plugin system */
         PluginError load_error = PLUGIN_ERROR_NONE;
-        gboolean load_result = image_io_load(doc, file_path, &load_error);
+        gboolean load_result = image_io_load(doc, file_path, &load_error, ctx->settings);
 
         if (!load_result) {
             if (load_error == PLUGIN_ERROR_USER_CANCELLED) {
@@ -446,7 +446,7 @@ void on_file_open_response(GtkNativeDialog* dialog, gint response_id, gpointer u
             if (doc) {
                 /* Load the image into the document */
                 PluginError load_error = PLUGIN_ERROR_NONE;
-                gboolean load_result = image_io_load(doc, file_path, &load_error);
+                gboolean load_result = image_io_load(doc, file_path, &load_error, ctx->settings);
 
                 if (!load_result) {
                     if (load_error == PLUGIN_ERROR_USER_CANCELLED) {

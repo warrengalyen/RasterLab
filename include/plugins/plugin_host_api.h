@@ -13,6 +13,12 @@ extern "C" {
  */
 ImageFormatHostAPI* plugin_host_api_get(void);
 
+/**
+ * Set the settings pointer for color management (use embedded ICC, etc.).
+ * Call after loading settings (e.g. in main). Pass NULL if settings unavailable.
+ */
+void plugin_host_api_set_cm_settings(void* settings);
+
 #ifdef __cplusplus
 }
 #endif

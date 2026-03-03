@@ -1872,7 +1872,7 @@ gboolean document_load_image_from_file(ImageDocument* doc, const gchar* file_pat
     doc->layers = NULL;
 
     /* Load image using plugin system */
-    result = image_io_load(doc, file_path, NULL);
+    result = image_io_load(doc, file_path, NULL, NULL);
 
     if (!result) {
         return FALSE;

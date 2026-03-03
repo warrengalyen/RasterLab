@@ -283,12 +283,17 @@ static PluginError load_png(ImageDocument* doc, const char* filename) {
             iccp_profile != NULL && iccp_proflen > 0) {
             cmsHPROFILE profile = icc_profile_from_memory(iccp_profile, (size_t)iccp_proflen);
             if (profile) {
-                g_message("PNG: embedded ICC profile found (%u bytes), will convert to sRGB", (unsigned)iccp_proflen);
                 ImageFormatHostAPI* api = plugin_host_api_get();
-                if (api && api->document_set_load_icc_profile)
-                    api->document_set_load_icc_profile(doc, profile);
-                else
+                if (api && api->document_set_load_icc_profile) {
+                    if (api->get_use_embedded_icc && !api->get_use_embedded_icc())
+                        icc_destroy(profile);
+                    else {
+                        g_message("PNG: embedded ICC profile found, will convert to sRGB");
+                        api->document_set_load_icc_profile(doc, profile);
+                    }
+                } else {
                     icc_destroy(profile);
+                }
             } else {
                 g_warning("PNG plugin: Invalid or non-RGB embedded ICC profile; assuming sRGB");
             }

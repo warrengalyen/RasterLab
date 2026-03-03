@@ -302,10 +302,14 @@ static PluginError load_avif(ImageDocument* doc, const char* filename) {
                         cmsHPROFILE profile = icc_profile_from_memory(profile_buf, profile_size);
                         if (profile) {
                             ImageFormatHostAPI* api = plugin_host_api_get();
-                            if (api && api->document_set_load_icc_profile)
-                                api->document_set_load_icc_profile(doc, profile);
-                            else
+                            if (api && api->document_set_load_icc_profile) {
+                                if (api->get_use_embedded_icc && !api->get_use_embedded_icc())
+                                    icc_destroy(profile);
+                                else
+                                    api->document_set_load_icc_profile(doc, profile);
+                            } else {
                                 icc_destroy(profile);
+                            }
                         } else {
                             g_warning("AVIF plugin: Invalid or non-RGB embedded ICC profile; assuming sRGB");
                         }

@@ -108,6 +108,13 @@ static Settings* settings_create_default(void) {
     settings->gpu_acceleration_enabled = DEFAULT_GPU_ACCELERATION;
     settings->gpu_device_name = NULL; /* NULL = use system default GPU */
 
+    /* Color management defaults */
+    settings->cm_rendering_intent = 1; /* RELATIVE_COLORIMETRIC */
+    settings->cm_black_point_compensation = TRUE;
+    settings->cm_use_embedded_icc = TRUE;
+    settings->cm_mode = 0; /* CM_MODE_SYSTEM_PROFILE */
+    settings->cm_display_profiles = NULL;
+
     return settings;
 }
 
@@ -333,6 +340,16 @@ static void settings_load_advanced(Settings* settings, xmlNode* advanced_node);
 static void settings_save_advanced(xmlTextWriterPtr writer, Settings* settings);
 
 /**
+ * Load color management settings from XML (forward declaration)
+ */
+static void settings_load_color_management(Settings* settings, xmlNode* color_management_node);
+
+/**
+ * Save color management settings to XML (forward declaration)
+ */
+static void settings_save_color_management(xmlTextWriterPtr writer, Settings* settings);
+
+/**
  * Load recent files from XML
  * Stores RecentFile* entries in Settings->recent_files (includes path and timestamp)
  */
@@ -441,6 +458,8 @@ Settings* settings_load(const char* app_dir) {
             settings_load_tone_mapping(settings, cur);
         } else if (xmlStrcmp(cur->name, (const xmlChar*)"advanced") == 0) {
             settings_load_advanced(settings, cur);
+        } else if (xmlStrcmp(cur->name, (const xmlChar*)"color_management") == 0) {
+            settings_load_color_management(settings, cur);
         }
     }
 
@@ -980,6 +999,9 @@ gboolean settings_save(Settings* settings, const char* app_dir) {
     /* Write Advanced settings (temp file directory, etc.) */
     settings_save_advanced(writer, settings);
 
+    /* Write color management settings */
+    settings_save_color_management(writer, settings);
+
     /* Close root element */
     xmlTextWriterEndElement(writer); /* app_settings */
 
@@ -1030,6 +1052,10 @@ void settings_free(Settings* settings) {
 
     if (settings->gpu_device_name) {
         g_free(settings->gpu_device_name);
+    }
+
+    if (settings->cm_display_profiles) {
+        g_hash_table_destroy(settings->cm_display_profiles);
     }
 
     g_free(settings);
@@ -1749,6 +1775,109 @@ static void settings_save_advanced(xmlTextWriterPtr writer, Settings* settings) 
 }
 
 /**
+ * Load color management settings from XML
+ */
+static void settings_load_color_management(Settings* settings, xmlNode* color_management_node) {
+    if (!settings || !color_management_node) {
+        return;
+    }
+
+    xmlChar* intent_attr = xmlGetProp(color_management_node, (const xmlChar*)"rendering_intent");
+    if (intent_attr) {
+        gint v = (gint)strtol((const char*)intent_attr, NULL, 10);
+        if (v >= 0 && v <= 3) {
+            settings->cm_rendering_intent = v;
+        }
+        xmlFree(intent_attr);
+    }
+
+    xmlChar* bpc_attr = xmlGetProp(color_management_node, (const xmlChar*)"black_point_compensation");
+    if (bpc_attr) {
+        settings->cm_black_point_compensation = (xmlStrcmp(bpc_attr, (const xmlChar*)"true") == 0);
+        xmlFree(bpc_attr);
+    }
+
+    xmlChar* embedded_attr = xmlGetProp(color_management_node, (const xmlChar*)"use_embedded_icc");
+    if (embedded_attr) {
+        settings->cm_use_embedded_icc = (xmlStrcmp(embedded_attr, (const xmlChar*)"true") == 0);
+        xmlFree(embedded_attr);
+    }
+
+    xmlChar* mode_attr = xmlGetProp(color_management_node, (const xmlChar*)"mode");
+    if (mode_attr) {
+        gint v = (gint)strtol((const char*)mode_attr, NULL, 10);
+        if (v >= 0 && v <= 1) {
+            settings->cm_mode = v;
+        }
+        xmlFree(mode_attr);
+    }
+
+    /* Child elements: <display id="..." profile_path="..."/> */
+    if (!settings->cm_display_profiles) {
+        settings->cm_display_profiles = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+    }
+    g_hash_table_remove_all(settings->cm_display_profiles);
+
+    for (xmlNode* cur = color_management_node->children; cur; cur = cur->next) {
+        if (cur->type != XML_ELEMENT_NODE || xmlStrcmp(cur->name, (const xmlChar*)"display") != 0) {
+            continue;
+        }
+        xmlChar* id_attr = xmlGetProp(cur, (const xmlChar*)"id");
+        xmlChar* path_attr = xmlGetProp(cur, (const xmlChar*)"profile_path");
+        if (id_attr && path_attr) {
+            g_hash_table_insert(settings->cm_display_profiles,
+                                g_strdup((const char*)id_attr),
+                                g_strdup((const char*)path_attr));
+        }
+        if (id_attr) xmlFree(id_attr);
+        if (path_attr) xmlFree(path_attr);
+    }
+}
+
+/**
+ * Save color management settings to XML
+ */
+static void settings_save_color_management(xmlTextWriterPtr writer, Settings* settings) {
+    if (!writer || !settings) {
+        return;
+    }
+
+    xmlTextWriterStartElement(writer, (const xmlChar*)"color_management");
+
+    gchar intent_str[8];
+    g_snprintf(intent_str, sizeof(intent_str), "%d", settings->cm_rendering_intent);
+    xmlTextWriterWriteAttribute(writer, (const xmlChar*)"rendering_intent", (const xmlChar*)intent_str);
+
+    xmlTextWriterWriteAttribute(writer, (const xmlChar*)"black_point_compensation",
+                                (const xmlChar*)(settings->cm_black_point_compensation ? "true" : "false"));
+
+    xmlTextWriterWriteAttribute(writer, (const xmlChar*)"use_embedded_icc",
+                                (const xmlChar*)(settings->cm_use_embedded_icc ? "true" : "false"));
+
+    gchar mode_str[8];
+    g_snprintf(mode_str, sizeof(mode_str), "%d", settings->cm_mode);
+    xmlTextWriterWriteAttribute(writer, (const xmlChar*)"mode", (const xmlChar*)mode_str);
+
+    if (settings->cm_display_profiles) {
+        GHashTableIter iter;
+        gpointer k, v;
+        g_hash_table_iter_init(&iter, settings->cm_display_profiles);
+        while (g_hash_table_iter_next(&iter, &k, &v)) {
+            const gchar* display_id = (const gchar*)k;
+            const gchar* profile_path = (const gchar*)v;
+            if (display_id && profile_path) {
+                xmlTextWriterStartElement(writer, (const xmlChar*)"display");
+                xmlTextWriterWriteAttribute(writer, (const xmlChar*)"id", (const xmlChar*)display_id);
+                xmlTextWriterWriteAttribute(writer, (const xmlChar*)"profile_path", (const xmlChar*)profile_path);
+                xmlTextWriterEndElement(writer); /* display */
+            }
+        }
+    }
+
+    xmlTextWriterEndElement(writer); /* color_management */
+}
+
+/**
  * Tone mapping settings getters/setters
  */
 void settings_set_tone_map_auto_apply(Settings* settings, gboolean auto_apply) {
@@ -1934,4 +2063,67 @@ void settings_set_gpu_device_name(Settings* settings, const gchar* device_name) 
         g_free(settings->gpu_device_name);
     }
     settings->gpu_device_name = device_name ? g_strdup(device_name) : NULL;
+}
+
+/* Color management getters/setters */
+
+void settings_set_cm_rendering_intent(Settings* settings, gint intent) {
+    if (!settings) return;
+    if (intent >= 0 && intent <= 3) {
+        settings->cm_rendering_intent = intent;
+    }
+}
+
+gint settings_get_cm_rendering_intent(Settings* settings) {
+    if (!settings) return 1; /* RELATIVE_COLORIMETRIC */
+    return settings->cm_rendering_intent;
+}
+
+void settings_set_cm_black_point_compensation(Settings* settings, gboolean use) {
+    if (!settings) return;
+    settings->cm_black_point_compensation = use;
+}
+
+gboolean settings_get_cm_black_point_compensation(Settings* settings) {
+    if (!settings) return TRUE;
+    return settings->cm_black_point_compensation;
+}
+
+void settings_set_cm_use_embedded_icc(Settings* settings, gboolean use) {
+    if (!settings) return;
+    settings->cm_use_embedded_icc = use;
+}
+
+gboolean settings_get_cm_use_embedded_icc(Settings* settings) {
+    if (!settings) return TRUE;
+    return settings->cm_use_embedded_icc;
+}
+
+void settings_set_cm_mode(Settings* settings, gint mode) {
+    if (!settings) return;
+    if (mode >= 0 && mode <= 1) {
+        settings->cm_mode = mode;
+    }
+}
+
+gint settings_get_cm_mode(Settings* settings) {
+    if (!settings) return 0; /* CM_MODE_SYSTEM_PROFILE */
+    return settings->cm_mode;
+}
+
+void settings_set_cm_display_profile(Settings* settings, const gchar* display_id, const gchar* profile_path) {
+    if (!settings || !display_id) return;
+    if (profile_path && profile_path[0] != '\0') {
+        if (!settings->cm_display_profiles) {
+            settings->cm_display_profiles = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+        }
+        g_hash_table_insert(settings->cm_display_profiles, g_strdup(display_id), g_strdup(profile_path));
+    } else if (settings->cm_display_profiles) {
+        g_hash_table_remove(settings->cm_display_profiles, display_id);
+    }
+}
+
+const gchar* settings_get_cm_display_profile(Settings* settings, const gchar* display_id) {
+    if (!settings || !display_id || !settings->cm_display_profiles) return NULL;
+    return (const gchar*)g_hash_table_lookup(settings->cm_display_profiles, display_id);
 }

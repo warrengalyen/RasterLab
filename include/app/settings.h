@@ -4,6 +4,24 @@
 #include <glib.h>
 
 /**
+ * Rendering intent for color management (ICC)
+ */
+typedef enum {
+    CM_RENDERING_INTENT_PERCEPTUAL = 0,
+    CM_RENDERING_INTENT_RELATIVE_COLORIMETRIC = 1,
+    CM_RENDERING_INTENT_SATURATION = 2,
+    CM_RENDERING_INTENT_ABSOLUTE_COLORIMETRIC = 3
+} ColorManagementRenderingIntent;
+
+/**
+ * Color management display mode
+ */
+typedef enum {
+    CM_MODE_SYSTEM_PROFILE = 0, /* Use current system profile for each display (default) */
+    CM_MODE_CUSTOM_PROFILE = 1  /* Use custom ICC/ICM profile per display */
+} ColorManagementMode;
+
+/**
  * Settings structure - holds all application settings
  */
 typedef struct {
@@ -62,6 +80,13 @@ typedef struct {
     /* GPU acceleration settings */
     gboolean gpu_acceleration_enabled; /* Enable GPU-accelerated compositing (default TRUE) */
     gchar* gpu_device_name;            /* GPU device name to use (NULL = system default) */
+
+    /* Color management settings (section "color_management") */
+    gint cm_rendering_intent;             /* ColorManagementRenderingIntent (default: RELATIVE_COLORIMETRIC) */
+    gboolean cm_black_point_compensation; /* Use black point compensation (default TRUE) */
+    gboolean cm_use_embedded_icc;         /* Use embedded ICC profiles in files when available (default TRUE) */
+    gint cm_mode;                         /* ColorManagementMode (default: SYSTEM_PROFILE) */
+    GHashTable* cm_display_profiles;      /* When mode=CUSTOM: display_id (gchar*) -> profile path (gchar*). NULL if unused. */
 } Settings;
 
 /**
@@ -366,5 +391,33 @@ const gchar* settings_get_gpu_device_name(Settings* settings);
  * @param device_name GPU device name (NULL = use system default)
  */
 void settings_set_gpu_device_name(Settings* settings, const gchar* device_name);
+
+/**
+ * Color management settings getters/setters
+ * (Not yet exposed in the settings dialog.)
+ */
+
+/** Rendering intent (perceptual, relative colorimetric, saturation, absolute colorimetric). Default: relative colorimetric. */
+void settings_set_cm_rendering_intent(Settings* settings, gint intent);
+gint settings_get_cm_rendering_intent(Settings* settings);
+
+/** Use black point compensation. Default: TRUE. */
+void settings_set_cm_black_point_compensation(Settings* settings, gboolean use);
+gboolean settings_get_cm_black_point_compensation(Settings* settings);
+
+/** Use embedded ICC profiles in files when available. Default: TRUE. */
+void settings_set_cm_use_embedded_icc(Settings* settings, gboolean use);
+gboolean settings_get_cm_use_embedded_icc(Settings* settings);
+
+/** Color management mode: system profile per display (0) or custom profile per display (1). Default: 0. */
+void settings_set_cm_mode(Settings* settings, gint mode);
+gint settings_get_cm_mode(Settings* settings);
+
+/** Set custom ICC/ICM profile path for a display (used when mode is CUSTOM). display_id is e.g. monitor name or ID. */
+void settings_set_cm_display_profile(Settings* settings, const gchar* display_id, const gchar* profile_path);
+
+/** Get custom profile path for a display. Returns NULL if not set or mode is not CUSTOM. Caller must not free.
+ *  When no system profile is available and no ICC/ICM path is set for the display, use default sRGB (no transform). */
+const gchar* settings_get_cm_display_profile(Settings* settings, const gchar* display_id);
 
 #endif /* SETTINGS_H */

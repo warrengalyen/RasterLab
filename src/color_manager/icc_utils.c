@@ -73,6 +73,21 @@ cmsHPROFILE icc_profile_from_memory(const void *data, size_t size)
     return h;
 }
 
+cmsHPROFILE icc_profile_from_file(const char* path)
+{
+    if (!path || !path[0])
+        return NULL;
+
+    gchar* data = NULL;
+    gsize size = 0;
+    if (!g_file_get_contents(path, &data, &size, NULL))
+        return NULL;
+
+    cmsHPROFILE h = icc_profile_from_memory(data, size);
+    g_free(data);
+    return h;
+}
+
 bool icc_profile_to_memory(cmsHPROFILE profile, void **out_data, size_t *out_size)
 {
     if (!profile || !out_data || !out_size) {

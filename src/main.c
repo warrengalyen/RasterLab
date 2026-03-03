@@ -3,6 +3,7 @@
 #include "app/settings.h"
 #include "plugins/builtin_plugins.h"
 #include "plugins/format_registry.h"
+#include "plugins/plugin_host_api.h"
 #include "plugins/plugin_loader.h"
 #include "render/layer.h"
 #include "render/render_utils.h"
@@ -146,6 +147,9 @@ int main(int argc, char* argv[]) {
 
             /* Load tool options from settings */
             ui_load_tool_options_from_settings(app);
+
+            /* Pass settings to plugin host for color management (use embedded ICC, etc.) */
+            plugin_host_api_set_cm_settings(app->settings);
         }
     } else {
         g_free(app_dir);
