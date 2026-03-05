@@ -180,6 +180,10 @@ typedef struct ImageDocument {
     /* Load-time ICC profile (opaque cmsHPROFILE). Set by format plugin, applied and freed by host. */
     void* load_icc_profile;
 
+    /* Cached display CMS transform (opaque DisplayTransformCache*). Avoids rebuilding
+     * the lcms transform on every draw call. Freed in document_free(). */
+    void* display_xform_cache;
+
     /* Rendering pipeline */
     GList* layers;                      /* List of ImageLayer objects */
     ImageLayer* selected_layer;         /* Currently selected layer for tools */

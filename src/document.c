@@ -45,6 +45,45 @@ static gboolean on_viewport_leave_notify(GtkWidget* widget, GdkEventCrossing* ev
 /** Queue only the ruler strips containing the mouse marker (old and new) for minimal redraw. */
 static void queue_ruler_marker_areas(ImageDocument* doc, gdouble old_cx, gdouble old_cy, gdouble new_cx, gdouble new_cy);
 
+#if HAVE_LCMS2
+typedef struct {
+    ColorTransform* transform;
+    ColorProfile*   srgb_profile;
+    ColorProfile*   display_profile;
+    gchar*          display_id;
+    gchar*          custom_profile_path;
+    gint            mode;
+    gint            intent;
+    gboolean        bpc;
+} DisplayTransformCache;
+
+static void display_xform_cache_free(DisplayTransformCache* cache) {
+    if (!cache) return;
+    cm_transform_destroy(cache->transform);
+    cm_profile_destroy(cache->srgb_profile);
+    cm_profile_destroy(cache->display_profile);
+    g_free(cache->display_id);
+    g_free(cache->custom_profile_path);
+    g_free(cache);
+}
+
+static gboolean display_xform_cache_valid(const DisplayTransformCache* cache,
+                                          const gchar* display_id, gint mode,
+                                          gint intent, gboolean bpc,
+                                          const gchar* custom_profile_path) {
+    if (!cache || !cache->transform)
+        return FALSE;
+    if (cache->mode != mode || cache->intent != intent || cache->bpc != bpc)
+        return FALSE;
+    if (g_strcmp0(cache->display_id, display_id) != 0)
+        return FALSE;
+    if (mode == CM_MODE_CUSTOM_PROFILE &&
+        g_strcmp0(cache->custom_profile_path, custom_profile_path) != 0)
+        return FALSE;
+    return TRUE;
+}
+#endif
+
 /**
  * Animation timer callback - updates selection marching ants
  */
@@ -215,17 +254,19 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
 #if HAVE_LCMS2
     /* Display color management: sRGB -> system or custom profile.
      * Skipped when mode is CM_MODE_NONE (no transform, small performance gain).
-     * Applied for both CPU and GPU compositing (GPU writes to tile->pixel_buffer via glReadPixels). */
-    ColorProfile* display_prof = NULL;
-    ColorProfile* srgb_prof = NULL;
+     * Applied for both CPU and GPU compositing (GPU writes to tile->pixel_buffer via glReadPixels).
+     * The transform is cached in doc->display_xform_cache and reused across draw calls
+     * as long as the CMS settings and target monitor remain unchanged. */
     ColorTransform* display_xform = NULL;
-    gchar* display_id = NULL;
     {
         gpointer ctx_data = g_object_get_data(G_OBJECT(widget), "app_context");
         if (ctx_data) {
             AppContext* ctx = (AppContext*)ctx_data;
             Settings* settings = ctx ? ctx->settings : NULL;
-            if (settings && settings_get_cm_mode(settings) != CM_MODE_NONE) {
+            gint cm_mode = settings ? settings_get_cm_mode(settings) : CM_MODE_NONE;
+
+            if (settings && cm_mode != CM_MODE_NONE) {
+                gchar* cur_display_id = NULL;
                 GdkWindow* win = gtk_widget_get_window(widget);
                 if (win) {
                     GdkDisplay* gdk_display = gdk_window_get_display(win);
@@ -234,23 +275,64 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
                         gint n = (gint)gdk_display_get_n_monitors(gdk_display);
                         for (gint i = 0; i < n; i++) {
                             if (gdk_display_get_monitor(gdk_display, i) == monitor) {
-                                display_id = g_strdup_printf("monitor-%d", i);
+                                cur_display_id = g_strdup_printf("monitor-%d", i);
                                 break;
                             }
                         }
                     }
                 }
-                if (display_id) {
-                    display_prof = cm_get_display_profile(settings, display_id);
-                    if (display_prof) {
-                        srgb_prof = cm_profile_create_srgb();
-                        if (srgb_prof) {
-                            gint intent = settings_get_cm_rendering_intent(settings);
-                            gboolean bpc = settings_get_cm_black_point_compensation(settings);
-                            display_xform = cm_transform_create_with_intent(srgb_prof, display_prof,
-                                                                            CM_PIXELFORMAT_RGBA8, intent, bpc ? true : false);
+                if (cur_display_id) {
+                    gint intent = settings_get_cm_rendering_intent(settings);
+                    gboolean bpc = settings_get_cm_black_point_compensation(settings);
+                    const gchar* custom_path = (cm_mode == CM_MODE_CUSTOM_PROFILE)
+                        ? settings_get_cm_display_profile(settings, cur_display_id) : NULL;
+
+                    DisplayTransformCache* cache = (DisplayTransformCache*)doc->display_xform_cache;
+                    if (display_xform_cache_valid(cache, cur_display_id, cm_mode, intent, bpc, custom_path)) {
+                        display_xform = cache->transform;
+                        g_free(cur_display_id);
+                    } else {
+                        display_xform_cache_free(cache);
+                        doc->display_xform_cache = NULL;
+
+                        ColorProfile* display_prof = cm_get_display_profile(settings, cur_display_id);
+                        if (display_prof) {
+                            ColorProfile* srgb_prof = cm_profile_create_srgb();
+                            if (srgb_prof) {
+                                ColorTransform* xform = cm_transform_create_with_intent(
+                                    srgb_prof, display_prof, CM_PIXELFORMAT_RGBA8,
+                                    intent, bpc ? true : false);
+                                if (xform) {
+                                    DisplayTransformCache* new_cache = g_new0(DisplayTransformCache, 1);
+                                    new_cache->transform      = xform;
+                                    new_cache->srgb_profile    = srgb_prof;
+                                    new_cache->display_profile = display_prof;
+                                    new_cache->display_id      = cur_display_id;
+                                    new_cache->custom_profile_path = g_strdup(custom_path);
+                                    new_cache->mode   = cm_mode;
+                                    new_cache->intent = intent;
+                                    new_cache->bpc    = bpc;
+                                    doc->display_xform_cache = new_cache;
+                                    display_xform = xform;
+                                } else {
+                                    cm_profile_destroy(srgb_prof);
+                                    cm_profile_destroy(display_prof);
+                                    g_free(cur_display_id);
+                                }
+                            } else {
+                                cm_profile_destroy(display_prof);
+                                g_free(cur_display_id);
+                            }
+                        } else {
+                            g_free(cur_display_id);
                         }
                     }
+                }
+            } else {
+                /* CMS disabled — drop any stale cache */
+                if (doc->display_xform_cache) {
+                    display_xform_cache_free((DisplayTransformCache*)doc->display_xform_cache);
+                    doc->display_xform_cache = NULL;
                 }
             }
         }
@@ -696,16 +778,7 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
         draw_checkered_background(cr, clip_width, clip_height);
     }
 
-#if HAVE_LCMS2
-    /* Clean up display profile/transform (used for process_uploads and tile paths) */
-    if (display_xform)
-        cm_transform_destroy(display_xform);
-    if (srgb_prof)
-        cm_profile_destroy(srgb_prof);
-    if (display_prof)
-        cm_profile_destroy(display_prof);
-    g_free(display_id);
-#endif
+    /* Display transform is owned by doc->display_xform_cache — no per-draw cleanup needed. */
 
     /* Draw rect select tool preview during drag */
     tool_rect_select_draw_preview(doc, cr, zoom);
@@ -1391,6 +1464,7 @@ ImageDocument* document_new(const gchar* filename, gboolean create_worker_pool, 
     doc->bit_depth = 0;
     doc->has_alpha = FALSE;
     doc->load_icc_profile = NULL;
+    doc->display_xform_cache = NULL;
 
     /* Initialize rendering pipeline */
     doc->layers = NULL;
@@ -1476,6 +1550,13 @@ void document_free(ImageDocument* doc) {
         layer_free((ImageLayer*)iter->data);
     }
     g_list_free(layers_to_free);
+
+#if HAVE_LCMS2
+    if (doc->display_xform_cache) {
+        display_xform_cache_free((DisplayTransformCache*)doc->display_xform_cache);
+        doc->display_xform_cache = NULL;
+    }
+#endif
 
     /* Free composite surface */
     if (doc->composite_surface) {
