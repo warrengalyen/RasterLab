@@ -213,12 +213,13 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
     }
 
 #if HAVE_LCMS2
-    /* Display color management: sRGB -> system or custom profile (fallback to sRGB if none) */
+    /* Display color management: sRGB -> system or custom profile (fallback to sRGB if none).
+     * Applied for both CPU and GPU compositing (GPU writes to tile->pixel_buffer via glReadPixels). */
     ColorProfile* display_prof = NULL;
     ColorProfile* srgb_prof = NULL;
     ColorTransform* display_xform = NULL;
     gchar* display_id = NULL;
-    if (!use_gpu_compositing) {
+    {
         gpointer ctx_data = g_object_get_data(G_OBJECT(widget), "app_context");
         if (ctx_data) {
             AppContext* ctx = (AppContext*)ctx_data;
@@ -246,7 +247,7 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
                             gint intent = settings_get_cm_rendering_intent(settings);
                             gboolean bpc = settings_get_cm_black_point_compensation(settings);
                             display_xform = cm_transform_create_with_intent(srgb_prof, display_prof,
-                                CM_PIXELFORMAT_RGBA8, intent, bpc ? true : false);
+                                                                            CM_PIXELFORMAT_RGBA8, intent, bpc ? true : false);
                         }
                     }
                 }
@@ -261,9 +262,9 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
     if (doc->tile_worker_pool) {
         guint uploaded = tile_worker_pool_process_uploads(doc->tile_worker_pool,
 #if HAVE_LCMS2
-            display_xform
+                                                          display_xform
 #else
-            NULL
+                                                          NULL
 #endif
         );
         if (uploaded > 0) {
@@ -459,7 +460,7 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
 #if HAVE_LCMS2
                             if (display_xform) {
                                 cm_apply_transform_argb32(display_xform, (uint8_t*)tile->pixel_buffer,
-                                    (size_t)(tile->w * tile->h));
+                                                          (size_t)(tile->w * tile->h));
                             }
 #endif
                             tile->surface = cairo_image_surface_create_for_data(
@@ -584,7 +585,7 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
 #if HAVE_LCMS2
                                     if (display_xform) {
                                         cm_apply_transform_argb32(display_xform, (uint8_t*)tile->pixel_buffer,
-                                            (size_t)(tile->w * tile->h));
+                                                                  (size_t)(tile->w * tile->h));
                                     }
 #endif
                                     tile->surface = cairo_image_surface_create_for_data(
