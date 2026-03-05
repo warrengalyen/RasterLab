@@ -6,6 +6,7 @@
 
 #include "color_manager/icc_utils.h"
 #include <glib.h>
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 #include <wchar.h>
@@ -146,18 +147,55 @@ cmsHPROFILE icc_create_srgb_profile(void)
     return cmsCreate_sRGBProfile();
 }
 
-static bool description_contains_srgb(cmsHPROFILE profile)
+static bool xy_near(double a, double b, double tol) { return fabs(a - b) <= tol; }
+
+static bool primaries_and_trc_match_srgb(cmsHPROFILE profile)
 {
-    char lang[3], country[3];
-    icc_get_system_locale(lang, country);
-    wchar_t buf[256];
-    if (cmsGetProfileInfo(profile, cmsInfoDescription, lang, country, buf, (cmsUInt32Number)sizeof(buf)))
-        return wcsstr(buf, L"sRGB") != NULL;
-    /* Many profiles only have en/US; try fallback */
-    if ((lang[0] != 'e' || lang[1] != 'n') &&
-        cmsGetProfileInfo(profile, cmsInfoDescription, "en", "US", buf, (cmsUInt32Number)sizeof(buf)))
-        return wcsstr(buf, L"sRGB") != NULL;
-    return false;
+    const double tol = 0.003;
+
+    cmsCIEXYZ* wp = (cmsCIEXYZ*)cmsReadTag(profile, cmsSigMediaWhitePointTag);
+    if (!wp) return false;
+    cmsCIExyY wp_xy;
+    cmsXYZ2xyY(&wp_xy, wp);
+    /* sRGB uses D50 adapted white in the ICC PCS (D50: x=0.3457, y=0.3585) */
+    if (!xy_near(wp_xy.x, 0.3457, tol) || !xy_near(wp_xy.y, 0.3585, tol))
+        return false;
+
+    cmsCIEXYZ* r = (cmsCIEXYZ*)cmsReadTag(profile, cmsSigRedColorantTag);
+    cmsCIEXYZ* g = (cmsCIEXYZ*)cmsReadTag(profile, cmsSigGreenColorantTag);
+    cmsCIEXYZ* b = (cmsCIEXYZ*)cmsReadTag(profile, cmsSigBlueColorantTag);
+    if (!r || !g || !b) return false;
+
+    cmsCIExyY r_xy, g_xy, b_xy;
+    cmsXYZ2xyY(&r_xy, r);
+    cmsXYZ2xyY(&g_xy, g);
+    cmsXYZ2xyY(&b_xy, b);
+
+    /* sRGB primaries (Rec. 709) adapted to D50 PCS via Bradford.
+     * Typical ICC values after adaptation: R(0.4361,0.2225), G(0.3851,0.7169), B(0.1431,0.0606).
+     * Use a wider tolerance here because different profile generators
+     * produce slightly different adapted values. */
+    const double ptol = 0.006;
+    if (!xy_near(r_xy.x, 0.4361, ptol) || !xy_near(r_xy.y, 0.2225, ptol))
+        return false;
+    if (!xy_near(g_xy.x, 0.3851, ptol) || !xy_near(g_xy.y, 0.7169, ptol))
+        return false;
+    if (!xy_near(b_xy.x, 0.1431, ptol) || !xy_near(b_xy.y, 0.0606, ptol))
+        return false;
+
+    /* TRC: sRGB effective gamma is ~2.2. Reject linear (1.0), ProPhoto-like (1.8), etc. */
+    cmsToneCurve* r_trc = (cmsToneCurve*)cmsReadTag(profile, cmsSigRedTRCTag);
+    cmsToneCurve* g_trc = (cmsToneCurve*)cmsReadTag(profile, cmsSigGreenTRCTag);
+    cmsToneCurve* b_trc = (cmsToneCurve*)cmsReadTag(profile, cmsSigBlueTRCTag);
+    if (!r_trc || !g_trc || !b_trc) return false;
+
+    double gr = cmsEstimateGamma(r_trc, 0.1);
+    double gg = cmsEstimateGamma(g_trc, 0.1);
+    double gb = cmsEstimateGamma(b_trc, 0.1);
+    if (gr < 2.0 || gr > 2.5 || gg < 2.0 || gg > 2.5 || gb < 2.0 || gb > 2.5)
+        return false;
+
+    return true;
 }
 
 bool icc_is_profile_srgb(cmsHPROFILE profile)
@@ -168,7 +206,7 @@ bool icc_is_profile_srgb(cmsHPROFILE profile)
     if (cmsGetColorSpace(profile) != cmsSigRgbData)
         return false;
 
-    return description_contains_srgb(profile);
+    return primaries_and_trc_match_srgb(profile);
 }
 
 bool icc_get_profile_description(cmsHPROFILE profile, char* buf, size_t buf_size)
