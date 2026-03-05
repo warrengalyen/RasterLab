@@ -146,6 +146,10 @@ ColorProfile* cm_get_display_profile(const Settings* settings, const char* displ
 
     gint mode = settings_get_cm_mode((Settings*)settings);
 
+    if (mode == 2) {
+        /* CM_MODE_NONE: no display color management */
+        return NULL;
+    }
     if (mode == 1) {
         /* Custom: load from path in settings */
         const gchar* path = settings_get_cm_display_profile((Settings*)settings, display_id);

@@ -213,7 +213,8 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
     }
 
 #if HAVE_LCMS2
-    /* Display color management: sRGB -> system or custom profile (fallback to sRGB if none).
+    /* Display color management: sRGB -> system or custom profile.
+     * Skipped when mode is CM_MODE_NONE (no transform, small performance gain).
      * Applied for both CPU and GPU compositing (GPU writes to tile->pixel_buffer via glReadPixels). */
     ColorProfile* display_prof = NULL;
     ColorProfile* srgb_prof = NULL;
@@ -224,7 +225,7 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
         if (ctx_data) {
             AppContext* ctx = (AppContext*)ctx_data;
             Settings* settings = ctx ? ctx->settings : NULL;
-            if (settings) {
+            if (settings && settings_get_cm_mode(settings) != CM_MODE_NONE) {
                 GdkWindow* win = gtk_widget_get_window(widget);
                 if (win) {
                     GdkDisplay* gdk_display = gdk_window_get_display(win);

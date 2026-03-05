@@ -1812,7 +1812,7 @@ static void settings_load_color_management(Settings* settings, xmlNode* color_ma
     xmlChar* mode_attr = xmlGetProp(color_management_node, (const xmlChar*)"mode");
     if (mode_attr) {
         gint v = (gint)strtol((const char*)mode_attr, NULL, 10);
-        if (v >= 0 && v <= 1) {
+        if (v >= 0 && v <= 2) {
             settings->cm_mode = v;
         }
         xmlFree(mode_attr);
@@ -2135,7 +2135,7 @@ gboolean settings_get_cm_use_embedded_icc(Settings* settings) {
 void settings_set_cm_mode(Settings* settings, gint mode) {
     if (!settings)
         return;
-    if (mode >= 0 && mode <= 1) {
+    if (mode >= 0 && mode <= 2) {
         settings->cm_mode = mode;
     }
 }

@@ -18,7 +18,8 @@ typedef enum {
  */
 typedef enum {
     CM_MODE_SYSTEM_PROFILE = 0, /* Use current system profile for each display (default) */
-    CM_MODE_CUSTOM_PROFILE = 1  /* Use custom ICC/ICM profile per display */
+    CM_MODE_CUSTOM_PROFILE = 1, /* Use custom ICC/ICM profile per display */
+    CM_MODE_NONE = 2           /* Turn off display color management (no transform; small performance gain) */
 } ColorManagementMode;
 
 /**

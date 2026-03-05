@@ -215,11 +215,11 @@ static gboolean settings_dialog_apply_and_save(GtkDialog* dialog, AppContext* ct
     /* Apply checkerboard to global render state so canvas updates immediately */
     render_utils_set_alpha_check_from_settings(ctx->settings);
 
-    /* CMS: validate profile path before saving; if custom mode and invalid path, abort */
+    /* CMS: validate profile path before saving; only when custom mode and path non-empty */
     GtkComboBox* cms_display_combo = GTK_COMBO_BOX(gtk_builder_get_object(builder, "cms_available_displays_combo"));
     GtkEntry* cms_profile_entry = GTK_ENTRY(gtk_builder_get_object(builder, "cms_color_profile_text"));
     GtkToggleButton* cms_custom_radio = GTK_TOGGLE_BUTTON(gtk_builder_get_object(builder, "cms_mode_custom_radio"));
-    if (cms_custom_radio && gtk_toggle_button_get_active(cms_custom_radio) && cms_profile_entry) {
+    if (cms_custom_radio && gtk_toggle_button_get_active(cms_custom_radio) && cms_profile_entry) { /* custom mode only */
         const gchar* profile_path = gtk_entry_get_text(cms_profile_entry);
         gchar* trimmed = profile_path ? g_strstrip(g_strdup(profile_path)) : g_strdup("");
         if (trimmed && trimmed[0] != '\0') {
@@ -244,9 +244,17 @@ static gboolean settings_dialog_apply_and_save(GtkDialog* dialog, AppContext* ct
         g_free(trimmed);
     }
 
-    /* CMS: apply mode, rendering intent, checkboxes, and display profile */
-    if (cms_custom_radio) {
-        settings_set_cm_mode(ctx->settings, gtk_toggle_button_get_active(cms_custom_radio) ? 1 : 0);
+    /* CMS: apply mode (none=2, custom=1, system=0) */
+    {
+        GtkToggleButton* cms_none_radio = GTK_TOGGLE_BUTTON(gtk_builder_get_object(builder, "cms_mode_none_radio"));
+        GtkToggleButton* cms_system_radio = GTK_TOGGLE_BUTTON(gtk_builder_get_object(builder, "cms_mode_system_radio"));
+        if (cms_none_radio && gtk_toggle_button_get_active(cms_none_radio)) {
+            settings_set_cm_mode(ctx->settings, 2); /* CM_MODE_NONE */
+        } else if (cms_custom_radio && gtk_toggle_button_get_active(cms_custom_radio)) {
+            settings_set_cm_mode(ctx->settings, 1); /* CM_MODE_CUSTOM_PROFILE */
+        } else if (cms_system_radio) {
+            settings_set_cm_mode(ctx->settings, 0); /* CM_MODE_SYSTEM_PROFILE */
+        }
     }
     GtkComboBox* cms_intent_combo = GTK_COMBO_BOX(gtk_builder_get_object(builder, "cms_rendering_intent_combo"));
     if (cms_intent_combo) {
@@ -929,10 +937,14 @@ void settings_dialog_show(AppContext* ctx) {
             gtk_combo_box_set_active(cms_intent_combo, intent);
         }
 
-        /* Mode radios: load from settings, enable/disable custom box */
-        if (cms_system_radio && cms_custom_radio) {
+        /* Mode radios: load from settings (none=2, custom=1, system=0), enable/disable custom box */
+        GtkRadioButton* cms_none_radio = GTK_RADIO_BUTTON(gtk_builder_get_object(builder, "cms_mode_none_radio"));
+        if (cms_system_radio && cms_custom_radio && cms_none_radio) {
             gint mode = settings_get_cm_mode(ctx->settings);
-            gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(mode == 1 ? cms_custom_radio : cms_system_radio), TRUE);
+            GtkToggleButton* active_radio = (mode == 2) ? GTK_TOGGLE_BUTTON(cms_none_radio)
+                                    : (mode == 1) ? GTK_TOGGLE_BUTTON(cms_custom_radio)
+                                    : GTK_TOGGLE_BUTTON(cms_system_radio);
+            gtk_toggle_button_set_active(active_radio, TRUE);
         }
         if (cms_custom_box && cms_custom_radio) {
             gtk_widget_set_sensitive(cms_custom_box, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(cms_custom_radio)));
