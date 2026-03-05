@@ -40,6 +40,10 @@ struct ColorTransform {
 
 /* Swap R and B in each pixel (BGRA <-> RGBA) for lcms RGBA8 transform. */
 static void argb32_swap_rb(uint8_t* buffer, size_t pixel_count);
+/* Fused: unpremultiply + swap R/B in one pass (BGRA-premul → RGBA-straight). */
+static void argb32_unpremultiply_swap_rb(uint8_t* buffer, size_t pixel_count);
+/* Fused: swap R/B + premultiply in one pass (RGBA-straight → BGRA-premul). */
+static void argb32_swap_rb_premultiply(uint8_t* buffer, size_t pixel_count);
 
 ColorProfile* cm_profile_from_file(const char* path) {
     if (!path || !path[0])
@@ -345,11 +349,9 @@ void cm_apply_transform_argb32(ColorTransform* transform, uint8_t* buffer, size_
     if (!transform || !buffer || pixel_count == 0)
         return;
 
-    cm_unpremultiply_argb32(buffer, pixel_count);
-    argb32_swap_rb(buffer, pixel_count);
+    argb32_unpremultiply_swap_rb(buffer, pixel_count);
     cm_transform_apply(transform, buffer, pixel_count);
-    argb32_swap_rb(buffer, pixel_count);
-    cm_premultiply_argb32(buffer, pixel_count);
+    argb32_swap_rb_premultiply(buffer, pixel_count);
 }
 
 void cm_transform_destroy(ColorTransform* transform) {
@@ -368,6 +370,34 @@ static void argb32_swap_rb(uint8_t* buffer, size_t pixel_count) {
         uint8_t t = p[0];
         p[0] = p[2];
         p[2] = t;
+    }
+}
+
+static void argb32_unpremultiply_swap_rb(uint8_t* buffer, size_t pixel_count) {
+    for (size_t i = 0; i < pixel_count; i++) {
+        uint8_t* p = buffer + (i * 4);
+        uint8_t b = p[0], g = p[1], r = p[2], a = p[3];
+
+        if (a == 0) {
+            p[0] = p[1] = p[2] = 0;
+            continue;
+        }
+
+        uint32_t half = a / 2;
+        p[0] = (uint8_t)(((uint32_t)r * 255 + half) / a);
+        p[1] = (uint8_t)(((uint32_t)g * 255 + half) / a);
+        p[2] = (uint8_t)(((uint32_t)b * 255 + half) / a);
+    }
+}
+
+static void argb32_swap_rb_premultiply(uint8_t* buffer, size_t pixel_count) {
+    for (size_t i = 0; i < pixel_count; i++) {
+        uint8_t* p = buffer + (i * 4);
+        uint8_t r = p[0], g = p[1], b = p[2], a = p[3];
+
+        p[0] = (uint8_t)((b * (uint32_t)a + 127) / 255);
+        p[1] = (uint8_t)((g * (uint32_t)a + 127) / 255);
+        p[2] = (uint8_t)((r * (uint32_t)a + 127) / 255);
     }
 }
 
@@ -444,11 +474,9 @@ void cm_convert_sdr_to_srgb_argb32(uint8_t* buffer, size_t pixel_count,
         return;
     }
 
-    cm_unpremultiply_argb32(buffer, pixel_count);
-    argb32_swap_rb(buffer, pixel_count);           /* BGRA -> RGBA for lcms */
+    argb32_unpremultiply_swap_rb(buffer, pixel_count);
     cm_transform_apply(transform, buffer, pixel_count);
-    argb32_swap_rb(buffer, pixel_count);           /* RGBA -> BGRA (Cairo) */
-    cm_premultiply_argb32(buffer, pixel_count);
+    argb32_swap_rb_premultiply(buffer, pixel_count);
 
     cm_transform_destroy(transform);
     cm_profile_destroy(dst);
@@ -483,12 +511,9 @@ bool cm_convert_sdr_to_srgb_argb32_from_profile(uint8_t* buffer, size_t pixel_co
     if (!transform)
         return false;
 
-    /* Do NOT allow premultiplied data through CMS: convert to straight alpha, transform, then premultiply for Cairo */
-    cm_unpremultiply_argb32(buffer, pixel_count);
-    argb32_swap_rb(buffer, pixel_count);
+    argb32_unpremultiply_swap_rb(buffer, pixel_count);
     cmsDoTransform(transform, buffer, buffer, (cmsUInt32Number)pixel_count);
-    argb32_swap_rb(buffer, pixel_count);
-    cm_premultiply_argb32(buffer, pixel_count);
+    argb32_swap_rb_premultiply(buffer, pixel_count);
 
     cmsDeleteTransform(transform);
     return true;
