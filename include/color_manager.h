@@ -231,6 +231,26 @@ bool cm_convert_sdr_to_srgb_argb32_from_profile(uint8_t* buffer, size_t pixel_co
                                                 bool use_black_point_comp);
 
 /* -------------------------------------------------------------------------
+ * CMYK load-time conversion to sRGB
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Convert interleaved CMYK 8-bit data to Cairo ARGB32 (BGRA, premultiplied)
+ * via an ICC CMYK profile. Alpha is set to 0xFF (fully opaque).
+ *
+ * \param cmyk_data       Input: interleaved CMYK, 4 bytes per pixel (C, M, Y, K)
+ * \param argb32_out      Output: Cairo ARGB32 buffer, must be allocated (pixel_count * 4 bytes)
+ * \param pixel_count     Number of pixels
+ * \param cmyk_profile    Source CMYK ICC profile (cmsHPROFILE), caller retains ownership
+ * \param rendering_intent ICC intent (0-3)
+ * \param use_bpc         If true, use black point compensation
+ * \return true on success, false on transform failure
+ */
+bool cm_convert_cmyk_to_srgb_argb32(const uint8_t* cmyk_data, uint8_t* argb32_out,
+                                    size_t pixel_count, void* cmyk_profile,
+                                    int rendering_intent, bool use_bpc);
+
+/* -------------------------------------------------------------------------
  * HDR linear conversion (before tone mapping)
  * ------------------------------------------------------------------------- */
 

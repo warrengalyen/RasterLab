@@ -15,6 +15,7 @@
 #include <tiff.h>
 #include <tiffio.h>
 #if defined(HAVE_LCMS2)
+#include "color_manager.h"
 #include "color_manager/icc_utils.h"
 #endif
 
@@ -145,6 +146,88 @@ static void tiff_warning_handler(const char* module, const char* fmt, va_list ap
     (void)fmt;
     (void)ap;
     /* Warnings are ignored for now */
+}
+
+/**
+ * Load a single CMYK page from TIFF into a layer via raw scanlines + CMS.
+ * Returns PLUGIN_ERROR_UNSUPPORTED_FORMAT if scanlines can't be read (tiled, etc.),
+ * so the caller can fall back to TIFFReadRGBAImage.
+ */
+static PluginError load_tiff_page_cmyk(TIFF* tif, ImageDocument* doc, ImageLayer* layer,
+                                       uint32_t page_width, uint32_t page_height,
+                                       void* cmyk_profile, int intent, gboolean use_bpc) {
+    cairo_surface_t* temp_surface;
+    guchar* surface_data;
+    int surface_stride;
+
+    if (!tif || !doc || !layer)
+        return PLUGIN_ERROR_INVALID_PARAMETERS;
+
+    if (TIFFIsTiled(tif))
+        return PLUGIN_ERROR_UNSUPPORTED_FORMAT;
+
+    temp_surface = layer->surface;
+    if (!temp_surface) return PLUGIN_ERROR_OUT_OF_MEMORY;
+    cairo_surface_flush(temp_surface);
+    surface_data = cairo_image_surface_get_data(temp_surface);
+    surface_stride = cairo_image_surface_get_stride(temp_surface);
+    if (!surface_data) return PLUGIN_ERROR_OUT_OF_MEMORY;
+
+    uint32_t offset_x = (page_width < doc->width) ? (doc->width - page_width) / 2 : 0;
+    uint32_t offset_y = (page_height < doc->height) ? (doc->height - page_height) / 2 : 0;
+
+    cairo_t* cr = cairo_create(temp_surface);
+    if (cr) { cairo_set_operator(cr, CAIRO_OPERATOR_CLEAR); cairo_paint(cr); cairo_destroy(cr); }
+
+    tmsize_t sl_size = TIFFScanlineSize(tif);
+    guchar* sl_buf = g_malloc(sl_size);
+    guchar* argb_row = g_malloc(page_width * 4);
+    if (!sl_buf || !argb_row) {
+        g_free(sl_buf); g_free(argb_row);
+        return PLUGIN_ERROR_OUT_OF_MEMORY;
+    }
+
+    for (uint32_t y = 0; y < page_height; y++) {
+        if (TIFFReadScanline(tif, sl_buf, y, 0) < 0) {
+            g_warning("TIFF plugin: failed to read CMYK scanline %u", y);
+            break;
+        }
+
+#if defined(HAVE_LCMS2)
+        if (cmyk_profile) {
+            cm_convert_cmyk_to_srgb_argb32(sl_buf, argb_row, page_width,
+                                           cmyk_profile, intent, use_bpc ? true : false);
+        } else
+#endif
+        {
+            (void)cmyk_profile; (void)intent; (void)use_bpc;
+            for (uint32_t x = 0; x < page_width; x++) {
+                guchar c = sl_buf[x * 4 + 0];
+                guchar m = sl_buf[x * 4 + 1];
+                guchar yy = sl_buf[x * 4 + 2];
+                guchar k = sl_buf[x * 4 + 3];
+                guchar r = (guchar)(((255 - c) * (255 - k) + 127) / 255);
+                guchar g = (guchar)(((255 - m) * (255 - k) + 127) / 255);
+                guchar b = (guchar)(((255 - yy) * (255 - k) + 127) / 255);
+                argb_row[x * 4 + 0] = b;
+                argb_row[x * 4 + 1] = g;
+                argb_row[x * 4 + 2] = r;
+                argb_row[x * 4 + 3] = 0xFF;
+            }
+        }
+
+        if ((offset_y + y) < doc->height) {
+            guchar* dst = surface_data + (offset_y + y) * surface_stride;
+            uint32_t copy_w = page_width;
+            if (offset_x + copy_w > doc->width) copy_w = doc->width - offset_x;
+            memcpy(dst + offset_x * 4, argb_row, copy_w * 4);
+        }
+    }
+
+    g_free(sl_buf);
+    g_free(argb_row);
+    cairo_surface_mark_dirty(temp_surface);
+    return PLUGIN_ERROR_NONE;
 }
 
 /**
@@ -334,38 +417,46 @@ static PluginError load_tiff(ImageDocument* doc, const char* filename) {
         planar_config = PLANARCONFIG_CONTIG;
     }
 
+    gboolean is_cmyk = (photometric == PHOTOMETRIC_SEPARATED && samples_per_pixel >= 4);
+
 #if defined(HAVE_LIBTIFF) && defined(HAVE_LCMS2)
-    /* TIFF: libtiff TIFFGetField(tif, TIFFTAG_ICCPROFILE, &len, &data). Pass to icc_profile_from_memory().
-     * Fall back to NULL profile (sRGB) on any failure or malformed ICC. */
+    cmsHPROFILE cmyk_icc = NULL;
     {
         uint32_t icc_len = 0;
         void* icc_data = NULL;
+        ImageFormatHostAPI* api = plugin_host_api_get();
+        gboolean use_icc = !api || !api->get_use_embedded_icc || api->get_use_embedded_icc();
+
         if (TIFFGetField(tif, TIFFTAG_ICCPROFILE, &icc_len, &icc_data) && icc_data != NULL && icc_len > 0) {
-            cmsHPROFILE profile = icc_profile_from_memory(icc_data, (size_t)icc_len);
-            if (profile) {
-                ImageFormatHostAPI* api = plugin_host_api_get();
-                if (api && api->document_set_load_icc_profile) {
-                    if (api->get_use_embedded_icc && !api->get_use_embedded_icc())
-                        icc_destroy(profile);
-                    else {
-                        g_message("TIFF: embedded ICC profile found, will convert to sRGB", (unsigned)icc_len);
-                        api->document_set_load_icc_profile(doc, profile);
-                    }
-                } else {
-                    icc_destroy(profile);
+            if (use_icc && is_cmyk) {
+                cmyk_icc = icc_profile_from_memory_any(icc_data, (size_t)icc_len);
+                if (cmyk_icc && !icc_profile_is_cmyk(cmyk_icc)) {
+                    icc_destroy(cmyk_icc);
+                    cmyk_icc = NULL;
                 }
-            } else {
-                g_warning("TIFF plugin: Invalid or non-RGB embedded ICC profile; assuming sRGB");
+                if (cmyk_icc)
+                    g_message("TIFF: CMYK ICC profile found, will convert to sRGB");
+            } else if (use_icc) {
+                cmsHPROFILE rgb_prof = icc_profile_from_memory(icc_data, (size_t)icc_len);
+                if (rgb_prof) {
+                    if (api && api->document_set_load_icc_profile) {
+                        g_message("TIFF: embedded ICC profile found, will convert to sRGB");
+                        api->document_set_load_icc_profile(doc, rgb_prof);
+                    } else {
+                        icc_destroy(rgb_prof);
+                    }
+                }
             }
         }
-        /* No ICC profile tag or malformed */
     }
+    int cmyk_intent = plugin_host_api_get_cm_rendering_intent();
+    gboolean cmyk_bpc = plugin_host_api_get_cm_bpc();
 #endif
 
     /* Set document metadata based on first page */
     doc->width = width;
     doc->height = height;
-    doc->channels = samples_per_pixel;
+    doc->channels = is_cmyk ? 3 : samples_per_pixel;
     doc->bit_depth = bits_per_sample;
     doc->has_alpha = (samples_per_pixel == 4 || samples_per_pixel == 2);
 
@@ -407,8 +498,20 @@ static PluginError load_tiff(ImageDocument* doc, const char* filename) {
             continue;
         }
 
-        /* Load page into layer */
-        error = load_tiff_page(tif, doc, layer, page_width, page_height);
+        /* Load page into layer: CMYK path or standard RGBA path */
+        if (is_cmyk) {
+#if defined(HAVE_LCMS2)
+            error = load_tiff_page_cmyk(tif, doc, layer, page_width, page_height,
+                                        cmyk_icc, cmyk_intent, cmyk_bpc);
+#else
+            error = load_tiff_page_cmyk(tif, doc, layer, page_width, page_height,
+                                        NULL, 1, TRUE);
+#endif
+            if (error == PLUGIN_ERROR_UNSUPPORTED_FORMAT)
+                error = load_tiff_page(tif, doc, layer, page_width, page_height);
+        } else {
+            error = load_tiff_page(tif, doc, layer, page_width, page_height);
+        }
         if (error != PLUGIN_ERROR_NONE) {
             g_warning("TIFF plugin: Failed to load page %u", page_num + 1);
             layer_free(layer);
@@ -424,6 +527,13 @@ static PluginError load_tiff(ImageDocument* doc, const char* filename) {
 
     /* Cleanup */
     TIFFClose(tif);
+
+#if defined(HAVE_LCMS2)
+    if (cmyk_icc) {
+        icc_destroy(cmyk_icc);
+        cmyk_icc = NULL;
+    }
+#endif
 
     /* Check if we loaded any pages */
     if (doc->layers == NULL) {

@@ -74,6 +74,19 @@ cmsHPROFILE icc_profile_from_memory(const void *data, size_t size)
     return h;
 }
 
+cmsHPROFILE icc_profile_from_memory_any(const void *data, size_t size)
+{
+    if (!data || size == 0 || size > (size_t)(cmsUInt32Number)(-1))
+        return NULL;
+
+    return cmsOpenProfileFromMem(data, (cmsUInt32Number)size);
+}
+
+bool icc_profile_is_cmyk(cmsHPROFILE profile)
+{
+    return profile && cmsGetColorSpace(profile) == cmsSigCmykData;
+}
+
 cmsHPROFILE icc_profile_from_file(const char* path)
 {
     if (!path || !path[0])

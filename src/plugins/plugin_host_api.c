@@ -152,6 +152,14 @@ static bool host_get_use_embedded_icc(void) {
     return !s_cm_settings || settings_get_cm_use_embedded_icc(s_cm_settings);
 }
 
+int plugin_host_api_get_cm_rendering_intent(void) {
+    return s_cm_settings ? settings_get_cm_rendering_intent(s_cm_settings) : 1;
+}
+
+bool plugin_host_api_get_cm_bpc(void) {
+    return !s_cm_settings || settings_get_cm_black_point_compensation(s_cm_settings);
+}
+
 /**
  * Get number of layers
  */

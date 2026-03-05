@@ -522,6 +522,51 @@ bool cm_convert_sdr_to_srgb_argb32_from_profile(uint8_t* buffer, size_t pixel_co
 }
 
 /* -------------------------------------------------------------------------
+ * CMYK load-time conversion to sRGB
+ * ------------------------------------------------------------------------- */
+
+bool cm_convert_cmyk_to_srgb_argb32(const uint8_t* cmyk_data, uint8_t* argb32_out,
+                                    size_t pixel_count, void* cmyk_profile,
+                                    int rendering_intent, bool use_bpc) {
+    if (!cmyk_data || !argb32_out || pixel_count == 0 || !cmyk_profile)
+        return false;
+
+    cmsHPROFILE src = (cmsHPROFILE)cmyk_profile;
+    cmsHPROFILE dst = cmsCreate_sRGBProfile();
+    if (!dst)
+        return false;
+
+    if (rendering_intent < 0) rendering_intent = 0;
+    if (rendering_intent > 3) rendering_intent = 3;
+
+    cmsUInt32Number flags = 0;
+    if (use_bpc)
+        flags |= cmsFLAGS_BLACKPOINTCOMPENSATION;
+
+    cmsHTRANSFORM xform = cmsCreateTransform(
+        src, TYPE_CMYK_8,
+        dst, TYPE_RGBA_8,
+        (cmsUInt32Number)rendering_intent,
+        flags);
+    cmsCloseProfile(dst);
+    if (!xform)
+        return false;
+
+    cmsDoTransform(xform, cmyk_data, argb32_out, (cmsUInt32Number)pixel_count);
+    cmsDeleteTransform(xform);
+
+    /* lcms output is RGBA straight. Convert to Cairo BGRA premultiplied (A=0xFF → no premul needed). */
+    for (size_t i = 0; i < pixel_count; i++) {
+        uint8_t* p = argb32_out + i * 4;
+        uint8_t r = p[0];
+        p[0] = p[2]; /* B */
+        p[2] = r;    /* R */
+        p[3] = 0xFF; /* opaque */
+    }
+    return true;
+}
+
+/* -------------------------------------------------------------------------
  * HDR linear conversion (linear space only; no tone mapping / gamma / 8-bit)
  * ------------------------------------------------------------------------- */
 

@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 #if defined(HAVE_LIBJPEG) && defined(HAVE_LCMS2)
+#include "color_manager.h"
 #include "color_manager/icc_utils.h"
 #endif
 
@@ -123,6 +124,9 @@ static PluginError load_jpeg(ImageDocument* doc, const char* filename) {
     cairo_surface_t* temp_surface;
     guchar* surface_data;
     int surface_stride;
+#if defined(HAVE_LIBJPEG) && defined(HAVE_LCMS2)
+    cmsHPROFILE embedded_icc = NULL;
+#endif
 
     if (!doc || !filename) {
         return PLUGIN_ERROR_INVALID_PARAMETERS;
@@ -141,6 +145,9 @@ static PluginError load_jpeg(ImageDocument* doc, const char* filename) {
     if (setjmp(jerr.setjmp_buffer)) {
         jpeg_destroy_decompress(&cinfo);
         fclose(infile);
+#if defined(HAVE_LIBJPEG) && defined(HAVE_LCMS2)
+        if (embedded_icc) icc_destroy(embedded_icc);
+#endif
         return PLUGIN_ERROR_FILE_READ_ERROR;
     }
 
@@ -150,36 +157,45 @@ static PluginError load_jpeg(ImageDocument* doc, const char* filename) {
     jpeg_save_markers(&cinfo, JPEG_APP0 + 2, 0xFFFF); /* APP2 for ICC profile */
     jpeg_read_header(&cinfo, TRUE);
 
+    /* Detect CMYK/YCCK before decompression */
+    gboolean is_cmyk = (cinfo.jpeg_color_space == JCS_CMYK || cinfo.jpeg_color_space == JCS_YCCK);
+
 #if defined(HAVE_LIBJPEG) && defined(HAVE_LCMS2)
-    /* JPEG: libjpeg marker parsing. jpeg_save_markers(APP2) + jpeg_read_icc_profile() collects
-     * APP2 segments labeled "ICC_PROFILE" and reassembles multi-part ICC in correct sequence.
-     * Pass reassembled buffer to icc_profile_from_memory(). Fall back to NULL profile (sRGB) on any failure. */
+    /* Extract embedded ICC profile. For CMYK images use icc_profile_from_memory_any()
+     * so CMYK profiles are accepted; for RGB use the RGB-only loader. */
     {
         JOCTET* icc_data = NULL;
         unsigned int icc_len = 0;
         if (jpeg_read_icc_profile(&cinfo, &icc_data, &icc_len) && icc_data != NULL && icc_len > 0) {
-            cmsHPROFILE profile = icc_profile_from_memory(icc_data, (size_t)icc_len);
-            free(icc_data);
-            icc_data = NULL;
-            if (profile) {
-                ImageFormatHostAPI* api = plugin_host_api_get();
-                if (api && api->document_set_load_icc_profile) {
-                    if (api->get_use_embedded_icc && !api->get_use_embedded_icc())
-                        icc_destroy(profile);
-                    else {
-                        g_message("JPEG: embedded ICC profile found, will convert to sRGB");
-                        api->document_set_load_icc_profile(doc, profile);
-                    }
-                } else {
-                    icc_destroy(profile);
+            ImageFormatHostAPI* api = plugin_host_api_get();
+            gboolean use_icc = !api || !api->get_use_embedded_icc || api->get_use_embedded_icc();
+
+            if (use_icc && is_cmyk) {
+                embedded_icc = icc_profile_from_memory_any(icc_data, (size_t)icc_len);
+                if (embedded_icc && !icc_profile_is_cmyk(embedded_icc)) {
+                    icc_destroy(embedded_icc);
+                    embedded_icc = NULL;
                 }
-            } else {
-                g_warning("JPEG plugin: Invalid or non-RGB embedded ICC profile; assuming sRGB");
+                if (embedded_icc)
+                    g_message("JPEG: CMYK ICC profile found, will convert to sRGB");
+            } else if (use_icc) {
+                cmsHPROFILE rgb_prof = icc_profile_from_memory(icc_data, (size_t)icc_len);
+                if (rgb_prof) {
+                    if (api && api->document_set_load_icc_profile) {
+                        g_message("JPEG: embedded ICC profile found, will convert to sRGB");
+                        api->document_set_load_icc_profile(doc, rgb_prof);
+                    } else {
+                        icc_destroy(rgb_prof);
+                    }
+                }
             }
+            free(icc_data);
         }
-        /* No APP2 ICC or malformed */
     }
 #endif
+
+    if (is_cmyk)
+        cinfo.out_color_space = JCS_CMYK;
 
     /* Start decompression */
     jpeg_start_decompress(&cinfo);
@@ -187,9 +203,9 @@ static PluginError load_jpeg(ImageDocument* doc, const char* filename) {
     /* Set document metadata */
     doc->width = cinfo.output_width;
     doc->height = cinfo.output_height;
-    doc->channels = cinfo.output_components; /* 3 for RGB */
+    doc->channels = 3;
     doc->bit_depth = 8;
-    doc->has_alpha = FALSE; /* JPEG doesn't support alpha */
+    doc->has_alpha = FALSE;
 
     /* Free old layers */
     for (GList* iter = doc->layers; iter; iter = iter->next) {
@@ -205,6 +221,9 @@ static PluginError load_jpeg(ImageDocument* doc, const char* filename) {
         jpeg_finish_decompress(&cinfo);
         jpeg_destroy_decompress(&cinfo);
         fclose(infile);
+#if defined(HAVE_LIBJPEG) && defined(HAVE_LCMS2)
+        if (embedded_icc) icc_destroy(embedded_icc);
+#endif
         return PLUGIN_ERROR_OUT_OF_MEMORY;
     }
 
@@ -218,29 +237,82 @@ static PluginError load_jpeg(ImageDocument* doc, const char* filename) {
     row_stride = cinfo.output_width * cinfo.output_components;
     buffer = (*cinfo.mem->alloc_sarray)((j_common_ptr)&cinfo, JPOOL_IMAGE, row_stride, 1);
 
-    int y = 0;
-    while (cinfo.output_scanline < cinfo.output_height) {
-        jpeg_read_scanlines(&cinfo, buffer, 1);
+    if (is_cmyk) {
+        /* CMYK path: read raw CMYK scanlines, convert via CMS or naive fallback */
+#if defined(HAVE_LIBJPEG) && defined(HAVE_LCMS2)
+        gboolean have_cms = (embedded_icc != NULL);
+        int intent = plugin_host_api_get_cm_rendering_intent();
+        gboolean bpc = plugin_host_api_get_cm_bpc();
+#endif
+        int y = 0;
+        while (cinfo.output_scanline < cinfo.output_height) {
+            jpeg_read_scanlines(&cinfo, buffer, 1);
+            guchar* src = buffer[0];
+            guchar* dst = surface_data + y * surface_stride;
 
-        /* Convert RGB to ARGB32 (BGRA in memory for Cairo) */
-        guchar* src_row = buffer[0];
-        guchar* dst_row = surface_data + y * surface_stride;
+#if defined(HAVE_LIBJPEG) && defined(HAVE_LCMS2)
+            if (have_cms) {
+                cm_convert_cmyk_to_srgb_argb32(src, dst, doc->width,
+                                               embedded_icc, intent, bpc ? true : false);
+            } else
+#endif
+            {
+                gboolean adobe = cinfo.saw_Adobe_marker;
+                for (guint x = 0; x < doc->width; x++) {
+                    guchar c = src[x * 4 + 0];
+                    guchar m = src[x * 4 + 1];
+                    guchar yy = src[x * 4 + 2];
+                    guchar k = src[x * 4 + 3];
+                    guchar r, g, b;
 
-        for (guint x = 0; x < doc->width; x++) {
-            guchar r = src_row[x * 3 + 0];
-            guchar g = src_row[x * 3 + 1];
-            guchar b = src_row[x * 3 + 2];
+                    if (adobe) {
+                        r = (guchar)((c * k + 127) / 255);
+                        g = (guchar)((m * k + 127) / 255);
+                        b = (guchar)((yy * k + 127) / 255);
+                    } else {
+                        r = (guchar)(((255 - c) * (255 - k) + 127) / 255);
+                        g = (guchar)(((255 - m) * (255 - k) + 127) / 255);
+                        b = (guchar)(((255 - yy) * (255 - k) + 127) / 255);
+                    }
 
-            /* Cairo ARGB32: BGRA in memory (little-endian) */
-            dst_row[x * 4 + 0] = b;
-            dst_row[x * 4 + 1] = g;
-            dst_row[x * 4 + 2] = r;
-            dst_row[x * 4 + 3] = 0xFF; /* Alpha = opaque */
+                    dst[x * 4 + 0] = b;
+                    dst[x * 4 + 1] = g;
+                    dst[x * 4 + 2] = r;
+                    dst[x * 4 + 3] = 0xFF;
+                }
+            }
+            y++;
         }
-        y++;
+    } else {
+        /* Standard RGB path */
+        int y = 0;
+        while (cinfo.output_scanline < cinfo.output_height) {
+            jpeg_read_scanlines(&cinfo, buffer, 1);
+            guchar* src_row = buffer[0];
+            guchar* dst_row = surface_data + y * surface_stride;
+
+            for (guint x = 0; x < doc->width; x++) {
+                guchar r = src_row[x * 3 + 0];
+                guchar g = src_row[x * 3 + 1];
+                guchar b = src_row[x * 3 + 2];
+
+                dst_row[x * 4 + 0] = b;
+                dst_row[x * 4 + 1] = g;
+                dst_row[x * 4 + 2] = r;
+                dst_row[x * 4 + 3] = 0xFF;
+            }
+            y++;
+        }
     }
 
     cairo_surface_mark_dirty(temp_surface);
+
+#if defined(HAVE_LIBJPEG) && defined(HAVE_LCMS2)
+    if (embedded_icc) {
+        icc_destroy(embedded_icc);
+        embedded_icc = NULL;
+    }
+#endif
 
     /* Finish decompression */
     jpeg_finish_decompress(&cinfo);

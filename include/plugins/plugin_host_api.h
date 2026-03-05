@@ -19,6 +19,16 @@ ImageFormatHostAPI* plugin_host_api_get(void);
  */
 void plugin_host_api_set_cm_settings(void* settings);
 
+/**
+ * Get the CMS rendering intent from settings (0-3). Default: 1 (relative colorimetric).
+ */
+int plugin_host_api_get_cm_rendering_intent(void);
+
+/**
+ * Get whether black point compensation is enabled. Default: true.
+ */
+bool plugin_host_api_get_cm_bpc(void);
+
 #ifdef __cplusplus
 }
 #endif

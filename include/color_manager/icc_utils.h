@@ -30,6 +30,13 @@ bool icc_profile_to_memory(cmsHPROFILE profile,
 // Caller owns profile and must cmsCloseProfile().
 cmsHPROFILE icc_create_srgb_profile(void);
 
+// Load ICC profile from raw memory block, accepting any color space (RGB, CMYK, etc.).
+// Used for load-time conversion from non-RGB source spaces. Returns NULL if invalid.
+cmsHPROFILE icc_profile_from_memory_any(const void* data, size_t size);
+
+// Returns true if the profile's color space is CMYK.
+bool icc_profile_is_cmyk(cmsHPROFILE profile);
+
 // Returns true if profile is already sRGB (approximate comparison allowed).
 bool icc_is_profile_srgb(cmsHPROFILE profile);
 
