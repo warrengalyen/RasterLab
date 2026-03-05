@@ -154,34 +154,44 @@ gboolean image_io_load(ImageDocument* doc, const char* filename, PluginError* er
             g_message("Loaded ICC profile: %s", desc_buf);
         }
 
-        if (document_get_layer_count(doc) > 0 && !icc_is_profile_srgb(embedded)) {
-            ImageLayer* layer = document_get_layer(doc, 0);
-            if (layer && layer->surface) {
+        guint layer_count = document_get_layer_count(doc);
+        if (layer_count > 0 && !icc_is_profile_srgb(embedded)) {
+            guint converted = 0;
+            for (guint li = 0; li < layer_count; li++) {
+                ImageLayer* layer = document_get_layer(doc, li);
+                if (!layer || !layer->surface)
+                    continue;
+
                 cairo_surface_flush(layer->surface);
                 guchar* data = cairo_image_surface_get_data(layer->surface);
                 int stride = cairo_image_surface_get_stride(layer->surface);
-                if (data && stride >= (int)(doc->width * 4)) {
-                    gboolean ok = TRUE;
-                    if (stride == (int)(doc->width * 4)) {
-                        size_t pixel_count = (size_t)doc->width * (size_t)doc->height;
-                        ok = cm_convert_sdr_to_srgb_argb32_from_profile(data, pixel_count, embedded, intent, use_bpc);
-                    } else {
-                        for (guint y = 0; y < doc->height && ok; y++) {
-                            ok = cm_convert_sdr_to_srgb_argb32_from_profile(
-                                data + (size_t)y * stride, (size_t)doc->width,
-                                embedded, intent, use_bpc);
-                        }
-                    }
-                    if (ok) {
-                        const char* name = desc_buf[0] ? desc_buf : "(embedded)";
-                        g_message("Converted from: %s → sRGB", name);
-                        cairo_surface_mark_dirty(layer->surface);
-                    } else {
-                        g_warning("ICC transform failed, assuming sRGB");
+                guint lw = layer->width, lh = layer->height;
+                if (!data || stride < (int)(lw * 4))
+                    continue;
+
+                gboolean ok = TRUE;
+                if (stride == (int)(lw * 4)) {
+                    ok = cm_convert_sdr_to_srgb_argb32_from_profile(
+                        data, (size_t)lw * (size_t)lh, embedded, intent, use_bpc);
+                } else {
+                    for (guint y = 0; y < lh && ok; y++) {
+                        ok = cm_convert_sdr_to_srgb_argb32_from_profile(
+                            data + (size_t)y * stride, (size_t)lw,
+                            embedded, intent, use_bpc);
                     }
                 }
+                if (ok) {
+                    cairo_surface_mark_dirty(layer->surface);
+                    converted++;
+                } else {
+                    g_warning("ICC transform failed on layer %u, assuming sRGB", li);
+                }
             }
-        } else if (document_get_layer_count(doc) > 0) {
+            if (converted > 0) {
+                const char* name = desc_buf[0] ? desc_buf : "(embedded)";
+                g_message("Converted %u layer(s) from: %s → sRGB", converted, name);
+            }
+        } else if (layer_count > 0) {
             g_message("Profile is sRGB, no conversion needed");
         }
 
