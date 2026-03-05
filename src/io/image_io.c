@@ -159,15 +159,25 @@ gboolean image_io_load(ImageDocument* doc, const char* filename, PluginError* er
             if (layer && layer->surface) {
                 cairo_surface_flush(layer->surface);
                 guchar* data = cairo_image_surface_get_data(layer->surface);
-                if (data) {
-                    size_t pixel_count = (size_t)doc->width * (size_t)doc->height;
-                    if (cm_convert_sdr_to_srgb_argb32_from_profile(data, pixel_count, embedded, intent, use_bpc)) {
+                int stride = cairo_image_surface_get_stride(layer->surface);
+                if (data && stride >= (int)(doc->width * 4)) {
+                    gboolean ok = TRUE;
+                    if (stride == (int)(doc->width * 4)) {
+                        size_t pixel_count = (size_t)doc->width * (size_t)doc->height;
+                        ok = cm_convert_sdr_to_srgb_argb32_from_profile(data, pixel_count, embedded, intent, use_bpc);
+                    } else {
+                        for (guint y = 0; y < doc->height && ok; y++) {
+                            ok = cm_convert_sdr_to_srgb_argb32_from_profile(
+                                data + (size_t)y * stride, (size_t)doc->width,
+                                embedded, intent, use_bpc);
+                        }
+                    }
+                    if (ok) {
                         const char* name = desc_buf[0] ? desc_buf : "(embedded)";
                         g_message("Converted from: %s → sRGB", name);
                         cairo_surface_mark_dirty(layer->surface);
                     } else {
                         g_warning("ICC transform failed, assuming sRGB");
-                        /* Fallback: pixels remain in source space; treat as sRGB for display */
                     }
                 }
             }
