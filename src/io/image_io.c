@@ -156,6 +156,16 @@ gboolean image_io_load(ImageDocument* doc, const char* filename, PluginError* er
 
         guint layer_count = document_get_layer_count(doc);
         if (layer_count > 0 && !icc_is_profile_srgb(embedded)) {
+            /* Retain original ICC blob for "preserve original profile" on save */
+            if (!doc->original_icc_data) {
+                void* blob = NULL;
+                size_t blob_size = 0;
+                if (icc_profile_to_memory(embedded, &blob, &blob_size) && blob) {
+                    doc->original_icc_data = blob;
+                    doc->original_icc_size = blob_size;
+                }
+            }
+
             guint converted = 0;
             for (guint li = 0; li < layer_count; li++) {
                 ImageLayer* layer = document_get_layer(doc, li);
@@ -255,11 +265,8 @@ gboolean image_io_save(ImageDocument* doc, const char* filename, const SaveOptio
 
     /* Initialize with provided options or defaults */
     if (opts) {
-        /* Copy base options */
-        actual_opts->quality = opts->quality;
-        actual_opts->compression_level = opts->compression_level;
-        actual_opts->preserve_alpha = opts->preserve_alpha;
-        actual_opts->flatten_layers = opts->flatten_layers;
+        /* Copy all base options (including reserved fields) */
+        *actual_opts = *opts;
 
         /* Use existing plugin_data if provided, otherwise allocate new one */
         if (opts->plugin_data) {

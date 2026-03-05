@@ -458,6 +458,25 @@ static PluginError save_jpeg(ImageDocument* doc, const char* filename, const Sav
     surface_data = cairo_image_surface_get_data(flattened);
     surface_stride = cairo_image_surface_get_stride(flattened);
 
+#if defined(HAVE_LIBJPEG) && defined(HAVE_LCMS2)
+    if (opts && opts->preserve_icc_profile && doc->original_icc_data && doc->original_icc_size > 0) {
+        int cms_intent = plugin_host_api_get_cm_rendering_intent();
+        bool cms_bpc = plugin_host_api_get_cm_bpc();
+        if (surface_stride == (int)(doc->width * 4)) {
+            cm_convert_srgb_argb32_to_profile(surface_data, (size_t)(doc->width * doc->height),
+                                               doc->original_icc_data, doc->original_icc_size,
+                                               cms_intent, cms_bpc);
+        } else {
+            for (guint y = 0; y < doc->height; y++) {
+                uint8_t* row = surface_data + y * surface_stride;
+                cm_convert_srgb_argb32_to_profile(row, doc->width,
+                                                   doc->original_icc_data, doc->original_icc_size,
+                                                   cms_intent, cms_bpc);
+            }
+        }
+    }
+#endif
+
     /* Determine if image is grayscale (for auto color depth) */
     if (color_depth == JPEG_COLOR_AUTO) {
         /* Check if image is grayscale by sampling pixels */
@@ -552,20 +571,24 @@ static PluginError save_jpeg(ImageDocument* doc, const char* filename, const Sav
     jpeg_start_compress(&cinfo, TRUE);
 
 #if defined(HAVE_LIBJPEG) && defined(HAVE_LCMS2)
-    /* Embed fresh sRGB ICC on every save (color only); do not preserve original profile */
     if (!is_grayscale) {
         void* icc_data = NULL;
         size_t icc_size = 0;
-        cmsHPROFILE srgb = icc_create_srgb_profile();
-        if (srgb && icc_profile_to_memory(srgb, &icc_data, &icc_size) && icc_data && icc_size > 0) {
-            icc_destroy(srgb);
-            jpeg_write_icc_profile(&cinfo, (const JOCTET*)icc_data, (unsigned int)icc_size);
-            free(icc_data);
+        if (opts && opts->preserve_icc_profile && doc->original_icc_data && doc->original_icc_size > 0) {
+            jpeg_write_icc_profile(&cinfo, (const JOCTET*)doc->original_icc_data,
+                                   (unsigned int)doc->original_icc_size);
         } else {
-            if (srgb)
+            cmsHPROFILE srgb = icc_create_srgb_profile();
+            if (srgb && icc_profile_to_memory(srgb, &icc_data, &icc_size) && icc_data && icc_size > 0) {
                 icc_destroy(srgb);
-            if (icc_data)
+                jpeg_write_icc_profile(&cinfo, (const JOCTET*)icc_data, (unsigned int)icc_size);
                 free(icc_data);
+            } else {
+                if (srgb)
+                    icc_destroy(srgb);
+                if (icc_data)
+                    free(icc_data);
+            }
         }
     }
 #endif

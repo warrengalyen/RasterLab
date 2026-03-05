@@ -1,9 +1,10 @@
 #include "ui/dialogs/formats/tiff_options_dialog.h"
-#include "ui/ui_utils.h"
 #include "document.h"
+#include "ui/ui_utils.h"
 #include <glib.h>
 #include <gtk/gtk.h>
 #include <string.h>
+
 
 #ifdef HAVE_LIBTIFF
 
@@ -274,6 +275,7 @@ gboolean tiff_options_dialog_show(GtkWindow* parent, SaveOptions* opts, ImageDoc
     GError* error = NULL;
     gint response;
     gboolean result = FALSE;
+    GtkWidget* icc_checkbox = NULL;
     TIFFSaveOptions* tiff_opts = NULL;
     GdkRGBA rgba;
     GtkToggleButton* color_compression_buttons[4];
@@ -531,6 +533,14 @@ gboolean tiff_options_dialog_show(GtkWindow* parent, SaveOptions* opts, ImageDoc
         g_signal_connect(cancel_button, "clicked", G_CALLBACK(on_button_clicked), dialog);
     }
 
+    /* Add "Embed ICC profile" checkbox when document has a non-sRGB original profile */
+    if (doc && doc->original_icc_data && doc->original_icc_size > 0) {
+        GtkWidget* content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+        icc_checkbox = gtk_check_button_new_with_label("Embed original ICC profile");
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(icc_checkbox), FALSE);
+        gtk_box_pack_end(GTK_BOX(content), icc_checkbox, FALSE, FALSE, 4);
+    }
+
     /* Show the dialog */
     gtk_widget_show_all(dialog);
 
@@ -604,6 +614,10 @@ gboolean tiff_options_dialog_show(GtkWindow* parent, SaveOptions* opts, ImageDoc
             if (page_format_single_page_button && page_format_multipage_button) {
                 tiff_opts->page_format = (TIFFPageFormat)get_active_toggle_button(page_format_buttons, 2);
             }
+        }
+        if (icc_checkbox) {
+            opts->preserve_icc_profile =
+                gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(icc_checkbox)) ? true : false;
         }
         result = TRUE;
     }

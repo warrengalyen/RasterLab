@@ -1,4 +1,5 @@
 #include "ui/dialogs/save_options_dialog.h"
+#include "document.h"
 #include "plugins/format_registry.h"
 #include "ui/dialogs/formats/bmp_options_dialog.h"
 #include "ui/dialogs/formats/jpeg_options_dialog.h"
@@ -40,13 +41,13 @@ gboolean save_options_dialog_show(GtkWindow* parent, const char* filename, SaveO
         return bmp_options_dialog_show(parent, opts);
     }
     if (g_ascii_strcasecmp(ext, "jpg") == 0 || g_ascii_strcasecmp(ext, "jpeg") == 0) {
-        return jpeg_options_dialog_show(parent, opts);
+        return jpeg_options_dialog_show(parent, opts, doc);
     }
     if (g_ascii_strcasecmp(ext, "png") == 0) {
-        return png_options_dialog_show(parent, opts);
+        return png_options_dialog_show(parent, opts, doc);
     }
     if (g_ascii_strcasecmp(ext, "webp") == 0) {
-        return webp_options_dialog_show(parent, opts);
+        return webp_options_dialog_show(parent, opts, doc);
     }
     if (g_ascii_strcasecmp(ext, "tif") == 0 || g_ascii_strcasecmp(ext, "tiff") == 0) {
         return tiff_options_dialog_show(parent, opts, doc);
@@ -55,7 +56,7 @@ gboolean save_options_dialog_show(GtkWindow* parent, const char* filename, SaveO
         return heic_options_dialog_show(parent, opts, doc);
     }
     if (g_ascii_strcasecmp(ext, "avif") == 0 || g_ascii_strcasecmp(ext, "avifs") == 0) {
-        return avif_options_dialog_show(parent, opts);
+        return avif_options_dialog_show(parent, opts, doc);
     }
 
     /* No dialog for this format */

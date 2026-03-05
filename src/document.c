@@ -1464,6 +1464,8 @@ ImageDocument* document_new(const gchar* filename, gboolean create_worker_pool, 
     doc->bit_depth = 0;
     doc->has_alpha = FALSE;
     doc->load_icc_profile = NULL;
+    doc->original_icc_data = NULL;
+    doc->original_icc_size = 0;
     doc->display_xform_cache = NULL;
 
     /* Initialize rendering pipeline */
@@ -1557,6 +1559,12 @@ void document_free(ImageDocument* doc) {
         doc->display_xform_cache = NULL;
     }
 #endif
+
+    if (doc->original_icc_data) {
+        free(doc->original_icc_data);
+        doc->original_icc_data = NULL;
+        doc->original_icc_size = 0;
+    }
 
     /* Free composite surface */
     if (doc->composite_surface) {

@@ -12,7 +12,7 @@ static void on_button_clicked(GtkButton* button, gpointer user_data) {
     gtk_dialog_response(dialog, response_id);
 }
 
-gboolean avif_options_dialog_show(GtkWindow* parent, SaveOptions* opts) {
+gboolean avif_options_dialog_show(GtkWindow* parent, SaveOptions* opts, ImageDocument* doc) {
     GtkBuilder* builder;
     GtkWidget* dialog;
     GtkWidget* quality_scale;
@@ -22,6 +22,7 @@ gboolean avif_options_dialog_show(GtkWindow* parent, SaveOptions* opts) {
     gint response;
     gboolean result = FALSE;
     AVIFSaveOptions* avif_opts = NULL;
+    GtkWidget* icc_checkbox = NULL;
 
     if (!opts) {
         return FALSE;
@@ -102,6 +103,14 @@ gboolean avif_options_dialog_show(GtkWindow* parent, SaveOptions* opts) {
         g_signal_connect(cancel_button, "clicked", G_CALLBACK(on_button_clicked), dialog);
     }
 
+    /* Add "Embed ICC profile" checkbox when document has a non-sRGB original profile */
+    if (doc && doc->original_icc_data && doc->original_icc_size > 0) {
+        GtkWidget* content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+        icc_checkbox = gtk_check_button_new_with_label("Embed original ICC profile");
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(icc_checkbox), FALSE);
+        gtk_box_pack_end(GTK_BOX(content), icc_checkbox, FALSE, FALSE, 4);
+    }
+
     gtk_widget_show_all(dialog);
 
     response = gtk_dialog_run(GTK_DIALOG(dialog));
@@ -114,6 +123,10 @@ gboolean avif_options_dialog_show(GtkWindow* parent, SaveOptions* opts) {
             if (avif_opts->quality > 63)
                 avif_opts->quality = 63;
         }
+        if (icc_checkbox) {
+            opts->preserve_icc_profile =
+                gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(icc_checkbox)) ? true : false;
+        }
         result = TRUE;
     }
 
@@ -125,9 +138,10 @@ gboolean avif_options_dialog_show(GtkWindow* parent, SaveOptions* opts) {
 
 #else
 
-gboolean avif_options_dialog_show(GtkWindow* parent, SaveOptions* opts) {
+gboolean avif_options_dialog_show(GtkWindow* parent, SaveOptions* opts, ImageDocument* doc) {
     (void)parent;
     (void)opts;
+    (void)doc;
     return FALSE;
 }
 

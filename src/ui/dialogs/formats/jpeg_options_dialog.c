@@ -152,7 +152,7 @@ typedef struct {
 /**
  * Show JPEG save options dialog
  */
-gboolean jpeg_options_dialog_show(GtkWindow* parent, SaveOptions* opts) {
+gboolean jpeg_options_dialog_show(GtkWindow* parent, SaveOptions* opts, ImageDocument* doc) {
     GtkBuilder* builder;
     GtkWidget* dialog;
     GtkWidget* quality_preset_combo;
@@ -169,6 +169,7 @@ gboolean jpeg_options_dialog_show(GtkWindow* parent, SaveOptions* opts) {
     GtkWidget* depth_color_button;
     GtkWidget* depth_grayscale_button;
     GtkWidget* embed_thumbnail_checkbox;
+    GtkWidget* icc_checkbox = NULL;
     GtkAdjustment* quality_adjustment;
     GError* error = NULL;
     gint response;
@@ -446,6 +447,14 @@ gboolean jpeg_options_dialog_show(GtkWindow* parent, SaveOptions* opts) {
         g_signal_connect(cancel_button, "clicked", G_CALLBACK(on_button_clicked), dialog);
     }
 
+    /* Add "Embed ICC profile" checkbox when document has a non-sRGB original profile */
+    if (doc && doc->original_icc_data && doc->original_icc_size > 0) {
+        GtkWidget* content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+        icc_checkbox = gtk_check_button_new_with_label("Embed original ICC profile");
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(icc_checkbox), FALSE);
+        gtk_box_pack_end(GTK_BOX(content), icc_checkbox, FALSE, FALSE, 4);
+    }
+
     /* All widgets are defined in Glade with visible=True, so just show the dialog */
     gtk_widget_show_all(dialog);
 
@@ -495,6 +504,10 @@ gboolean jpeg_options_dialog_show(GtkWindow* parent, SaveOptions* opts) {
                 jpeg_opts->embed_thumbnail = FALSE;
             }
         }
+        if (icc_checkbox) {
+            opts->preserve_icc_profile =
+                gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(icc_checkbox)) ? true : false;
+        }
         result = TRUE;
     }
 
@@ -507,9 +520,10 @@ gboolean jpeg_options_dialog_show(GtkWindow* parent, SaveOptions* opts) {
 
 #else /* HAVE_LIBJPEG not defined */
 
-gboolean jpeg_options_dialog_show(GtkWindow* parent, SaveOptions* opts) {
+gboolean jpeg_options_dialog_show(GtkWindow* parent, SaveOptions* opts, ImageDocument* doc) {
     (void)parent;
     (void)opts;
+    (void)doc;
     /* JPEG support not available */
     return FALSE;
 }

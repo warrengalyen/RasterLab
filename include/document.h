@@ -180,6 +180,11 @@ typedef struct ImageDocument {
     /* Load-time ICC profile (opaque cmsHPROFILE). Set by format plugin, applied and freed by host. */
     void* load_icc_profile;
 
+    /* Original ICC profile blob from loaded file (malloc'd). Retained for "preserve
+     * original profile" on save. NULL if the file had no non-sRGB RGB profile. */
+    void* original_icc_data;
+    size_t original_icc_size;
+
     /* Cached display CMS transform (opaque DisplayTransformCache*). Avoids rebuilding
      * the lcms transform on every draw call. Freed in document_free(). */
     void* display_xform_cache;

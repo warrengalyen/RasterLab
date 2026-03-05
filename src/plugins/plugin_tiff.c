@@ -832,14 +832,22 @@ static PluginError save_tiff(ImageDocument* doc, const char* filename, const Sav
 #if defined(HAVE_LIBTIFF) && defined(HAVE_LCMS2)
     void* icc_data = NULL;
     size_t icc_size = 0;
-    cmsHPROFILE srgb = icc_create_srgb_profile();
-    if (srgb && icc_profile_to_memory(srgb, &icc_data, &icc_size)) {
-        icc_destroy(srgb);
+    if (opts && opts->preserve_icc_profile && doc->original_icc_data && doc->original_icc_size > 0) {
+        icc_data = malloc(doc->original_icc_size);
+        if (icc_data) {
+            memcpy(icc_data, doc->original_icc_data, doc->original_icc_size);
+            icc_size = doc->original_icc_size;
+        }
     } else {
-        if (srgb)
+        cmsHPROFILE srgb = icc_create_srgb_profile();
+        if (srgb && icc_profile_to_memory(srgb, &icc_data, &icc_size)) {
             icc_destroy(srgb);
-        icc_data = NULL;
-        icc_size = 0;
+        } else {
+            if (srgb)
+                icc_destroy(srgb);
+            icc_data = NULL;
+            icc_size = 0;
+        }
     }
 #endif
 
@@ -855,6 +863,29 @@ static PluginError save_tiff(ImageDocument* doc, const char* filename, const Sav
 #endif
             return PLUGIN_ERROR_FILE_WRITE_ERROR;
         }
+
+#if defined(HAVE_LIBTIFF) && defined(HAVE_LCMS2)
+        if (opts && opts->preserve_icc_profile && doc->original_icc_data && doc->original_icc_size > 0) {
+            cairo_surface_flush(composite);
+            guchar* comp_data = cairo_image_surface_get_data(composite);
+            int comp_stride = cairo_image_surface_get_stride(composite);
+            int cms_intent = plugin_host_api_get_cm_rendering_intent();
+            bool cms_bpc = plugin_host_api_get_cm_bpc();
+            if (comp_stride == (int)(doc->width * 4)) {
+                cm_convert_srgb_argb32_to_profile(comp_data, (size_t)(doc->width * doc->height),
+                                                   doc->original_icc_data, doc->original_icc_size,
+                                                   cms_intent, cms_bpc);
+            } else {
+                for (guint y = 0; y < doc->height; y++) {
+                    uint8_t* row = comp_data + y * comp_stride;
+                    cm_convert_srgb_argb32_to_profile(row, doc->width,
+                                                       doc->original_icc_data, doc->original_icc_size,
+                                                       cms_intent, cms_bpc);
+                }
+            }
+            cairo_surface_mark_dirty(composite);
+        }
+#endif
 
         error = write_tiff_page(tif, composite, doc->width, doc->height, tiff_opts,
                                 color_compression, mono_compression, color_format, transparency_format,

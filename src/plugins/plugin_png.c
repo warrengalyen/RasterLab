@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 #if defined(HAVE_LIBPNG) && defined(HAVE_LCMS2)
+#include "color_manager.h"
 #include "color_manager/icc_utils.h"
 #endif
 
@@ -698,6 +699,7 @@ static void png_flush_memory_callback(png_structp png_ptr) {
  * Returns allocated GByteArray with PNG data, or NULL on error
  */
 static GByteArray* save_png_to_memory(ImageDocument* doc,
+                                      const SaveOptions* opts,
                                       guchar* surface_data,
                                       int surface_stride,
                                       png_bytep* row_pointers,
@@ -758,20 +760,29 @@ static GByteArray* save_png_to_memory(ImageDocument* doc,
                  PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
 
 #if defined(HAVE_LIBPNG) && defined(HAVE_LCMS2)
-    /* Embed fresh sRGB ICC on every save; do not preserve original profile */
     {
         size_t icc_size = 0;
-        cmsHPROFILE srgb = icc_create_srgb_profile();
-        if (srgb && icc_profile_to_memory(srgb, &icc_data, &icc_size) && icc_data && icc_size > 0) {
-            icc_destroy(srgb);
-            png_set_iCCP(png_ptr, info_ptr, (png_const_charp) "sRGB IEC61966-2.1", PNG_COMPRESSION_TYPE_BASE,
-                         (png_bytep)icc_data, (png_uint_32)icc_size);
-        } else {
-            if (srgb)
-                icc_destroy(srgb);
+        if (opts && opts->preserve_icc_profile && doc->original_icc_data && doc->original_icc_size > 0) {
+            icc_data = malloc(doc->original_icc_size);
             if (icc_data) {
-                free(icc_data);
-                icc_data = NULL;
+                memcpy(icc_data, doc->original_icc_data, doc->original_icc_size);
+                icc_size = doc->original_icc_size;
+                png_set_iCCP(png_ptr, info_ptr, (png_const_charp) "embedded", PNG_COMPRESSION_TYPE_BASE,
+                             (png_bytep)icc_data, (png_uint_32)icc_size);
+            }
+        } else {
+            cmsHPROFILE srgb = icc_create_srgb_profile();
+            if (srgb && icc_profile_to_memory(srgb, &icc_data, &icc_size) && icc_data && icc_size > 0) {
+                icc_destroy(srgb);
+                png_set_iCCP(png_ptr, info_ptr, (png_const_charp) "sRGB IEC61966-2.1", PNG_COMPRESSION_TYPE_BASE,
+                             (png_bytep)icc_data, (png_uint_32)icc_size);
+            } else {
+                if (srgb)
+                    icc_destroy(srgb);
+                if (icc_data) {
+                    free(icc_data);
+                    icc_data = NULL;
+                }
             }
         }
     }
@@ -858,6 +869,25 @@ static PluginError save_png(ImageDocument* doc, const char* filename, const Save
     cairo_surface_flush(composite);
     surface_data = cairo_image_surface_get_data(composite);
     surface_stride = cairo_image_surface_get_stride(composite);
+
+#if defined(HAVE_LIBPNG) && defined(HAVE_LCMS2)
+    if (opts && opts->preserve_icc_profile && doc->original_icc_data && doc->original_icc_size > 0) {
+        int cms_intent = plugin_host_api_get_cm_rendering_intent();
+        bool cms_bpc = plugin_host_api_get_cm_bpc();
+        if (surface_stride == (int)(doc->width * 4)) {
+            cm_convert_srgb_argb32_to_profile(surface_data, (size_t)(doc->width * doc->height),
+                                               doc->original_icc_data, doc->original_icc_size,
+                                               cms_intent, cms_bpc);
+        } else {
+            for (guint y = 0; y < doc->height; y++) {
+                uint8_t* row = surface_data + y * surface_stride;
+                cm_convert_srgb_argb32_to_profile(row, doc->width,
+                                                   doc->original_icc_data, doc->original_icc_size,
+                                                   cms_intent, cms_bpc);
+            }
+        }
+    }
+#endif
 
     if (!surface_data) {
         cairo_surface_destroy(composite);
@@ -1001,7 +1031,7 @@ static PluginError save_png(ImageDocument* doc, const char* filename, const Save
 
         for (guint f = 0; f < G_N_ELEMENTS(filter_types); f++) {
             for (guint s = 0; s < G_N_ELEMENTS(strategies); s++) {
-                GByteArray* test_result = save_png_to_memory(doc, surface_data, surface_stride,
+                GByteArray* test_result = save_png_to_memory(doc, opts, surface_data, surface_stride,
                                                              row_pointers, image_data,
                                                              test_compression_level,
                                                              filter_types[f],
@@ -1128,20 +1158,29 @@ static PluginError save_png(ImageDocument* doc, const char* filename, const Save
                  PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
 
 #if defined(HAVE_LIBPNG) && defined(HAVE_LCMS2)
-    /* Embed fresh sRGB ICC on every save; do not preserve original profile */
     {
         size_t icc_size = 0;
-        cmsHPROFILE srgb = icc_create_srgb_profile();
-        if (srgb && icc_profile_to_memory(srgb, &icc_data, &icc_size) && icc_data && icc_size > 0) {
-            icc_destroy(srgb);
-            png_set_iCCP(png_ptr, info_ptr, (png_const_charp) "sRGB IEC61966-2.1", PNG_COMPRESSION_TYPE_BASE,
-                         (png_bytep)icc_data, (png_uint_32)icc_size);
-        } else {
-            if (srgb)
-                icc_destroy(srgb);
+        if (opts && opts->preserve_icc_profile && doc->original_icc_data && doc->original_icc_size > 0) {
+            icc_data = malloc(doc->original_icc_size);
             if (icc_data) {
-                free(icc_data);
-                icc_data = NULL;
+                memcpy(icc_data, doc->original_icc_data, doc->original_icc_size);
+                icc_size = doc->original_icc_size;
+                png_set_iCCP(png_ptr, info_ptr, (png_const_charp) "embedded", PNG_COMPRESSION_TYPE_BASE,
+                             (png_bytep)icc_data, (png_uint_32)icc_size);
+            }
+        } else {
+            cmsHPROFILE srgb = icc_create_srgb_profile();
+            if (srgb && icc_profile_to_memory(srgb, &icc_data, &icc_size) && icc_data && icc_size > 0) {
+                icc_destroy(srgb);
+                png_set_iCCP(png_ptr, info_ptr, (png_const_charp) "sRGB IEC61966-2.1", PNG_COMPRESSION_TYPE_BASE,
+                             (png_bytep)icc_data, (png_uint_32)icc_size);
+            } else {
+                if (srgb)
+                    icc_destroy(srgb);
+                if (icc_data) {
+                    free(icc_data);
+                    icc_data = NULL;
+                }
             }
         }
     }

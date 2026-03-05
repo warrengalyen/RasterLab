@@ -16,7 +16,7 @@ extern "C" {
  * @param opts SaveOptions structure with plugin_data pointing to AVIFSaveOptions
  * @return TRUE if user clicked OK, FALSE if cancelled
  */
-gboolean avif_options_dialog_show(GtkWindow* parent, SaveOptions* opts);
+gboolean avif_options_dialog_show(GtkWindow* parent, SaveOptions* opts, ImageDocument* doc);
 
 #ifdef __cplusplus
 }

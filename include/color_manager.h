@@ -251,6 +251,26 @@ bool cm_convert_cmyk_to_srgb_argb32(const uint8_t* cmyk_data, uint8_t* argb32_ou
                                     int rendering_intent, bool use_bpc);
 
 /* -------------------------------------------------------------------------
+ * Save-time reverse conversion (sRGB -> original profile)
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Convert Cairo ARGB32 buffer in-place from sRGB to a target RGB ICC profile.
+ * Used when "preserve original profile" is enabled on save.
+ *
+ * \param buffer            Cairo ARGB32 buffer (BGRA premultiplied), modified in place
+ * \param pixel_count       Number of pixels
+ * \param icc_data          Raw ICC profile blob describing the target space
+ * \param icc_size          Size of the ICC blob in bytes
+ * \param rendering_intent  ICC intent (0-3)
+ * \param use_bpc           If true, use black point compensation
+ * \return true on success, false on transform failure
+ */
+bool cm_convert_srgb_argb32_to_profile(uint8_t* buffer, size_t pixel_count,
+                                       const void* icc_data, size_t icc_size,
+                                       int rendering_intent, bool use_bpc);
+
+/* -------------------------------------------------------------------------
  * HDR linear conversion (before tone mapping)
  * ------------------------------------------------------------------------- */
 

@@ -19,6 +19,7 @@
 #include "color_manager/icc_utils.h"
 #endif
 #if defined(HAVE_LCMS2)
+#include "color_manager.h"
 #include "color_manager/icc_utils.h"
 #endif
 
@@ -475,6 +476,25 @@ static PluginError save_webp(ImageDocument* doc, const char* filename, const Sav
     cairo_surface_flush(composite);
     surface_data = cairo_image_surface_get_data(composite);
     surface_stride = cairo_image_surface_get_stride(composite);
+
+#if defined(HAVE_LIBWEBP) && defined(HAVE_LCMS2)
+    if (opts && opts->preserve_icc_profile && doc->original_icc_data && doc->original_icc_size > 0) {
+        int cms_intent = plugin_host_api_get_cm_rendering_intent();
+        bool cms_bpc = plugin_host_api_get_cm_bpc();
+        if (surface_stride == (int)(doc->width * 4)) {
+            cm_convert_srgb_argb32_to_profile(surface_data, (size_t)(doc->width * doc->height),
+                                               doc->original_icc_data, doc->original_icc_size,
+                                               cms_intent, cms_bpc);
+        } else {
+            for (guint y = 0; y < doc->height; y++) {
+                uint8_t* row = surface_data + y * surface_stride;
+                cm_convert_srgb_argb32_to_profile(row, doc->width,
+                                                   doc->original_icc_data, doc->original_icc_size,
+                                                   cms_intent, cms_bpc);
+            }
+        }
+    }
+#endif
     width = cairo_image_surface_get_width(composite);
     height = cairo_image_surface_get_height(composite);
 
@@ -615,17 +635,29 @@ static PluginError save_webp(ImageDocument* doc, const char* filename, const Sav
     webp_size = writer.size;
 
 #if defined(HAVE_LIBWEBP) && defined(HAVE_LCMS2)
-    /* Embed fresh sRGB ICC in container; do not preserve original profile */
     {
-        void* icc_data = NULL;
-        size_t icc_size = 0;
-        cmsHPROFILE srgb = icc_create_srgb_profile();
-        if (srgb && icc_profile_to_memory(srgb, &icc_data, &icc_size) && icc_data && icc_size > 0) {
-            icc_destroy(srgb);
+        const void* embed_icc = NULL;
+        size_t embed_icc_size = 0;
+        void* alloc_icc = NULL;
+        if (opts && opts->preserve_icc_profile && doc->original_icc_data && doc->original_icc_size > 0) {
+            embed_icc = doc->original_icc_data;
+            embed_icc_size = doc->original_icc_size;
+        } else {
+            cmsHPROFILE srgb = icc_create_srgb_profile();
+            if (srgb && icc_profile_to_memory(srgb, &alloc_icc, &embed_icc_size) && alloc_icc && embed_icc_size > 0) {
+                icc_destroy(srgb);
+                embed_icc = alloc_icc;
+            } else {
+                if (srgb) icc_destroy(srgb);
+                if (alloc_icc) free(alloc_icc);
+                embed_icc_size = 0;
+            }
+        }
+        if (embed_icc && embed_icc_size > 0) {
             WebPData encoded = {webp_data, webp_size};
             WebPMux* mux = WebPMuxCreate(&encoded, 0);
             if (mux) {
-                WebPData icc = {(uint8_t*)icc_data, icc_size};
+                WebPData icc = {(const uint8_t*)embed_icc, embed_icc_size};
                 if (WebPMuxSetChunk(mux, "ICCP", &icc, 1) == WEBP_MUX_OK) {
                     if (WebPMuxAssemble(mux, &assembled_webp) == WEBP_MUX_OK) {
                         webp_data = assembled_webp.bytes;
@@ -634,13 +666,8 @@ static PluginError save_webp(ImageDocument* doc, const char* filename, const Sav
                 }
                 WebPMuxDelete(mux);
             }
-            free(icc_data);
-        } else {
-            if (srgb)
-                icc_destroy(srgb);
-            if (icc_data)
-                free(icc_data);
         }
+        if (alloc_icc) free(alloc_icc);
     }
 #endif
 

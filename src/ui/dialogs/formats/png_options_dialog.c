@@ -335,7 +335,7 @@ static void on_depth_changed(GtkComboBox* combo, gpointer user_data) {
 /**
  * Show PNG save options dialog
  */
-gboolean png_options_dialog_show(GtkWindow* parent, SaveOptions* opts) {
+gboolean png_options_dialog_show(GtkWindow* parent, SaveOptions* opts, ImageDocument* doc) {
     GtkBuilder* builder;
     GtkWidget* dialog;
     GtkWidget* compression_level_scale;
@@ -371,6 +371,7 @@ gboolean png_options_dialog_show(GtkWindow* parent, SaveOptions* opts) {
     PNGColorButtonData embed_bgcolor_data;
     PNGColorButtonData transparent_color_data;
     PNGColorButtonData compositing_color_data;
+    GtkWidget* icc_checkbox = NULL;
 
     if (!opts) {
         return FALSE;
@@ -668,6 +669,14 @@ gboolean png_options_dialog_show(GtkWindow* parent, SaveOptions* opts) {
         g_signal_connect(cancel_button, "clicked", G_CALLBACK(on_button_clicked), dialog);
     }
 
+    /* Add "Embed ICC profile" checkbox when document has a non-sRGB original profile */
+    if (doc && doc->original_icc_data && doc->original_icc_size > 0) {
+        GtkWidget* content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+        icc_checkbox = gtk_check_button_new_with_label("Embed original ICC profile");
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(icc_checkbox), FALSE);
+        gtk_box_pack_end(GTK_BOX(content), icc_checkbox, FALSE, FALSE, 4);
+    }
+
     /* Show the dialog first to ensure widgets are realized */
     gtk_widget_show_all(dialog);
 
@@ -744,6 +753,11 @@ gboolean png_options_dialog_show(GtkWindow* parent, SaveOptions* opts) {
                 png_opts->compositing_color_g = (uint8_t)(compositing_color_rgba.green * 255.0 + 0.5);
                 png_opts->compositing_color_b = (uint8_t)(compositing_color_rgba.blue * 255.0 + 0.5);
             }
+
+            if (icc_checkbox) {
+                opts->preserve_icc_profile =
+                    gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(icc_checkbox)) ? true : false;
+            }
         }
         result = TRUE;
     }
@@ -757,9 +771,10 @@ gboolean png_options_dialog_show(GtkWindow* parent, SaveOptions* opts) {
 
 #else /* HAVE_LIBPNG not defined */
 
-gboolean png_options_dialog_show(GtkWindow* parent, SaveOptions* opts) {
+gboolean png_options_dialog_show(GtkWindow* parent, SaveOptions* opts, ImageDocument* doc) {
     (void)parent;
     (void)opts;
+    (void)doc;
     /* PNG support not available */
     return FALSE;
 }

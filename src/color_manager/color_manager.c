@@ -567,6 +567,51 @@ bool cm_convert_cmyk_to_srgb_argb32(const uint8_t* cmyk_data, uint8_t* argb32_ou
 }
 
 /* -------------------------------------------------------------------------
+ * Save-time reverse conversion (sRGB -> original profile)
+ * ------------------------------------------------------------------------- */
+
+bool cm_convert_srgb_argb32_to_profile(uint8_t* buffer, size_t pixel_count,
+                                       const void* icc_data, size_t icc_size,
+                                       int rendering_intent, bool use_bpc) {
+    if (!buffer || pixel_count == 0 || !icc_data || icc_size == 0)
+        return false;
+
+    cmsHPROFILE dst = cmsOpenProfileFromMem(icc_data, (cmsUInt32Number)icc_size);
+    if (!dst)
+        return false;
+
+    cmsHPROFILE src = cmsCreate_sRGBProfile();
+    if (!src) {
+        cmsCloseProfile(dst);
+        return false;
+    }
+
+    if (rendering_intent < 0) rendering_intent = 0;
+    if (rendering_intent > 3) rendering_intent = 3;
+
+    cmsUInt32Number flags = 0;
+    if (use_bpc)
+        flags |= cmsFLAGS_BLACKPOINTCOMPENSATION;
+
+    cmsHTRANSFORM xform = cmsCreateTransform(
+        src, TYPE_RGBA_8,
+        dst, TYPE_RGBA_8,
+        (cmsUInt32Number)rendering_intent,
+        flags);
+    cmsCloseProfile(src);
+    cmsCloseProfile(dst);
+    if (!xform)
+        return false;
+
+    argb32_unpremultiply_swap_rb(buffer, pixel_count);
+    cmsDoTransform(xform, buffer, buffer, (cmsUInt32Number)pixel_count);
+    argb32_swap_rb_premultiply(buffer, pixel_count);
+
+    cmsDeleteTransform(xform);
+    return true;
+}
+
+/* -------------------------------------------------------------------------
  * HDR linear conversion (linear space only; no tone mapping / gamma / 8-bit)
  * ------------------------------------------------------------------------- */
 

@@ -61,6 +61,9 @@ typedef struct {
     /* Flatten layers to single layer */
     bool flatten_layers;
 
+    /* Preserve original ICC profile: convert sRGB back to source profile on save */
+    bool preserve_icc_profile;
+
     /* Plugin-specific options data (cast to plugin's options structure) */
     /* Plugins should define their own options structures and cast this pointer */
     void* plugin_data;
