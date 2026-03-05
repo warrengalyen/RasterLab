@@ -39,6 +39,7 @@ set(SOURCES
     app/settings.c
     command.c
     color_manager/color_manager.c
+    color_manager/display_profile.c
     color_manager/icc_utils.c
     commands/command_image.c
     commands/command_layer.c
@@ -253,7 +254,7 @@ list(APPEND SOURCES ${GRESOURCE_FILE})
 
 # color_manager module requires Little CMS; drop it when lcms2 not available
 if(NOT LCMS2_FOUND)
-    list(REMOVE_ITEM SOURCES color_manager/color_manager.c color_manager/icc_utils.c)
+    list(REMOVE_ITEM SOURCES color_manager/color_manager.c color_manager/display_profile.c color_manager/icc_utils.c)
 endif()
 
 # Add Windows resource file for application icon

@@ -5,6 +5,7 @@
  */
 
 #include "color_manager.h"
+#include <glib.h>
 #include <lcms2.h>
 #include <stdlib.h>
 #include <string.h>
@@ -36,6 +37,45 @@ static cmsUInt32Number pixel_format_to_lcms(CMPixelFormat fmt) {
 struct ColorTransform {
     void* xform; /* cmsHTRANSFORM */
 };
+
+/* Swap R and B in each pixel (BGRA <-> RGBA) for lcms RGBA8 transform. */
+static void argb32_swap_rb(uint8_t* buffer, size_t pixel_count);
+
+ColorProfile* cm_profile_from_file(const char* path) {
+    if (!path || !path[0])
+        return NULL;
+
+    gchar* data = NULL;
+    gsize size = 0;
+    if (!g_file_get_contents(path, &data, &size, NULL))
+        return NULL;
+
+    if (size == 0 || size > (size_t)(cmsUInt32Number)(-1)) {
+        g_free(data);
+        return NULL;
+    }
+
+    cmsHPROFILE h = cmsOpenProfileFromMem(data, (cmsUInt32Number)size);
+    g_free(data);
+    if (!h)
+        return NULL;
+
+    /* Display profiles must be RGB */
+    if (cmsGetColorSpace(h) != cmsSigRgbData) {
+        cmsCloseProfile(h);
+        return NULL;
+    }
+
+    ColorProfile* p = (ColorProfile*)malloc(sizeof(ColorProfile));
+    if (!p) {
+        cmsCloseProfile(h);
+        return NULL;
+    }
+    p->handle = (void*)h;
+    p->raw_data = NULL;
+    p->size = 0;
+    return p;
+}
 
 ColorProfile* cm_profile_from_memory(const void* data, size_t size) {
     if (!data || size == 0 || size > (size_t)(cmsUInt32Number)(-1))
@@ -251,11 +291,65 @@ ColorTransform* cm_transform_create(ColorProfile* src, ColorProfile* dst, CMPixe
     return t;
 }
 
+static cmsUInt32Number intent_to_lcms(int intent) {
+    switch (intent) {
+        case 0: return INTENT_PERCEPTUAL;
+        case 1: return INTENT_RELATIVE_COLORIMETRIC;
+        case 2: return INTENT_SATURATION;
+        case 3: return INTENT_ABSOLUTE_COLORIMETRIC;
+        default: return INTENT_RELATIVE_COLORIMETRIC;
+    }
+}
+
+ColorTransform* cm_transform_create_with_intent(ColorProfile* src, ColorProfile* dst, CMPixelFormat fmt,
+                                                int intent, bool use_bpc) {
+    if (!src || !dst || !profile_handle(src) || !profile_handle(dst))
+        return NULL;
+
+    cmsUInt32Number lcms_fmt = pixel_format_to_lcms(fmt);
+    if (lcms_fmt == (cmsUInt32Number)-1)
+        return NULL;
+
+    cmsUInt32Number flags = 0;
+    if (fmt == CM_PIXELFORMAT_RGBA8 || fmt == CM_PIXELFORMAT_RGBA16 || fmt == CM_PIXELFORMAT_RGBAF)
+        flags = cmsFLAGS_COPY_ALPHA;
+    if (use_bpc)
+        flags |= cmsFLAGS_BLACKPOINTCOMPENSATION;
+
+    cmsHTRANSFORM h = cmsCreateTransform(
+        profile_handle(src),  lcms_fmt,
+        profile_handle(dst), lcms_fmt,
+        intent_to_lcms(intent),
+        flags
+    );
+    if (!h)
+        return NULL;
+
+    ColorTransform* t = (ColorTransform*)malloc(sizeof(ColorTransform));
+    if (!t) {
+        cmsDeleteTransform(h);
+        return NULL;
+    }
+    t->xform = (void*)h;
+    return t;
+}
+
 void cm_transform_apply(ColorTransform* transform, void* buffer, size_t pixel_count) {
     if (!transform || !transform->xform || !buffer || pixel_count == 0)
         return;
 
     cmsDoTransform((cmsHTRANSFORM)transform->xform, buffer, buffer, (cmsUInt32Number)pixel_count);
+}
+
+void cm_apply_transform_argb32(ColorTransform* transform, uint8_t* buffer, size_t pixel_count) {
+    if (!transform || !buffer || pixel_count == 0)
+        return;
+
+    cm_unpremultiply_argb32(buffer, pixel_count);
+    argb32_swap_rb(buffer, pixel_count);
+    cm_transform_apply(transform, buffer, pixel_count);
+    argb32_swap_rb(buffer, pixel_count);
+    cm_premultiply_argb32(buffer, pixel_count);
 }
 
 void cm_transform_destroy(ColorTransform* transform) {
@@ -268,7 +362,6 @@ void cm_transform_destroy(ColorTransform* transform) {
     free(transform);
 }
 
-/* Swap R and B in each pixel (BGRA <-> RGBA) for lcms RGBA8 transform. */
 static void argb32_swap_rb(uint8_t* buffer, size_t pixel_count) {
     for (size_t i = 0; i < pixel_count; i++) {
         uint8_t* p = buffer + (i * 4);

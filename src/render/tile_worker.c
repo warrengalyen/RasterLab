@@ -5,6 +5,9 @@
 #include "render/layer.h"
 #include <glib.h>
 #include <string.h>
+#if HAVE_LCMS2
+#include "color_manager.h"
+#endif
 
 /**
  * Internal worker pool structure
@@ -486,7 +489,7 @@ guint tile_worker_pool_get_pending(TileWorkerPool* pool) {
  * @param pool Worker pool
  * @return Number of tiles uploaded to Cairo
  */
-guint tile_worker_pool_process_uploads(TileWorkerPool* pool) {
+guint tile_worker_pool_process_uploads(TileWorkerPool* pool, void* display_transform) {
     Tile* tile;
     guint count = 0;
     GQueue* to_process;
@@ -520,6 +523,14 @@ guint tile_worker_pool_process_uploads(TileWorkerPool* pool) {
             cairo_surface_destroy(tile->surface);
             tile->surface = NULL;
         }
+
+#if HAVE_LCMS2
+        if (display_transform) {
+            cm_apply_transform_argb32((ColorTransform*)display_transform,
+                (uint8_t*)tile->pixel_buffer,
+                (size_t)(tile->w * tile->h));
+        }
+#endif
 
         /* Create new Cairo surface from pixel buffer (main thread safe)
          * Note: cairo_image_surface_create_for_data does NOT copy the data,

@@ -39,6 +39,15 @@ typedef enum {
 typedef struct ColorTransform ColorTransform;
 
 /**
+ * Create a color profile from an ICC/ICM file.
+ * Only RGB profiles are supported (non-RGB returns NULL).
+ *
+ * \param path  Path to .icc or .icm file
+ * \return      New ColorProfile*, or NULL on error
+ */
+ColorProfile* cm_profile_from_file(const char* path);
+
+/**
  * Create a color profile from an ICC profile blob in memory.
  * A copy of the data is not required; the profile may retain the pointer
  * for as long as the profile exists (caller must not free data before
@@ -120,6 +129,20 @@ const void* cm_get_embedded_srgb_profile(size_t* out_size);
 ColorTransform* cm_transform_create(ColorProfile* src, ColorProfile* dst, CMPixelFormat fmt);
 
 /**
+ * Create a color transform with rendering intent and black point compensation.
+ * Used for display output (sRGB -> display profile).
+ *
+ * \param src    Source profile (e.g. sRGB)
+ * \param dst    Destination profile (e.g. display)
+ * \param fmt    Pixel format
+ * \param intent ICC rendering intent (0-3: perceptual, relative colorimetric, saturation, absolute)
+ * \param use_bpc If true, use black point compensation
+ * \return       New ColorTransform*, or NULL on error
+ */
+ColorTransform* cm_transform_create_with_intent(ColorProfile* src, ColorProfile* dst, CMPixelFormat fmt,
+                                                int intent, bool use_bpc);
+
+/**
  * Apply the transform in-place to a buffer.
  *
  * \param transform    Transform created with cm_transform_create
@@ -127,6 +150,16 @@ ColorTransform* cm_transform_create(ColorProfile* src, ColorProfile* dst, CMPixe
  * \param pixel_count  Number of pixels to transform
  */
 void cm_transform_apply(ColorTransform* transform, void* buffer, size_t pixel_count);
+
+/**
+ * Apply a transform to Cairo ARGB32 (BGRA, premultiplied) buffer in place.
+ * Unpremultiplies, converts BGRA<->RGBA for lcms, applies transform, then premultiplies again.
+ *
+ * \param transform    Transform (e.g. sRGB -> display profile, RGBA8)
+ * \param buffer       ARGB32 pixel buffer (modified in place)
+ * \param pixel_count  Number of pixels
+ */
+void cm_apply_transform_argb32(ColorTransform* transform, uint8_t* buffer, size_t pixel_count);
 
 /**
  * Destroy a color transform. Safe to call with NULL (no-op).

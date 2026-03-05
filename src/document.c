@@ -1,5 +1,10 @@
 #include "document.h"
 #include "app/settings.h"
+#if HAVE_LCMS2
+#include "color_manager.h"
+#include "color_manager/display_profile.h"
+#include <gdk/gdk.h>
+#endif
 #include "command.h"
 #include "io/image_io.h"
 #include "render/compositor.h"
@@ -207,10 +212,60 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
         }
     }
 
+#if HAVE_LCMS2
+    /* Display color management: sRGB -> system or custom profile (fallback to sRGB if none) */
+    ColorProfile* display_prof = NULL;
+    ColorProfile* srgb_prof = NULL;
+    ColorTransform* display_xform = NULL;
+    gchar* display_id = NULL;
+    if (!use_gpu_compositing) {
+        gpointer ctx_data = g_object_get_data(G_OBJECT(widget), "app_context");
+        if (ctx_data) {
+            AppContext* ctx = (AppContext*)ctx_data;
+            Settings* settings = ctx ? ctx->settings : NULL;
+            if (settings) {
+                GdkWindow* win = gtk_widget_get_window(widget);
+                if (win) {
+                    GdkDisplay* gdk_display = gdk_window_get_display(win);
+                    GdkMonitor* monitor = gdk_display_get_monitor_at_window(gdk_display, win);
+                    if (monitor && gdk_display) {
+                        gint n = (gint)gdk_display_get_n_monitors(gdk_display);
+                        for (gint i = 0; i < n; i++) {
+                            if (gdk_display_get_monitor(gdk_display, i) == monitor) {
+                                display_id = g_strdup_printf("monitor-%d", i);
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (display_id) {
+                    display_prof = cm_get_display_profile(settings, display_id);
+                    if (display_prof) {
+                        srgb_prof = cm_profile_create_srgb();
+                        if (srgb_prof) {
+                            gint intent = settings_get_cm_rendering_intent(settings);
+                            gboolean bpc = settings_get_cm_black_point_compensation(settings);
+                            display_xform = cm_transform_create_with_intent(srgb_prof, display_prof,
+                                CM_PIXELFORMAT_RGBA8, intent, bpc ? true : false);
+                        }
+                    }
+                }
+            }
+        }
+    }
+#endif
+
     /* Process completed tiles from Cairo-safe worker pool
-       Workers have finished compositing into pixel_buffer, now upload to Cairo */
+       Workers have finished compositing into pixel_buffer, now upload to Cairo.
+       Pass display transform so 100% zoom tiles get display CMS when uploaded async. */
     if (doc->tile_worker_pool) {
-        guint uploaded = tile_worker_pool_process_uploads(doc->tile_worker_pool);
+        guint uploaded = tile_worker_pool_process_uploads(doc->tile_worker_pool,
+#if HAVE_LCMS2
+            display_xform
+#else
+            NULL
+#endif
+        );
         if (uploaded > 0) {
             g_debug("Uploaded %u tiles to Cairo surfaces", uploaded);
         }
@@ -330,7 +385,41 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
         /* Render based on zoom level */
         if (zoom > 1.0) {
             /* Zoomed IN: Use layer-based rendering for best quality */
-            document_render_layers_at_zoom(doc, cr, viewport_x, viewport_y, viewport_w, viewport_h);
+#if HAVE_LCMS2
+            if (display_xform && viewport_w > 0 && viewport_h > 0) {
+                /* Render viewport to offscreen buffer, apply display transform, then draw */
+                cairo_surface_t* offscreen = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, viewport_w, viewport_h);
+                if (offscreen && cairo_surface_status(offscreen) == CAIRO_STATUS_SUCCESS) {
+                    cairo_t* offscreen_cr = cairo_create(offscreen);
+                    if (offscreen_cr) {
+                        cairo_translate(offscreen_cr, -viewport_x, -viewport_y);
+                        document_render_layers_at_zoom(doc, offscreen_cr, viewport_x, viewport_y, viewport_w, viewport_h);
+                        cairo_destroy(offscreen_cr);
+                        cairo_surface_flush(offscreen);
+                        unsigned char* data = cairo_image_surface_get_data(offscreen);
+                        int stride = cairo_image_surface_get_stride(offscreen);
+                        if (data && stride >= viewport_w * 4) {
+                            for (gint y = 0; y < viewport_h; y++) {
+                                cm_apply_transform_argb32(display_xform, data + (size_t)y * stride, (size_t)viewport_w);
+                            }
+                            cairo_surface_mark_dirty(offscreen);
+                        }
+                        cairo_save(cr);
+                        cairo_translate(cr, viewport_x, viewport_y);
+                        cairo_set_source_surface(cr, offscreen, 0, 0);
+                        cairo_rectangle(cr, 0, 0, viewport_w, viewport_h);
+                        cairo_fill(cr);
+                        cairo_restore(cr);
+                    }
+                    cairo_surface_destroy(offscreen);
+                } else if (offscreen) {
+                    cairo_surface_destroy(offscreen);
+                }
+            } else
+#endif
+            {
+                document_render_layers_at_zoom(doc, cr, viewport_x, viewport_y, viewport_w, viewport_h);
+            }
         } else if (zoom < 1.0 && doc->tile_grid) {
             /* Zoomed OUT: Use pre-computed tile mipmaps for fast rendering */
             gint tile_size = doc->tile_grid->tile_size;
@@ -367,6 +456,12 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
                             tile->surface = NULL;
                         }
                         if (tile->pixel_buffer) {
+#if HAVE_LCMS2
+                            if (display_xform) {
+                                cm_apply_transform_argb32(display_xform, (uint8_t*)tile->pixel_buffer,
+                                    (size_t)(tile->w * tile->h));
+                            }
+#endif
                             tile->surface = cairo_image_surface_create_for_data(
                                 tile->pixel_buffer,
                                 CAIRO_FORMAT_ARGB32,
@@ -486,6 +581,12 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
                                 }
 
                                 if (tile->pixel_buffer) {
+#if HAVE_LCMS2
+                                    if (display_xform) {
+                                        cm_apply_transform_argb32(display_xform, (uint8_t*)tile->pixel_buffer,
+                                            (size_t)(tile->w * tile->h));
+                                    }
+#endif
                                     tile->surface = cairo_image_surface_create_for_data(
                                         tile->pixel_buffer,
                                         CAIRO_FORMAT_ARGB32,
@@ -592,6 +693,17 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
         /* Draw checkered background for empty canvas */
         draw_checkered_background(cr, clip_width, clip_height);
     }
+
+#if HAVE_LCMS2
+    /* Clean up display profile/transform (used for process_uploads and tile paths) */
+    if (display_xform)
+        cm_transform_destroy(display_xform);
+    if (srgb_prof)
+        cm_profile_destroy(srgb_prof);
+    if (display_prof)
+        cm_profile_destroy(display_prof);
+    g_free(display_id);
+#endif
 
     /* Draw rect select tool preview during drag */
     tool_rect_select_draw_preview(doc, cr, zoom);

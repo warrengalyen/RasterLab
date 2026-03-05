@@ -51,7 +51,7 @@ A full-featured image editor written in C.
 - Create, delete, duplicate, and reorder layers
 - Layer opacity and visibility controls
 - Layer locking
-- **11 Blend Modes**: Normal, Darken, Multiply, Color Burn, Lighten, Screen, Color Dodge, Overlay, Soft Light, Hard Light, Difference
+- **27 Blend Modes**: Normal, Dissolve, Darken, Multiply, Color Burn, Linear Burn, Darker Color, Lighten, Screen, Color Dodge, Linear Dodge, Lighter Color, Overlay, Soft Light, Hard Light, Vivid Light, Linear Light, Pin Light, Hard Mix, Difference, Exclusion, Subtract, Divide, Hue, Saturation, Color, Luminosity
 - Layer transformations: Flip horizontal/vertical, transpose
 - Fit active layer to canvas, fit all layers to canvas
 - Merge visible layers and flatten image

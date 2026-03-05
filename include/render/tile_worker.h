@@ -89,9 +89,11 @@ guint tile_worker_pool_get_pending(TileWorkerPool* pool);
  * MAIN THREAD ONLY - updates Cairo surfaces for tiles with pending_upload=TRUE
  * Should be called from GTK main loop
  * @param pool Worker pool
+ * @param display_transform Optional display color transform (ColorTransform*), or NULL.
+ *        When non-NULL, applied to each tile's pixel buffer before creating the surface.
  * @return Number of tiles uploaded to Cairo
  */
-guint tile_worker_pool_process_uploads(TileWorkerPool* pool);
+guint tile_worker_pool_process_uploads(TileWorkerPool* pool, void* display_transform);
 
 /**
  * Composite a tile's pixel buffer (worker function)
