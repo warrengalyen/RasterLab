@@ -137,9 +137,28 @@ No caching even when selection bounds/parameters haven't changed.
 
 ### High Priority
 
-- [ ] **Bounding-box mask allocation** - Only allocate mask for
+- [x] **Bounding-box mask allocation** - Only allocate mask for
       `(selection_bounds + feather_radius)` instead of full document. Track offset
-      for coordinate translation. Would reduce memory from O(doc_area) to O(selection_area).
+      for coordinate translation. Reduces memory from O(doc_area) to O(selection_area):
+      - `SelectionMask` gains `offset_x`/`offset_y` fields (zero for full-document masks,
+        non-zero for bounded masks — fully backward-compatible).
+      - `selection_mask_new_bounded(offset_x, offset_y, width, height)` allocates only the
+        sub-region: `(rect ± ceil(feather_radius) + 2)` clamped to document bounds.
+      - Preview draw in `tool_rect_select.c`, `tool_ellipse_select.c`, and
+        `tool_polygon_select.c` uses the bounded constructor. Rect/ellipse fill
+        `Selection->mask` in local coordinates directly; polygon translates its
+        vertex arrays to local coordinates before passing them to
+        `selection_mask_fill_polygon()` (so Cairo rasterises into the small surface).
+        Polygon exterior mode (`area_mode==1`) falls back to the full-document mask
+        because inversion would create a spurious rectangular outline at the bounded
+        mask boundary.
+      - `selection_mask_render_outline()` translates local (x, y) → document space via
+        `(x + offset_x, y + offset_y)` before calling `cairo_rectangle()`, preserving
+        continuous marching-ants dash pattern using document coordinates.
+      - `selection_generate_feathered_preview()` already accepts `mask_width/height/stride`
+        as parameters so it processes only the bounded region without any other changes.
+      - For a 4000×3000 document with a 200×200 selection and 50px feather, peak
+        allocation drops from ~12 MB to ~(304×304 × 3 buffers) ≈ 270 KB — ~45× reduction.
 
 - [ ] **Optimized distance transform** - Replace current O(n² × radius) algorithm with
       efficient separable distance transform (O(n) per dimension). Options:

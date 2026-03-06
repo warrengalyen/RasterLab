@@ -775,8 +775,28 @@ void tool_ellipse_select_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble z
                                    !state->is_dragging);
 
         if (show_feathered) {
-            /* Draw feathered outline from temporary mask (only when not actively dragging) */
-            SelectionMask* preview_mask = selection_mask_new(doc->width, doc->height);
+            /* Draw feathered outline from a bounded temporary mask.
+             *
+             * Allocate only (rect ± feather_pad) instead of the full document,
+             * reducing both memory usage and distance-field computation from
+             * O(doc_area) down to O(selection_area).  See tool_rect_select.c for
+             * a detailed explanation; the logic here is identical except the mask
+             * fill uses an ellipse point-in-test instead of a rectangle fill.
+             */
+            int pad = (int)ceilf((float)state->feather_radius) + 2;
+            int mask_x = rect_x - pad;
+            int mask_y = rect_y - pad;
+            int mask_x2 = rect_x + rect_w + pad;
+            int mask_y2 = rect_y + rect_h + pad;
+            /* Clamp to document bounds */
+            if (mask_x < 0)                   mask_x = 0;
+            if (mask_y < 0)                   mask_y = 0;
+            if (mask_x2 > (int)doc->width)    mask_x2 = (int)doc->width;
+            if (mask_y2 > (int)doc->height)   mask_y2 = (int)doc->height;
+            int mask_w = mask_x2 - mask_x;
+            int mask_h = mask_y2 - mask_y;
+
+            SelectionMask* preview_mask = selection_mask_new_bounded(mask_x, mask_y, mask_w, mask_h);
 
             /* Create a Selection object for the preview with feathering */
             Selection* preview_sel = selection_new(rect_x, rect_y, rect_w, rect_h,
@@ -784,24 +804,28 @@ void tool_ellipse_select_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble z
                                                    state->smooth_mode,
                                                    (float)state->feather_radius);
             if (preview_sel) {
-                /* Allocate and fill the selection's mask with ellipse */
+                /* Allocate and fill the selection's mask with ellipse pixels using
+                 * LOCAL coordinates (relative to the bounded mask origin). */
                 int stride = preview_mask->stride;
-                preview_sel->mask = g_malloc0(stride * doc->height);
+                preview_sel->mask = g_malloc0(stride * mask_h);
 
-                /* Fill ellipse pixels */
                 gdouble cx = rect_x + rect_w / 2.0;
                 gdouble cy = rect_y + rect_h / 2.0;
                 gdouble rx = rect_w / 2.0;
                 gdouble ry = rect_h / 2.0;
 
                 for (int row = rect_y; row < rect_y + rect_h && row < (int)doc->height; row++) {
+                    int local_row = row - mask_y;
+                    if (local_row < 0 || local_row >= mask_h)
+                        continue;
                     for (int col = rect_x; col < rect_x + rect_w && col < (int)doc->width; col++) {
-                        if (row >= 0 && col >= 0) {
-                            gdouble dx = (col + 0.5 - cx) / rx;
-                            gdouble dy = (row + 0.5 - cy) / ry;
-                            if (dx * dx + dy * dy <= 1.0) {
-                                preview_sel->mask[row * stride + col] = 255;
-                            }
+                        int local_col = col - mask_x;
+                        if (local_col < 0 || local_col >= mask_w)
+                            continue;
+                        gdouble dx = (col + 0.5 - cx) / rx;
+                        gdouble dy = (row + 0.5 - cy) / ry;
+                        if (dx * dx + dy * dy <= 1.0) {
+                            preview_sel->mask[local_row * stride + local_col] = 255;
                         }
                     }
                 }

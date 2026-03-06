@@ -45,6 +45,13 @@ typedef struct SelectionMask {
     int height; /* Mask height in pixels */
     int stride; /* Bytes per row (aligned) */
 
+    /* Document-space origin of this mask (0,0 for full-document masks).
+     * Non-zero when created with selection_mask_new_bounded(): the mask buffer
+     * covers only a sub-region of the document and every pixel at local (x,y)
+     * corresponds to document pixel (x + offset_x, y + offset_y). */
+    int offset_x;
+    int offset_y;
+
     /* Authoritative selection data */
     uint8_t* base_mask; /* COMBINED: Hard-edged mask 0/255 only (never feathered, owned) */
     uint8_t* temp_data; /* Temporary buffer for operations (owned) */
@@ -71,6 +78,25 @@ typedef struct SelectionMask {
  * @return Newly allocated SelectionMask, initially all zeros (empty)
  */
 SelectionMask* selection_mask_new(int width, int height);
+
+/**
+ * Create a bounded selection mask that covers only a sub-region of the document.
+ *
+ * The mask buffer is sized to (width × height) instead of the full document,
+ * saving memory and CPU time proportional to the ratio of selection area to
+ * document area.  All internal mask coordinates are local (0-based).
+ * Document-space coordinates are recovered by adding offset_x / offset_y.
+ *
+ * selection_mask_render_outline() automatically applies the offset when drawing,
+ * so callers do not need to adjust the Cairo context.
+ *
+ * @param offset_x  Left edge of the bounded region in document pixels
+ * @param offset_y  Top edge of the bounded region in document pixels
+ * @param width     Width of the bounded region in pixels
+ * @param height    Height of the bounded region in pixels
+ * @return Newly allocated SelectionMask, initially all zeros (empty)
+ */
+SelectionMask* selection_mask_new_bounded(int offset_x, int offset_y, int width, int height);
 
 /**
  * Free selection mask and all resources

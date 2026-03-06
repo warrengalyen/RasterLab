@@ -58,6 +58,20 @@ SelectionMask* selection_mask_new(int width, int height) {
 }
 
 /**
+ * Create a bounded selection mask covering a sub-region of the document.
+ * The buffer is (width × height) pixels; pixel at local (x, y) maps to
+ * document position (x + offset_x, y + offset_y).
+ */
+SelectionMask* selection_mask_new_bounded(int offset_x, int offset_y, int width, int height) {
+    SelectionMask* mask = selection_mask_new(width, height);
+    if (mask) {
+        mask->offset_x = offset_x;
+        mask->offset_y = offset_y;
+    }
+    return mask;
+}
+
+/**
  * Free selection mask
  */
 void selection_mask_free(SelectionMask* mask) {
@@ -950,6 +964,12 @@ void selection_mask_render_outline(
         dash_size = 1.0; /* Minimum dash size of 1 pixel */
     }
 
+    /* For bounded masks (offset != 0), local coordinates must be translated to
+     * document space before drawing.  For full-document masks offset_x/y are 0
+     * so there is no change in behaviour for existing callers. */
+    const int off_x = mask->offset_x;
+    const int off_y = mask->offset_y;
+
     /* Edge detection: detect boundary where selection transitions to non-selected
        For feathered selections, detect the outer edge where feathering ends (mask->0)
        For hard selections, detect the hard edge (255->0) */
@@ -975,12 +995,18 @@ void selection_mask_render_outline(
                - Hard edges: center=255, neighbor=0
                - Feathered edges: center>0 (any value in feather), neighbor=0 (end of feather) */
             if (left == 0 || right == 0 || top == 0 || bottom == 0) {
-                /* Render marching ants pixel - shift pattern by dash_phase for animation
-                 * Use scaled dash_size to maintain constant visual size on screen regardless of zoom */
-                int pattern = ((int)((x + y) / dash_size) + dash_phase) % 2;
+                /* Translate local mask coordinates to document space.
+                 * For full-document masks off_x/off_y are 0 (no-op). */
+                int doc_x = x + off_x;
+                int doc_y = y + off_y;
+
+                /* Render marching ants pixel - shift pattern by dash_phase for animation.
+                 * Use document coordinates so the pattern is continuous across the image
+                 * regardless of where the bounded mask starts. */
+                int pattern = ((int)((doc_x + doc_y) / dash_size) + dash_phase) % 2;
 
                 cairo_set_source_rgb(cr, pattern ? 0.0 : 1.0, pattern ? 0.0 : 1.0, pattern ? 0.0 : 1.0);
-                cairo_rectangle(cr, (gdouble)x, (gdouble)y, 1.0, 1.0);
+                cairo_rectangle(cr, (gdouble)doc_x, (gdouble)doc_y, 1.0, 1.0);
                 cairo_fill(cr);
             }
         }
