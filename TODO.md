@@ -160,11 +160,25 @@ No caching even when selection bounds/parameters haven't changed.
       - For a 4000×3000 document with a 200×200 selection and 50px feather, peak
         allocation drops from ~12 MB to ~(304×304 × 3 buffers) ≈ 270 KB — ~45× reduction.
 
-- [ ] **Optimized distance transform** - Replace current O(n² × radius) algorithm with
-      efficient separable distance transform (O(n) per dimension). Options:
-      - Meijster's algorithm (exact Euclidean, O(n))
-      - Felzenszwalb-Huttenlocher distance transform
-      - Jump flooding algorithm (GPU-friendly approximation)
+- [x] **Optimized distance transform** - Replaced the O(width × height × radius)
+      limited-search algorithm with the Felzenszwalb-Huttenlocher (FH) separable
+      Euclidean Distance Transform:
+      - **Algorithm:** `edt_1d()` — 1-D lower-envelope parabola sweep (FH 2012).
+        Two passes suffice: one across rows, one down columns. Each pass is O(n).
+        Total complexity: O(width × height) regardless of feather radius.
+      - **`compute_edt()`** replaces both `compute_distance_outside()` and
+        `compute_distance_inside()` with a unified function parameterised by
+        `seed_is_nonzero`. Allocates a single workspace of O(max(width, height))
+        shared across all rows and columns — no per-column `g_malloc`/`g_free`.
+      - **`selection_generate_feathered_preview()`** simplified:
+        - Removed `large_val`, `max_search_radius`, and the pre-initialization loop
+        - Eliminated the `signed_dist` float buffer (signed distance computed inline)
+        - Reduced temporary peak allocation from 3 × (width × height × 4B) to
+          2 × (width × height × 4B) + tiny O(max_dim) workspace
+      - **No radius cap** — the old code capped search at 200 px giving wrong
+        feathering for larger radii; FH is exact at any radius.
+      - For a 4000×3000 bounded mask (~1000×1000 after bounding-box optimisation),
+        the EDT drops from ~600 M operations to ~2 M (300×).
 
 - [ ] **Preview result caching** - Cache the computed feathered preview surface and
       only regenerate when:
