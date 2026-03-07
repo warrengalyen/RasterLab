@@ -19,6 +19,7 @@
 #include "tool_options.h"
 #include "tools/tool_crop.h"
 #include "tools/tool_ellipse_select.h"
+#include "tools/tool_polygon_select.h"
 #include "tools/tool_rect_select.h"
 #include "ui/dialogs/canvas_size_dialog.h"
 #include "ui/dialogs/new_layer_dialog.h"
@@ -1567,6 +1568,30 @@ static void on_notebook_switch_page(GtkNotebook* notebook, GtkWidget* page,
     /* Fallback to ui_get_active_document if page matching fails */
     if (!doc) {
         doc = ui_get_active_document(ctx);
+    }
+
+    /* Reset any active selection-tool preview before switching documents.
+     *
+     * This fires in two scenarios:
+     *   1. The user manually clicks a different document tab.
+     *   2. A document is closed: gtk_notebook_remove_page() triggers this
+     *      callback while the old document is still valid (document_free()
+     *      is called *after* page removal), so the reset is safe.
+     *
+     * Without this, the tool state (is_editing, preview_cache, …) from the
+     * previous document would be rendered on whatever document becomes active
+     * next — the "ghost selection" bug. */
+    if (ctx->tool_registry) {
+        Tool* active_tool = tool_manager_get_active(ctx->tool_registry);
+        if (active_tool) {
+            if (active_tool->type == TOOL_RECT_SELECT) {
+                tool_rect_select_reset(active_tool);
+            } else if (active_tool->type == TOOL_ELLIPSE_SELECT) {
+                tool_ellipse_select_reset(active_tool);
+            } else if (active_tool->type == TOOL_POLYGON_SELECT) {
+                tool_polygon_select_reset(active_tool);
+            }
+        }
     }
 
     /* Set the current document in the tool registry so tools can access it */

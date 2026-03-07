@@ -101,6 +101,10 @@ static gboolean on_rect_select_tool_animation_timer(gpointer user_data) {
     ImageDocument* doc = timer_data->doc;
 
     if (!doc->drawing_area || !tool->user_data) {
+        /* Zero the timer ID before returning FALSE so that reset() does not
+         * attempt to g_source_remove() an already auto-removed source. */
+        if (tool->user_data)
+            ((RectSelectToolState*)tool->user_data)->animation_timer_id = 0;
         g_free(timer_data);
         return FALSE;
     }

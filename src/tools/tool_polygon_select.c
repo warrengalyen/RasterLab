@@ -293,10 +293,21 @@ static void polygon_select_tool_mouse_up(Tool* tool, struct ImageDocument* doc, 
 static gboolean on_polygon_select_animation_timer(gpointer user_data) {
     PolygonSelectTimerData* td = (PolygonSelectTimerData*)user_data;
     if (!td || !td->tool || !td->doc || !td->tool->user_data) {
+        /* Zero the timer ID where accessible before letting GLib auto-remove
+         * the source, to prevent a later reset() from calling g_source_remove()
+         * on an already-gone source ID. */
+        if (td && td->tool && td->tool->user_data)
+            ((PolygonSelectToolState*)td->tool->user_data)->animation_timer_id = 0;
         g_free(td);
         return FALSE;
     }
     PolygonSelectToolState* state = (PolygonSelectToolState*)td->tool->user_data;
+    if (!td->doc->drawing_area) {
+        /* drawing_area was NULLed during document close; stop cleanly. */
+        state->animation_timer_id = 0;
+        g_free(td);
+        return FALSE;
+    }
     if (!state->closed) {
         state->animation_timer_id = 0;
         g_free(td);
