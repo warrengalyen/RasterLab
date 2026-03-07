@@ -643,6 +643,12 @@ void tool_rect_select_reset(Tool* tool) {
         g_source_remove(state->animation_timer_id);
         state->animation_timer_id = 0;
     }
+
+    /* Release the feathered-preview cache */
+    if (state->preview_cache) {
+        selection_mask_free(state->preview_cache);
+        state->preview_cache = NULL;
+    }
 }
 
 /**
@@ -753,67 +759,82 @@ void tool_rect_select_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom
                                    !state->is_dragging);
 
         if (show_feathered) {
-            /* Draw feathered outline from a bounded temporary mask.
-             *
-             * Instead of allocating a full-document mask (O(doc_area)), allocate
-             * only a region large enough to contain the selection plus the feather
-             * falloff zone.  For a 4000×3000 document with a small selection this
-             * reduces memory from ~12 MB to a few KB and cuts the distance-field
-             * computation proportionally.
-             *
-             * The bounded region is (rect ± feather_pad) clamped to the document.
-             * selection_mask_render_outline() translates local coordinates back to
-             * document space automatically via SelectionMask.offset_x/offset_y.
-             */
-            int pad = (int)ceilf((float)state->feather_radius) + 2;
-            int mask_x = rect_x - pad;
-            int mask_y = rect_y - pad;
-            int mask_x2 = rect_x + rect_w + pad;
-            int mask_y2 = rect_y + rect_h + pad;
-            /* Clamp to document bounds */
-            if (mask_x < 0)                   mask_x = 0;
-            if (mask_y < 0)                   mask_y = 0;
-            if (mask_x2 > (int)doc->width)    mask_x2 = (int)doc->width;
-            if (mask_y2 > (int)doc->height)   mask_y2 = (int)doc->height;
-            int mask_w = mask_x2 - mask_x;
-            int mask_h = mask_y2 - mask_y;
+            /* Feathered-preview cache:
+             * Building the bounded SelectionMask triggers an O(selection_area) EDT.
+             * When only the animation phase changes (every timer tick) the bounds and
+             * feather parameters are identical, so we keep the computed mask alive in
+             * state->preview_cache and skip the EDT entirely on cache hits.
+             * The cache is invalidated (and freed) whenever bounds, feather radius,
+             * smoothing mode, or combine mode change.  It is freed in reset(). */
+            gboolean cache_valid =
+                (state->preview_cache          != NULL                    &&
+                 state->cache_rect_x           == rect_x                  &&
+                 state->cache_rect_y           == rect_y                  &&
+                 state->cache_rect_w           == rect_w                  &&
+                 state->cache_rect_h           == rect_h                  &&
+                 state->cache_feather_radius   == state->feather_radius   &&
+                 state->cache_smooth_mode      == state->smooth_mode      &&
+                 state->cache_combine_mode     == state->combine_mode);
 
-            SelectionMask* preview_mask = selection_mask_new_bounded(mask_x, mask_y, mask_w, mask_h);
-
-            /* Create a Selection object for the preview with feathering */
-            Selection* preview_sel = selection_new(rect_x, rect_y, rect_w, rect_h,
-                                                   SELECTION_COMBINE_NEW,
-                                                   state->smooth_mode,
-                                                   (float)state->feather_radius);
-            if (preview_sel) {
-                /* Allocate and fill the selection's mask using LOCAL coordinates
-                 * (relative to the bounded mask origin). */
-                int stride = preview_mask->stride;
-                preview_sel->mask = g_malloc0(stride * mask_h);
-                for (int row = rect_y; row < rect_y + rect_h && row < (int)doc->height; row++) {
-                    int local_row = row - mask_y;
-                    if (local_row < 0 || local_row >= mask_h)
-                        continue;
-                    for (int col = rect_x; col < rect_x + rect_w && col < (int)doc->width; col++) {
-                        int local_col = col - mask_x;
-                        if (local_col >= 0 && local_col < mask_w)
-                            preview_sel->mask[local_row * stride + local_col] = 255;
-                    }
+            if (!cache_valid) {
+                /* Discard stale cache */
+                if (state->preview_cache) {
+                    selection_mask_free(state->preview_cache);
+                    state->preview_cache = NULL;
                 }
 
-                /* Add to preview mask and rebuild */
-                selection_mask_add_selection(preview_mask, preview_sel);
-                selection_unref(preview_sel);
+                /* Build bounded preview mask (O(selection_area) EDT). */
+                int pad = (int)ceilf((float)state->feather_radius) + 2;
+                int mask_x = rect_x - pad;
+                int mask_y = rect_y - pad;
+                int mask_x2 = rect_x + rect_w + pad;
+                int mask_y2 = rect_y + rect_h + pad;
+                if (mask_x < 0)                   mask_x = 0;
+                if (mask_y < 0)                   mask_y = 0;
+                if (mask_x2 > (int)doc->width)    mask_x2 = (int)doc->width;
+                if (mask_y2 > (int)doc->height)   mask_y2 = (int)doc->height;
+                int mask_w = mask_x2 - mask_x;
+                int mask_h = mask_y2 - mask_y;
 
-                /* Ensure feathering is computed by triggering surface rebuild */
-                selection_mask_get_surface(preview_mask);
+                SelectionMask* preview_mask = selection_mask_new_bounded(mask_x, mask_y, mask_w, mask_h);
+                Selection* preview_sel = selection_new(rect_x, rect_y, rect_w, rect_h,
+                                                       SELECTION_COMBINE_NEW,
+                                                       state->smooth_mode,
+                                                       (float)state->feather_radius);
+                if (preview_sel) {
+                    int stride = preview_mask->stride;
+                    preview_sel->mask = g_malloc0(stride * mask_h);
+                    for (int row = rect_y; row < rect_y + rect_h && row < (int)doc->height; row++) {
+                        int local_row = row - mask_y;
+                        if (local_row < 0 || local_row >= mask_h) continue;
+                        for (int col = rect_x; col < rect_x + rect_w && col < (int)doc->width; col++) {
+                            int local_col = col - mask_x;
+                            if (local_col >= 0 && local_col < mask_w)
+                                preview_sel->mask[local_row * stride + local_col] = 255;
+                        }
+                    }
+                    selection_mask_add_selection(preview_mask, preview_sel);
+                    selection_unref(preview_sel);
+                    /* Trigger feather computation now so it is already cached for rendering */
+                    selection_mask_get_surface(preview_mask);
+                }
 
-                /* Compute and render feathered outline with animation phase if enabled */
-                int animation_phase = (current_opts && current_opts->rect_select_animate) ? state->animation_phase : 0;
-                selection_mask_render_outline(cr, preview_mask, animation_phase, zoom, TRUE);
+                /* Store in cache */
+                state->preview_cache        = preview_mask;
+                state->cache_rect_x         = rect_x;
+                state->cache_rect_y         = rect_y;
+                state->cache_rect_w         = rect_w;
+                state->cache_rect_h         = rect_h;
+                state->cache_feather_radius = state->feather_radius;
+                state->cache_smooth_mode    = state->smooth_mode;
+                state->cache_combine_mode   = state->combine_mode;
             }
 
-            selection_mask_free(preview_mask);
+            /* Render from cache (EDT already done; only the outline scan runs here) */
+            if (state->preview_cache) {
+                int animation_phase = (current_opts && current_opts->rect_select_animate) ? state->animation_phase : 0;
+                selection_mask_render_outline(cr, state->preview_cache, animation_phase, zoom, TRUE);
+            }
         } else {
             /* Draw hard outline (no feathering) - faster for active dragging */
             int animation_phase = (state->is_editing && current_opts && current_opts->rect_select_animate) ? state->animation_phase : 0;

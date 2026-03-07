@@ -4,8 +4,9 @@
 #include "selection.h"
 #include "tools.h"
 
-/* Forward declaration */
+/* Forward declarations */
 typedef struct ImageDocument ImageDocument;
+typedef struct SelectionMask SelectionMask;
 
 /**
  * Rectangular Selection Tool state and options
@@ -29,6 +30,20 @@ typedef struct {
     SelectionSmoothingMode smooth_mode; /* Edge smoothing mode */
     gint feather_radius;                /* Feather radius in pixels */
     gint hovered_handle;                /* Which handle is under mouse (-1 = none, 0-3 = corners) */
+
+    /* Feathered-preview cache.
+     * The cache holds a fully computed SelectionMask (including EDT-based feathered
+     * preview) for the current selection geometry and feather parameters.  It is
+     * reused on every animation-timer redraw so the expensive EDT is only run when
+     * the selection bounds, feather radius, or mode actually change. */
+    SelectionMask*         preview_cache;        /* Cached mask, NULL = needs rebuild */
+    gint                   cache_rect_x;
+    gint                   cache_rect_y;
+    gint                   cache_rect_w;
+    gint                   cache_rect_h;
+    gint                   cache_feather_radius;
+    SelectionSmoothingMode cache_smooth_mode;
+    SelectionCombineMode   cache_combine_mode;
 } RectSelectToolState;
 
 /**

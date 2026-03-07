@@ -4,8 +4,9 @@
 #include "selection.h"
 #include "tools.h"
 
-/* Forward declaration */
+/* Forward declarations */
 typedef struct ImageDocument ImageDocument;
+typedef struct SelectionMask SelectionMask;
 
 /**
  * Polygon Selection Tool state
@@ -31,6 +32,20 @@ typedef struct {
     gfloat curvature;
     gint area_mode;
     gint border_width;
+
+    /* Feathered-preview cache — see RectSelectToolState for full description.
+     * For the polygon tool the geometry is an arbitrary point list, so we copy
+     * the vertex arrays rather than just four integers. */
+    SelectionMask*         preview_cache;
+    gint                   cache_n_points;
+    gint*                  cache_points_x;       /* Heap-allocated copies, NULL = no cache */
+    gint*                  cache_points_y;
+    gint                   cache_feather_radius;
+    SelectionSmoothingMode cache_smooth_mode;
+    SelectionCombineMode   cache_combine_mode;
+    gfloat                 cache_curvature;
+    gint                   cache_area_mode;
+    gint                   cache_border_width;
 } PolygonSelectToolState;
 
 /**

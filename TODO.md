@@ -180,13 +180,24 @@ No caching even when selection bounds/parameters haven't changed.
       - For a 4000×3000 bounded mask (~1000×1000 after bounding-box optimisation),
         the EDT drops from ~600 M operations to ~2 M (300×).
 
-- [ ] **Preview result caching** - Cache the computed feathered preview surface and
-      only regenerate when:
-      - Selection bounds change
-      - Feather radius changes
-      - Selection mode (add/subtract/intersect) changes
-
-      During marching ants animation, reuse cached surface.
+- [x] **Preview result caching** - Cache the computed feathered `SelectionMask` in
+      each tool's state struct and reuse it across animation-timer redraws:
+      - **`RectSelectToolState` / `EllipseSelectToolState`** each gain a
+        `SelectionMask* preview_cache` plus seven scalar cache-key fields
+        (`cache_rect_x/y/w/h`, `cache_feather_radius`, `cache_smooth_mode`,
+        `cache_combine_mode`).
+      - **`PolygonSelectToolState`** gains the same plus `cache_n_points`,
+        `gint* cache_points_x/y` (heap-allocated vertex copies), `cache_curvature`,
+        `cache_area_mode`, `cache_border_width`.
+      - On each `draw_preview()` call the current parameters are compared to the
+        cached keys.  On a **cache hit** only `selection_mask_render_outline()` runs
+        (the outline pixel scan) — the EDT, mask allocation, and Cairo surface build
+        are entirely skipped.  On a **cache miss** the mask is rebuilt and stored.
+      - Cache freed in `reset()` for all three tools (tool switch, deactivation).
+      - `SelectionMask` forward-declared in all three tool headers so the pointer
+        field compiles without pulling in the full selection subsystem.
+      - During marching ants animation only `animation_phase` changes → every timer
+        tick is now a pure cache hit: **zero allocations, zero EDT work**.
 
 ### Medium Priority
 

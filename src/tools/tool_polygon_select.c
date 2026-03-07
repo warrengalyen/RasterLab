@@ -397,6 +397,15 @@ void tool_polygon_select_reset(Tool* tool) {
         g_source_remove(state->animation_timer_id);
         state->animation_timer_id = 0;
     }
+
+    /* Release the feathered-preview cache */
+    if (state->preview_cache) {
+        selection_mask_free(state->preview_cache);
+        state->preview_cache = NULL;
+    }
+    g_free(state->cache_points_x); state->cache_points_x = NULL;
+    g_free(state->cache_points_y); state->cache_points_y = NULL;
+    state->cache_n_points = 0;
 }
 
 Tool* tool_polygon_select_create(void) {
@@ -454,88 +463,129 @@ void tool_polygon_select_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble z
         /* Same style as finalized: SelectionMask + selection_mask_render_outline */
         polygon_select_get_options(state);
 
-        /* Collect points from state once; we need them for the bounding-box calculation. */
-        double* px = g_malloc(n * sizeof(double));
-        double* py = g_malloc(n * sizeof(double));
-        for (guint i = 0; i < n; i++) {
-            GdkPoint* pt = &g_array_index(state->points, GdkPoint, i);
-            px[i] = pt->x;
-            py[i] = pt->y;
-        }
-
-        /* --- Bounding-box mask allocation (same optimisation as rect/ellipse tools) ---
+        /* Feathered-preview cache — see tool_rect_select.c for the general design.
          *
-         * For interior (area_mode==0) and border (area_mode==2) selections, allocate
-         * only a region large enough to contain the polygon plus the feather falloff zone.
-         * This reduces the SelectionMask, the Cairo rasterisation surface, and the
-         * distance-field buffers from O(doc_area) to O(selection_area).
-         *
-         * Exterior mode (area_mode==1) inverts the entire mask, so every pixel outside
-         * the polygon becomes selected.  Using a bounded mask there would create a
-         * spurious rectangular outline at the mask boundary, so we fall back to the
-         * full-document mask in that case.
-         */
-        gboolean use_bounded = (state->area_mode != 1);
-
-        SelectionMask* preview_mask = NULL;
-        double* px_fill = px; /* points passed to fill_polygon (local or doc coords) */
-        double* py_fill = py;
-        double* px_local = NULL;
-        double* py_local = NULL;
-        int mask_x = 0, mask_y = 0; /* bounded mask origin in document space */
-
-        if (use_bounded) {
-            /* Tight bounding box of polygon vertices */
-            double bbox_min_x = px[0], bbox_max_x = px[0];
-            double bbox_min_y = py[0], bbox_max_y = py[0];
-            for (guint i = 1; i < n; i++) {
-                if (px[i] < bbox_min_x) bbox_min_x = px[i];
-                if (px[i] > bbox_max_x) bbox_max_x = px[i];
-                if (py[i] < bbox_min_y) bbox_min_y = py[i];
-                if (py[i] > bbox_max_y) bbox_max_y = py[i];
-            }
-
-            int pad = (int)ceilf((float)state->feather_radius) + 2;
-            int mask_x2 = (int)ceil(bbox_max_x) + pad;
-            int mask_y2 = (int)ceil(bbox_max_y) + pad;
-            mask_x = (int)floor(bbox_min_x) - pad;
-            mask_y = (int)floor(bbox_min_y) - pad;
-            if (mask_x < 0)                    mask_x = 0;
-            if (mask_y < 0)                    mask_y = 0;
-            if (mask_x2 > (int)doc->width)     mask_x2 = (int)doc->width;
-            if (mask_y2 > (int)doc->height)    mask_y2 = (int)doc->height;
-            int mask_w = mask_x2 - mask_x;
-            int mask_h = mask_y2 - mask_y;
-
-            preview_mask = selection_mask_new_bounded(mask_x, mask_y, mask_w, mask_h);
-
-            /* Translate points to LOCAL coordinates so fill_polygon rasterises into
-             * the bounded surface at the correct position. */
-            px_local = g_malloc(n * sizeof(double));
-            py_local = g_malloc(n * sizeof(double));
+         * For the polygon, geometry is an arbitrary point list so we compare the
+         * full vertex array (O(n) scan, negligible vs EDT).  Cache invalidation:
+         * any change to n_points, any vertex coordinate, feather_radius, smooth_mode,
+         * combine_mode, curvature, area_mode, or border_width rebuilds the mask. */
+        gboolean cache_valid = FALSE;
+        if (state->preview_cache         != NULL                     &&
+            state->cache_n_points        == (gint)n                  &&
+            state->cache_feather_radius  == state->feather_radius    &&
+            state->cache_smooth_mode     == state->smooth_mode       &&
+            state->cache_combine_mode    == state->combine_mode      &&
+            state->cache_curvature       == state->curvature         &&
+            state->cache_area_mode       == state->area_mode         &&
+            state->cache_border_width    == state->border_width      &&
+            state->cache_points_x        != NULL                     &&
+            state->cache_points_y        != NULL) {
+            /* Quick point-array comparison */
+            cache_valid = TRUE;
             for (guint i = 0; i < n; i++) {
-                px_local[i] = px[i] - mask_x;
-                py_local[i] = py[i] - mask_y;
+                GdkPoint* pt = &g_array_index(state->points, GdkPoint, i);
+                if (state->cache_points_x[i] != pt->x ||
+                    state->cache_points_y[i] != pt->y) {
+                    cache_valid = FALSE;
+                    break;
+                }
             }
-            px_fill = px_local;
-            py_fill = py_local;
-        } else {
-            /* Exterior mode: fall back to full-document mask */
-            preview_mask = selection_mask_new(doc->width, doc->height);
         }
 
-        if (preview_mask) {
-            selection_mask_fill_polygon(preview_mask, px_fill, py_fill, (int)n,
-                                        SELECTION_COMBINE_NEW, state->smooth_mode, (float)state->feather_radius,
-                                        state->curvature, state->area_mode, state->border_width, FALSE);
-            selection_mask_render_outline(cr, preview_mask, anim_phase, zoom, TRUE);
-            selection_mask_free(preview_mask);
+        if (!cache_valid) {
+            /* Discard stale cache */
+            if (state->preview_cache) {
+                selection_mask_free(state->preview_cache);
+                state->preview_cache = NULL;
+            }
+            g_free(state->cache_points_x); state->cache_points_x = NULL;
+            g_free(state->cache_points_y); state->cache_points_y = NULL;
+
+            /* Collect document-space points */
+            double* px = g_malloc(n * sizeof(double));
+            double* py = g_malloc(n * sizeof(double));
+            for (guint i = 0; i < n; i++) {
+                GdkPoint* pt = &g_array_index(state->points, GdkPoint, i);
+                px[i] = pt->x;
+                py[i] = pt->y;
+            }
+
+            /* Bounded-mask allocation (exterior mode falls back to full document) */
+            gboolean use_bounded = (state->area_mode != 1);
+            SelectionMask* preview_mask = NULL;
+            double* px_fill = px;
+            double* py_fill = py;
+            double* px_local = NULL;
+            double* py_local = NULL;
+            int mask_x = 0, mask_y = 0;
+
+            if (use_bounded) {
+                double bbox_min_x = px[0], bbox_max_x = px[0];
+                double bbox_min_y = py[0], bbox_max_y = py[0];
+                for (guint i = 1; i < n; i++) {
+                    if (px[i] < bbox_min_x) bbox_min_x = px[i];
+                    if (px[i] > bbox_max_x) bbox_max_x = px[i];
+                    if (py[i] < bbox_min_y) bbox_min_y = py[i];
+                    if (py[i] > bbox_max_y) bbox_max_y = py[i];
+                }
+                int pad = (int)ceilf((float)state->feather_radius) + 2;
+                int mask_x2 = (int)ceil(bbox_max_x) + pad;
+                int mask_y2 = (int)ceil(bbox_max_y) + pad;
+                mask_x = (int)floor(bbox_min_x) - pad;
+                mask_y = (int)floor(bbox_min_y) - pad;
+                if (mask_x < 0)                    mask_x = 0;
+                if (mask_y < 0)                    mask_y = 0;
+                if (mask_x2 > (int)doc->width)     mask_x2 = (int)doc->width;
+                if (mask_y2 > (int)doc->height)    mask_y2 = (int)doc->height;
+                int mask_w = mask_x2 - mask_x;
+                int mask_h = mask_y2 - mask_y;
+                preview_mask = selection_mask_new_bounded(mask_x, mask_y, mask_w, mask_h);
+                px_local = g_malloc(n * sizeof(double));
+                py_local = g_malloc(n * sizeof(double));
+                for (guint i = 0; i < n; i++) {
+                    px_local[i] = px[i] - mask_x;
+                    py_local[i] = py[i] - mask_y;
+                }
+                px_fill = px_local;
+                py_fill = py_local;
+            } else {
+                preview_mask = selection_mask_new(doc->width, doc->height);
+            }
+
+            if (preview_mask) {
+                selection_mask_fill_polygon(preview_mask, px_fill, py_fill, (int)n,
+                                            SELECTION_COMBINE_NEW, state->smooth_mode, (float)state->feather_radius,
+                                            state->curvature, state->area_mode, state->border_width, FALSE);
+                /* Trigger feather computation before storing in cache */
+                selection_mask_get_surface(preview_mask);
+            }
+
+            /* Store in cache */
+            state->preview_cache        = preview_mask;
+            state->cache_n_points       = (gint)n;
+            state->cache_points_x       = g_malloc(n * sizeof(gint));
+            state->cache_points_y       = g_malloc(n * sizeof(gint));
+            for (guint i = 0; i < n; i++) {
+                state->cache_points_x[i] = (gint)px[i];
+                state->cache_points_y[i] = (gint)py[i];
+            }
+            state->cache_feather_radius = state->feather_radius;
+            state->cache_smooth_mode    = state->smooth_mode;
+            state->cache_combine_mode   = state->combine_mode;
+            state->cache_curvature      = state->curvature;
+            state->cache_area_mode      = state->area_mode;
+            state->cache_border_width   = state->border_width;
+
+            g_free(px);
+            g_free(py);
+            if (px_local) g_free(px_local);
+            if (py_local) g_free(py_local);
         }
 
-        g_free(px);
-        g_free(py);
-        if (px_local) g_free(px_local);
-        if (py_local) g_free(py_local);
+        /* Render from cache */
+        if (state->preview_cache) {
+            selection_mask_render_outline(cr, state->preview_cache, anim_phase, zoom, TRUE);
+        }
     } else {
         /* Building: use selection_draw_marching_ants_path (same style as rect/ellipse) */
         cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
