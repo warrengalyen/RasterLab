@@ -15,6 +15,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 /* Timer callback data structure to hold both tool and document */
 typedef struct {
@@ -829,16 +830,35 @@ void tool_ellipse_select_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble z
                     gdouble rx = rect_w / 2.0;
                     gdouble ry = rect_h / 2.0;
 
-                    for (int row = rect_y; row < rect_y + rect_h && row < (int)doc->height; row++) {
-                        int local_row = row - mask_y;
-                        if (local_row < 0 || local_row >= mask_h) continue;
-                        for (int col = rect_x; col < rect_x + rect_w && col < (int)doc->width; col++) {
-                            int local_col = col - mask_x;
-                            if (local_col < 0 || local_col >= mask_w) continue;
-                            gdouble dx = (col + 0.5 - cx) / rx;
-                            gdouble dy = (row + 0.5 - cy) / ry;
-                            if (dx * dx + dy * dy <= 1.0)
-                                preview_sel->mask[local_row * stride + local_col] = 255;
+                    /* Scanline rasterization: for each row, analytically compute the
+                     * horizontal span of pixels whose center lies inside the ellipse,
+                     * then fill with a single memset — O(rect_h) instead of O(rect_h*rect_w).
+                     *
+                     * Pixel col is inside iff (col+0.5 - cx)^2/rx^2 + norm_dy^2 <= 1
+                     * => (col+0.5) ∈ [cx - x_half, cx + x_half]
+                     * => col ∈ [ceil(cx - x_half - 0.5), floor(cx + x_half - 0.5)]  */
+                    if (rx > 0.0 && ry > 0.0) {
+                        int row_end = rect_y + rect_h;
+                        if (row_end > (int)doc->height) row_end = (int)doc->height;
+                        for (int row = rect_y; row < row_end; row++) {
+                            int local_row = row - mask_y;
+                            if (local_row < 0 || local_row >= mask_h) continue;
+                            gdouble norm_dy = (row + 0.5 - cy) / ry;
+                            gdouble rem     = 1.0 - norm_dy * norm_dy;
+                            if (rem < 0.0) continue;
+                            gdouble x_half  = rx * sqrt(rem);
+                            int x_left  = (int)ceil (cx - x_half - 0.5);
+                            int x_right = (int)floor(cx + x_half - 0.5);
+                            if (x_left  < rect_x)           x_left  = rect_x;
+                            if (x_right >= rect_x + rect_w) x_right = rect_x + rect_w - 1;
+                            if (x_right >= (int)doc->width) x_right = (int)doc->width - 1;
+                            int local_x0 = x_left  - mask_x;
+                            int local_x1 = x_right - mask_x;
+                            if (local_x0 < 0)       local_x0 = 0;
+                            if (local_x1 >= mask_w) local_x1 = mask_w - 1;
+                            if (local_x0 <= local_x1)
+                                memset(&preview_sel->mask[local_row * stride + local_x0],
+                                       255, (size_t)(local_x1 - local_x0 + 1));
                         }
                     }
                     selection_mask_add_selection(preview_mask, preview_sel);

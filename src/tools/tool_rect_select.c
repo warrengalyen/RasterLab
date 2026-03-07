@@ -15,6 +15,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 /* Timer callback data structure to hold both tool and document */
 typedef struct {
@@ -808,14 +809,20 @@ void tool_rect_select_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom
                 if (preview_sel) {
                     int stride = preview_mask->stride;
                     preview_sel->mask = g_malloc0(stride * mask_h);
-                    for (int row = rect_y; row < rect_y + rect_h && row < (int)doc->height; row++) {
-                        int local_row = row - mask_y;
-                        if (local_row < 0 || local_row >= mask_h) continue;
-                        for (int col = rect_x; col < rect_x + rect_w && col < (int)doc->width; col++) {
-                            int local_col = col - mask_x;
-                            if (local_col >= 0 && local_col < mask_w)
-                                preview_sel->mask[local_row * stride + local_col] = 255;
-                        }
+                    /* Translate rect to local (bounded-mask) coordinates and fill
+                     * each row with a single memset — O(rect_h) instead of O(rect_h*rect_w). */
+                    int local_y0 = rect_y - mask_y;
+                    int local_x0 = rect_x - mask_x;
+                    int local_y1 = local_y0 + rect_h;
+                    int local_x1 = local_x0 + rect_w;
+                    if (local_x0 < 0)      local_x0 = 0;
+                    if (local_y0 < 0)      local_y0 = 0;
+                    if (local_x1 > mask_w) local_x1 = mask_w;
+                    if (local_y1 > mask_h) local_y1 = mask_h;
+                    int fill_w = local_x1 - local_x0;
+                    if (fill_w > 0) {
+                        for (int row = local_y0; row < local_y1; row++)
+                            memset(&preview_sel->mask[row * stride + local_x0], 255, (size_t)fill_w);
                     }
                     selection_mask_add_selection(preview_mask, preview_sel);
                     selection_unref(preview_sel);

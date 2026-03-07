@@ -204,16 +204,37 @@ No caching even when selection bounds/parameters haven't changed.
 - [ ] **Incremental feathering** - For resize operations, only recompute the changed
       edge regions rather than the entire selection.
 
-- [ ] **Fast rectangle filling** - Replace per-pixel loops with `memset()` for solid
-      rectangle regions:
-      ```c
-      for (int row = rect_y; row < rect_y + rect_h; row++) {
-          memset(&mask[row * stride + rect_x], 255, rect_w);
-      }
-      ```
+- [x] **Fast rectangle filling** - Replaced all per-pixel rect fill loops with a
+      single `memset()` call per row across four code sites:
+      - **`tool_rect_select.c` preview fill** — translates the bounding rect to
+        local bounded-mask coordinates once, then does `O(rect_h)` `memset` calls
+        instead of `O(rect_h × rect_w)` byte writes.
+      - **`selection_mask.c:selection_mask_fill_rect`** — three per-pixel loops
+        (direct-modify/create, direct-modify/base_mask, and the normal tool path)
+        all replaced with `memset` per row. `clamped_width` bytes are written per
+        row in a single call instead of a column loop.
+      - For a 200×200 selection the inner loop drops from 40 000 byte-writes to
+        200 `memset` calls (each writing 200 bytes via optimised CPU memcpy path).
 
-- [ ] **Optimized ellipse rasterization** - Use midpoint ellipse algorithm with
-      scanline filling instead of per-pixel distance checks.
+- [x] **Optimized ellipse rasterization** - Replaced all per-pixel `dx²+dy²≤1`
+      distance checks with scanline rasterization + `memset` across five code sites:
+      - **`tool_ellipse_select.c` preview fill** — for each row, analytically
+        computes the horizontal span `[ceil(cx - x_half - 0.5), floor(cx + x_half -
+        0.5)]` where `x_half = rx * sqrt(1 - norm_dy²)` (one `sqrt` per row), then
+        fills that span with `memset`. Reduces `O(rect_h × rect_w)` float ops to
+        `O(rect_h)` `sqrt` calls.
+      - **`selection_mask.c:fill_ellipse_scanline_to_buf`** — new static helper
+        (placed before `selection_mask_fill_ellipse`) handles both the hard-edge
+        and antialiased paths:
+        - **Non-AA (SMOOTH_NONE / SMOOTH_FEATHERED):** pure scanline + `memset`,
+          one `sqrt` per row.
+        - **AA (SMOOTH_ANTIALIASED):** computes outer (`1+aa_width`) and inner
+          (`1-aa_width`) normalised radii; the interior zone is `memset` to 255;
+          per-pixel smoothstep math runs only on the ~1-pixel-wide edge band on
+          each side of each row. For a 500×500 ellipse with AA, per-pixel work
+          drops from 250 000 to ≈ 2 000 edge pixels.
+      - All four per-pixel loops inside `selection_mask_fill_ellipse` (two
+        direct-modify paths × two buffers) are replaced with calls to the helper.
 
 - [ ] **Deferred feathering computation** - Only compute feathering after a short
       delay (e.g., 100ms) when user stops resizing, showing unfeathered preview

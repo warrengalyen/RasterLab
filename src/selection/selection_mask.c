@@ -267,12 +267,9 @@ void selection_mask_fill_rect(
                 int stride = calculate_stride(mask->width);
                 sel->mask = g_malloc0(stride * mask->height);
 
-                /* Fill rectangle region in selection's mask */
-                for (int row = y1; row < y2; row++) {
-                    for (int col = x1; col < x2; col++) {
-                        sel->mask[row * stride + col] = 255;
-                    }
-                }
+                /* Fill rectangle region in selection's mask — one memset per row. */
+                for (int row = y1; row < y2; row++)
+                    memset(&sel->mask[row * stride + x1], 255, (size_t)clamped_width);
 
                 /* Add selection to list */
                 selection_mask_add_selection(mask, sel);
@@ -292,13 +289,9 @@ void selection_mask_fill_rect(
             int stride = mask->stride;
             uint8_t* base_mask = mask->base_mask;
 
-            /* Fill rectangle region in base_mask with 255 (ignore combine mode) */
-            for (int row = y1; row < y2; row++) {
-                uint8_t* row_ptr = base_mask + row * stride;
-                for (int col = x1; col < x2; col++) {
-                    row_ptr[col] = 255;
-                }
-            }
+            /* Fill rectangle region in base_mask with 255 — one memset per row. */
+            for (int row = y1; row < y2; row++)
+                memset(base_mask + row * stride + x1, 255, (size_t)clamped_width);
 
             /* Clear existing selections list */
             if (mask->selections) {
@@ -323,12 +316,9 @@ void selection_mask_fill_rect(
                 int sel_stride = calculate_stride(mask->width);
                 sel->mask = g_malloc0(sel_stride * mask->height);
 
-                /* Fill rectangle region in selection's mask */
-                for (int row = y1; row < y2; row++) {
-                    for (int col = x1; col < x2; col++) {
-                        sel->mask[row * sel_stride + col] = 255;
-                    }
-                }
+                /* Fill rectangle region in selection's mask — one memset per row. */
+                for (int row = y1; row < y2; row++)
+                    memset(&sel->mask[row * sel_stride + x1], 255, (size_t)clamped_width);
 
                 /* Add selection to list */
                 selection_mask_add_selection(mask, sel);
@@ -370,12 +360,9 @@ void selection_mask_fill_rect(
         int stride = calculate_stride(mask->width);
         sel->mask = g_malloc0(stride * mask->height);
 
-        /* Fill rectangle region in selection's mask (hard 0/255 only) */
-        for (int row = y1; row < y2; row++) {
-            for (int col = x1; col < x2; col++) {
-                sel->mask[row * stride + col] = 255;
-            }
-        }
+        /* Fill rectangle region in selection's mask — one memset per row. */
+        for (int row = y1; row < y2; row++)
+            memset(&sel->mask[row * stride + x1], 255, (size_t)clamped_width);
 
         /* Add selection to list */
         selection_mask_add_selection(mask, sel);
@@ -383,6 +370,112 @@ void selection_mask_fill_rect(
 
         /* Mark affected region as dirty */
         selection_mask_mark_dirty(mask, x1, y1, clamped_width, clamped_height);
+    }
+}
+
+/* ---------------------------------------------------------------------------
+ * Scanline ellipse rasterizer
+ *
+ * Fills the pixels of an ellipse into `buf` (a flat byte mask, stride bytes
+ * per row) whose bounding box in buf-space is [x1,x2) × [y1,y2).
+ *
+ * Non-AA path  — O(height) sqrt calls + memset per row.
+ * AA path      — same for the fully-inside interior; per-pixel math only for
+ *                the ~1-pixel-wide transition band on each edge.
+ *
+ * Pixel col is inside the (hard-edge) ellipse iff:
+ *   (col+0.5 - cx)²/rx² + (row+0.5 - cy)²/ry² ≤ 1
+ * which rearranges to:
+ *   col ∈ [ ceil(cx - x_half - 0.5),  floor(cx + x_half - 0.5) ]
+ * where x_half = rx * sqrt(1 - norm_dy²).
+ * --------------------------------------------------------------------------- */
+static void fill_ellipse_scanline_to_buf(
+    uint8_t* buf, int stride,
+    int y1, int y2, int x1, int x2,
+    double cx, double cy, double rx, double ry,
+    SelectionSmoothingMode smoothing, double aa_width)
+{
+    if (rx <= 0.0 || ry <= 0.0) return;
+
+    if (smoothing == SELECTION_SMOOTH_ANTIALIASED && aa_width > 0.0) {
+        /* Pre-compute squared outer/inner normalized radii. */
+        double outer_r2  = (1.0 + aa_width) * (1.0 + aa_width);
+        double inner_r2v = (1.0 - aa_width) * (1.0 - aa_width);
+        double inner_r2  = (inner_r2v > 0.0) ? inner_r2v : 0.0;
+
+        for (int row = y1; row < y2; row++) {
+            double norm_dy  = (row + 0.5 - cy) / ry;
+            double norm_dy2 = norm_dy * norm_dy;
+            if (norm_dy2 >= outer_r2) continue;   /* Row entirely outside AA zone */
+
+            /* Outer span covers all pixels that receive any non-zero AA value. */
+            double outer_half  = rx * sqrt(outer_r2 - norm_dy2);
+            int    outer_left  = (int)ceil (cx - outer_half - 0.5);
+            int    outer_right = (int)floor(cx + outer_half - 0.5);
+            if (outer_left  < x1) outer_left  = x1;
+            if (outer_right >= x2) outer_right = x2 - 1;
+            if (outer_left > outer_right) continue;
+
+            uint8_t* row_ptr = buf + row * stride;
+
+            if (norm_dy2 < inner_r2) {
+                /* This row has an inner zone that is 100% inside → memset. */
+                double inner_half  = rx * sqrt(inner_r2 - norm_dy2);
+                int    inner_left  = (int)ceil (cx - inner_half - 0.5);
+                int    inner_right = (int)floor(cx + inner_half - 0.5);
+                if (inner_left  < x1) inner_left  = x1;
+                if (inner_right >= x2) inner_right = x2 - 1;
+
+                /* Left AA band */
+                for (int col = outer_left; col < inner_left; col++) {
+                    double dx   = (col + 0.5 - cx) / rx;
+                    double dist = sqrt(dx * dx + norm_dy2);
+                    double t    = (dist - (1.0 - aa_width)) / (2.0 * aa_width);
+                    if (t <= 0.0) { row_ptr[col] = 255; continue; }
+                    if (t >= 1.0) continue;
+                    row_ptr[col] = (uint8_t)((1.0 - smoothstep((float)t)) * 255.0 + 0.5);
+                }
+                /* Inner fully-opaque zone */
+                if (inner_left <= inner_right)
+                    memset(row_ptr + inner_left, 255,
+                           (size_t)(inner_right - inner_left + 1));
+                /* Right AA band */
+                for (int col = inner_right + 1; col <= outer_right; col++) {
+                    double dx   = (col + 0.5 - cx) / rx;
+                    double dist = sqrt(dx * dx + norm_dy2);
+                    double t    = (dist - (1.0 - aa_width)) / (2.0 * aa_width);
+                    if (t <= 0.0) { row_ptr[col] = 255; continue; }
+                    if (t >= 1.0) continue;
+                    row_ptr[col] = (uint8_t)((1.0 - smoothstep((float)t)) * 255.0 + 0.5);
+                }
+            } else {
+                /* Entire visible span is in the AA transition zone (very tall row
+                 * or very thin ellipse) — per-pixel for the narrow outer band. */
+                for (int col = outer_left; col <= outer_right; col++) {
+                    double dx   = (col + 0.5 - cx) / rx;
+                    double dist = sqrt(dx * dx + norm_dy2);
+                    double t    = (dist - (1.0 - aa_width)) / (2.0 * aa_width);
+                    if (t <= 0.0) { row_ptr[col] = 255; continue; }
+                    if (t >= 1.0) continue;
+                    row_ptr[col] = (uint8_t)((1.0 - smoothstep((float)t)) * 255.0 + 0.5);
+                }
+            }
+        }
+    } else {
+        /* Hard-edge (SMOOTH_NONE or SMOOTH_FEATHERED): O(height) scanline + memset. */
+        for (int row = y1; row < y2; row++) {
+            double norm_dy = (row + 0.5 - cy) / ry;
+            double rem     = 1.0 - norm_dy * norm_dy;
+            if (rem < 0.0) continue;
+            double x_half  = rx * sqrt(rem);
+            int x_left  = (int)ceil (cx - x_half - 0.5);
+            int x_right = (int)floor(cx + x_half - 0.5);
+            if (x_left  < x1) x_left  = x1;
+            if (x_right >= x2) x_right = x2 - 1;
+            if (x_left <= x_right)
+                memset(buf + row * stride + x_left, 255,
+                       (size_t)(x_right - x_left + 1));
+        }
     }
 }
 
@@ -436,32 +529,9 @@ void selection_mask_fill_ellipse(
                 int stride = calculate_stride(mask->width);
                 sel->mask = g_malloc0(stride * mask->height);
 
-                /* Fill ellipse region in selection's mask */
-                for (int row = y1; row < y2; row++) {
-                    for (int col = x1; col < x2; col++) {
-                        /* Check if point is inside ellipse: (x-cx)^2/rx^2 + (y-cy)^2/ry^2 <= 1 */
-                        double dx = (col + 0.5 - cx) / rx;
-                        double dy = (row + 0.5 - cy) / ry;
-                        double dist_sq = dx * dx + dy * dy;
-
-                        if (smoothing == SELECTION_SMOOTH_ANTIALIASED && aa_width > 0) {
-                            double dist = sqrt(dist_sq);
-                            if (dist <= 1.0 - aa_width) {
-                                sel->mask[row * stride + col] = 255;
-                            } else if (dist >= 1.0 + aa_width) {
-                                sel->mask[row * stride + col] = 0;
-                            } else {
-                                double t = (dist - (1.0 - aa_width)) / (2.0 * aa_width);
-                                double alpha = 1.0 - smoothstep((float)t);
-                                sel->mask[row * stride + col] = (uint8_t)(alpha * 255.0 + 0.5);
-                            }
-                        } else {
-                            if (dist_sq <= 1.0) {
-                                sel->mask[row * stride + col] = 255;
-                            }
-                        }
-                    }
-                }
+                /* Fill ellipse region — scanline rasterizer replaces per-pixel checks. */
+                fill_ellipse_scanline_to_buf(sel->mask, stride, y1, y2, x1, x2,
+                                             cx, cy, rx, ry, smoothing, aa_width);
 
                 /* Add selection to list */
                 selection_mask_add_selection(mask, sel);
@@ -478,32 +548,9 @@ void selection_mask_fill_ellipse(
             int stride = mask->stride;
             uint8_t* base_mask = mask->base_mask;
 
-            /* Fill ellipse region in base_mask */
-            for (int row = y1; row < y2; row++) {
-                uint8_t* row_ptr = base_mask + row * stride;
-                for (int col = x1; col < x2; col++) {
-                    double dx = (col + 0.5 - cx) / rx;
-                    double dy = (row + 0.5 - cy) / ry;
-                    double dist_sq = dx * dx + dy * dy;
-
-                    if (smoothing == SELECTION_SMOOTH_ANTIALIASED && aa_width > 0) {
-                        double dist = sqrt(dist_sq);
-                        if (dist <= 1.0 - aa_width) {
-                            row_ptr[col] = 255;
-                        } else if (dist >= 1.0 + aa_width) {
-                            row_ptr[col] = 0;
-                        } else {
-                            double t = (dist - (1.0 - aa_width)) / (2.0 * aa_width);
-                            double alpha = 1.0 - smoothstep((float)t);
-                            row_ptr[col] = (uint8_t)(alpha * 255.0 + 0.5);
-                        }
-                    } else {
-                        if (dist_sq <= 1.0) {
-                            row_ptr[col] = 255;
-                        }
-                    }
-                }
-            }
+            /* Fill ellipse region in base_mask — scanline rasterizer. */
+            fill_ellipse_scanline_to_buf(base_mask, stride, y1, y2, x1, x2,
+                                         cx, cy, rx, ry, smoothing, aa_width);
 
             /* Clear existing selections list */
             if (mask->selections) {
@@ -527,30 +574,9 @@ void selection_mask_fill_ellipse(
                 int sel_stride = calculate_stride(mask->width);
                 sel->mask = g_malloc0(sel_stride * mask->height);
 
-                for (int row = y1; row < y2; row++) {
-                    for (int col = x1; col < x2; col++) {
-                        double dx = (col + 0.5 - cx) / rx;
-                        double dy = (row + 0.5 - cy) / ry;
-                        double dist_sq = dx * dx + dy * dy;
-
-                        if (smoothing == SELECTION_SMOOTH_ANTIALIASED && aa_width > 0) {
-                            double dist = sqrt(dist_sq);
-                            if (dist <= 1.0 - aa_width) {
-                                sel->mask[row * sel_stride + col] = 255;
-                            } else if (dist >= 1.0 + aa_width) {
-                                sel->mask[row * sel_stride + col] = 0;
-                            } else {
-                                double t = (dist - (1.0 - aa_width)) / (2.0 * aa_width);
-                                double alpha = 1.0 - smoothstep((float)t);
-                                sel->mask[row * sel_stride + col] = (uint8_t)(alpha * 255.0 + 0.5);
-                            }
-                        } else {
-                            if (dist_sq <= 1.0) {
-                                sel->mask[row * sel_stride + col] = 255;
-                            }
-                        }
-                    }
-                }
+                /* Fill ellipse region — scanline rasterizer. */
+                fill_ellipse_scanline_to_buf(sel->mask, sel_stride, y1, y2, x1, x2,
+                                             cx, cy, rx, ry, smoothing, aa_width);
 
                 selection_mask_add_selection(mask, sel);
                 selection_unref(sel);
@@ -592,36 +618,9 @@ void selection_mask_fill_ellipse(
         /* Use approximately 1 pixel transition at the edge */
         double aa_width = (rx > 0 && ry > 0) ? (1.0 / fmin(rx, ry)) : 0.0;
 
-        /* Fill ellipse region in selection's mask */
-        for (int row = y1; row < y2; row++) {
-            for (int col = x1; col < x2; col++) {
-                double dx = (col + 0.5 - cx) / rx;
-                double dy = (row + 0.5 - cy) / ry;
-                double dist_sq = dx * dx + dy * dy;
-
-                if (smoothing == SELECTION_SMOOTH_ANTIALIASED && aa_width > 0) {
-                    /* Antialiased edge: compute smooth transition at boundary */
-                    double dist = sqrt(dist_sq);
-                    if (dist <= 1.0 - aa_width) {
-                        /* Fully inside */
-                        sel->mask[row * stride + col] = 255;
-                    } else if (dist >= 1.0 + aa_width) {
-                        /* Fully outside */
-                        sel->mask[row * stride + col] = 0;
-                    } else {
-                        /* In transition zone - apply smoothstep for smooth edge */
-                        double t = (dist - (1.0 - aa_width)) / (2.0 * aa_width);
-                        double alpha = 1.0 - smoothstep((float)t);
-                        sel->mask[row * stride + col] = (uint8_t)(alpha * 255.0 + 0.5);
-                    }
-                } else {
-                    /* Hard edge (SELECTION_SMOOTH_NONE or SELECTION_SMOOTH_FEATHERED) */
-                    if (dist_sq <= 1.0) {
-                        sel->mask[row * stride + col] = 255;
-                    }
-                }
-            }
-        }
+        /* Fill ellipse region — scanline rasterizer replaces per-pixel checks. */
+        fill_ellipse_scanline_to_buf(sel->mask, stride, y1, y2, x1, x2,
+                                     cx, cy, rx, ry, smoothing, aa_width);
 
         /* Add selection to list */
         selection_mask_add_selection(mask, sel);
