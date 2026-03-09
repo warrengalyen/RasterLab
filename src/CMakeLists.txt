@@ -105,6 +105,7 @@ set(SOURCES
     tools/tool_rect_select.c
     tools/tool_ellipse_select.c
     tools/tool_polygon_select.c
+    tools/tool_lasso_select.c
     tools/tool_zoom.c
     ui.c
     ui/dialogs/beeps_dialog.c

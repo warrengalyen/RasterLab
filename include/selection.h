@@ -65,6 +65,14 @@ void selection_draw_marching_ants_path(cairo_t* cr, GArray* points, gboolean clo
                                        gdouble animation_phase, gdouble zoom);
 
 /**
+ * Draw marching ants outline along a closed path with 1px stroke on each side.
+ * Same style as selection_draw_marching_ants_path but with perpendicular offset strokes.
+ * Used for lasso selection completed preview.
+ */
+void selection_draw_marching_ants_path_double_stroke(cairo_t* cr, GArray* points,
+                                                     gdouble animation_phase, gdouble zoom);
+
+/**
  * Detect which handle (if any) is at the given point
  * Used by rectangular and elliptical selection tools for handle detection
  * @param x Point X coordinate in image space

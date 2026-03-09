@@ -44,6 +44,14 @@ typedef struct {
     gint polygon_select_area;                     /* 0=interior, 1=exterior, 2=border */
     gint polygon_select_border_width;             /* Border width in pixels (1-1000), for area=border */
 
+    /* Lasso select tool options (same as polygon except no curvature) */
+    SelectionCombineMode lasso_select_combine;
+    SelectionSmoothingMode lasso_select_smooth;
+    gfloat lasso_select_feather;
+    gboolean lasso_select_animate;
+    gint lasso_select_area;
+    gint lasso_select_border_width;
+
     /* Move tool options */
     gboolean move_auto_select_layer; /* Auto-select layer under cursor based on visibility */
 
@@ -281,6 +289,22 @@ void tool_options_set_polygon_select_border_width(ToolOptions* opts, gint width)
 gint tool_options_get_polygon_select_border_width(ToolOptions* opts);
 
 /**
+ * Lasso select: same as polygon except no curvature
+ */
+void tool_options_set_lasso_select_combine(ToolOptions* opts, SelectionCombineMode combine);
+SelectionCombineMode tool_options_get_lasso_select_combine(ToolOptions* opts);
+void tool_options_set_lasso_select_smooth(ToolOptions* opts, SelectionSmoothingMode smooth);
+SelectionSmoothingMode tool_options_get_lasso_select_smooth(ToolOptions* opts);
+void tool_options_set_lasso_select_feather(ToolOptions* opts, gfloat feather);
+gfloat tool_options_get_lasso_select_feather(ToolOptions* opts);
+void tool_options_set_lasso_select_animate(ToolOptions* opts, gboolean animate);
+gboolean tool_options_get_lasso_select_animate(ToolOptions* opts);
+void tool_options_set_lasso_select_area(ToolOptions* opts, gint area);
+gint tool_options_get_lasso_select_area(ToolOptions* opts);
+void tool_options_set_lasso_select_border_width(ToolOptions* opts, gint width);
+gint tool_options_get_lasso_select_border_width(ToolOptions* opts);
+
+/**
  * Set move tool auto select layer
  * @param opts The tool options
  * @param auto_select TRUE to enable auto-select, FALSE to use selected layer
@@ -366,4 +390,4 @@ gint tool_options_get_crop_overlay_mode(ToolOptions* opts);
 void tool_options_set_crop_snap(ToolOptions* opts, gboolean snap);
 gboolean tool_options_get_crop_snap(ToolOptions* opts);
 
-#endif /* TOOL_OPTIONS_H */
+#endif  /* TOOL_OPTIONS_H */

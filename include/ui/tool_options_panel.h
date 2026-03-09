@@ -54,6 +54,16 @@ typedef struct {
     GtkWidget* polygon_curvature_scale;
     GtkWidget* polygon_area_combo;
     GtkWidget* polygon_border_scale;
+    GtkWidget* lasso_select_panel;               /* Lasso select tool options panel (from Glade) */
+    GtkWidget* lasso_combine_new_button;
+    GtkWidget* lasso_combine_add_button;
+    GtkWidget* lasso_combine_subtract_button;
+    GtkWidget* lasso_combine_intersect_button;
+    GtkWidget* lasso_smooth_combo;
+    GtkWidget* lasso_feather_scale;
+    GtkWidget* lasso_animate_checkbox;
+    GtkWidget* lasso_area_combo;
+    GtkWidget* lasso_border_scale;
     GtkWidget* move_auto_select_checkbox;        /* Auto-select layer checkbox (move tool only) */
     ToolType current_tool_type;                  /* Currently displayed tool type */
     ToolRegistry* tool_registry;                 /* Tool registry for cursor updates */

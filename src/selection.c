@@ -204,6 +204,49 @@ void selection_draw_marching_ants_path(cairo_t* cr, GArray* points, gboolean clo
     }
 }
 
+#define LASSO_DOUBLE_STROKE_WIDTH 0.5
+
+/**
+ * Draw closed path: normal marching ants dashed line with black 0.5px stroke on each side.
+ * Used for lasso completed preview.
+ */
+void selection_draw_marching_ants_path_double_stroke(cairo_t* cr, GArray* points,
+                                                     gdouble animation_phase, gdouble zoom) {
+    if (!cr || !points || points->len < 2) {
+        return;
+    }
+
+    guint n = points->len;
+    gdouble stroke_width = LASSO_DOUBLE_STROKE_WIDTH;
+
+    /* 1. Black 0.5px stroke on each side: line_width 1.0 = 0.5px inside + 0.5px outside path */
+    cairo_new_path(cr);
+    GdkPoint* p0 = &g_array_index(points, GdkPoint, 0);
+    cairo_move_to(cr, p0->x + 0.5, p0->y + 0.5);
+    for (guint i = 1; i < n; i++) {
+        GdkPoint* p = &g_array_index(points, GdkPoint, i);
+        cairo_line_to(cr, p->x + 0.5, p->y + 0.5);
+    }
+    cairo_close_path(cr);
+    cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
+    cairo_set_line_width(cr, stroke_width * 2.0);
+    cairo_stroke(cr);
+
+    /* 2. Normal marching ants dashed line along the path */
+    gint dash_phase = (gint)animation_phase;
+    gdouble dash_size = ANT_DASH_SIZE / zoom;
+    if (dash_size < 1.0) {
+        dash_size = 1.0;
+    }
+    gdouble path_pos = 0.0;
+    for (guint i = 0; i < n; i++) {
+        GdkPoint* a = &g_array_index(points, GdkPoint, i);
+        GdkPoint* b = &g_array_index(points, GdkPoint, (i + 1) % n);
+        path_pos = draw_marching_ants_line(cr, a->x, a->y, b->x, b->y,
+                                          dash_size, dash_phase, path_pos);
+    }
+}
+
 /**
  * Detect which handle (if any) is at the given point
  * Used by rectangular and elliptical selection tools for handle detection

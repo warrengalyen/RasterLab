@@ -22,6 +22,7 @@
 #include "tools/tool_colorpicker.h"
 #include "tools/tool_crop.h"
 #include "tools/tool_ellipse_select.h"
+#include "tools/tool_lasso_select.h"
 #include "tools/tool_move.h"
 #include "tools/tool_polygon_select.h"
 #include "tools/tool_rect_select.h"
@@ -48,17 +49,18 @@ static void queue_ruler_marker_areas(ImageDocument* doc, gdouble old_cx, gdouble
 #if HAVE_LCMS2
 typedef struct {
     ColorTransform* transform;
-    ColorProfile*   srgb_profile;
-    ColorProfile*   display_profile;
-    gchar*          display_id;
-    gchar*          custom_profile_path;
-    gint            mode;
-    gint            intent;
-    gboolean        bpc;
+    ColorProfile* srgb_profile;
+    ColorProfile* display_profile;
+    gchar* display_id;
+    gchar* custom_profile_path;
+    gint mode;
+    gint intent;
+    gboolean bpc;
 } DisplayTransformCache;
 
 static void display_xform_cache_free(DisplayTransformCache* cache) {
-    if (!cache) return;
+    if (!cache)
+        return;
     cm_transform_destroy(cache->transform);
     cm_profile_destroy(cache->srgb_profile);
     cm_profile_destroy(cache->display_profile);
@@ -285,7 +287,8 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
                     gint intent = settings_get_cm_rendering_intent(settings);
                     gboolean bpc = settings_get_cm_black_point_compensation(settings);
                     const gchar* custom_path = (cm_mode == CM_MODE_CUSTOM_PROFILE)
-                        ? settings_get_cm_display_profile(settings, cur_display_id) : NULL;
+                                                   ? settings_get_cm_display_profile(settings, cur_display_id)
+                                                   : NULL;
 
                     DisplayTransformCache* cache = (DisplayTransformCache*)doc->display_xform_cache;
                     if (display_xform_cache_valid(cache, cur_display_id, cm_mode, intent, bpc, custom_path)) {
@@ -304,14 +307,14 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
                                     intent, bpc ? true : false);
                                 if (xform) {
                                     DisplayTransformCache* new_cache = g_new0(DisplayTransformCache, 1);
-                                    new_cache->transform      = xform;
-                                    new_cache->srgb_profile    = srgb_prof;
+                                    new_cache->transform = xform;
+                                    new_cache->srgb_profile = srgb_prof;
                                     new_cache->display_profile = display_prof;
-                                    new_cache->display_id      = cur_display_id;
+                                    new_cache->display_id = cur_display_id;
                                     new_cache->custom_profile_path = g_strdup(custom_path);
-                                    new_cache->mode   = cm_mode;
+                                    new_cache->mode = cm_mode;
                                     new_cache->intent = intent;
-                                    new_cache->bpc    = bpc;
+                                    new_cache->bpc = bpc;
                                     doc->display_xform_cache = new_cache;
                                     display_xform = xform;
                                 } else {
@@ -788,6 +791,9 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
 
     /* Draw polygon select tool preview */
     tool_polygon_select_draw_preview(doc, cr, zoom);
+
+    /* Draw lasso select tool preview */
+    tool_lasso_select_draw_preview(doc, cr, zoom);
 
     /* Render selection overlays after all content is drawn */
     if (doc->selection_mask && !selection_mask_is_empty(doc->selection_mask)) {
@@ -1637,7 +1643,8 @@ static gboolean on_drawing_area_key_press(GtkWidget* widget, GdkEventKey* event,
     }
 
     Tool* active_tool = tool_manager_get_active(tool_registry);
-    if (!active_tool || (active_tool->type != TOOL_RECT_SELECT && active_tool->type != TOOL_ELLIPSE_SELECT && active_tool->type != TOOL_POLYGON_SELECT)) {
+    if (!active_tool || (active_tool->type != TOOL_RECT_SELECT && active_tool->type != TOOL_ELLIPSE_SELECT &&
+                         active_tool->type != TOOL_POLYGON_SELECT && active_tool->type != TOOL_LASSO_SELECT)) {
         return FALSE;
     }
 
@@ -1646,6 +1653,16 @@ static gboolean on_drawing_area_key_press(GtkWidget* widget, GdkEventKey* event,
         PolygonSelectToolState* state = (PolygonSelectToolState*)active_tool->user_data;
         if (!state->closed && state->points && state->points->len > 0) {
             tool_polygon_select_reset(active_tool);
+            gtk_widget_queue_draw(doc->drawing_area);
+            return TRUE;
+        }
+    }
+
+    /* ESC: cancel in-progress lasso selection */
+    if (event->keyval == GDK_KEY_Escape && active_tool->type == TOOL_LASSO_SELECT && active_tool->user_data) {
+        LassoSelectToolState* state = (LassoSelectToolState*)active_tool->user_data;
+        if (!state->completed && state->points && state->points->len > 0) {
+            tool_lasso_select_reset(active_tool);
             gtk_widget_queue_draw(doc->drawing_area);
             return TRUE;
         }
@@ -1693,6 +1710,11 @@ static gboolean on_drawing_area_key_press(GtkWidget* widget, GdkEventKey* event,
         if (opts) {
             opts->polygon_select_combine = temp_mode;
         }
+    } else if (active_tool->type == TOOL_LASSO_SELECT) {
+        ToolOptions* opts = tool_options_get_for_tool(TOOL_LASSO_SELECT);
+        if (opts) {
+            opts->lasso_select_combine = temp_mode;
+        }
     }
 
     /* Update UI buttons to show the temporary mode */
@@ -1720,7 +1742,8 @@ static gboolean on_drawing_area_key_release(GtkWidget* widget, GdkEventKey* even
     }
 
     Tool* active_tool = tool_manager_get_active(tool_registry);
-    if (!active_tool || (active_tool->type != TOOL_RECT_SELECT && active_tool->type != TOOL_ELLIPSE_SELECT && active_tool->type != TOOL_POLYGON_SELECT)) {
+    if (!active_tool || (active_tool->type != TOOL_RECT_SELECT && active_tool->type != TOOL_ELLIPSE_SELECT &&
+                         active_tool->type != TOOL_POLYGON_SELECT && active_tool->type != TOOL_LASSO_SELECT)) {
         return FALSE;
     }
 
@@ -1765,6 +1788,11 @@ static gboolean on_drawing_area_key_release(GtkWidget* widget, GdkEventKey* even
         ToolOptions* opts = tool_options_get_for_tool(TOOL_POLYGON_SELECT);
         if (opts) {
             opts->polygon_select_combine = temp_mode;
+        }
+    } else if (active_tool->type == TOOL_LASSO_SELECT) {
+        ToolOptions* opts = tool_options_get_for_tool(TOOL_LASSO_SELECT);
+        if (opts) {
+            opts->lasso_select_combine = temp_mode;
         }
     }
 
@@ -1843,6 +1871,7 @@ GtkWidget* document_create_drawing_area(ImageDocument* doc) {
                               GDK_BUTTON_PRESS_MASK |
                               GDK_BUTTON_RELEASE_MASK |
                               GDK_POINTER_MOTION_MASK |
+                              GDK_BUTTON1_MOTION_MASK |
                               GDK_ENTER_NOTIFY_MASK |
                               GDK_LEAVE_NOTIFY_MASK);
 

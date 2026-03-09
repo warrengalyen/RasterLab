@@ -23,9 +23,10 @@ typedef enum {
     TOOL_RECT_SELECT = 7,
     TOOL_ELLIPSE_SELECT = 8,
     TOOL_POLYGON_SELECT = 9,
-    TOOL_COLOR_PICKER = 10,
-    TOOL_CROP = 11,
-    TOOL_COUNT = 12 /* Total number of tools */
+    TOOL_LASSO_SELECT = 10,
+    TOOL_COLOR_PICKER = 11,
+    TOOL_CROP = 12,
+    TOOL_COUNT = 13 /* Total number of tools */
 } ToolType;
 
 /**

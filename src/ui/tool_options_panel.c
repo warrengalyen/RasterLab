@@ -1213,6 +1213,148 @@ static void on_polygon_select_border_changed(GtkRange* range, gpointer user_data
     polygon_select_trigger_redraw(panel);
 }
 
+/* --- Lasso select tool callbacks --- */
+static void lasso_select_trigger_redraw(ToolOptionsPanel* panel);
+
+static void on_lasso_select_combine_button_toggled(GtkToggleButton* button, gpointer user_data) {
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    if (!gtk_toggle_button_get_active(button))
+        return;
+    SelectionCombineMode mode = SELECTION_COMBINE_NEW;
+    if (button == GTK_TOGGLE_BUTTON(panel->lasso_combine_new_button))
+        mode = SELECTION_COMBINE_NEW;
+    else if (panel->lasso_combine_add_button && button == GTK_TOGGLE_BUTTON(panel->lasso_combine_add_button))
+        mode = SELECTION_COMBINE_ADD;
+    else if (panel->lasso_combine_subtract_button && button == GTK_TOGGLE_BUTTON(panel->lasso_combine_subtract_button))
+        mode = SELECTION_COMBINE_SUBTRACT;
+    else if (panel->lasso_combine_intersect_button && button == GTK_TOGGLE_BUTTON(panel->lasso_combine_intersect_button))
+        mode = SELECTION_COMBINE_INTERSECT;
+
+    g_signal_handlers_block_by_func(panel->lasso_combine_new_button, G_CALLBACK(on_lasso_select_combine_button_toggled), panel);
+    if (panel->lasso_combine_add_button)
+        g_signal_handlers_block_by_func(panel->lasso_combine_add_button, G_CALLBACK(on_lasso_select_combine_button_toggled), panel);
+    if (panel->lasso_combine_subtract_button)
+        g_signal_handlers_block_by_func(panel->lasso_combine_subtract_button, G_CALLBACK(on_lasso_select_combine_button_toggled), panel);
+    if (panel->lasso_combine_intersect_button)
+        g_signal_handlers_block_by_func(panel->lasso_combine_intersect_button, G_CALLBACK(on_lasso_select_combine_button_toggled), panel);
+
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->lasso_combine_new_button), (mode == SELECTION_COMBINE_NEW));
+    if (panel->lasso_combine_add_button)
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->lasso_combine_add_button), (mode == SELECTION_COMBINE_ADD));
+    if (panel->lasso_combine_subtract_button)
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->lasso_combine_subtract_button), (mode == SELECTION_COMBINE_SUBTRACT));
+    if (panel->lasso_combine_intersect_button)
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->lasso_combine_intersect_button), (mode == SELECTION_COMBINE_INTERSECT));
+
+    g_signal_handlers_unblock_by_func(panel->lasso_combine_new_button, G_CALLBACK(on_lasso_select_combine_button_toggled), panel);
+    if (panel->lasso_combine_add_button)
+        g_signal_handlers_unblock_by_func(panel->lasso_combine_add_button, G_CALLBACK(on_lasso_select_combine_button_toggled), panel);
+    if (panel->lasso_combine_subtract_button)
+        g_signal_handlers_unblock_by_func(panel->lasso_combine_subtract_button, G_CALLBACK(on_lasso_select_combine_button_toggled), panel);
+    if (panel->lasso_combine_intersect_button)
+        g_signal_handlers_unblock_by_func(panel->lasso_combine_intersect_button, G_CALLBACK(on_lasso_select_combine_button_toggled), panel);
+
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_LASSO_SELECT);
+    if (opts)
+        tool_options_set_lasso_select_combine(opts, mode);
+    lasso_select_trigger_redraw(panel);
+}
+
+static void update_lasso_combine_mode_buttons(ToolOptionsPanel* panel, SelectionCombineMode mode) {
+    if (!panel || !panel->lasso_combine_new_button)
+        return;
+    g_signal_handlers_block_by_func(panel->lasso_combine_new_button, G_CALLBACK(on_lasso_select_combine_button_toggled), panel);
+    if (panel->lasso_combine_add_button)
+        g_signal_handlers_block_by_func(panel->lasso_combine_add_button, G_CALLBACK(on_lasso_select_combine_button_toggled), panel);
+    if (panel->lasso_combine_subtract_button)
+        g_signal_handlers_block_by_func(panel->lasso_combine_subtract_button, G_CALLBACK(on_lasso_select_combine_button_toggled), panel);
+    if (panel->lasso_combine_intersect_button)
+        g_signal_handlers_block_by_func(panel->lasso_combine_intersect_button, G_CALLBACK(on_lasso_select_combine_button_toggled), panel);
+
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->lasso_combine_new_button), (mode == SELECTION_COMBINE_NEW));
+    if (panel->lasso_combine_add_button)
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->lasso_combine_add_button), (mode == SELECTION_COMBINE_ADD));
+    if (panel->lasso_combine_subtract_button)
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->lasso_combine_subtract_button), (mode == SELECTION_COMBINE_SUBTRACT));
+    if (panel->lasso_combine_intersect_button)
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->lasso_combine_intersect_button), (mode == SELECTION_COMBINE_INTERSECT));
+
+    g_signal_handlers_unblock_by_func(panel->lasso_combine_new_button, G_CALLBACK(on_lasso_select_combine_button_toggled), panel);
+    if (panel->lasso_combine_add_button)
+        g_signal_handlers_unblock_by_func(panel->lasso_combine_add_button, G_CALLBACK(on_lasso_select_combine_button_toggled), panel);
+    if (panel->lasso_combine_subtract_button)
+        g_signal_handlers_unblock_by_func(panel->lasso_combine_subtract_button, G_CALLBACK(on_lasso_select_combine_button_toggled), panel);
+    if (panel->lasso_combine_intersect_button)
+        g_signal_handlers_unblock_by_func(panel->lasso_combine_intersect_button, G_CALLBACK(on_lasso_select_combine_button_toggled), panel);
+}
+
+static void lasso_select_trigger_redraw(ToolOptionsPanel* panel) {
+    if (!panel || !panel->panel)
+        return;
+    GtkWidget* window = gtk_widget_get_toplevel(panel->panel);
+    if (!window)
+        return;
+    AppContext* ctx = (AppContext*)g_object_get_data(G_OBJECT(window), "app_context");
+    if (!ctx)
+        return;
+    ImageDocument* doc = ui_get_active_document(ctx);
+    if (doc) {
+        if (doc->drawing_area)
+            gtk_widget_queue_draw(doc->drawing_area);
+        if (doc->viewport)
+            gtk_widget_queue_draw(doc->viewport);
+    }
+}
+
+static void on_lasso_select_smooth_changed(GtkComboBox* combo_box, gpointer user_data) {
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    gint active = gtk_combo_box_get_active(combo_box);
+    if (active < 0 || active >= 3)
+        return;
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_LASSO_SELECT);
+    if (opts)
+        tool_options_set_lasso_select_smooth(opts, (SelectionSmoothingMode)active);
+    lasso_select_trigger_redraw(panel);
+}
+
+static void on_lasso_select_feather_changed(GtkRange* range, gpointer user_data) {
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    gdouble value = gtk_range_get_value(range);
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_LASSO_SELECT);
+    if (opts)
+        tool_options_set_lasso_select_feather(opts, (gfloat)value);
+    lasso_select_trigger_redraw(panel);
+}
+
+static void on_lasso_select_animate_toggled(GtkToggleButton* button, gpointer user_data) {
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    gboolean active = gtk_toggle_button_get_active(button);
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_LASSO_SELECT);
+    if (opts)
+        tool_options_set_lasso_select_animate(opts, active);
+    lasso_select_trigger_redraw(panel);
+}
+
+static void on_lasso_select_area_changed(GtkComboBox* combo_box, gpointer user_data) {
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    gint active = gtk_combo_box_get_active(combo_box);
+    if (active < 0 || active > 2)
+        return;
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_LASSO_SELECT);
+    if (opts)
+        tool_options_set_lasso_select_area(opts, active);
+    lasso_select_trigger_redraw(panel);
+}
+
+static void on_lasso_select_border_changed(GtkRange* range, gpointer user_data) {
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    gint value = (gint)gtk_range_get_value(range);
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_LASSO_SELECT);
+    if (opts)
+        tool_options_set_lasso_select_border_width(opts, value);
+    lasso_select_trigger_redraw(panel);
+}
+
 static gboolean crop_panel_do_redraw_idle(gpointer user_data) {
     ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
     if (!panel || !panel->panel) {
@@ -1678,6 +1820,16 @@ ToolOptionsPanel* create_tool_options_panel(void) {
     tool_opts_panel->polygon_curvature_scale = NULL;
     tool_opts_panel->polygon_area_combo = NULL;
     tool_opts_panel->polygon_border_scale = NULL;
+    tool_opts_panel->lasso_select_panel = NULL;
+    tool_opts_panel->lasso_combine_new_button = NULL;
+    tool_opts_panel->lasso_combine_add_button = NULL;
+    tool_opts_panel->lasso_combine_subtract_button = NULL;
+    tool_opts_panel->lasso_combine_intersect_button = NULL;
+    tool_opts_panel->lasso_smooth_combo = NULL;
+    tool_opts_panel->lasso_feather_scale = NULL;
+    tool_opts_panel->lasso_animate_checkbox = NULL;
+    tool_opts_panel->lasso_area_combo = NULL;
+    tool_opts_panel->lasso_border_scale = NULL;
     tool_opts_panel->move_auto_select_checkbox = NULL;
     tool_opts_panel->current_tool_type = TOOL_MOVE; /* Start with no tool selected */
 
@@ -2230,6 +2382,68 @@ ToolOptionsPanel* create_tool_options_panel(void) {
             g_object_unref(polygon_select_builder);
     }
 
+    /* Load lasso select options panel from Glade */
+    GtkBuilder* lasso_select_builder = gtk_builder_new();
+    GError* lasso_select_error = NULL;
+    if (gtk_builder_add_from_resource(lasso_select_builder, "/ui/lasso_select_options.glade", &lasso_select_error)) {
+        tool_opts_panel->lasso_select_panel = GTK_WIDGET(gtk_builder_get_object(lasso_select_builder, "lasso_select_options_panel"));
+        if (tool_opts_panel->lasso_select_panel) {
+            gtk_container_add(GTK_CONTAINER(container), tool_opts_panel->lasso_select_panel);
+
+            tool_opts_panel->lasso_combine_new_button = GTK_WIDGET(gtk_builder_get_object(lasso_select_builder, "lasso_select_combine_new_button"));
+            tool_opts_panel->lasso_combine_add_button = GTK_WIDGET(gtk_builder_get_object(lasso_select_builder, "lasso_select_combine_add_button"));
+            tool_opts_panel->lasso_combine_subtract_button = GTK_WIDGET(gtk_builder_get_object(lasso_select_builder, "lasso_select_combine_subtract_button"));
+            tool_opts_panel->lasso_combine_intersect_button = GTK_WIDGET(gtk_builder_get_object(lasso_select_builder, "lasso_select_combine_intersect_button"));
+            tool_opts_panel->lasso_smooth_combo = GTK_WIDGET(gtk_builder_get_object(lasso_select_builder, "lasso_select_smooth_combo"));
+            tool_opts_panel->lasso_feather_scale = GTK_WIDGET(gtk_builder_get_object(lasso_select_builder, "lasso_select_feather_scale"));
+            tool_opts_panel->lasso_animate_checkbox = GTK_WIDGET(gtk_builder_get_object(lasso_select_builder, "lasso_select_animate_checkbox"));
+            tool_opts_panel->lasso_area_combo = GTK_WIDGET(gtk_builder_get_object(lasso_select_builder, "lasso_select_area_combo"));
+            tool_opts_panel->lasso_border_scale = GTK_WIDGET(gtk_builder_get_object(lasso_select_builder, "lasso_select_border_scale"));
+
+            if (tool_opts_panel->lasso_combine_new_button)
+                g_signal_connect(tool_opts_panel->lasso_combine_new_button, "toggled", G_CALLBACK(on_lasso_select_combine_button_toggled), tool_opts_panel);
+            if (tool_opts_panel->lasso_combine_add_button)
+                g_signal_connect(tool_opts_panel->lasso_combine_add_button, "toggled", G_CALLBACK(on_lasso_select_combine_button_toggled), tool_opts_panel);
+            if (tool_opts_panel->lasso_combine_subtract_button)
+                g_signal_connect(tool_opts_panel->lasso_combine_subtract_button, "toggled", G_CALLBACK(on_lasso_select_combine_button_toggled), tool_opts_panel);
+            if (tool_opts_panel->lasso_combine_intersect_button)
+                g_signal_connect(tool_opts_panel->lasso_combine_intersect_button, "toggled", G_CALLBACK(on_lasso_select_combine_button_toggled), tool_opts_panel);
+
+            if (tool_opts_panel->lasso_smooth_combo) {
+                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(tool_opts_panel->lasso_smooth_combo), "None");
+                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(tool_opts_panel->lasso_smooth_combo), "Antialiased");
+                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(tool_opts_panel->lasso_smooth_combo), "Feathered");
+                gtk_combo_box_set_active(GTK_COMBO_BOX(tool_opts_panel->lasso_smooth_combo), 1);
+                g_signal_connect(tool_opts_panel->lasso_smooth_combo, "changed", G_CALLBACK(on_lasso_select_smooth_changed), tool_opts_panel);
+            }
+            if (tool_opts_panel->lasso_feather_scale)
+                g_signal_connect(tool_opts_panel->lasso_feather_scale, "value-changed", G_CALLBACK(on_lasso_select_feather_changed), tool_opts_panel);
+            if (tool_opts_panel->lasso_animate_checkbox)
+                g_signal_connect(tool_opts_panel->lasso_animate_checkbox, "toggled", G_CALLBACK(on_lasso_select_animate_toggled), tool_opts_panel);
+            if (tool_opts_panel->lasso_area_combo) {
+                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(tool_opts_panel->lasso_area_combo), "Interior");
+                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(tool_opts_panel->lasso_area_combo), "Exterior");
+                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(tool_opts_panel->lasso_area_combo), "Border");
+                gtk_combo_box_set_active(GTK_COMBO_BOX(tool_opts_panel->lasso_area_combo), 0);
+                g_signal_connect(tool_opts_panel->lasso_area_combo, "changed", G_CALLBACK(on_lasso_select_area_changed), tool_opts_panel);
+            }
+            if (tool_opts_panel->lasso_border_scale)
+                g_signal_connect(tool_opts_panel->lasso_border_scale, "value-changed", G_CALLBACK(on_lasso_select_border_changed), tool_opts_panel);
+
+            gtk_widget_set_visible(tool_opts_panel->lasso_select_panel, FALSE);
+            gtk_widget_set_no_show_all(tool_opts_panel->lasso_select_panel, TRUE);
+            add_spin_button_to_scale(lasso_select_builder, "lasso_select_feather_scale", "lasso_select_feather_control_box");
+            add_spin_button_to_scale(lasso_select_builder, "lasso_select_border_scale", "lasso_select_border_control_box");
+        }
+        g_object_unref(lasso_select_builder);
+    } else {
+        g_warning("Failed to load lasso select options panel: %s", lasso_select_error ? lasso_select_error->message : "Unknown error");
+        if (lasso_select_error)
+            g_error_free(lasso_select_error);
+        if (lasso_select_builder)
+            g_object_unref(lasso_select_builder);
+    }
+
     /* Load crop panel from Glade */
     GtkBuilder* crop_builder = gtk_builder_new();
     GError* crop_error = NULL;
@@ -2432,6 +2646,8 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
         new_tool_type = TOOL_ELLIPSE_SELECT;
     } else if (g_strcmp0(tool_name, "Polygon Select") == 0) {
         new_tool_type = TOOL_POLYGON_SELECT;
+    } else if (g_strcmp0(tool_name, "Lasso Select") == 0) {
+        new_tool_type = TOOL_LASSO_SELECT;
     } else if (g_strcmp0(tool_name, "Move") == 0) {
         new_tool_type = TOOL_MOVE;
     } else if (g_strcmp0(tool_name, "Crop") == 0) {
@@ -2471,6 +2687,9 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
     }
     if (panel->polygon_select_panel) {
         gtk_widget_set_visible(panel->polygon_select_panel, FALSE);
+    }
+    if (panel->lasso_select_panel) {
+        gtk_widget_set_visible(panel->lasso_select_panel, FALSE);
     }
     if (panel->crop_panel) {
         gtk_widget_set_visible(panel->crop_panel, FALSE);
@@ -2611,6 +2830,61 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
             }
         }
 
+        return;
+    }
+
+    /* For lasso select tool, show the options panel */
+    if (new_tool_type == TOOL_LASSO_SELECT && panel->lasso_select_panel) {
+        if (panel->panel) {
+            gtk_widget_set_visible(panel->panel, TRUE);
+        }
+        gtk_widget_set_no_show_all(panel->lasso_select_panel, FALSE);
+        gtk_widget_set_visible(panel->lasso_select_panel, TRUE);
+        gtk_widget_show_all(panel->lasso_select_panel);
+
+        ToolOptions* opts = tool_options_get_for_tool(TOOL_LASSO_SELECT);
+        if (opts) {
+            if (panel->lasso_combine_new_button) {
+                update_lasso_combine_mode_buttons(panel, (SelectionCombineMode)opts->lasso_select_combine);
+            }
+            if (panel->lasso_smooth_combo) {
+                g_signal_handlers_block_by_func(panel->lasso_smooth_combo,
+                                                G_CALLBACK(on_lasso_select_smooth_changed), panel);
+                gtk_combo_box_set_active(GTK_COMBO_BOX(panel->lasso_smooth_combo),
+                                         (gint)opts->lasso_select_smooth);
+                g_signal_handlers_unblock_by_func(panel->lasso_smooth_combo,
+                                                  G_CALLBACK(on_lasso_select_smooth_changed), panel);
+            }
+            if (panel->lasso_feather_scale) {
+                g_signal_handlers_block_by_func(panel->lasso_feather_scale,
+                                                G_CALLBACK(on_lasso_select_feather_changed), panel);
+                gtk_range_set_value(GTK_RANGE(panel->lasso_feather_scale), opts->lasso_select_feather);
+                g_signal_handlers_unblock_by_func(panel->lasso_feather_scale,
+                                                  G_CALLBACK(on_lasso_select_feather_changed), panel);
+            }
+            if (panel->lasso_animate_checkbox) {
+                g_signal_handlers_block_by_func(panel->lasso_animate_checkbox,
+                                                G_CALLBACK(on_lasso_select_animate_toggled), panel);
+                gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->lasso_animate_checkbox),
+                                             opts->lasso_select_animate);
+                g_signal_handlers_unblock_by_func(panel->lasso_animate_checkbox,
+                                                  G_CALLBACK(on_lasso_select_animate_toggled), panel);
+            }
+            if (panel->lasso_area_combo) {
+                g_signal_handlers_block_by_func(panel->lasso_area_combo,
+                                                G_CALLBACK(on_lasso_select_area_changed), panel);
+                gtk_combo_box_set_active(GTK_COMBO_BOX(panel->lasso_area_combo), opts->lasso_select_area);
+                g_signal_handlers_unblock_by_func(panel->lasso_area_combo,
+                                                  G_CALLBACK(on_lasso_select_area_changed), panel);
+            }
+            if (panel->lasso_border_scale) {
+                g_signal_handlers_block_by_func(panel->lasso_border_scale,
+                                                G_CALLBACK(on_lasso_select_border_changed), panel);
+                gtk_range_set_value(GTK_RANGE(panel->lasso_border_scale), (gdouble)opts->lasso_select_border_width);
+                g_signal_handlers_unblock_by_func(panel->lasso_border_scale,
+                                                  G_CALLBACK(on_lasso_select_border_changed), panel);
+            }
+        }
         return;
     }
 
@@ -3095,6 +3369,8 @@ void tool_options_panel_set_combine_mode(ToolOptionsPanel* panel, SelectionCombi
     }
     if (panel->current_tool_type == TOOL_POLYGON_SELECT && panel->polygon_combine_new_button) {
         update_polygon_combine_mode_buttons(panel, mode);
+    } else if (panel->current_tool_type == TOOL_LASSO_SELECT && panel->lasso_combine_new_button) {
+        update_lasso_combine_mode_buttons(panel, mode);
     } else if (panel->current_tool_type == TOOL_ELLIPSE_SELECT && panel->ellipse_combine_new_button) {
         update_ellipse_combine_mode_buttons(panel, mode);
     } else {

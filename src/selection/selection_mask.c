@@ -1542,15 +1542,26 @@ void selection_mask_regenerate_combined_feather_preview(SelectionMask* mask) {
  */
 static void dilate_mask(uint8_t* src_mask, uint8_t* dst_mask, int width, int height, int stride, int radius) {
     /* EDT-based dilation: O(w×h), exact circular kernel.
-     * A pixel becomes selected iff its distance to the nearest selected pixel <= radius. */
-    float* dist = g_malloc(stride * height * sizeof(float));
-    if (!dist) {
-        memset(dst_mask, 0, stride * height);
+     * Binarize at threshold 128 first so anti-aliased edge pixels don't act as seeds. */
+    int n = stride * height;
+    uint8_t* binary = g_malloc(n);
+    if (!binary) {
+        memset(dst_mask, 0, n);
         return;
     }
-    /* seed_is_nonzero=TRUE: seeds are selected (non-zero) pixels.
+    for (int i = 0; i < n; i++)
+        binary[i] = (src_mask[i] >= 128) ? 255 : 0;
+
+    float* dist = g_malloc(n * sizeof(float));
+    if (!dist) {
+        g_free(binary);
+        memset(dst_mask, 0, n);
+        return;
+    }
+    /* seed_is_nonzero=TRUE: seeds are pixels with binary > 0 (i.e. src_mask >= 128).
      * dist[i] = distance from pixel i to nearest selected pixel. */
-    compute_edt(src_mask, dist, width, height, stride, TRUE);
+    compute_edt(binary, dist, width, height, stride, TRUE);
+    g_free(binary);
 
     float r = (float)radius;
     for (int y = 0; y < height; y++) {
@@ -1636,24 +1647,38 @@ static void apply_gaussian_blur(uint8_t* src_mask, uint8_t* dst_mask, int width,
  */
 static void erode_mask(uint8_t* src_mask, uint8_t* dst_mask, int width, int height, int stride, int radius) {
     /* EDT-based erosion: O(w×h), exact circular kernel.
-     * A selected pixel survives iff its distance to the nearest unselected pixel >= radius.
-     * Pixels outside the image boundary are treated as unselected (standard morphology). */
-    float* dist = g_malloc(stride * height * sizeof(float));
-    if (!dist) {
-        memset(dst_mask, 0, stride * height);
+     * Binarize at threshold 128 first so anti-aliased edge pixels (0 < value < 128) are
+     * treated as "unselected" seeds — otherwise the EDT would skip them and compute
+     * distances to the nearest fully-zero pixel, making thin borders disappear.
+     * A selected pixel survives iff its distance to the nearest unselected pixel > radius.
+     * Strict > matches the old brute-force closed-disk semantics (pixels at exactly
+     * distance r are inside the kernel and cause the center to fail). */
+    int n = stride * height;
+    uint8_t* binary = g_malloc(n);
+    if (!binary) {
+        memset(dst_mask, 0, n);
         return;
     }
-    /* seed_is_nonzero=FALSE: seeds are unselected (zero) pixels.
+    for (int i = 0; i < n; i++)
+        binary[i] = (src_mask[i] >= 128) ? 255 : 0;
+
+    float* dist = g_malloc(n * sizeof(float));
+    if (!dist) {
+        g_free(binary);
+        memset(dst_mask, 0, n);
+        return;
+    }
+    /* seed_is_nonzero=FALSE: seeds are pixels with binary == 0 (i.e. src_mask < 128).
      * dist[i] = distance from pixel i to nearest unselected pixel. */
-    compute_edt(src_mask, dist, width, height, stride, FALSE);
+    compute_edt(binary, dist, width, height, stride, FALSE);
+    g_free(binary);
 
     float r = (float)radius;
     for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {
             int idx = y * stride + x;
-            /* Also treat image-edge pixels as touching the boundary */
             gboolean at_edge = (x == 0 || y == 0 || x == width - 1 || y == height - 1);
-            dst_mask[idx] = (!at_edge && src_mask[idx] >= 128 && dist[idx] >= r) ? 255 : 0;
+            dst_mask[idx] = (!at_edge && src_mask[idx] >= 128 && dist[idx] > r) ? 255 : 0;
         }
     }
     g_free(dist);

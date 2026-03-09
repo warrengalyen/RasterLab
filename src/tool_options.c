@@ -53,6 +53,14 @@ ToolOptions* tool_options_new(void) {
     opts->polygon_select_area = 0;   /* 0=interior */
     opts->polygon_select_border_width = 1;
 
+    /* Initialize lasso select tool options */
+    opts->lasso_select_combine = SELECTION_COMBINE_NEW;
+    opts->lasso_select_smooth = SELECTION_SMOOTH_ANTIALIASED;
+    opts->lasso_select_feather = 0.0f;
+    opts->lasso_select_animate = TRUE;
+    opts->lasso_select_area = 0;
+    opts->lasso_select_border_width = 1;
+
     /* Initialize move tool options */
     opts->move_auto_select_layer = TRUE; /* Default: auto-select enabled */
 
@@ -407,6 +415,50 @@ void tool_options_set_polygon_select_border_width(ToolOptions* opts, gint width)
 }
 gint tool_options_get_polygon_select_border_width(ToolOptions* opts) {
     return opts ? opts->polygon_select_border_width : 1;
+}
+
+/* Lasso select tool options */
+void tool_options_set_lasso_select_combine(ToolOptions* opts, SelectionCombineMode combine) {
+    if (opts)
+        opts->lasso_select_combine = combine;
+}
+SelectionCombineMode tool_options_get_lasso_select_combine(ToolOptions* opts) {
+    return opts ? opts->lasso_select_combine : SELECTION_COMBINE_NEW;
+}
+void tool_options_set_lasso_select_smooth(ToolOptions* opts, SelectionSmoothingMode smooth) {
+    if (opts)
+        opts->lasso_select_smooth = smooth;
+}
+SelectionSmoothingMode tool_options_get_lasso_select_smooth(ToolOptions* opts) {
+    return opts ? opts->lasso_select_smooth : SELECTION_SMOOTH_ANTIALIASED;
+}
+void tool_options_set_lasso_select_feather(ToolOptions* opts, gfloat feather) {
+    if (opts)
+        opts->lasso_select_feather = fmaxf(0.0f, feather);
+}
+gfloat tool_options_get_lasso_select_feather(ToolOptions* opts) {
+    return opts ? opts->lasso_select_feather : 0.0f;
+}
+void tool_options_set_lasso_select_animate(ToolOptions* opts, gboolean animate) {
+    if (opts)
+        opts->lasso_select_animate = animate ? TRUE : FALSE;
+}
+gboolean tool_options_get_lasso_select_animate(ToolOptions* opts) {
+    return opts ? opts->lasso_select_animate : TRUE;
+}
+void tool_options_set_lasso_select_area(ToolOptions* opts, gint area) {
+    if (opts && area >= 0 && area <= 2)
+        opts->lasso_select_area = area;
+}
+gint tool_options_get_lasso_select_area(ToolOptions* opts) {
+    return opts ? opts->lasso_select_area : 0;
+}
+void tool_options_set_lasso_select_border_width(ToolOptions* opts, gint width) {
+    if (opts && width >= 1 && width <= 1000)
+        opts->lasso_select_border_width = width;
+}
+gint tool_options_get_lasso_select_border_width(ToolOptions* opts) {
+    return opts ? opts->lasso_select_border_width : 1;
 }
 
 /**
