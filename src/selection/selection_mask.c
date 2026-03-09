@@ -393,46 +393,56 @@ static void fill_ellipse_scanline_to_buf(
     uint8_t* buf, int stride,
     int y1, int y2, int x1, int x2,
     double cx, double cy, double rx, double ry,
-    SelectionSmoothingMode smoothing, double aa_width)
-{
-    if (rx <= 0.0 || ry <= 0.0) return;
+    SelectionSmoothingMode smoothing, double aa_width) {
+    if (rx <= 0.0 || ry <= 0.0)
+        return;
 
     if (smoothing == SELECTION_SMOOTH_ANTIALIASED && aa_width > 0.0) {
         /* Pre-compute squared outer/inner normalized radii. */
-        double outer_r2  = (1.0 + aa_width) * (1.0 + aa_width);
+        double outer_r2 = (1.0 + aa_width) * (1.0 + aa_width);
         double inner_r2v = (1.0 - aa_width) * (1.0 - aa_width);
-        double inner_r2  = (inner_r2v > 0.0) ? inner_r2v : 0.0;
+        double inner_r2 = (inner_r2v > 0.0) ? inner_r2v : 0.0;
 
         for (int row = y1; row < y2; row++) {
-            double norm_dy  = (row + 0.5 - cy) / ry;
+            double norm_dy = (row + 0.5 - cy) / ry;
             double norm_dy2 = norm_dy * norm_dy;
-            if (norm_dy2 >= outer_r2) continue;   /* Row entirely outside AA zone */
+            if (norm_dy2 >= outer_r2)
+                continue; /* Row entirely outside AA zone */
 
             /* Outer span covers all pixels that receive any non-zero AA value. */
-            double outer_half  = rx * sqrt(outer_r2 - norm_dy2);
-            int    outer_left  = (int)ceil (cx - outer_half - 0.5);
-            int    outer_right = (int)floor(cx + outer_half - 0.5);
-            if (outer_left  < x1) outer_left  = x1;
-            if (outer_right >= x2) outer_right = x2 - 1;
-            if (outer_left > outer_right) continue;
+            double outer_half = rx * sqrt(outer_r2 - norm_dy2);
+            int outer_left = (int)ceil(cx - outer_half - 0.5);
+            int outer_right = (int)floor(cx + outer_half - 0.5);
+            if (outer_left < x1)
+                outer_left = x1;
+            if (outer_right >= x2)
+                outer_right = x2 - 1;
+            if (outer_left > outer_right)
+                continue;
 
             uint8_t* row_ptr = buf + row * stride;
 
             if (norm_dy2 < inner_r2) {
                 /* This row has an inner zone that is 100% inside → memset. */
-                double inner_half  = rx * sqrt(inner_r2 - norm_dy2);
-                int    inner_left  = (int)ceil (cx - inner_half - 0.5);
-                int    inner_right = (int)floor(cx + inner_half - 0.5);
-                if (inner_left  < x1) inner_left  = x1;
-                if (inner_right >= x2) inner_right = x2 - 1;
+                double inner_half = rx * sqrt(inner_r2 - norm_dy2);
+                int inner_left = (int)ceil(cx - inner_half - 0.5);
+                int inner_right = (int)floor(cx + inner_half - 0.5);
+                if (inner_left < x1)
+                    inner_left = x1;
+                if (inner_right >= x2)
+                    inner_right = x2 - 1;
 
                 /* Left AA band */
                 for (int col = outer_left; col < inner_left; col++) {
-                    double dx   = (col + 0.5 - cx) / rx;
+                    double dx = (col + 0.5 - cx) / rx;
                     double dist = sqrt(dx * dx + norm_dy2);
-                    double t    = (dist - (1.0 - aa_width)) / (2.0 * aa_width);
-                    if (t <= 0.0) { row_ptr[col] = 255; continue; }
-                    if (t >= 1.0) continue;
+                    double t = (dist - (1.0 - aa_width)) / (2.0 * aa_width);
+                    if (t <= 0.0) {
+                        row_ptr[col] = 255;
+                        continue;
+                    }
+                    if (t >= 1.0)
+                        continue;
                     row_ptr[col] = (uint8_t)((1.0 - smoothstep((float)t)) * 255.0 + 0.5);
                 }
                 /* Inner fully-opaque zone */
@@ -441,22 +451,30 @@ static void fill_ellipse_scanline_to_buf(
                            (size_t)(inner_right - inner_left + 1));
                 /* Right AA band */
                 for (int col = inner_right + 1; col <= outer_right; col++) {
-                    double dx   = (col + 0.5 - cx) / rx;
+                    double dx = (col + 0.5 - cx) / rx;
                     double dist = sqrt(dx * dx + norm_dy2);
-                    double t    = (dist - (1.0 - aa_width)) / (2.0 * aa_width);
-                    if (t <= 0.0) { row_ptr[col] = 255; continue; }
-                    if (t >= 1.0) continue;
+                    double t = (dist - (1.0 - aa_width)) / (2.0 * aa_width);
+                    if (t <= 0.0) {
+                        row_ptr[col] = 255;
+                        continue;
+                    }
+                    if (t >= 1.0)
+                        continue;
                     row_ptr[col] = (uint8_t)((1.0 - smoothstep((float)t)) * 255.0 + 0.5);
                 }
             } else {
                 /* Entire visible span is in the AA transition zone (very tall row
                  * or very thin ellipse) — per-pixel for the narrow outer band. */
                 for (int col = outer_left; col <= outer_right; col++) {
-                    double dx   = (col + 0.5 - cx) / rx;
+                    double dx = (col + 0.5 - cx) / rx;
                     double dist = sqrt(dx * dx + norm_dy2);
-                    double t    = (dist - (1.0 - aa_width)) / (2.0 * aa_width);
-                    if (t <= 0.0) { row_ptr[col] = 255; continue; }
-                    if (t >= 1.0) continue;
+                    double t = (dist - (1.0 - aa_width)) / (2.0 * aa_width);
+                    if (t <= 0.0) {
+                        row_ptr[col] = 255;
+                        continue;
+                    }
+                    if (t >= 1.0)
+                        continue;
                     row_ptr[col] = (uint8_t)((1.0 - smoothstep((float)t)) * 255.0 + 0.5);
                 }
             }
@@ -465,13 +483,16 @@ static void fill_ellipse_scanline_to_buf(
         /* Hard-edge (SMOOTH_NONE or SMOOTH_FEATHERED): O(height) scanline + memset. */
         for (int row = y1; row < y2; row++) {
             double norm_dy = (row + 0.5 - cy) / ry;
-            double rem     = 1.0 - norm_dy * norm_dy;
-            if (rem < 0.0) continue;
-            double x_half  = rx * sqrt(rem);
-            int x_left  = (int)ceil (cx - x_half - 0.5);
+            double rem = 1.0 - norm_dy * norm_dy;
+            if (rem < 0.0)
+                continue;
+            double x_half = rx * sqrt(rem);
+            int x_left = (int)ceil(cx - x_half - 0.5);
             int x_right = (int)floor(cx + x_half - 0.5);
-            if (x_left  < x1) x_left  = x1;
-            if (x_right >= x2) x_right = x2 - 1;
+            if (x_left < x1)
+                x_left = x1;
+            if (x_right >= x2)
+                x_right = x2 - 1;
             if (x_left <= x_right)
                 memset(buf + row * stride + x_left, 255,
                        (size_t)(x_right - x_left + 1));
@@ -1236,13 +1257,12 @@ static void edt_1d(const float* f, float* d, int* v, float* z, int n) {
          * z[0] = -EDT_INF guarantees termination without an explicit k >= 0 check. */
         while (1) {
             int r = v[k];
-            float s = (fq_plus_q2 - (f[r] + (float)(r * r)))
-                      / (2.0f * (float)(q - r));
+            float s = (fq_plus_q2 - (f[r] + (float)(r * r))) / (2.0f * (float)(q - r));
             if (s > z[k]) {
                 /* New parabola dominates beyond s; add it to the envelope */
                 k++;
                 v[k] = q;
-                z[k]     = s;
+                z[k] = s;
                 z[k + 1] = EDT_INF;
                 break;
             }
@@ -1253,7 +1273,8 @@ static void edt_1d(const float* f, float* d, int* v, float* z, int n) {
     /* --- Phase 2: left-to-right scan, query the lower envelope --- */
     k = 0;
     for (int q = 0; q < n; q++) {
-        while (z[k + 1] < (float)q) k++;
+        while (z[k + 1] < (float)q)
+            k++;
         float diff = (float)(q - v[k]);
         d[q] = diff * diff + f[v[k]];
     }
@@ -1287,10 +1308,10 @@ static void compute_edt(const uint8_t* mask, float* dist,
     int max_dim = (width > height) ? width : height;
 
     /* Workspace — allocated once, reused for every row and every column */
-    float* buf_in  = g_malloc(max_dim * sizeof(float));
+    float* buf_in = g_malloc(max_dim * sizeof(float));
     float* buf_out = g_malloc(max_dim * sizeof(float));
-    int*   v       = g_malloc(max_dim * sizeof(int));
-    float* z       = g_malloc((max_dim + 1) * sizeof(float));
+    int* v = g_malloc(max_dim * sizeof(int));
+    float* z = g_malloc((max_dim + 1) * sizeof(float));
 
     /* ---- Pass 1: 1-D EDT along each row ----
      * Produces squared horizontal distance to the nearest seed in the same row. */
@@ -1374,7 +1395,7 @@ static void selection_generate_feathered_preview(Selection* sel, int mask_width,
 
     /* Allocate two distance buffers; signed_dist is computed inline from them. */
     float* dist_outside = g_malloc(stride * mask_height * sizeof(float));
-    float* dist_inside  = g_malloc(stride * mask_height * sizeof(float));
+    float* dist_inside = g_malloc(stride * mask_height * sizeof(float));
 
     /* Exact O(width × height) Euclidean DT — no radius cap, no search loop.
      *   dist_outside[i]: distance of pixel i to the nearest SELECTED pixel
@@ -1384,7 +1405,7 @@ static void selection_generate_feathered_preview(Selection* sel, int mask_width,
      *   positive  → outside the selection
      *   ~0        → on the boundary */
     compute_edt(sel->mask, dist_outside, mask_width, mask_height, stride, TRUE);
-    compute_edt(sel->mask, dist_inside,  mask_width, mask_height, stride, FALSE);
+    compute_edt(sel->mask, dist_inside, mask_width, mask_height, stride, FALSE);
 
     /* Convert signed distance to alpha using a symmetric smoothstep falloff.
      * At sdf = -feather_radius (deep inside):  alpha = 1  (fully selected)
@@ -1520,34 +1541,25 @@ void selection_mask_regenerate_combined_feather_preview(SelectionMask* mask) {
  * Morphological dilation - expands selection outward
  */
 static void dilate_mask(uint8_t* src_mask, uint8_t* dst_mask, int width, int height, int stride, int radius) {
-    int x, y, dx, dy;
-    int dist_sq, radius_sq = radius * radius;
+    /* EDT-based dilation: O(w×h), exact circular kernel.
+     * A pixel becomes selected iff its distance to the nearest selected pixel <= radius. */
+    float* dist = g_malloc(stride * height * sizeof(float));
+    if (!dist) {
+        memset(dst_mask, 0, stride * height);
+        return;
+    }
+    /* seed_is_nonzero=TRUE: seeds are selected (non-zero) pixels.
+     * dist[i] = distance from pixel i to nearest selected pixel. */
+    compute_edt(src_mask, dist, width, height, stride, TRUE);
 
-    /* Initialize destination to zero */
-    memset(dst_mask, 0, stride * height);
-
-    /* For each pixel in source */
-    for (y = 0; y < height; y++) {
-        for (x = 0; x < width; x++) {
-            int src_idx = y * stride + x;
-            if (src_mask[src_idx] >= 128) { /* Selected pixel */
-                /* Expand this pixel to all pixels within radius */
-                for (dy = -radius; dy <= radius; dy++) {
-                    for (dx = -radius; dx <= radius; dx++) {
-                        dist_sq = dx * dx + dy * dy;
-                        if (dist_sq <= radius_sq) {
-                            int nx = x + dx;
-                            int ny = y + dy;
-                            if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
-                                int dst_idx = ny * stride + nx;
-                                dst_mask[dst_idx] = 255;
-                            }
-                        }
-                    }
-                }
-            }
+    float r = (float)radius;
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            int idx = y * stride + x;
+            dst_mask[idx] = (dist[idx] <= r) ? 255 : 0;
         }
     }
+    g_free(dist);
 }
 
 /**
@@ -1623,45 +1635,28 @@ static void apply_gaussian_blur(uint8_t* src_mask, uint8_t* dst_mask, int width,
  * Morphological erosion - contracts selection inward
  */
 static void erode_mask(uint8_t* src_mask, uint8_t* dst_mask, int width, int height, int stride, int radius) {
-    int x, y, dx, dy;
-    int dist_sq, radius_sq = radius * radius;
-    gboolean all_selected;
+    /* EDT-based erosion: O(w×h), exact circular kernel.
+     * A selected pixel survives iff its distance to the nearest unselected pixel >= radius.
+     * Pixels outside the image boundary are treated as unselected (standard morphology). */
+    float* dist = g_malloc(stride * height * sizeof(float));
+    if (!dist) {
+        memset(dst_mask, 0, stride * height);
+        return;
+    }
+    /* seed_is_nonzero=FALSE: seeds are unselected (zero) pixels.
+     * dist[i] = distance from pixel i to nearest unselected pixel. */
+    compute_edt(src_mask, dist, width, height, stride, FALSE);
 
-    /* Initialize destination to zero */
-    memset(dst_mask, 0, stride * height);
-
-    /* For each pixel in source */
-    for (y = 0; y < height; y++) {
-        for (x = 0; x < width; x++) {
-            int src_idx = y * stride + x;
-            if (src_mask[src_idx] >= 128) { /* Selected pixel */
-                /* Check if all pixels within radius are selected */
-                all_selected = TRUE;
-                for (dy = -radius; dy <= radius && all_selected; dy++) {
-                    for (dx = -radius; dx <= radius && all_selected; dx++) {
-                        dist_sq = dx * dx + dy * dy;
-                        if (dist_sq <= radius_sq) {
-                            int nx = x + dx;
-                            int ny = y + dy;
-                            if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
-                                int check_idx = ny * stride + nx;
-                                if (src_mask[check_idx] < 128) {
-                                    all_selected = FALSE;
-                                }
-                            } else {
-                                /* Out of bounds - consider as not selected */
-                                all_selected = FALSE;
-                            }
-                        }
-                    }
-                }
-                if (all_selected) {
-                    int dst_idx = y * stride + x;
-                    dst_mask[dst_idx] = 255;
-                }
-            }
+    float r = (float)radius;
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            int idx = y * stride + x;
+            /* Also treat image-edge pixels as touching the boundary */
+            gboolean at_edge = (x == 0 || y == 0 || x == width - 1 || y == height - 1);
+            dst_mask[idx] = (!at_edge && src_mask[idx] >= 128 && dist[idx] >= r) ? 255 : 0;
         }
     }
+    g_free(dist);
 }
 
 /**
