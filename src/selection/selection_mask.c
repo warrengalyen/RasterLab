@@ -990,48 +990,122 @@ void selection_mask_render_outline(
     const int off_x = mask->offset_x;
     const int off_y = mask->offset_y;
 
-    /* Edge detection: detect boundary where selection transitions to non-selected
-       For feathered selections, detect the outer edge where feathering ends (mask->0)
-       For hard selections, detect the hard edge (255->0) */
+    /* Edge detection and rendering via contour tracing.
+     *
+     * The naive approach of using (x+y)/dash_size as the pattern index fails at
+     * 45-degree outline segments: d(x+y)/ds = 0 there, so the pattern never
+     * toggles and those sections appear as one long unbroken dash.
+     *
+     * Instead we:
+     *   Pass 1 – build an edge_state bitmap (0=interior, 1=edge/unvisited,
+     *             2=edge/visited) using the same 4-neighbour boundary rule.
+     *   Pass 2 – for every unvisited edge pixel, trace the connected contour
+     *             with Moore (8-connected) neighbourhood following, accumulating
+     *             true pixel-to-pixel arc length.  The dash pattern is assigned
+     *             from that arc length, so dashes are uniform at every angle.
+     */
+
     const uint8_t MIN_ALPHA = 1; /* Minimum alpha to consider as "inside" selection */
+    const int W = mask->width;
+    const int H = mask->height;
 
-    for (int y = 0; y < mask->height; y++) {
-        for (int x = 0; x < mask->width; x++) {
-            /* Get center pixel from mask (feathered or hard-edged) */
+    /* Allocate edge state array (1 byte per pixel: 0/1/2) */
+    size_t map_size = (size_t)W * H;
+    uint8_t* edge_state = g_malloc0(map_size);
+    if (!edge_state) {
+        cairo_restore(cr);
+        return;
+    }
+
+    /* Pass 1: mark boundary pixels */
+    for (int y = 0; y < H; y++) {
+        for (int x = 0; x < W; x++) {
             uint8_t center = mask_data[y * mask->stride + x];
-
-            /* Skip pixels that are completely outside selection */
-            if (center == 0)
+            if (center < MIN_ALPHA)
                 continue;
+            uint8_t left   = (x > 0)     ? mask_data[ y      * mask->stride + (x - 1)] : 0;
+            uint8_t right  = (x < W - 1) ? mask_data[ y      * mask->stride + (x + 1)] : 0;
+            uint8_t top    = (y > 0)     ? mask_data[(y - 1) * mask->stride +  x     ] : 0;
+            uint8_t bottom = (y < H - 1) ? mask_data[(y + 1) * mask->stride +  x     ] : 0;
+            if (left < MIN_ALPHA || right < MIN_ALPHA || top < MIN_ALPHA || bottom < MIN_ALPHA)
+                edge_state[(size_t)y * W + x] = 1; /* unvisited edge */
+        }
+    }
 
-            /* Check neighbors - get alpha values with bounds checking */
-            uint8_t left = (x > 0) ? mask_data[y * mask->stride + (x - 1)] : 0;
-            uint8_t right = (x < mask->width - 1) ? mask_data[y * mask->stride + (x + 1)] : 0;
-            uint8_t top = (y > 0) ? mask_data[(y - 1) * mask->stride + x] : 0;
-            uint8_t bottom = (y < mask->height - 1) ? mask_data[(y + 1) * mask->stride + x] : 0;
+    /* 8-connected neighbour directions in clockwise screen order:
+     * 0=E, 1=SE, 2=S, 3=SW, 4=W, 5=NW, 6=N, 7=NE */
+    static const int dx8[8] = { 1,  1,  0, -1, -1, -1,  0,  1 };
+    static const int dy8[8] = { 0,  1,  1,  1,  0, -1, -1, -1 };
 
-            /* Detect edge: pixel has some alpha (inside selection) but has at least one neighbor with alpha=0 (outside)
-               This detects the outer boundary for both:
-               - Hard edges: center=255, neighbor=0
-               - Feathered edges: center>0 (any value in feather), neighbor=0 (end of feather) */
-            if (left == 0 || right == 0 || top == 0 || bottom == 0) {
-                /* Translate local mask coordinates to document space.
-                 * For full-document masks off_x/off_y are 0 (no-op). */
-                int doc_x = x + off_x;
-                int doc_y = y + off_y;
+    /* Pass 2: trace each connected edge component with Moore neighbourhood.
+     *
+     * Scan top-left → bottom-right; every unvisited edge pixel is the start of
+     * a new contour component.  At each step we search clockwise starting one
+     * step past the backtrack direction (the "turn left" / outer-contour rule).
+     * Arc length is the sum of pixel-to-pixel Euclidean distances (1.0 for
+     * axis-aligned steps, √2 for diagonal steps). */
+    for (int sy = 0; sy < H; sy++) {
+        for (int sx = 0; sx < W; sx++) {
+            if (edge_state[(size_t)sy * W + sx] != 1)
+                continue; /* not an unvisited edge pixel */
 
-                /* Render marching ants pixel - shift pattern by dash_phase for animation.
-                 * Use document coordinates so the pattern is continuous across the image
-                 * regardless of where the bounded mask starts. */
-                int pattern = ((int)((doc_x + doc_y) / dash_size) + dash_phase) % 2;
+            int      cx        = sx;
+            int      cy        = sy;
+            gdouble  arc_len   = 0.0;
+            int      prev_x    = -1;
+            int      prev_y    = -1;
+            int      last_dir  = 0; /* initially assumed to be moving East */
 
-                cairo_set_source_rgb(cr, pattern ? 0.0 : 1.0, pattern ? 0.0 : 1.0, pattern ? 0.0 : 1.0);
+            while (TRUE) {
+                edge_state[(size_t)cy * W + cx] = 2; /* mark visited */
+
+                /* Accumulate arc length from previous pixel */
+                if (prev_x >= 0) {
+                    double ddx = (double)(cx - prev_x);
+                    double ddy = (double)(cy - prev_y);
+                    arc_len += sqrt(ddx * ddx + ddy * ddy);
+                }
+
+                /* Render this pixel using arc-length-based pattern */
+                int doc_x   = cx + off_x;
+                int doc_y   = cy + off_y;
+                int pattern = ((int)(arc_len / dash_size) + dash_phase) % 2;
+                cairo_set_source_rgb(cr,
+                                     pattern ? 0.0 : 1.0,
+                                     pattern ? 0.0 : 1.0,
+                                     pattern ? 0.0 : 1.0);
                 cairo_rectangle(cr, (gdouble)doc_x, (gdouble)doc_y, 1.0, 1.0);
                 cairo_fill(cr);
+
+                prev_x = cx;
+                prev_y = cy;
+
+                /* Find next unvisited edge neighbour: search clockwise starting
+                 * one step past the backtrack direction so we follow the outer
+                 * contour without reversing. */
+                int      back_dir = (last_dir + 4) % 8;
+                gboolean found    = FALSE;
+                for (int d = 1; d <= 8; d++) {
+                    int try_dir = (back_dir + d) % 8;
+                    int nx      = cx + dx8[try_dir];
+                    int ny      = cy + dy8[try_dir];
+                    if (nx >= 0 && nx < W && ny >= 0 && ny < H &&
+                        edge_state[(size_t)ny * W + nx] == 1) {
+                        last_dir = try_dir;
+                        cx       = nx;
+                        cy       = ny;
+                        found    = TRUE;
+                        break;
+                    }
+                }
+
+                if (!found)
+                    break; /* end of this contour component */
             }
         }
     }
 
+    g_free(edge_state);
     cairo_restore(cr);
 }
 

@@ -97,6 +97,8 @@ void selection_draw_marching_ants_ellipse(cairo_t* cr, gdouble x, gdouble y,
 
     gint prev_px = -1000, prev_py = -1000;
     gdouble arc_length = 0.0;
+    gdouble prev_ex = 0.0, prev_ey = 0.0;
+    gboolean first_sample = TRUE;
 
     for (gint i = 0; i <= num_samples; i++) {
         gdouble theta = (2.0 * M_PI * i) / num_samples;
@@ -105,19 +107,24 @@ void selection_draw_marching_ants_ellipse(cairo_t* cr, gdouble x, gdouble y,
         gdouble ex = cx + rx * cos(theta);
         gdouble ey = cy + ry * sin(theta);
 
+        /* Accumulate arc length using float-to-float distance at every sample so
+         * the measurement is a smooth numerical integral of the ellipse arc length,
+         * independent of which samples happen to land on duplicate pixels. */
+        if (!first_sample) {
+            gdouble ddx = ex - prev_ex;
+            gdouble ddy = ey - prev_ey;
+            arc_length += sqrt(ddx * ddx + ddy * ddy);
+        }
+        prev_ex = ex;
+        prev_ey = ey;
+        first_sample = FALSE;
+
         gint px = (gint)ex;
         gint py = (gint)ey;
 
-        /* Skip duplicate pixels */
+        /* Skip duplicate pixels - only render each unique pixel once */
         if (px == prev_px && py == prev_py) {
             continue;
-        }
-
-        /* Calculate arc length for animation (approximate) */
-        if (prev_px != -1000) {
-            gdouble dx = ex - (prev_px + 0.5);
-            gdouble dy = ey - (prev_py + 0.5);
-            arc_length += sqrt(dx * dx + dy * dy);
         }
 
         /* Calculate pattern based on arc length for consistent marching effect */
