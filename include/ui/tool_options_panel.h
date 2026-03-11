@@ -29,6 +29,7 @@ typedef struct {
     GtkWidget* contiguous_radio;                 /* Contiguous radio button (current panel, paint bucket only) */
     GtkWidget* global_radio;                     /* Global radio button (current panel, paint bucket only) */
     GtkWidget* antialiased_checkbox;             /* Antialiased checkbox (current panel, paint bucket only) */
+    GtkWidget* compare_combo;                    /* Pixel comparison mode combo (current panel, paint bucket only) */
     GtkWidget* rect_animate_checkbox;            /* Animate checkbox (rect select only) */
     GtkWidget* rect_combine_new_button;          /* Combine mode NEW toggle button (rect select only) */
     GtkWidget* rect_combine_add_button;          /* Combine mode ADD toggle button (rect select only) */

@@ -27,6 +27,7 @@ ToolOptions* tool_options_new(void) {
     opts->tolerance = settings_get_default_tool_tolerance();
     opts->fill_contiguous = settings_get_default_tool_fill_contiguous();
     opts->fill_antialiased = settings_get_default_tool_fill_antialiased();
+    opts->fill_compare_mode = FILL_COMPARE_COLOR;
 
     /* Initialize pencil tool options with defaults */
     opts->pencil_antialias = FALSE;       /* Default: no antialiasing */
@@ -194,6 +195,26 @@ void tool_options_set_fill_antialiased(ToolOptions* opts, gboolean antialiased) 
     }
 
     opts->fill_antialiased = antialiased ? TRUE : FALSE;
+}
+
+/**
+ * Set fill pixel comparison mode
+ */
+void tool_options_set_fill_compare_mode(ToolOptions* opts, FillCompareMode mode) {
+    if (!opts) {
+        return;
+    }
+    opts->fill_compare_mode = mode;
+}
+
+/**
+ * Get fill pixel comparison mode
+ */
+FillCompareMode tool_options_get_fill_compare_mode(ToolOptions* opts) {
+    if (!opts) {
+        return FILL_COMPARE_COLOR;
+    }
+    return opts->fill_compare_mode;
 }
 
 /**

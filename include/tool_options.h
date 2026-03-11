@@ -6,6 +6,19 @@
 #include <glib.h>
 
 /**
+ * Pixel comparison mode for the paint bucket fill tool
+ */
+typedef enum {
+    FILL_COMPARE_COLOR = 0,          /* RGB distance only (ignores alpha) */
+    FILL_COMPARE_COLOR_AND_OPACITY,  /* RGBA distance (alpha weighted) */
+    FILL_COMPARE_LUMINANCE,          /* Perceptual luminance difference */
+    FILL_COMPARE_RED,                /* Red channel difference only */
+    FILL_COMPARE_GREEN,              /* Green channel difference only */
+    FILL_COMPARE_BLUE,               /* Blue channel difference only */
+    FILL_COMPARE_ALPHA               /* Alpha channel difference only */
+} FillCompareMode;
+
+/**
  * Tool Options - Configuration for drawing tools
  */
 
@@ -18,6 +31,7 @@ typedef struct {
     gfloat tolerance;          /* Paint bucket tolerance 0-100 (0=exact match, 100=all colors) */
     gboolean fill_contiguous;  /* Paint bucket fill area: TRUE=contiguous, FALSE=global */
     gboolean fill_antialiased; /* Paint bucket antialiasing: TRUE=smooth edges, FALSE=hard edges */
+    FillCompareMode fill_compare_mode; /* Paint bucket pixel comparison mode (default: COLOR) */
 
     /* Pencil tool options */
     gboolean pencil_antialias;        /* Pencil antialiasing: TRUE=smooth edges, FALSE=hard edges */
@@ -154,6 +168,20 @@ void tool_options_set_fill_contiguous(ToolOptions* opts, gboolean contiguous);
  * @param antialiased TRUE for antialiased edges, FALSE for hard edges
  */
 void tool_options_set_fill_antialiased(ToolOptions* opts, gboolean antialiased);
+
+/**
+ * Set fill pixel comparison mode
+ * @param opts The tool options
+ * @param mode The comparison mode (FILL_COMPARE_COLOR, etc.)
+ */
+void tool_options_set_fill_compare_mode(ToolOptions* opts, FillCompareMode mode);
+
+/**
+ * Get fill pixel comparison mode
+ * @param opts The tool options
+ * @return The current comparison mode
+ */
+FillCompareMode tool_options_get_fill_compare_mode(ToolOptions* opts);
 
 /**
  * Set rectangle select combine mode

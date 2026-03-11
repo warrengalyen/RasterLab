@@ -30,18 +30,6 @@
       </packing>
     </child>
     <child>
-      <object class="GtkSeparator" id="paintbucket_separator1">
-        <property name="visible">True</property>
-        <property name="can-focus">False</property>
-        <property name="orientation">vertical</property>
-      </object>
-      <packing>
-        <property name="expand">False</property>
-        <property name="fill">False</property>
-        <property name="position">1</property>
-      </packing>
-    </child>
-    <child>
       <object class="GtkBox" id="paintbucket_tolerance_box">
         <property name="visible">True</property>
         <property name="can-focus">False</property>
@@ -87,6 +75,54 @@
             <property name="expand">False</property>
             <property name="fill">False</property>
             <property name="position">1</property>
+          </packing>
+        </child>
+      </object>
+      <packing>
+        <property name="expand">False</property>
+        <property name="fill">False</property>
+        <property name="position">1</property>
+      </packing>
+    </child>
+    <child>
+      <object class="GtkBox" id="paintbucket_compare_box">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="orientation">vertical</property>
+        <property name="spacing">3</property>
+        <child>
+          <object class="GtkLabel" id="paintbucket_compare_label">
+            <property name="visible">True</property>
+            <property name="can-focus">False</property>
+            <property name="tooltip-text">Color matching tolerance (0=exact match, 100=all colors)</property>
+            <property name="halign">start</property>
+            <property name="label">compare pixels by</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">False</property>
+            <property name="position">0</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkComboBoxText" id="paintbucket_compare_combo">
+            <property name="visible">True</property>
+            <property name="can-focus">False</property>
+            <property name="margin-left">5</property>
+            <items>
+              <item translatable="yes">color</item>
+              <item translatable="yes">color and opacity</item>
+              <item translatable="yes">luminance</item>
+              <item translatable="yes">red only</item>
+              <item translatable="yes">green only</item>
+              <item translatable="yes">blue only</item>
+              <item translatable="yes">alpha only</item>
+            </items>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">2</property>
           </packing>
         </child>
       </object>
@@ -202,6 +238,18 @@
         <property name="expand">False</property>
         <property name="fill">False</property>
         <property name="position">4</property>
+      </packing>
+    </child>
+    <child>
+      <object class="GtkSeparator" id="paintbucket_separator1">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="orientation">vertical</property>
+      </object>
+      <packing>
+        <property name="expand">False</property>
+        <property name="fill">False</property>
+        <property name="position">5</property>
       </packing>
     </child>
   </object>

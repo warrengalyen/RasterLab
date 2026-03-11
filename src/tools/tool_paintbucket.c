@@ -101,47 +101,94 @@ typedef struct {
 } FloodFillPoint;
 
 /**
- * Calculate color difference (Euclidean distance in RGB space)
- * Returns a value from 0.0 (identical) to ~441.67 (max difference)
+ * Calculate pixel distance using the specified comparison mode.
+ * Returns 0.0 for identical pixels; max varies by mode.
  */
-static gdouble color_distance(guint8 r1, guint8 g1, guint8 b1, guint8 a1,
-                              guint8 r2, guint8 g2, guint8 b2, guint8 a2) {
-    gdouble dr = (gdouble)r1 - (gdouble)r2;
-    gdouble dg = (gdouble)g1 - (gdouble)g2;
-    gdouble db = (gdouble)b1 - (gdouble)b2;
-    gdouble da = (gdouble)a1 - (gdouble)a2;
-
-    /* Weight alpha less than RGB for tolerance calculation */
-    return sqrt(dr * dr + dg * dg + db * db + da * da * 0.5);
+static gdouble color_distance_for_mode(guint8 r1, guint8 g1, guint8 b1, guint8 a1,
+                                       guint8 r2, guint8 g2, guint8 b2, guint8 a2,
+                                       FillCompareMode mode) {
+    switch (mode) {
+        case FILL_COMPARE_COLOR: {
+            gdouble dr = (gdouble)r1 - (gdouble)r2;
+            gdouble dg = (gdouble)g1 - (gdouble)g2;
+            gdouble db = (gdouble)b1 - (gdouble)b2;
+            return sqrt(dr * dr + dg * dg + db * db);
+        }
+        case FILL_COMPARE_COLOR_AND_OPACITY: {
+            gdouble dr = (gdouble)r1 - (gdouble)r2;
+            gdouble dg = (gdouble)g1 - (gdouble)g2;
+            gdouble db = (gdouble)b1 - (gdouble)b2;
+            gdouble da = (gdouble)a1 - (gdouble)a2;
+            return sqrt(dr * dr + dg * dg + db * db + da * da * 0.5);
+        }
+        case FILL_COMPARE_LUMINANCE: {
+            gdouble lum1 = 0.2126 * r1 + 0.7152 * g1 + 0.0722 * b1;
+            gdouble lum2 = 0.2126 * r2 + 0.7152 * g2 + 0.0722 * b2;
+            return fabs(lum1 - lum2);
+        }
+        case FILL_COMPARE_RED:
+            return fabs((gdouble)r1 - (gdouble)r2);
+        case FILL_COMPARE_GREEN:
+            return fabs((gdouble)g1 - (gdouble)g2);
+        case FILL_COMPARE_BLUE:
+            return fabs((gdouble)b1 - (gdouble)b2);
+        case FILL_COMPARE_ALPHA:
+            return fabs((gdouble)a1 - (gdouble)a2);
+        default: {
+            gdouble dr = (gdouble)r1 - (gdouble)r2;
+            gdouble dg = (gdouble)g1 - (gdouble)g2;
+            gdouble db = (gdouble)b1 - (gdouble)b2;
+            return sqrt(dr * dr + dg * dg + db * db);
+        }
+    }
 }
 
 /**
- * Check if a pixel matches the target color within tolerance
+ * Return the maximum possible distance value for a given comparison mode,
+ * used to scale tolerance (0-100) to a meaningful threshold.
+ */
+static gdouble max_distance_for_mode(FillCompareMode mode) {
+    switch (mode) {
+        case FILL_COMPARE_COLOR:
+            return 441.67; /* sqrt(255^2 * 3) */
+        case FILL_COMPARE_COLOR_AND_OPACITY:
+            return 477.06; /* sqrt(255^2 * 3.5) */
+        case FILL_COMPARE_LUMINANCE:
+        case FILL_COMPARE_RED:
+        case FILL_COMPARE_GREEN:
+        case FILL_COMPARE_BLUE:
+        case FILL_COMPARE_ALPHA:
+            return 255.0;
+        default:
+            return 441.67;
+    }
+}
+
+/**
+ * Check if a pixel matches the target color within tolerance using the given mode.
  */
 static gboolean color_matches(guint8 r1, guint8 g1, guint8 b1, guint8 a1,
                               guint8 r2, guint8 g2, guint8 b2, guint8 a2,
-                              gfloat tolerance) {
-    /* Convert tolerance from 0-100 range to 0-441.67 range (max color distance) */
-    gdouble max_distance = 441.67; /* sqrt(255^2 * 3.5) */
-    gdouble threshold = (tolerance / 100.0) * max_distance;
-
-    gdouble distance = color_distance(r1, g1, b1, a1, r2, g2, b2, a2);
+                              gfloat tolerance, FillCompareMode mode) {
+    gdouble max_dist = max_distance_for_mode(mode);
+    gdouble threshold = (tolerance / 100.0) * max_dist;
+    gdouble distance = color_distance_for_mode(r1, g1, b1, a1, r2, g2, b2, a2, mode);
     return distance <= threshold;
 }
 
 /**
- * Calculate blend factor for antialiasing based on color distance
- * Returns 0.0 (outside tolerance) to 1.0 (exact match)
+ * Calculate blend factor for antialiasing based on pixel distance.
+ * Returns 0.0 (outside tolerance) to 1.0 (exact match).
  */
 static gdouble calculate_blend_factor(guint8 r1, guint8 g1, guint8 b1, guint8 a1,
                                       guint8 r2, guint8 g2, guint8 b2, guint8 a2,
-                                      gfloat tolerance) {
-    gdouble max_distance = 441.67; /* sqrt(255^2 * 3.5) */
-    gdouble threshold = (tolerance / 100.0) * max_distance;
-    gdouble distance = color_distance(r1, g1, b1, a1, r2, g2, b2, a2);
+                                      gfloat tolerance, FillCompareMode mode) {
+    gdouble max_dist = max_distance_for_mode(mode);
+    gdouble threshold = (tolerance / 100.0) * max_dist;
+    gdouble distance = color_distance_for_mode(r1, g1, b1, a1, r2, g2, b2, a2, mode);
 
     if (distance > threshold) {
-        return 0.0; /* Outside tolerance */
+        return 0.0;
     }
 
     /* Linear blend: 1.0 at exact match, 0.0 at threshold */
@@ -154,7 +201,8 @@ static gdouble calculate_blend_factor(guint8 r1, guint8 g1, guint8 b1, guint8 a1
  */
 static void paint_bucket_flood_fill(cairo_surface_t* surface, struct ImageDocument* doc,
                                     gint start_x, gint start_y, gint layer_offset_x, gint layer_offset_y,
-                                    gfloat tolerance, gboolean contiguous, gboolean antialiased) {
+                                    gfloat tolerance, gboolean contiguous, gboolean antialiased,
+                                    FillCompareMode compare_mode) {
     gint width, height, stride;
     guchar* surface_data;
     gboolean* visited;
@@ -240,7 +288,8 @@ static void paint_bucket_flood_fill(cairo_surface_t* surface, struct ImageDocume
     }
 
     /* If fill color matches target color, nothing to do */
-    if (color_matches(fill_r, fill_g, fill_b, fill_a, target_r, target_g, target_b, target_a, 0.0)) {
+    if (color_matches(fill_r, fill_g, fill_b, fill_a, target_r, target_g, target_b, target_a, 0.0,
+                      compare_mode)) {
         return;
     }
 
@@ -318,13 +367,15 @@ static void paint_bucket_flood_fill(cairo_surface_t* surface, struct ImageDocume
             /* Calculate blend factor for antialiasing */
             gdouble blend_factor = 1.0;
             if (antialiased) {
-                blend_factor = calculate_blend_factor(r, g, b, a, target_r, target_g, target_b, target_a, tolerance);
+                blend_factor = calculate_blend_factor(r, g, b, a, target_r, target_g, target_b, target_a,
+                                                      tolerance, compare_mode);
                 if (blend_factor <= 0.0) {
                     continue; /* Outside tolerance */
                 }
             } else {
                 /* Check if pixel matches target color within tolerance */
-                if (!color_matches(r, g, b, a, target_r, target_g, target_b, target_a, tolerance)) {
+                if (!color_matches(r, g, b, a, target_r, target_g, target_b, target_a, tolerance,
+                                   compare_mode)) {
                     continue;
                 }
             }
@@ -455,13 +506,15 @@ static void paint_bucket_flood_fill(cairo_surface_t* surface, struct ImageDocume
                 /* Calculate blend factor for antialiasing */
                 gdouble blend_factor = 1.0;
                 if (antialiased) {
-                    blend_factor = calculate_blend_factor(r, g, b, a, target_r, target_g, target_b, target_a, tolerance);
+                    blend_factor = calculate_blend_factor(r, g, b, a, target_r, target_g, target_b, target_a,
+                                                          tolerance, compare_mode);
                     if (blend_factor <= 0.0) {
                         continue; /* Outside tolerance */
                     }
                 } else {
                     /* Check if pixel matches target color within tolerance */
-                    if (!color_matches(r, g, b, a, target_r, target_g, target_b, target_a, tolerance)) {
+                    if (!color_matches(r, g, b, a, target_r, target_g, target_b, target_a, tolerance,
+                                       compare_mode)) {
                         continue;
                     }
                 }
@@ -577,10 +630,11 @@ static void paint_bucket_tool_mouse_down(Tool* tool, struct ImageDocument* doc, 
     gfloat tolerance = opts ? opts->tolerance : 10.0f;
     gboolean contiguous = opts ? opts->fill_contiguous : TRUE;
     gboolean antialiased = opts ? opts->fill_antialiased : FALSE;
+    FillCompareMode compare_mode = opts ? opts->fill_compare_mode : FILL_COMPARE_COLOR;
 
     paint_bucket_flood_fill(active_layer->surface, doc, layer_x, layer_y,
                             active_layer->offset_x, active_layer->offset_y,
-                            tolerance, contiguous, antialiased);
+                            tolerance, contiguous, antialiased, compare_mode);
 
     /* Commit tile-based undo transaction (captures "after" state and creates command) */
     Command* cmd = NULL;

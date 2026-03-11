@@ -284,6 +284,24 @@ static void on_fill_antialiased_toggled(GtkToggleButton* button, gpointer user_d
 }
 
 /**
+ * Tool options panel callback for fill compare mode combobox
+ */
+static void on_fill_compare_changed(GtkComboBox* combo, gpointer user_data) {
+    (void)user_data;
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)g_object_get_data(G_OBJECT(combo), "tool_options_panel");
+    if (panel && panel->current_tool_type == TOOL_PAINT_BUCKET) {
+        ToolOptions* opts = tool_options_get_for_tool(TOOL_PAINT_BUCKET);
+        if (opts) {
+            gint active = gtk_combo_box_get_active(combo);
+            if (active >= 0) {
+                tool_options_set_fill_compare_mode(opts, (FillCompareMode)active);
+                save_tool_options_to_settings(panel, TOOL_PAINT_BUCKET);
+            }
+        }
+    }
+}
+
+/**
  * Tool options panel callback for pencil antialias checkbox
  */
 static void on_pencil_antialias_toggled(GtkToggleButton* button, gpointer user_data) {
@@ -2000,6 +2018,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
     GtkWidget *paintbucket_title = NULL, *paintbucket_tolerance = NULL;
     GtkWidget *paintbucket_contiguous = NULL, *paintbucket_global = NULL;
     GtkWidget* paintbucket_antialiased = NULL;
+    GtkWidget* paintbucket_compare = NULL;
     ToolOptions* paintbucket_opts = tool_options_get_for_tool(TOOL_PAINT_BUCKET);
 
     if (gtk_builder_add_from_resource(paintbucket_builder, "/ui/paintbucket_options.glade", &paintbucket_error)) {
@@ -2013,6 +2032,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
             paintbucket_contiguous = GTK_WIDGET(gtk_builder_get_object(paintbucket_builder, "paintbucket_contiguous_radio"));
             paintbucket_global = GTK_WIDGET(gtk_builder_get_object(paintbucket_builder, "paintbucket_global_radio"));
             paintbucket_antialiased = GTK_WIDGET(gtk_builder_get_object(paintbucket_builder, "paintbucket_antialiased_checkbox"));
+            paintbucket_compare = GTK_WIDGET(gtk_builder_get_object(paintbucket_builder, "paintbucket_compare_combo"));
 
             /* Store references */
             if (paintbucket_title) {
@@ -2049,6 +2069,14 @@ ToolOptionsPanel* create_tool_options_panel(void) {
                 if (paintbucket_opts) {
                     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(paintbucket_antialiased), paintbucket_opts->fill_antialiased);
                     g_signal_connect(paintbucket_antialiased, "toggled", G_CALLBACK(on_fill_antialiased_toggled), NULL);
+                }
+            }
+            if (paintbucket_compare) {
+                g_object_set_data(G_OBJECT(tool_opts_panel->paintbucket_panel), "compare_combo", paintbucket_compare);
+                if (paintbucket_opts) {
+                    gtk_combo_box_set_active(GTK_COMBO_BOX(paintbucket_compare),
+                                             (gint)paintbucket_opts->fill_compare_mode);
+                    g_signal_connect(paintbucket_compare, "changed", G_CALLBACK(on_fill_compare_changed), NULL);
                 }
             }
 
@@ -3219,6 +3247,17 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
                 gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widget), opts->fill_antialiased);
                 g_object_set_data(G_OBJECT(widget), "tool_options_panel", panel);
                 g_signal_connect(widget, "toggled", G_CALLBACK(on_fill_antialiased_toggled), NULL);
+            }
+        }
+
+        widget = GTK_WIDGET(g_object_get_data(G_OBJECT(panel->paintbucket_panel), "compare_combo"));
+        if (widget) {
+            panel->compare_combo = widget;
+            if (opts) {
+                g_signal_handlers_disconnect_by_func(widget, G_CALLBACK(on_fill_compare_changed), NULL);
+                gtk_combo_box_set_active(GTK_COMBO_BOX(widget), (gint)opts->fill_compare_mode);
+                g_object_set_data(G_OBJECT(widget), "tool_options_panel", panel);
+                g_signal_connect(widget, "changed", G_CALLBACK(on_fill_compare_changed), NULL);
             }
         }
     } else if (new_tool_type == TOOL_COLOR_PICKER && panel->color_picker_panel) {
