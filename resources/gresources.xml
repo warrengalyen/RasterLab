@@ -14,6 +14,7 @@
     <file preprocess="to-pixdata">icons/tool-elliptical-select.png</file>
     <file preprocess="to-pixdata">icons/tool-polygon-select.png</file>
     <file preprocess="to-pixdata">icons/tool-lasso-select.png</file>
+    <file preprocess="to-pixdata">icons/tool-magicwand-select.png</file>
     <file preprocess="to-pixdata">icons/chevron.png</file>
     <file preprocess="to-pixdata">icons/layer-add.png</file>
     <file preprocess="to-pixdata">icons/layer-delete.png</file>
@@ -80,6 +81,7 @@
     <file>ui/elliptical_select_options.glade</file>
     <file>ui/polygon_select_options.glade</file>
     <file>ui/lasso_select_options.glade</file>
+    <file>ui/magic_wand_select_options.glade</file>
     <file>ui/crop_options.glade</file>
     <file>ui/color_picker_options.glade</file>
     <file>ui/move_options.glade</file>

@@ -26,7 +26,8 @@ typedef enum {
     TOOL_LASSO_SELECT = 10,
     TOOL_COLOR_PICKER = 11,
     TOOL_CROP = 12,
-    TOOL_COUNT = 13 /* Total number of tools */
+    TOOL_MAGIC_WAND = 13,
+    TOOL_COUNT = 14 /* Total number of tools */
 } ToolType;
 
 /**

@@ -69,6 +69,15 @@ ToolOptions* tool_options_new(void) {
     opts->color_picker_sample_radius = 0;        /* Default: single pixel */
     opts->color_picker_sample_from_layer = TRUE; /* Default: sample from layer */
 
+    /* Initialize magic wand select tool options */
+    opts->magicwand_combine = SELECTION_COMBINE_NEW;
+    opts->magicwand_smooth = SELECTION_SMOOTH_ANTIALIASED;
+    opts->magicwand_feather = 0.0f;
+    opts->magicwand_animate = TRUE;
+    opts->magicwand_tolerance = 15.0f;
+    opts->magicwand_compare_mode = FILL_COMPARE_COLOR;
+    opts->magicwand_contiguous = TRUE;
+
     /* Initialize crop tool options */
     opts->crop_constraint_mode = 0; /* 0=Free */
     opts->crop_ratio_w = 16;
@@ -623,6 +632,50 @@ void tool_options_set_crop_snap(ToolOptions* opts, gboolean snap) {
 }
 gboolean tool_options_get_crop_snap(ToolOptions* opts) {
     return opts ? opts->crop_snap : FALSE;
+}
+
+/* Magic Wand select options */
+void tool_options_set_magicwand_combine(ToolOptions* opts, SelectionCombineMode combine) {
+    if (opts) opts->magicwand_combine = combine;
+}
+SelectionCombineMode tool_options_get_magicwand_combine(ToolOptions* opts) {
+    return opts ? opts->magicwand_combine : SELECTION_COMBINE_NEW;
+}
+void tool_options_set_magicwand_smooth(ToolOptions* opts, SelectionSmoothingMode smooth) {
+    if (opts) opts->magicwand_smooth = smooth;
+}
+SelectionSmoothingMode tool_options_get_magicwand_smooth(ToolOptions* opts) {
+    return opts ? opts->magicwand_smooth : SELECTION_SMOOTH_ANTIALIASED;
+}
+void tool_options_set_magicwand_feather(ToolOptions* opts, gfloat feather) {
+    if (opts) opts->magicwand_feather = fmaxf(0.0f, feather);
+}
+gfloat tool_options_get_magicwand_feather(ToolOptions* opts) {
+    return opts ? opts->magicwand_feather : 0.0f;
+}
+void tool_options_set_magicwand_animate(ToolOptions* opts, gboolean animate) {
+    if (opts) opts->magicwand_animate = animate ? TRUE : FALSE;
+}
+gboolean tool_options_get_magicwand_animate(ToolOptions* opts) {
+    return opts ? opts->magicwand_animate : TRUE;
+}
+void tool_options_set_magicwand_tolerance(ToolOptions* opts, gfloat tolerance) {
+    if (opts) opts->magicwand_tolerance = fmaxf(0.0f, fminf(100.0f, tolerance));
+}
+gfloat tool_options_get_magicwand_tolerance(ToolOptions* opts) {
+    return opts ? opts->magicwand_tolerance : 15.0f;
+}
+void tool_options_set_magicwand_compare_mode(ToolOptions* opts, FillCompareMode mode) {
+    if (opts) opts->magicwand_compare_mode = mode;
+}
+FillCompareMode tool_options_get_magicwand_compare_mode(ToolOptions* opts) {
+    return opts ? opts->magicwand_compare_mode : FILL_COMPARE_COLOR;
+}
+void tool_options_set_magicwand_contiguous(ToolOptions* opts, gboolean contiguous) {
+    if (opts) opts->magicwand_contiguous = contiguous ? TRUE : FALSE;
+}
+gboolean tool_options_get_magicwand_contiguous(ToolOptions* opts) {
+    return opts ? opts->magicwand_contiguous : TRUE;
 }
 
 /**

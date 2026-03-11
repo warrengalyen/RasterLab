@@ -20,6 +20,7 @@
 #include "tools/tool_crop.h"
 #include "tools/tool_ellipse_select.h"
 #include "tools/tool_polygon_select.h"
+#include "tools/tool_magic_wand_select.h"
 #include "tools/tool_rect_select.h"
 #include "ui/dialogs/canvas_size_dialog.h"
 #include "ui/dialogs/new_layer_dialog.h"
@@ -2873,6 +2874,8 @@ static const char* tool_type_to_name(ToolType tool_type) {
             return "crop";
         case TOOL_COLOR_PICKER:
             return "color_picker";
+        case TOOL_MAGIC_WAND:
+            return "magic_wand_select";
         default:
             return NULL;
     }
@@ -3129,6 +3132,41 @@ void ui_load_tool_options_from_settings(AppContext* ctx) {
             }
         }
 
+        /* Magic wand select tool specific options */
+        if (tool_type == TOOL_MAGIC_WAND) {
+            const char* combine_str = settings_get_tool_option(ctx->settings, tool_name, "magicwand_combine");
+            if (combine_str) {
+                gint v = (gint)g_ascii_strtoll(combine_str, NULL, 10);
+                tool_options_set_magicwand_combine(opts, (v >= 0 && v < 4) ? (SelectionCombineMode)v : SELECTION_COMBINE_NEW);
+            }
+            const char* smooth_str = settings_get_tool_option(ctx->settings, tool_name, "magicwand_smooth");
+            if (smooth_str) {
+                gint v = (gint)g_ascii_strtoll(smooth_str, NULL, 10);
+                tool_options_set_magicwand_smooth(opts, (v >= 0 && v < 3) ? (SelectionSmoothingMode)v : SELECTION_SMOOTH_ANTIALIASED);
+            }
+            const char* feather_str = settings_get_tool_option(ctx->settings, tool_name, "magicwand_feather");
+            if (feather_str) {
+                gfloat v = (gfloat)g_ascii_strtod(feather_str, NULL);
+                tool_options_set_magicwand_feather(opts, (v >= 0.0f && v <= 200.0f) ? v : 0.0f);
+            }
+            const char* animate_str = settings_get_tool_option(ctx->settings, tool_name, "magicwand_animate");
+            if (animate_str)
+                tool_options_set_magicwand_animate(opts, (g_strcmp0(animate_str, "true") == 0 || g_strcmp0(animate_str, "1") == 0));
+            const char* tolerance_str = settings_get_tool_option(ctx->settings, tool_name, "magicwand_tolerance");
+            if (tolerance_str) {
+                gfloat v = (gfloat)g_ascii_strtod(tolerance_str, NULL);
+                tool_options_set_magicwand_tolerance(opts, (v >= 0.0f && v <= 100.0f) ? v : 15.0f);
+            }
+            const char* compare_str = settings_get_tool_option(ctx->settings, tool_name, "magicwand_compare_mode");
+            if (compare_str) {
+                gint v = (gint)g_ascii_strtoll(compare_str, NULL, 10);
+                tool_options_set_magicwand_compare_mode(opts, (v >= 0 && v <= (gint)FILL_COMPARE_ALPHA) ? (FillCompareMode)v : FILL_COMPARE_COLOR);
+            }
+            const char* contiguous_str = settings_get_tool_option(ctx->settings, tool_name, "magicwand_contiguous");
+            if (contiguous_str)
+                tool_options_set_magicwand_contiguous(opts, !(g_strcmp0(contiguous_str, "false") == 0 || g_strcmp0(contiguous_str, "0") == 0));
+        }
+
         /* Crop tool specific options */
         if (tool_type == TOOL_CROP) {
             const char* overlay_str = settings_get_tool_option(ctx->settings, tool_name, "crop_overlay_mode");
@@ -3340,6 +3378,26 @@ static void ui_save_tool_options_to_settings_internal(AppContext* ctx, ToolType 
         settings_set_tool_option(ctx->settings, tool_name, "ellipse_select_feather", feather_str);
 
         settings_set_tool_option(ctx->settings, tool_name, "ellipse_select_animate", ellipse_select_animate_val ? "true" : "false");
+    }
+
+    /* Magic wand select tool options */
+    if (tool_type == TOOL_MAGIC_WAND) {
+        ToolOptions* mw_opts = tool_options_get_for_tool(TOOL_MAGIC_WAND);
+        if (mw_opts) {
+            gchar v_str[32];
+            g_snprintf(v_str, sizeof(v_str), "%d", (gint)mw_opts->magicwand_combine);
+            settings_set_tool_option(ctx->settings, tool_name, "magicwand_combine", v_str);
+            g_snprintf(v_str, sizeof(v_str), "%d", (gint)mw_opts->magicwand_smooth);
+            settings_set_tool_option(ctx->settings, tool_name, "magicwand_smooth", v_str);
+            g_snprintf(v_str, sizeof(v_str), "%.2f", mw_opts->magicwand_feather);
+            settings_set_tool_option(ctx->settings, tool_name, "magicwand_feather", v_str);
+            settings_set_tool_option(ctx->settings, tool_name, "magicwand_animate", mw_opts->magicwand_animate ? "true" : "false");
+            g_snprintf(v_str, sizeof(v_str), "%.0f", (gdouble)mw_opts->magicwand_tolerance);
+            settings_set_tool_option(ctx->settings, tool_name, "magicwand_tolerance", v_str);
+            g_snprintf(v_str, sizeof(v_str), "%d", (gint)mw_opts->magicwand_compare_mode);
+            settings_set_tool_option(ctx->settings, tool_name, "magicwand_compare_mode", v_str);
+            settings_set_tool_option(ctx->settings, tool_name, "magicwand_contiguous", mw_opts->magicwand_contiguous ? "true" : "false");
+        }
     }
 
     /* Crop tool options */

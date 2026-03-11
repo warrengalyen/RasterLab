@@ -73,6 +73,15 @@ typedef struct {
     gint color_picker_sample_radius;      /* Sample radius 0–100, default 0 (single pixel) */
     gboolean color_picker_sample_from_layer; /* TRUE = layer, FALSE = image; default TRUE */
 
+    /* Magic Wand select tool options */
+    SelectionCombineMode magicwand_combine;   /* How to combine with existing selection */
+    SelectionSmoothingMode magicwand_smooth;  /* Edge smoothing mode */
+    gfloat magicwand_feather;                 /* Feather radius in pixels */
+    gboolean magicwand_animate;               /* Animate marching ants */
+    gfloat magicwand_tolerance;               /* Color tolerance 0-100 */
+    FillCompareMode magicwand_compare_mode;   /* Pixel comparison mode */
+    gboolean magicwand_contiguous;            /* TRUE=flood-fill connected region, FALSE=global */
+
     /* Crop tool options */
     gint crop_constraint_mode;       /* 0=Free, 1=Fixed Ratio, 2=Fixed Size */
     gint crop_ratio_w;               /* Ratio width (e.g. 16) */
@@ -365,6 +374,24 @@ void tool_options_set_color_picker_sample_from_layer(ToolOptions* opts, gboolean
  * Get color picker sample from (TRUE = layer, FALSE = image)
  */
 gboolean tool_options_get_color_picker_sample_from_layer(ToolOptions* opts);
+
+/**
+ * Magic Wand select: set/get combine, smooth, feather, animate, tolerance, compare, contiguous
+ */
+void tool_options_set_magicwand_combine(ToolOptions* opts, SelectionCombineMode combine);
+SelectionCombineMode tool_options_get_magicwand_combine(ToolOptions* opts);
+void tool_options_set_magicwand_smooth(ToolOptions* opts, SelectionSmoothingMode smooth);
+SelectionSmoothingMode tool_options_get_magicwand_smooth(ToolOptions* opts);
+void tool_options_set_magicwand_feather(ToolOptions* opts, gfloat feather);
+gfloat tool_options_get_magicwand_feather(ToolOptions* opts);
+void tool_options_set_magicwand_animate(ToolOptions* opts, gboolean animate);
+gboolean tool_options_get_magicwand_animate(ToolOptions* opts);
+void tool_options_set_magicwand_tolerance(ToolOptions* opts, gfloat tolerance);
+gfloat tool_options_get_magicwand_tolerance(ToolOptions* opts);
+void tool_options_set_magicwand_compare_mode(ToolOptions* opts, FillCompareMode mode);
+FillCompareMode tool_options_get_magicwand_compare_mode(ToolOptions* opts);
+void tool_options_set_magicwand_contiguous(ToolOptions* opts, gboolean contiguous);
+gboolean tool_options_get_magicwand_contiguous(ToolOptions* opts);
 
 /**
  * Crop tool: set/get constraint mode (0=Free, 1=Ratio, 2=Size)

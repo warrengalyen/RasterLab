@@ -23,6 +23,7 @@
 #include "tools/tool_crop.h"
 #include "tools/tool_ellipse_select.h"
 #include "tools/tool_lasso_select.h"
+#include "tools/tool_magic_wand_select.h"
 #include "tools/tool_move.h"
 #include "tools/tool_polygon_select.h"
 #include "tools/tool_rect_select.h"
@@ -794,6 +795,9 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
 
     /* Draw lasso select tool preview */
     tool_lasso_select_draw_preview(doc, cr, zoom);
+
+    /* Draw magic wand select tool preview */
+    tool_magic_wand_select_draw_preview(doc, cr, zoom);
 
     /* Render selection overlays after all content is drawn */
     if (doc->selection_mask && !selection_mask_is_empty(doc->selection_mask)) {
@@ -1644,8 +1648,30 @@ static gboolean on_drawing_area_key_press(GtkWidget* widget, GdkEventKey* event,
 
     Tool* active_tool = tool_manager_get_active(tool_registry);
     if (!active_tool || (active_tool->type != TOOL_RECT_SELECT && active_tool->type != TOOL_ELLIPSE_SELECT &&
-                         active_tool->type != TOOL_POLYGON_SELECT && active_tool->type != TOOL_LASSO_SELECT)) {
+                         active_tool->type != TOOL_POLYGON_SELECT && active_tool->type != TOOL_LASSO_SELECT &&
+                         active_tool->type != TOOL_MAGIC_WAND)) {
         return FALSE;
+    }
+
+    /* Enter/Return: finalize magic wand selection */
+    if ((event->keyval == GDK_KEY_Return || event->keyval == GDK_KEY_KP_Enter) &&
+        active_tool->type == TOOL_MAGIC_WAND && active_tool->user_data) {
+        MagicWandSelectToolState* state = (MagicWandSelectToolState*)active_tool->user_data;
+        if (state->has_start_point && state->preview_mask && !state->has_been_finalized) {
+            tool_magic_wand_select_finalize(active_tool, doc);
+            gtk_widget_queue_draw(doc->drawing_area);
+            return TRUE;
+        }
+    }
+
+    /* ESC: cancel magic wand preview */
+    if (event->keyval == GDK_KEY_Escape && active_tool->type == TOOL_MAGIC_WAND && active_tool->user_data) {
+        MagicWandSelectToolState* state = (MagicWandSelectToolState*)active_tool->user_data;
+        if (state->has_start_point) {
+            tool_magic_wand_select_reset(active_tool);
+            gtk_widget_queue_draw(doc->drawing_area);
+            return TRUE;
+        }
     }
 
     /* ESC: cancel unclosed polygon selection */
@@ -1715,6 +1741,11 @@ static gboolean on_drawing_area_key_press(GtkWidget* widget, GdkEventKey* event,
         if (opts) {
             opts->lasso_select_combine = temp_mode;
         }
+    } else if (active_tool->type == TOOL_MAGIC_WAND) {
+        ToolOptions* opts = tool_options_get_for_tool(TOOL_MAGIC_WAND);
+        if (opts) {
+            opts->magicwand_combine = temp_mode;
+        }
     }
 
     /* Update UI buttons to show the temporary mode */
@@ -1743,7 +1774,8 @@ static gboolean on_drawing_area_key_release(GtkWidget* widget, GdkEventKey* even
 
     Tool* active_tool = tool_manager_get_active(tool_registry);
     if (!active_tool || (active_tool->type != TOOL_RECT_SELECT && active_tool->type != TOOL_ELLIPSE_SELECT &&
-                         active_tool->type != TOOL_POLYGON_SELECT && active_tool->type != TOOL_LASSO_SELECT)) {
+                         active_tool->type != TOOL_POLYGON_SELECT && active_tool->type != TOOL_LASSO_SELECT &&
+                         active_tool->type != TOOL_MAGIC_WAND)) {
         return FALSE;
     }
 
@@ -1793,6 +1825,11 @@ static gboolean on_drawing_area_key_release(GtkWidget* widget, GdkEventKey* even
         ToolOptions* opts = tool_options_get_for_tool(TOOL_LASSO_SELECT);
         if (opts) {
             opts->lasso_select_combine = temp_mode;
+        }
+    } else if (active_tool->type == TOOL_MAGIC_WAND) {
+        ToolOptions* opts = tool_options_get_for_tool(TOOL_MAGIC_WAND);
+        if (opts) {
+            opts->magicwand_combine = temp_mode;
         }
     }
 

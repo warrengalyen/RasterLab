@@ -2,6 +2,7 @@
 #include "tool_manager.h"
 #include "tool_options.h"
 #include "tools/tool_crop.h"
+#include "tools/tool_magic_wand_select.h"
 #include "ui.h"
 #include "ui/dialogs/color_chooser_dialog.h"
 #include "ui/layers_panel.h"
@@ -368,6 +369,7 @@ GtkWidget* tools_panel_initialize_from_builder(GtkBuilder* builder, ToolRegistry
         "tool_button_elliptical_select",
         "tool_button_polygon_select",
         "tool_button_lasso_select",
+        "tool_button_magicwand_select",
     };
 
     const ToolType tool_types[] = {
@@ -384,6 +386,7 @@ GtkWidget* tools_panel_initialize_from_builder(GtkBuilder* builder, ToolRegistry
         TOOL_ELLIPSE_SELECT,
         TOOL_POLYGON_SELECT,
         TOOL_LASSO_SELECT,
+        TOOL_MAGIC_WAND,
     };
 
     /* Set up tool buttons with callbacks */
@@ -421,6 +424,7 @@ GtkWidget* tools_panel_initialize_from_builder(GtkBuilder* builder, ToolRegistry
                 "/icons/tool-elliptical-select.png",
                 "/icons/tool-polygon-select.png",
                 "/icons/tool-lasso-select.png",
+                "/icons/tool-magicwand-select.png",
             };
             if (i < (int)(sizeof(icon_resources) / sizeof(icon_resources[0]))) {
                 GError* error = NULL;
@@ -615,6 +619,10 @@ gboolean tools_panel_on_window_key_press(GtkWidget* widget, GdkEventKey* event, 
         case GDK_KEY_L:
             tool_to_activate = TOOL_LASSO_SELECT;
             break;
+        case GDK_KEY_w:
+        case GDK_KEY_W:
+            tool_to_activate = TOOL_MAGIC_WAND;
+            break;
         case GDK_KEY_s:
         case GDK_KEY_S:
             /* Toggle between rectangular and elliptical selection */
@@ -642,16 +650,30 @@ gboolean tools_panel_on_window_key_press(GtkWidget* widget, GdkEventKey* event, 
                         return FALSE; /* Let the widget handle Enter */
                     }
                 }
-                Tool* active_tool = tool_manager_get_active(ctx->tool_registry);
-                gint x, y, w, h;
-                if (active_tool && active_tool->type == TOOL_CROP &&
-                    tool_crop_get_rect(active_tool, &x, &y, &w, &h)) {
-                    if (crop_apply_if_active(ctx)) {
-                        return TRUE;
-                    }
-                }
+        Tool* active_tool = tool_manager_get_active(ctx->tool_registry);
+        gint x, y, w, h;
+        if (active_tool && active_tool->type == TOOL_CROP &&
+            tool_crop_get_rect(active_tool, &x, &y, &w, &h)) {
+            if (crop_apply_if_active(ctx)) {
+                return TRUE;
             }
-            return FALSE;
+        }
+
+        /* Enter finalizes the magic wand selection regardless of keyboard focus */
+        if (active_tool && active_tool->type == TOOL_MAGIC_WAND &&
+            active_tool->user_data && ctx->tool_registry->current_doc) {
+            MagicWandSelectToolState* mw_state =
+                (MagicWandSelectToolState*)active_tool->user_data;
+            if (mw_state->has_start_point && mw_state->preview_mask &&
+                !mw_state->has_been_finalized) {
+                ImageDocument* wand_doc = ctx->tool_registry->current_doc;
+                tool_magic_wand_select_finalize(active_tool, wand_doc);
+                gtk_widget_queue_draw(wand_doc->drawing_area);
+                return TRUE;
+            }
+        }
+    }
+    return FALSE;
         default:
             return FALSE; /* Not a tool hotkey */
     }

@@ -12,6 +12,7 @@
 #include "tools/tool_rect_select.h"
 #include "tools/tool_polygon_select.h"
 #include "tools/tool_lasso_select.h"
+#include "tools/tool_magic_wand_select.h"
 #include "tools/tool_zoom.h"
 
 #include <stdio.h>
@@ -127,6 +128,13 @@ gboolean tool_manager_init_defaults(ToolRegistry* registry) {
     }
     tool_manager_register(registry, tool, TOOL_LASSO_SELECT);
 
+    /* Create Magic Wand Selection tool */
+    tool = tool_magic_wand_select_create();
+    if (!tool) {
+        return FALSE;
+    }
+    tool_manager_register(registry, tool, TOOL_MAGIC_WAND);
+
     /* Create Crop tool */
     tool = tool_crop_create();
     if (!tool) {
@@ -197,6 +205,12 @@ gboolean tool_manager_activate(ToolRegistry* registry, ToolType type) {
     if (prev_tool && prev_tool->type == TOOL_LASSO_SELECT && registry->current_doc) {
         tool_lasso_select_finalize(prev_tool, registry->current_doc);
         tool_lasso_select_reset(prev_tool);
+    }
+
+    /* Finalize magic wand select if switching away from it */
+    if (prev_tool && prev_tool->type == TOOL_MAGIC_WAND && registry->current_doc) {
+        tool_magic_wand_select_finalize(prev_tool, registry->current_doc);
+        tool_magic_wand_select_reset(prev_tool);
     }
 
     /* Reset crop tool if switching away from it */

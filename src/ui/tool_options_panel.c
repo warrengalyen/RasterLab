@@ -9,6 +9,7 @@
 #include "tools.h"
 #include "tools/tool_crop.h"
 #include "tools/tool_ellipse_select.h"
+#include "tools/tool_magic_wand_select.h"
 #include "tools/tool_rect_select.h"
 #include "ui.h"
 #include "ui/widgets/vertical_spin_button.h"
@@ -1398,6 +1399,167 @@ static gboolean crop_panel_do_redraw_idle(gpointer user_data) {
     return G_SOURCE_REMOVE;
 }
 
+static void magic_wand_trigger_redraw(ToolOptionsPanel* panel) {
+    if (!panel || !panel->panel) return;
+    GtkWidget* window = gtk_widget_get_toplevel(panel->panel);
+    if (!window) return;
+    AppContext* ctx = (AppContext*)g_object_get_data(G_OBJECT(window), "app_context");
+    if (!ctx || !ctx->tool_registry) return;
+    ImageDocument* doc = ui_get_active_document(ctx);
+    if (!doc) return;
+
+    /* Recompute the flood-fill with the new option values if the tool is active */
+    Tool* active_tool = tool_manager_get_active(ctx->tool_registry);
+    if (active_tool && active_tool->type == TOOL_MAGIC_WAND) {
+        tool_magic_wand_select_update_preview(active_tool, doc);
+    } else {
+        /* Fallback: simple redraw (should not normally happen) */
+        if (doc->drawing_area) gtk_widget_queue_draw(doc->drawing_area);
+    }
+}
+
+static void update_magicwand_combine_mode_buttons(ToolOptionsPanel* panel, SelectionCombineMode mode);
+
+static void on_magicwand_combine_button_toggled(GtkToggleButton* button, gpointer user_data) {
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    if (!gtk_toggle_button_get_active(button)) return;
+    SelectionCombineMode mode = SELECTION_COMBINE_NEW;
+    if (button == GTK_TOGGLE_BUTTON(panel->magicwand_combine_new_button))
+        mode = SELECTION_COMBINE_NEW;
+    else if (panel->magicwand_combine_add_button && button == GTK_TOGGLE_BUTTON(panel->magicwand_combine_add_button))
+        mode = SELECTION_COMBINE_ADD;
+    else if (panel->magicwand_combine_subtract_button && button == GTK_TOGGLE_BUTTON(panel->magicwand_combine_subtract_button))
+        mode = SELECTION_COMBINE_SUBTRACT;
+    else if (panel->magicwand_combine_intersect_button && button == GTK_TOGGLE_BUTTON(panel->magicwand_combine_intersect_button))
+        mode = SELECTION_COMBINE_INTERSECT;
+
+    g_signal_handlers_block_by_func(panel->magicwand_combine_new_button, G_CALLBACK(on_magicwand_combine_button_toggled), panel);
+    if (panel->magicwand_combine_add_button)
+        g_signal_handlers_block_by_func(panel->magicwand_combine_add_button, G_CALLBACK(on_magicwand_combine_button_toggled), panel);
+    if (panel->magicwand_combine_subtract_button)
+        g_signal_handlers_block_by_func(panel->magicwand_combine_subtract_button, G_CALLBACK(on_magicwand_combine_button_toggled), panel);
+    if (panel->magicwand_combine_intersect_button)
+        g_signal_handlers_block_by_func(panel->magicwand_combine_intersect_button, G_CALLBACK(on_magicwand_combine_button_toggled), panel);
+
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->magicwand_combine_new_button), (mode == SELECTION_COMBINE_NEW));
+    if (panel->magicwand_combine_add_button)
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->magicwand_combine_add_button), (mode == SELECTION_COMBINE_ADD));
+    if (panel->magicwand_combine_subtract_button)
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->magicwand_combine_subtract_button), (mode == SELECTION_COMBINE_SUBTRACT));
+    if (panel->magicwand_combine_intersect_button)
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->magicwand_combine_intersect_button), (mode == SELECTION_COMBINE_INTERSECT));
+
+    g_signal_handlers_unblock_by_func(panel->magicwand_combine_new_button, G_CALLBACK(on_magicwand_combine_button_toggled), panel);
+    if (panel->magicwand_combine_add_button)
+        g_signal_handlers_unblock_by_func(panel->magicwand_combine_add_button, G_CALLBACK(on_magicwand_combine_button_toggled), panel);
+    if (panel->magicwand_combine_subtract_button)
+        g_signal_handlers_unblock_by_func(panel->magicwand_combine_subtract_button, G_CALLBACK(on_magicwand_combine_button_toggled), panel);
+    if (panel->magicwand_combine_intersect_button)
+        g_signal_handlers_unblock_by_func(panel->magicwand_combine_intersect_button, G_CALLBACK(on_magicwand_combine_button_toggled), panel);
+
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_MAGIC_WAND);
+    if (opts) tool_options_set_magicwand_combine(opts, mode);
+    save_tool_options_to_settings(panel, TOOL_MAGIC_WAND);
+}
+
+static void update_magicwand_combine_mode_buttons(ToolOptionsPanel* panel, SelectionCombineMode mode) {
+    if (!panel || !panel->magicwand_combine_new_button) return;
+    g_signal_handlers_block_by_func(panel->magicwand_combine_new_button, G_CALLBACK(on_magicwand_combine_button_toggled), panel);
+    if (panel->magicwand_combine_add_button)
+        g_signal_handlers_block_by_func(panel->magicwand_combine_add_button, G_CALLBACK(on_magicwand_combine_button_toggled), panel);
+    if (panel->magicwand_combine_subtract_button)
+        g_signal_handlers_block_by_func(panel->magicwand_combine_subtract_button, G_CALLBACK(on_magicwand_combine_button_toggled), panel);
+    if (panel->magicwand_combine_intersect_button)
+        g_signal_handlers_block_by_func(panel->magicwand_combine_intersect_button, G_CALLBACK(on_magicwand_combine_button_toggled), panel);
+
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->magicwand_combine_new_button), (mode == SELECTION_COMBINE_NEW));
+    if (panel->magicwand_combine_add_button)
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->magicwand_combine_add_button), (mode == SELECTION_COMBINE_ADD));
+    if (panel->magicwand_combine_subtract_button)
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->magicwand_combine_subtract_button), (mode == SELECTION_COMBINE_SUBTRACT));
+    if (panel->magicwand_combine_intersect_button)
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->magicwand_combine_intersect_button), (mode == SELECTION_COMBINE_INTERSECT));
+
+    g_signal_handlers_unblock_by_func(panel->magicwand_combine_new_button, G_CALLBACK(on_magicwand_combine_button_toggled), panel);
+    if (panel->magicwand_combine_add_button)
+        g_signal_handlers_unblock_by_func(panel->magicwand_combine_add_button, G_CALLBACK(on_magicwand_combine_button_toggled), panel);
+    if (panel->magicwand_combine_subtract_button)
+        g_signal_handlers_unblock_by_func(panel->magicwand_combine_subtract_button, G_CALLBACK(on_magicwand_combine_button_toggled), panel);
+    if (panel->magicwand_combine_intersect_button)
+        g_signal_handlers_unblock_by_func(panel->magicwand_combine_intersect_button, G_CALLBACK(on_magicwand_combine_button_toggled), panel);
+}
+
+static void on_magicwand_smooth_changed(GtkComboBox* combo_box, gpointer user_data) {
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_MAGIC_WAND);
+    if (opts) {
+        gint active = gtk_combo_box_get_active(combo_box);
+        if (active >= 0)
+            tool_options_set_magicwand_smooth(opts, (SelectionSmoothingMode)active);
+    }
+    save_tool_options_to_settings(panel, TOOL_MAGIC_WAND);
+    magic_wand_trigger_redraw(panel);
+}
+
+static void on_magicwand_feather_changed(GtkRange* range, gpointer user_data) {
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_MAGIC_WAND);
+    if (opts)
+        tool_options_set_magicwand_feather(opts, (gfloat)gtk_range_get_value(range));
+    save_tool_options_to_settings(panel, TOOL_MAGIC_WAND);
+    magic_wand_trigger_redraw(panel);
+}
+
+static void on_magicwand_animate_toggled(GtkToggleButton* button, gpointer user_data) {
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_MAGIC_WAND);
+    if (opts)
+        tool_options_set_magicwand_animate(opts, gtk_toggle_button_get_active(button));
+    save_tool_options_to_settings(panel, TOOL_MAGIC_WAND);
+}
+
+static void on_magicwand_tolerance_changed(GtkRange* range, gpointer user_data) {
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_MAGIC_WAND);
+    if (opts)
+        tool_options_set_magicwand_tolerance(opts, (gfloat)gtk_range_get_value(range));
+    save_tool_options_to_settings(panel, TOOL_MAGIC_WAND);
+    magic_wand_trigger_redraw(panel);
+}
+
+static void on_magicwand_compare_changed(GtkComboBox* combo, gpointer user_data) {
+    (void)user_data;
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)g_object_get_data(G_OBJECT(combo), "tool_options_panel");
+    if (panel && panel->current_tool_type == TOOL_MAGIC_WAND) {
+        ToolOptions* opts = tool_options_get_for_tool(TOOL_MAGIC_WAND);
+        if (opts) {
+            gint active = gtk_combo_box_get_active(combo);
+            if (active >= 0)
+                tool_options_set_magicwand_compare_mode(opts, (FillCompareMode)active);
+        }
+        save_tool_options_to_settings(panel, TOOL_MAGIC_WAND);
+        magic_wand_trigger_redraw(panel);
+    }
+}
+
+static void on_magicwand_contiguous_toggled(GtkToggleButton* button, gpointer user_data) {
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    if (!gtk_toggle_button_get_active(button)) return;
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_MAGIC_WAND);
+    if (opts) tool_options_set_magicwand_contiguous(opts, TRUE);
+    save_tool_options_to_settings(panel, TOOL_MAGIC_WAND);
+    magic_wand_trigger_redraw(panel);
+}
+
+static void on_magicwand_global_toggled(GtkToggleButton* button, gpointer user_data) {
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    if (!gtk_toggle_button_get_active(button)) return;
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_MAGIC_WAND);
+    if (opts) tool_options_set_magicwand_contiguous(opts, FALSE);
+    save_tool_options_to_settings(panel, TOOL_MAGIC_WAND);
+    magic_wand_trigger_redraw(panel);
+}
+
 void tool_options_panel_sync_crop_from_rect(GtkWidget* drawing_area, gint w, gint h) {
     AppContext* ctx;
     ToolOptionsPanel* panel;
@@ -2472,6 +2634,102 @@ ToolOptionsPanel* create_tool_options_panel(void) {
             g_object_unref(lasso_select_builder);
     }
 
+    /* Load magic wand select options panel from Glade */
+    GtkBuilder* magic_wand_builder = gtk_builder_new();
+    GError* magic_wand_error = NULL;
+    ToolOptions* magicwand_opts = tool_options_get_for_tool(TOOL_MAGIC_WAND);
+    if (gtk_builder_add_from_resource(magic_wand_builder, "/ui/magic_wand_select_options.glade", &magic_wand_error)) {
+        tool_opts_panel->magic_wand_panel = GTK_WIDGET(gtk_builder_get_object(magic_wand_builder, "magicwand_select_options_panel"));
+        if (tool_opts_panel->magic_wand_panel) {
+            gtk_container_add(GTK_CONTAINER(container), tool_opts_panel->magic_wand_panel);
+
+            tool_opts_panel->magicwand_combine_new_button       = GTK_WIDGET(gtk_builder_get_object(magic_wand_builder, "magicwand_select_combine_new_button"));
+            tool_opts_panel->magicwand_combine_add_button       = GTK_WIDGET(gtk_builder_get_object(magic_wand_builder, "magicwand_select_combine_add_button"));
+            tool_opts_panel->magicwand_combine_subtract_button  = GTK_WIDGET(gtk_builder_get_object(magic_wand_builder, "magicwand_select_combine_subtract_button"));
+            tool_opts_panel->magicwand_combine_intersect_button = GTK_WIDGET(gtk_builder_get_object(magic_wand_builder, "magicwand_select_combine_intersect_button"));
+            tool_opts_panel->magicwand_smooth_combo             = GTK_WIDGET(gtk_builder_get_object(magic_wand_builder, "magicwand_select_smooth_combo"));
+            tool_opts_panel->magicwand_feather_scale            = GTK_WIDGET(gtk_builder_get_object(magic_wand_builder, "magicwand_select_feather_scale"));
+            tool_opts_panel->magicwand_animate_checkbox         = GTK_WIDGET(gtk_builder_get_object(magic_wand_builder, "magicwand_select_animate_checkbox"));
+            tool_opts_panel->magicwand_tolerance_scale          = GTK_WIDGET(gtk_builder_get_object(magic_wand_builder, "magicwand_select_tolernace_scale"));
+            tool_opts_panel->magicwand_compare_combo            = GTK_WIDGET(gtk_builder_get_object(magic_wand_builder, "paintbucket_compare_combo"));
+            tool_opts_panel->magicwand_contiguous_radio         = GTK_WIDGET(gtk_builder_get_object(magic_wand_builder, "paintbucket_contiguous_radio"));
+            tool_opts_panel->magicwand_global_radio             = GTK_WIDGET(gtk_builder_get_object(magic_wand_builder, "paintbucket_global_radio"));
+
+            if (tool_opts_panel->magicwand_combine_new_button)
+                g_signal_connect(tool_opts_panel->magicwand_combine_new_button, "toggled", G_CALLBACK(on_magicwand_combine_button_toggled), tool_opts_panel);
+            if (tool_opts_panel->magicwand_combine_add_button)
+                g_signal_connect(tool_opts_panel->magicwand_combine_add_button, "toggled", G_CALLBACK(on_magicwand_combine_button_toggled), tool_opts_panel);
+            if (tool_opts_panel->magicwand_combine_subtract_button)
+                g_signal_connect(tool_opts_panel->magicwand_combine_subtract_button, "toggled", G_CALLBACK(on_magicwand_combine_button_toggled), tool_opts_panel);
+            if (tool_opts_panel->magicwand_combine_intersect_button)
+                g_signal_connect(tool_opts_panel->magicwand_combine_intersect_button, "toggled", G_CALLBACK(on_magicwand_combine_button_toggled), tool_opts_panel);
+
+            if (tool_opts_panel->magicwand_smooth_combo) {
+                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(tool_opts_panel->magicwand_smooth_combo), "None");
+                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(tool_opts_panel->magicwand_smooth_combo), "Antialiased");
+                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(tool_opts_panel->magicwand_smooth_combo), "Feathered");
+                gtk_combo_box_set_active(GTK_COMBO_BOX(tool_opts_panel->magicwand_smooth_combo),
+                    magicwand_opts ? (gint)magicwand_opts->magicwand_smooth : 1);
+                g_signal_connect(tool_opts_panel->magicwand_smooth_combo, "changed",
+                                 G_CALLBACK(on_magicwand_smooth_changed), tool_opts_panel);
+            }
+            if (tool_opts_panel->magicwand_feather_scale) {
+                if (magicwand_opts)
+                    gtk_range_set_value(GTK_RANGE(tool_opts_panel->magicwand_feather_scale), magicwand_opts->magicwand_feather);
+                g_signal_connect(tool_opts_panel->magicwand_feather_scale, "value-changed",
+                                 G_CALLBACK(on_magicwand_feather_changed), tool_opts_panel);
+            }
+            if (tool_opts_panel->magicwand_animate_checkbox) {
+                gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(tool_opts_panel->magicwand_animate_checkbox),
+                    magicwand_opts ? magicwand_opts->magicwand_animate : TRUE);
+                g_signal_connect(tool_opts_panel->magicwand_animate_checkbox, "toggled",
+                                 G_CALLBACK(on_magicwand_animate_toggled), tool_opts_panel);
+            }
+            if (tool_opts_panel->magicwand_tolerance_scale) {
+                if (magicwand_opts)
+                    gtk_range_set_value(GTK_RANGE(tool_opts_panel->magicwand_tolerance_scale), magicwand_opts->magicwand_tolerance);
+                g_signal_connect(tool_opts_panel->magicwand_tolerance_scale, "value-changed",
+                                 G_CALLBACK(on_magicwand_tolerance_changed), tool_opts_panel);
+            }
+            if (tool_opts_panel->magicwand_compare_combo) {
+                g_object_set_data(G_OBJECT(tool_opts_panel->magicwand_compare_combo), "tool_options_panel", tool_opts_panel);
+                gtk_combo_box_set_active(GTK_COMBO_BOX(tool_opts_panel->magicwand_compare_combo),
+                    magicwand_opts ? (gint)magicwand_opts->magicwand_compare_mode : 0);
+                g_signal_connect(tool_opts_panel->magicwand_compare_combo, "changed",
+                                 G_CALLBACK(on_magicwand_compare_changed), NULL);
+            }
+            if (tool_opts_panel->magicwand_contiguous_radio && tool_opts_panel->magicwand_global_radio) {
+                /* Wire up radio group */
+                gtk_radio_button_join_group(
+                    GTK_RADIO_BUTTON(tool_opts_panel->magicwand_global_radio),
+                    GTK_RADIO_BUTTON(tool_opts_panel->magicwand_contiguous_radio));
+                gboolean is_contiguous = magicwand_opts ? magicwand_opts->magicwand_contiguous : TRUE;
+                gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(tool_opts_panel->magicwand_contiguous_radio), is_contiguous);
+                gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(tool_opts_panel->magicwand_global_radio), !is_contiguous);
+                g_signal_connect(tool_opts_panel->magicwand_contiguous_radio, "toggled",
+                                 G_CALLBACK(on_magicwand_contiguous_toggled), tool_opts_panel);
+                g_signal_connect(tool_opts_panel->magicwand_global_radio, "toggled",
+                                 G_CALLBACK(on_magicwand_global_toggled), tool_opts_panel);
+            }
+
+            if (magicwand_opts)
+                update_magicwand_combine_mode_buttons(tool_opts_panel,
+                    (SelectionCombineMode)magicwand_opts->magicwand_combine);
+
+            gtk_widget_set_visible(tool_opts_panel->magic_wand_panel, FALSE);
+            gtk_widget_set_no_show_all(tool_opts_panel->magic_wand_panel, TRUE);
+            add_spin_button_to_scale(magic_wand_builder, "magicwand_select_feather_scale", "magicwand_select_feather_control_box");
+            add_spin_button_to_scale(magic_wand_builder, "magicwand_select_tolernace_scale", "magicwand_select_tolerance_control_box");
+        }
+        g_object_unref(magic_wand_builder);
+    } else {
+        g_warning("Failed to load magic wand select options panel: %s", magic_wand_error ? magic_wand_error->message : "Unknown error");
+        if (magic_wand_error)
+            g_error_free(magic_wand_error);
+        if (magic_wand_builder)
+            g_object_unref(magic_wand_builder);
+    }
+
     /* Load crop panel from Glade */
     GtkBuilder* crop_builder = gtk_builder_new();
     GError* crop_error = NULL;
@@ -2676,6 +2934,8 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
         new_tool_type = TOOL_POLYGON_SELECT;
     } else if (g_strcmp0(tool_name, "Lasso Select") == 0) {
         new_tool_type = TOOL_LASSO_SELECT;
+    } else if (g_strcmp0(tool_name, "Magic Wand") == 0) {
+        new_tool_type = TOOL_MAGIC_WAND;
     } else if (g_strcmp0(tool_name, "Move") == 0) {
         new_tool_type = TOOL_MOVE;
     } else if (g_strcmp0(tool_name, "Crop") == 0) {
@@ -2718,6 +2978,9 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
     }
     if (panel->lasso_select_panel) {
         gtk_widget_set_visible(panel->lasso_select_panel, FALSE);
+    }
+    if (panel->magic_wand_panel) {
+        gtk_widget_set_visible(panel->magic_wand_panel, FALSE);
     }
     if (panel->crop_panel) {
         gtk_widget_set_visible(panel->crop_panel, FALSE);
@@ -2911,6 +3174,74 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
                 gtk_range_set_value(GTK_RANGE(panel->lasso_border_scale), (gdouble)opts->lasso_select_border_width);
                 g_signal_handlers_unblock_by_func(panel->lasso_border_scale,
                                                   G_CALLBACK(on_lasso_select_border_changed), panel);
+            }
+        }
+        return;
+    }
+
+    /* For magic wand select tool, show the options panel */
+    if (new_tool_type == TOOL_MAGIC_WAND && panel->magic_wand_panel) {
+        if (panel->panel)
+            gtk_widget_set_visible(panel->panel, TRUE);
+        gtk_widget_set_no_show_all(panel->magic_wand_panel, FALSE);
+        gtk_widget_set_visible(panel->magic_wand_panel, TRUE);
+        gtk_widget_show_all(panel->magic_wand_panel);
+
+        ToolOptions* opts = tool_options_get_for_tool(TOOL_MAGIC_WAND);
+        if (opts) {
+            if (panel->magicwand_combine_new_button)
+                update_magicwand_combine_mode_buttons(panel, (SelectionCombineMode)opts->magicwand_combine);
+
+            if (panel->magicwand_smooth_combo) {
+                g_signal_handlers_block_by_func(panel->magicwand_smooth_combo,
+                                                G_CALLBACK(on_magicwand_smooth_changed), panel);
+                gtk_combo_box_set_active(GTK_COMBO_BOX(panel->magicwand_smooth_combo),
+                                         (gint)opts->magicwand_smooth);
+                g_signal_handlers_unblock_by_func(panel->magicwand_smooth_combo,
+                                                  G_CALLBACK(on_magicwand_smooth_changed), panel);
+            }
+            if (panel->magicwand_feather_scale) {
+                g_signal_handlers_block_by_func(panel->magicwand_feather_scale,
+                                                G_CALLBACK(on_magicwand_feather_changed), panel);
+                gtk_range_set_value(GTK_RANGE(panel->magicwand_feather_scale), opts->magicwand_feather);
+                g_signal_handlers_unblock_by_func(panel->magicwand_feather_scale,
+                                                  G_CALLBACK(on_magicwand_feather_changed), panel);
+            }
+            if (panel->magicwand_animate_checkbox) {
+                g_signal_handlers_block_by_func(panel->magicwand_animate_checkbox,
+                                                G_CALLBACK(on_magicwand_animate_toggled), panel);
+                gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->magicwand_animate_checkbox),
+                                             opts->magicwand_animate);
+                g_signal_handlers_unblock_by_func(panel->magicwand_animate_checkbox,
+                                                  G_CALLBACK(on_magicwand_animate_toggled), panel);
+            }
+            if (panel->magicwand_tolerance_scale) {
+                g_signal_handlers_block_by_func(panel->magicwand_tolerance_scale,
+                                                G_CALLBACK(on_magicwand_tolerance_changed), panel);
+                gtk_range_set_value(GTK_RANGE(panel->magicwand_tolerance_scale), opts->magicwand_tolerance);
+                g_signal_handlers_unblock_by_func(panel->magicwand_tolerance_scale,
+                                                  G_CALLBACK(on_magicwand_tolerance_changed), panel);
+            }
+            if (panel->magicwand_compare_combo) {
+                g_object_set_data(G_OBJECT(panel->magicwand_compare_combo), "tool_options_panel", panel);
+                g_signal_handlers_disconnect_by_func(panel->magicwand_compare_combo,
+                                                     G_CALLBACK(on_magicwand_compare_changed), NULL);
+                gtk_combo_box_set_active(GTK_COMBO_BOX(panel->magicwand_compare_combo),
+                                         (gint)opts->magicwand_compare_mode);
+                g_signal_connect(panel->magicwand_compare_combo, "changed",
+                                 G_CALLBACK(on_magicwand_compare_changed), NULL);
+            }
+            if (panel->magicwand_contiguous_radio && panel->magicwand_global_radio) {
+                g_signal_handlers_block_by_func(panel->magicwand_contiguous_radio,
+                                                G_CALLBACK(on_magicwand_contiguous_toggled), panel);
+                g_signal_handlers_block_by_func(panel->magicwand_global_radio,
+                                                G_CALLBACK(on_magicwand_global_toggled), panel);
+                gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->magicwand_contiguous_radio), opts->magicwand_contiguous);
+                gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->magicwand_global_radio), !opts->magicwand_contiguous);
+                g_signal_handlers_unblock_by_func(panel->magicwand_contiguous_radio,
+                                                  G_CALLBACK(on_magicwand_contiguous_toggled), panel);
+                g_signal_handlers_unblock_by_func(panel->magicwand_global_radio,
+                                                  G_CALLBACK(on_magicwand_global_toggled), panel);
             }
         }
         return;
@@ -3410,6 +3741,8 @@ void tool_options_panel_set_combine_mode(ToolOptionsPanel* panel, SelectionCombi
         update_polygon_combine_mode_buttons(panel, mode);
     } else if (panel->current_tool_type == TOOL_LASSO_SELECT && panel->lasso_combine_new_button) {
         update_lasso_combine_mode_buttons(panel, mode);
+    } else if (panel->current_tool_type == TOOL_MAGIC_WAND && panel->magicwand_combine_new_button) {
+        update_magicwand_combine_mode_buttons(panel, mode);
     } else if (panel->current_tool_type == TOOL_ELLIPSE_SELECT && panel->ellipse_combine_new_button) {
         update_ellipse_combine_mode_buttons(panel, mode);
     } else {

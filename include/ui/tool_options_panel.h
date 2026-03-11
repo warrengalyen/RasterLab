@@ -65,6 +65,18 @@ typedef struct {
     GtkWidget* lasso_animate_checkbox;
     GtkWidget* lasso_area_combo;
     GtkWidget* lasso_border_scale;
+    GtkWidget* magic_wand_panel;                 /* Magic wand select tool options panel (from Glade) */
+    GtkWidget* magicwand_combine_new_button;
+    GtkWidget* magicwand_combine_add_button;
+    GtkWidget* magicwand_combine_subtract_button;
+    GtkWidget* magicwand_combine_intersect_button;
+    GtkWidget* magicwand_smooth_combo;
+    GtkWidget* magicwand_feather_scale;
+    GtkWidget* magicwand_animate_checkbox;
+    GtkWidget* magicwand_tolerance_scale;
+    GtkWidget* magicwand_compare_combo;
+    GtkWidget* magicwand_contiguous_radio;
+    GtkWidget* magicwand_global_radio;
     GtkWidget* move_auto_select_checkbox;        /* Auto-select layer checkbox (move tool only) */
     ToolType current_tool_type;                  /* Currently displayed tool type */
     ToolRegistry* tool_registry;                 /* Tool registry for cursor updates */
