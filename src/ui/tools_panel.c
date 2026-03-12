@@ -370,6 +370,7 @@ GtkWidget* tools_panel_initialize_from_builder(GtkBuilder* builder, ToolRegistry
         "tool_button_polygon_select",
         "tool_button_lasso_select",
         "tool_button_magicwand_select",
+        "tool_button_text",
     };
 
     const ToolType tool_types[] = {
@@ -387,6 +388,7 @@ GtkWidget* tools_panel_initialize_from_builder(GtkBuilder* builder, ToolRegistry
         TOOL_POLYGON_SELECT,
         TOOL_LASSO_SELECT,
         TOOL_MAGIC_WAND,
+        TOOL_TEXT,
     };
 
     /* Set up tool buttons with callbacks */
@@ -425,6 +427,7 @@ GtkWidget* tools_panel_initialize_from_builder(GtkBuilder* builder, ToolRegistry
                 "/icons/tool-polygon-select.png",
                 "/icons/tool-lasso-select.png",
                 "/icons/tool-magicwand-select.png",
+                "/icons/tool-text.png",
             };
             if (i < (int)(sizeof(icon_resources) / sizeof(icon_resources[0]))) {
                 GError* error = NULL;

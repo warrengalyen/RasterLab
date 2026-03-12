@@ -1,0 +1,511 @@
+#include "tools/tool_text.h"
+#include "document.h"
+#include "render/layer.h"
+#include "render/text_layer.h"
+#include "selection.h"
+#include "tool_manager.h"
+#include <gdk/gdk.h>
+#include <gtk/gtk.h>
+#include <math.h>
+
+/* Minimum box size in document pixels */
+#define TEXT_BOX_MIN_SIZE 4
+
+/* Default box size applied when the user clicks without dragging */
+#define TEXT_DEFAULT_BOX_W    200
+#define TEXT_DEFAULT_BOX_H     60
+
+/* Drag displacement smaller than this is treated as a plain click */
+#define TEXT_CLICK_THRESHOLD    8
+
+/* -----------------------------------------------------------------------
+ * Internal helpers
+ * --------------------------------------------------------------------- */
+
+/**
+ * Lightweight redraw: only the viewport overlay (handles + bounding box).
+ * Use this during interactive drag so the full compositor is NOT triggered.
+ */
+static void text_tool_queue_overlay(ImageDocument* doc) {
+    if (doc->viewport)
+        gtk_widget_queue_draw(doc->viewport);
+}
+
+/**
+ * Full redraw: viewport overlay AND drawing area (compositor).
+ * Use this only when the text layer geometry is finalised (mouse_up).
+ */
+static void text_tool_queue_full(ImageDocument* doc) {
+    if (doc->drawing_area)
+        gtk_widget_queue_draw(doc->drawing_area);
+    if (doc->viewport)
+        gtk_widget_queue_draw(doc->viewport);
+}
+
+/**
+ * Return TRUE if @layer is still present in doc->layers (safe dereference
+ * guard against layers deleted while the tool is active).
+ */
+static gboolean text_tool_layer_valid(ImageDocument* doc, ImageLayer* layer) {
+    if (!layer)
+        return FALSE;
+    return g_list_find(doc->layers, layer) != NULL;
+}
+
+/**
+ * Detect which of the 8 handles (if any) lies under (x, y).
+ * Coordinates are in document (image) space.
+ * Returns 0-7 on hit, or -1 when no handle is hit.
+ *
+ * Handle order: 0=TL, 1=TR, 2=BL, 3=BR, 4=Top, 5=Right, 6=Bottom, 7=Left
+ */
+static gint text_detect_handle(gdouble x, gdouble y,
+                                gdouble rx, gdouble ry,
+                                gdouble rw, gdouble rh,
+                                gdouble zoom) {
+    gdouble half = 6.0 / zoom;
+    if (half < 0.5) half = 0.5;
+
+    /* Corner positions */
+    const gdouble cx[4] = { rx,      rx + rw, rx,      rx + rw };
+    const gdouble cy[4] = { ry,      ry,      ry + rh, ry + rh };
+    for (gint i = 0; i < 4; i++) {
+        if (fabs(x - cx[i]) <= half && fabs(y - cy[i]) <= half)
+            return i;
+    }
+
+    /* Edge mid-point positions */
+    gdouble li = rx + half, ri = rx + rw - half;
+    gdouble ti = ry + half, bi = ry + rh - half;
+
+    if (rh > 2 * half && fabs(y - ry)        <= half && x >= li && x <= ri) return 4;
+    if (rw > 2 * half && fabs(x - (rx + rw)) <= half && y >= ti && y <= bi) return 5;
+    if (rh > 2 * half && fabs(y - (ry + rh)) <= half && x >= li && x <= ri) return 6;
+    if (rw > 2 * half && fabs(x - rx)        <= half && y >= ti && y <= bi) return 7;
+
+    return -1;
+}
+
+/**
+ * Set cursor for the given drag mode.
+ */
+static void text_set_cursor(GdkWindow* window, gint handle, GdkCursor* default_cursor) {
+    if (!window) return;
+
+    if (handle >= -1 && handle <= 3) {
+        /* Reuse selection cursor logic for move (-1) and corners (0-3) */
+        selection_set_cursor_for_handle(window, handle, default_cursor);
+        return;
+    }
+
+    GdkDisplay* display = gdk_window_get_display(window);
+    GdkCursor* cursor = NULL;
+
+    if (handle == 4 || handle == 6)
+        cursor = gdk_cursor_new_from_name(display, "ns-resize");
+    else if (handle == 5 || handle == 7)
+        cursor = gdk_cursor_new_from_name(display, "ew-resize");
+
+    if (cursor) {
+        gdk_window_set_cursor(window, cursor);
+        g_object_unref(cursor);
+    } else {
+        gdk_window_set_cursor(window, default_cursor);
+    }
+}
+
+/**
+ * Push box geometry into the text layer and trigger a compositor redraw.
+ * Called once in mouse_up, NOT during mouse_move, to avoid re-compositing
+ * the entire document on every drag event.
+ */
+static void text_sync_layer_box(ImageDocument* doc, TextToolState* state) {
+    if (!state->layer || !text_tool_layer_valid(doc, state->layer))
+        return;
+    if (state->layer->layer_type != LAYER_TYPE_TEXT || !state->layer->text_data)
+        return;
+
+    TextLayer* tl = (TextLayer*)state->layer->text_data;
+    tl->box_x      = (double)state->box_x;
+    tl->box_y      = (double)state->box_y;
+    tl->box_width  = (double)state->box_w;
+    tl->box_height = (double)state->box_h;
+
+    layer_invalidate_cache(state->layer);
+    document_invalidate_composite(doc);
+    /* Full redraw is triggered by the caller via text_tool_queue_full() */
+}
+
+/* -----------------------------------------------------------------------
+ * Mouse handlers
+ * --------------------------------------------------------------------- */
+
+static void text_tool_mouse_down(Tool* tool, struct ImageDocument* doc,
+                                 MouseEvent* event) {
+    if (!tool || !doc || !tool->user_data) return;
+
+    TextToolState* state = (TextToolState*)tool->user_data;
+
+    if (state->has_box && state->box_w > 0 && state->box_h > 0) {
+        /* Hit-test handles first, then interior */
+        gint handle = text_detect_handle((gdouble)event->x, (gdouble)event->y,
+                                         (gdouble)state->box_x, (gdouble)state->box_y,
+                                         (gdouble)state->box_w, (gdouble)state->box_h,
+                                         doc->zoom_factor);
+        if (handle >= 0) {
+            state->drag_mode   = handle;
+            state->is_dragging = TRUE;
+            state->start_x     = event->x;
+            state->start_y     = event->y;
+            text_tool_queue_overlay(doc);
+            return;
+        }
+
+        if (event->x >= state->box_x && event->x < state->box_x + state->box_w &&
+            event->y >= state->box_y && event->y < state->box_y + state->box_h) {
+            state->drag_mode   = -1; /* move */
+            state->is_dragging = TRUE;
+            state->start_x     = event->x;
+            state->start_y     = event->y;
+            text_tool_queue_overlay(doc);
+            return;
+        }
+    }
+
+    /* Start a new box */
+    state->has_box        = FALSE;
+    state->is_dragging    = TRUE;
+    state->drag_mode      = -2;
+    state->start_x        = event->x;
+    state->start_y        = event->y;
+    state->current_x      = event->x;
+    state->current_y      = event->y;
+    state->hovered_handle = -2;
+    text_tool_queue_overlay(doc);
+}
+
+static void text_tool_mouse_move(Tool* tool, struct ImageDocument* doc,
+                                 MouseEvent* event) {
+    if (!tool || !doc || !tool->user_data) return;
+
+    TextToolState* state = (TextToolState*)tool->user_data;
+    GdkWindow* window = doc->drawing_area
+                        ? gtk_widget_get_window(doc->drawing_area) : NULL;
+
+    if (state->is_dragging) {
+        if (window)
+            text_set_cursor(window, state->drag_mode, tool->cursor);
+
+        gint dx = event->x - state->start_x;
+        gint dy = event->y - state->start_y;
+
+        if (state->drag_mode == -2) {
+            /* Rubber-band: just track cursor, draw happens in draw_preview */
+            state->current_x = event->x;
+            state->current_y = event->y;
+        } else if (state->drag_mode == -1) {
+            /* Move */
+            state->box_x  += dx;
+            state->box_y  += dy;
+            state->start_x = event->x;
+            state->start_y = event->y;
+        } else {
+            /* Resize via handle */
+            switch (state->drag_mode) {
+                case 0: state->box_x += dx; state->box_y += dy;
+                        state->box_w -= dx; state->box_h -= dy; break;
+                case 1: state->box_y += dy;
+                        state->box_w += dx; state->box_h -= dy; break;
+                case 2: state->box_x += dx;
+                        state->box_w -= dx; state->box_h += dy; break;
+                case 3: state->box_w += dx; state->box_h += dy; break;
+                case 4: state->box_y += dy; state->box_h -= dy; break;
+                case 5: state->box_w += dx;                     break;
+                case 6: state->box_h += dy;                     break;
+                case 7: state->box_x += dx; state->box_w -= dx; break;
+                default: break;
+            }
+            state->start_x = event->x;
+            state->start_y = event->y;
+
+            /* Normalise negative dimensions */
+            if (state->box_w < 0) { state->box_x += state->box_w; state->box_w = -state->box_w; }
+            if (state->box_h < 0) { state->box_y += state->box_h; state->box_h = -state->box_h; }
+            if (state->box_w < TEXT_BOX_MIN_SIZE) state->box_w = TEXT_BOX_MIN_SIZE;
+            if (state->box_h < TEXT_BOX_MIN_SIZE) state->box_h = TEXT_BOX_MIN_SIZE;
+        }
+
+        /* Propagate updated box geometry directly into the TextLayer struct.
+         *
+         * At zoom > 1.0, document_render_layers_at_zoom reads box_x/y directly
+         * from the struct on every draw event (the drawing area is already queued
+         * for redraw by on_drawing_area_motion_notify), so the text follows the
+         * bounding box with zero cache/tile overhead.
+         *
+         * At zoom ≤ 1.0, the tile cache is not rebuilt here; the tile compositing
+         * path uses the stale cached surface during drag and catches up fully in
+         * mouse_up via text_sync_layer_box. */
+        if (state->drag_mode != -2 &&
+            state->layer && text_tool_layer_valid(doc, state->layer) &&
+            state->layer->layer_type == LAYER_TYPE_TEXT && state->layer->text_data) {
+            TextLayer* tl = (TextLayer*)state->layer->text_data;
+            tl->box_x      = (double)state->box_x;
+            tl->box_y      = (double)state->box_y;
+            tl->box_width  = (double)state->box_w;
+            tl->box_height = (double)state->box_h;
+        }
+
+        /* Overlay-only redraw so handles repaint without a full compositor pass */
+        text_tool_queue_overlay(doc);
+        return;
+    }
+
+    /* Not dragging: update hover state for cursor and handle highlight */
+    if (state->has_box && state->box_w > 0 && state->box_h > 0) {
+        gint hovered = text_detect_handle((gdouble)event->x, (gdouble)event->y,
+                                          (gdouble)state->box_x, (gdouble)state->box_y,
+                                          (gdouble)state->box_w, (gdouble)state->box_h,
+                                          doc->zoom_factor);
+        if (hovered >= 0) {
+            state->hovered_handle = hovered;
+        } else if (event->x >= state->box_x && event->x < state->box_x + state->box_w &&
+                   event->y >= state->box_y && event->y < state->box_y + state->box_h) {
+            state->hovered_handle = -1;
+        } else {
+            state->hovered_handle = -2;
+        }
+
+        if (window) {
+            if (state->hovered_handle >= -1)
+                text_set_cursor(window, state->hovered_handle, tool->cursor);
+            else
+                gdk_window_set_cursor(window, tool->cursor);
+        }
+        text_tool_queue_overlay(doc);
+    }
+}
+
+static void text_tool_mouse_up(Tool* tool, struct ImageDocument* doc,
+                               MouseEvent* event) {
+    if (!tool || !doc || !tool->user_data) return;
+
+    TextToolState* state = (TextToolState*)tool->user_data;
+
+    (void)event;
+
+    if (!state->is_dragging) return;
+    state->is_dragging = FALSE;
+
+    if (state->drag_mode == -2) {
+        /* Finalise new box from rubber-band drag */
+        gint x = state->start_x;
+        gint y = state->start_y;
+        gint w = state->current_x - state->start_x;
+        gint h = state->current_y - state->start_y;
+
+        if (w < 0) { x += w; w = -w; }
+        if (h < 0) { y += h; h = -h; }
+
+        /* A plain click (no meaningful drag) → apply a sensible default box */
+        if (w < TEXT_CLICK_THRESHOLD && h < TEXT_CLICK_THRESHOLD) {
+            w = TEXT_DEFAULT_BOX_W;
+            h = TEXT_DEFAULT_BOX_H;
+            /* Keep the click point as the top-left, clamped to the canvas */
+            if (doc->width  > 0 && x + w > (gint)doc->width)
+                x = MAX(0, (gint)doc->width  - w);
+            if (doc->height > 0 && y + h > (gint)doc->height)
+                y = MAX(0, (gint)doc->height - h);
+            w = MIN(w, (gint)doc->width);
+            h = MIN(h, (gint)doc->height);
+        }
+
+        if (w < TEXT_BOX_MIN_SIZE) w = TEXT_BOX_MIN_SIZE;
+        if (h < TEXT_BOX_MIN_SIZE) h = TEXT_BOX_MIN_SIZE;
+
+        state->box_x   = x;
+        state->box_y   = y;
+        state->box_w   = w;
+        state->box_h   = h;
+        state->has_box = TRUE;
+
+        /* Create the text layer */
+        if (doc->width > 0 && doc->height > 0) {
+            ImageLayer* layer = layer_create_text("Text Layer",
+                                                   doc->width, doc->height, doc);
+            if (layer) {
+                TextLayer* tl = (TextLayer*)layer->text_data;
+                tl->box_x      = (double)x;
+                tl->box_y      = (double)y;
+                tl->box_width  = (double)w;
+                tl->box_height = (double)h;
+                g_free(tl->text);
+                tl->text = g_strdup("Text");
+
+                doc->layers         = g_list_append(doc->layers, layer);
+                doc->selected_layer = layer;
+                state->layer        = layer;
+
+                document_invalidate_composite(doc);
+            }
+        }
+    } else {
+        /* Move / resize complete — push final geometry to the layer once */
+        state->has_box = (state->box_w > 0 && state->box_h > 0);
+        text_sync_layer_box(doc, state);
+    }
+
+    state->drag_mode      = -1;
+    state->hovered_handle = -2;
+    text_tool_queue_full(doc);
+}
+
+/* -----------------------------------------------------------------------
+ * Overlay drawing
+ * --------------------------------------------------------------------- */
+
+/* Snap a document coordinate to the nearest device-pixel centre. */
+#define TEXT_SNAP(c, z) (floor((c) * (z) + 0.5) / (z))
+
+void tool_text_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom) {
+    if (!doc || !cr) return;
+
+    ToolRegistry* reg = (ToolRegistry*)g_object_get_data(
+                            G_OBJECT(doc->drawing_area), "tool_registry");
+    if (!reg) return;
+
+    Tool* active = tool_manager_get_active(reg);
+    if (!active || active->type != TOOL_TEXT || !active->user_data) return;
+
+    TextToolState* state = (TextToolState*)active->user_data;
+
+    gint rx, ry, rw, rh;
+
+    /* During a new-box drag: show live rubber-band */
+    if (state->is_dragging && state->drag_mode == -2) {
+        rx = state->start_x;
+        ry = state->start_y;
+        rw = state->current_x - state->start_x;
+        rh = state->current_y - state->start_y;
+        if (rw < 0) { rx += rw; rw = -rw; }
+        if (rh < 0) { ry += rh; rh = -rh; }
+    } else if (state->has_box) {
+        rx = state->box_x;
+        ry = state->box_y;
+        rw = state->box_w;
+        rh = state->box_h;
+    } else {
+        return;
+    }
+
+    if (rw <= 0 || rh <= 0) return;
+
+    gdouble handle_size     = 12.0 / zoom;
+    gdouble half_handle     = handle_size * 0.5;
+    gdouble line_width      = 1.0 / zoom;
+    if (line_width < 0.5) line_width = 0.5;
+
+    cairo_save(cr);
+    if (zoom != 1.0)
+        cairo_scale(cr, zoom, zoom);
+
+    /* ---- Bounding box border ---- */
+    /* Dashed blue/white line to distinguish from the crop tool */
+    gdouble dash[] = { 5.0 / zoom, 3.0 / zoom };
+    cairo_set_dash(cr, dash, 2, 0);
+    cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
+    cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+
+    cairo_rectangle(cr,
+        TEXT_SNAP(rx,      zoom), TEXT_SNAP(ry,      zoom),
+        TEXT_SNAP(rx + rw, zoom) - TEXT_SNAP(rx, zoom),
+        TEXT_SNAP(ry + rh, zoom) - TEXT_SNAP(ry, zoom));
+
+    /* Dark shadow stroke */
+    cairo_set_source_rgba(cr, 0.1, 0.1, 0.1, 0.85);
+    cairo_set_line_width(cr, line_width * 3.0);
+    cairo_stroke_preserve(cr);
+    /* Bright blue stroke */
+    cairo_set_source_rgba(cr, 0.2, 0.6, 1.0, 1.0);
+    cairo_set_line_width(cr, line_width);
+    cairo_stroke(cr);
+
+    cairo_set_dash(cr, NULL, 0, 0);
+
+    /* ---- Only draw handles when we have a finalised box ---- */
+    if (!state->has_box) {
+        cairo_restore(cr);
+        return;
+    }
+
+    /* 8 handle positions */
+    gdouble hx[8], hy[8];
+    hx[0] = TEXT_SNAP(rx,       zoom); hy[0] = TEXT_SNAP(ry,       zoom);
+    hx[1] = TEXT_SNAP(rx + rw,  zoom); hy[1] = TEXT_SNAP(ry,       zoom);
+    hx[2] = TEXT_SNAP(rx,       zoom); hy[2] = TEXT_SNAP(ry + rh,  zoom);
+    hx[3] = TEXT_SNAP(rx + rw,  zoom); hy[3] = TEXT_SNAP(ry + rh,  zoom);
+    hx[4] = TEXT_SNAP(rx + rw * 0.5, zoom); hy[4] = TEXT_SNAP(ry,       zoom);
+    hx[5] = TEXT_SNAP(rx + rw,  zoom); hy[5] = TEXT_SNAP(ry + rh * 0.5, zoom);
+    hx[6] = TEXT_SNAP(rx + rw * 0.5, zoom); hy[6] = TEXT_SNAP(ry + rh,  zoom);
+    hx[7] = TEXT_SNAP(rx,       zoom); hy[7] = TEXT_SNAP(ry + rh * 0.5, zoom);
+
+    cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
+
+    for (gint i = 0; i < 8; i++) {
+        gboolean hovered = (state->hovered_handle == i);
+        gdouble bx  = TEXT_SNAP(hx[i] - half_handle, zoom);
+        gdouble by  = TEXT_SNAP(hy[i] - half_handle, zoom);
+        gdouble bw  = TEXT_SNAP(hx[i] + half_handle, zoom) - bx;
+        gdouble bh  = TEXT_SNAP(hy[i] + half_handle, zoom) - by;
+
+        cairo_rectangle(cr, bx, by, bw, bh);
+        /* Dark border */
+        cairo_set_source_rgba(cr, 0.1, 0.1, 0.1, 1.0);
+        cairo_set_line_width(cr, line_width * 3.0);
+        cairo_stroke_preserve(cr);
+        /* Fill: bright blue when hovered, white otherwise */
+        cairo_set_source_rgba(cr,
+            hovered ? 0.2 : 1.0,
+            hovered ? 0.6 : 1.0,
+            1.0, 1.0);
+        cairo_set_line_width(cr, line_width);
+        cairo_stroke(cr);
+    }
+
+    cairo_set_antialias(cr, CAIRO_ANTIALIAS_DEFAULT);
+    cairo_restore(cr);
+}
+
+/* -----------------------------------------------------------------------
+ * Tool lifecycle
+ * --------------------------------------------------------------------- */
+
+void tool_text_reset(Tool* tool) {
+    if (!tool || !tool->user_data) return;
+    TextToolState* state = (TextToolState*)tool->user_data;
+    state->has_box        = FALSE;
+    state->is_dragging    = FALSE;
+    state->drag_mode      = -2;
+    state->hovered_handle = -2;
+    state->layer          = NULL;
+}
+
+Tool* tool_text_create(void) {
+    Tool* tool = tool_new("Text", TOOL_TEXT, GDK_XTERM, TOOL_OPT_NONE);
+    if (!tool) return NULL;
+
+    tool->mouse_down = text_tool_mouse_down;
+    tool->mouse_move = text_tool_mouse_move;
+    tool->mouse_up   = text_tool_mouse_up;
+
+    tool->user_data = g_malloc0(sizeof(TextToolState));
+    if (!tool->user_data) {
+        tool_free(tool);
+        return NULL;
+    }
+
+    TextToolState* state = (TextToolState*)tool->user_data;
+    state->drag_mode      = -2;
+    state->hovered_handle = -2;
+
+    return tool;
+}

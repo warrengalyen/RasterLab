@@ -3,6 +3,7 @@
 #include "render/compositor.h"
 #include "render/gpu_compositor.h"
 #include "render/layer.h"
+#include "render/text_layer.h"
 #include <glib.h>
 #include <string.h>
 #if HAVE_LCMS2
@@ -79,6 +80,15 @@ gboolean tile_worker_composite_pixels(ImageDocument* doc,
         layer = (ImageLayer*)iter->data;
 
         if (!layer || !layer->visible || layer->opacity <= 0.0 || !layer->surface) {
+            continue;
+        }
+
+        /* Text (vector) layers are rendered directly via Pango by the display
+         * pipeline and must NOT be baked into tiles.  Baking them would lock in
+         * a stale position — text would appear at the old location during moves
+         * and would be invisible on initial creation (surface is transparent).
+         * The on-screen drawing pass handles text layers separately after tiles. */
+        if (layer->layer_type == LAYER_TYPE_TEXT) {
             continue;
         }
 

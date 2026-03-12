@@ -11,6 +11,7 @@
 #include "render/gpu_compositor.h"
 #include "render/layer.h"
 #include "render/render_utils.h"
+#include "render/text_layer.h"
 #include "render/tile.h"
 #include "render/tile_thread_pool.h"
 #include "render/tile_worker.h"
@@ -21,6 +22,7 @@
 #include "tools.h"
 #include "tools/tool_colorpicker.h"
 #include "tools/tool_crop.h"
+#include "tools/tool_text.h"
 #include "tools/tool_ellipse_select.h"
 #include "tools/tool_lasso_select.h"
 #include "tools/tool_magic_wand_select.h"
@@ -775,6 +777,43 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
             }
         }
 
+        /* Text layer direct rendering pass (zoom <= 1.0 only).
+         *
+         * At zoom > 1.0, document_render_layers_at_zoom() already renders text
+         * layers inline in the correct Z-order via text_layer_render().
+         *
+         * At zoom <= 1.0, the tile/mipmap paths use tile_worker_composite_pixels()
+         * which intentionally skips LAYER_TYPE_TEXT to prevent stale-position
+         * ghosting.  We render every visible text layer here instead, after all
+         * tile content is on screen, so the glyphs are always at the position
+         * stored in TextLayer.box_x/box_y — even during interactive drag before
+         * the tile cache is rebuilt on mouse-up. */
+        if (zoom <= 1.0) {
+            GList* tl_iter;
+            for (tl_iter = doc->layers; tl_iter; tl_iter = tl_iter->next) {
+                ImageLayer* tl_layer = (ImageLayer*)tl_iter->data;
+                if (!tl_layer || !tl_layer->visible || tl_layer->opacity <= 0.0)
+                    continue;
+                if (tl_layer->layer_type != LAYER_TYPE_TEXT || !tl_layer->text_data)
+                    continue;
+
+                cairo_save(cr);
+                cairo_translate(cr, tl_layer->offset_x, tl_layer->offset_y);
+                cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+
+                if (tl_layer->opacity < 1.0) {
+                    cairo_push_group(cr);
+                    text_layer_render((TextLayer*)tl_layer->text_data, cr);
+                    cairo_pop_group_to_source(cr);
+                    cairo_paint_with_alpha(cr, tl_layer->opacity);
+                } else {
+                    text_layer_render((TextLayer*)tl_layer->text_data, cr);
+                }
+
+                cairo_restore(cr);
+            }
+        }
+
         /* Restore Cairo state after layer rendering (undoes zoom transform) */
         cairo_restore(cr);
     } else {
@@ -848,6 +887,9 @@ static gboolean on_viewport_draw(GtkWidget* widget, cairo_t* cr, gpointer user_d
 
     /* Draw crop tool overlay (above canvas, handles not clipped at edges) */
     tool_crop_draw_preview(doc, cr, doc->zoom_factor);
+
+    /* Draw text tool bounding-box overlay */
+    tool_text_draw_preview(doc, cr, doc->zoom_factor);
 
     cairo_restore(cr);
 

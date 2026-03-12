@@ -13,6 +13,7 @@
 #include "tools/tool_polygon_select.h"
 #include "tools/tool_lasso_select.h"
 #include "tools/tool_magic_wand_select.h"
+#include "tools/tool_text.h"
 #include "tools/tool_zoom.h"
 
 #include <stdio.h>
@@ -142,6 +143,13 @@ gboolean tool_manager_init_defaults(ToolRegistry* registry) {
     }
     tool_manager_register(registry, tool, TOOL_CROP);
 
+    /* Create Text tool */
+    tool = tool_text_create();
+    if (!tool) {
+        return FALSE;
+    }
+    tool_manager_register(registry, tool, TOOL_TEXT);
+
     /* Activate Hand tool by default */
     tool_manager_activate(registry, TOOL_HAND);
 
@@ -216,6 +224,11 @@ gboolean tool_manager_activate(ToolRegistry* registry, ToolType type) {
     /* Reset crop tool if switching away from it */
     if (prev_tool && prev_tool->type == TOOL_CROP) {
         tool_crop_reset(prev_tool);
+    }
+
+    /* Reset text tool if switching away from it */
+    if (prev_tool && prev_tool->type == TOOL_TEXT) {
+        tool_text_reset(prev_tool);
     }
 
     registry->active_tool = tool;
