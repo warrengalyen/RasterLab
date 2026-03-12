@@ -140,6 +140,14 @@ struct MipmapPyramid;
 typedef struct MipmapPyramid MipmapPyramid;
 
 /**
+ * Layer type — raster pixel layers or vector text layers
+ */
+typedef enum {
+    LAYER_TYPE_RASTER = 0, /* Standard pixel/raster layer (default) */
+    LAYER_TYPE_TEXT   = 1  /* Vector text layer rendered via Pango+Cairo */
+} LayerType;
+
+/**
  * Structure to represent a single layer in an image
  */
 typedef struct ImageLayer {
@@ -156,6 +164,8 @@ typedef struct ImageLayer {
     gint offset_y;                  /* Layer offset Y (vertical translation) */
     MipmapPyramid* mipmap_pyramid;  /* Mipmap pyramid for fast zooming */
     guint64 content_version;        /* Increments when surface content changes (for GPU cache) */
+    LayerType layer_type;           /* Raster or text (vector) layer */
+    void* text_data;                /* TextLayer* when layer_type == LAYER_TYPE_TEXT, else NULL */
 } ImageLayer;
 
 /**

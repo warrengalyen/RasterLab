@@ -1,6 +1,7 @@
 #include "render/tile.h"
 #include "render/compositor.h"
 #include "render/layer.h"
+#include "render/text_layer.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -265,6 +266,18 @@ static gboolean tile_composite(ImageDocument* doc, Tile* tile) {
             op = blend_mode_to_cairo_operator(layer->blend_mode);
         }
         cairo_set_operator(cr, op);
+
+        /* For text (vector) layers in the large-layer fast path, ensure the
+         * Pango text has been drawn into the surface before we composite it. */
+        switch (layer->layer_type) {
+            case LAYER_TYPE_TEXT:
+                if (layer->text_data && layer->cache_dirty) {
+                    text_layer_render_to_surface(layer);
+                }
+                break;
+            default:
+                break;
+        }
 
         /* OPTIMIZATION: For large layers with dirty cache, use source directly
            with opacity applied on-the-fly instead of regenerating entire cache.

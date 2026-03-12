@@ -18,11 +18,11 @@ typedef struct SelectionMask SelectionMask;
  * ESC cancels the preview without applying it.
  */
 typedef struct {
-    gboolean has_start_point;    /* TRUE once the user has clicked */
-    gint start_x;                /* Seed point in document (image) space */
+    gboolean has_start_point; /* TRUE once the user has clicked */
+    gint start_x;             /* Seed point in document (image) space */
     gint start_y;
 
-    gboolean is_dragging_node;   /* TRUE while user drags the start node */
+    gboolean is_dragging_node; /* TRUE while user drags the start node */
     gint drag_anchor_x;
     gint drag_anchor_y;
 
@@ -33,10 +33,10 @@ typedef struct {
 
     /* Marching ants animation */
     guint animation_timer_id;
-    gint  animation_phase;
+    gint animation_phase;
 
     /* Cached options (read on every action) */
-    SelectionCombineMode  combine_mode;
+    SelectionCombineMode combine_mode;
     SelectionSmoothingMode smooth_mode;
     gfloat feather_radius;
     gboolean animate;

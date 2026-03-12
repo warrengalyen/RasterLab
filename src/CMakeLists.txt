@@ -82,6 +82,7 @@ set(SOURCES
     render/layer.c
     render/mipmap.c
     render/render_utils.c
+    render/text_layer.c
     render/tile.c
     render/tile_thread_pool.c
     render/tile_worker.c

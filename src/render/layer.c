@@ -1,4 +1,5 @@
 #include "render/layer.h"
+#include "render/text_layer.h"
 #include "document.h"
 #include "render/compositor.h"
 #include "render/mipmap.h"
@@ -114,6 +115,8 @@ ImageLayer* layer_new(const gchar* name, guint width, guint height, gboolean has
     layer->cache_surface = NULL;  /* Cache created on demand */
     layer->cache_dirty = TRUE;    /* Cache needs initial generation */
     layer->mipmap_pyramid = NULL; /* Mipmap pyramid created lazily */
+    layer->layer_type = LAYER_TYPE_RASTER;
+    layer->text_data  = NULL;
 
     return layer;
 }
@@ -162,6 +165,12 @@ void layer_free(ImageLayer* layer) {
          * We can't check if a pointer is valid in C, so we just have to try.
          * If it crashes, at least we've cleared the layer pointer so it won't be double-freed. */
         mipmap_pyramid_free(pyramid);
+    }
+
+    /* Free text layer data if present */
+    if (layer->layer_type == LAYER_TYPE_TEXT && layer->text_data) {
+        text_layer_free((TextLayer*)layer->text_data);
+        layer->text_data = NULL;
     }
 
     /* Free layer structure - heap might be corrupted at this point if
@@ -677,6 +686,18 @@ gboolean layer_ensure_cache(ImageLayer* layer) {
     /* If layer is very large and cache is dirty, we might skip caching
        during active drawing operations. But for now, we'll still cache
        since it helps with opacity/blend mode performance. */
+
+    /* For text layers, re-render the Pango+Cairo text into the surface
+     * before the cache is built from it. */
+    switch (layer->layer_type) {
+        case LAYER_TYPE_TEXT:
+            if (layer->text_data) {
+                text_layer_render_to_surface(layer);
+            }
+            break;
+        default:
+            break;
+    }
 
     /* Destroy old cache if exists */
     if (layer->cache_surface) {
