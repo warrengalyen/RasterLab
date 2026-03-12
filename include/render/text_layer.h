@@ -60,9 +60,27 @@ ImageLayer* layer_create_text(const gchar* name, guint width, guint height,
 void text_layer_free(TextLayer* text);
 
 /**
+ * Render text directly into an arbitrary Cairo context.
+ *
+ * The caller is responsible for all canvas/zoom transforms already being
+ * applied to @cr before this call (e.g. cairo_scale for zoom, cairo_translate
+ * for layer offset).  Because @cr carries those transforms, Pango measures and
+ * lays out glyphs at the effective on-screen resolution, giving crisp
+ * vector-quality text at any zoom level.
+ *
+ * Use this function from the main on-screen render loop
+ * (document_render_layers_at_zoom) so that text bypasses the pre-rasterised
+ * cache surface and is drawn at the native display resolution.
+ *
+ * @param layer TextLayer that holds all text properties
+ * @param cr    Cairo context to draw into (must not be NULL)
+ */
+void text_layer_render(TextLayer* layer, cairo_t* cr);
+
+/**
  * Render the text described by layer->text_data onto layer->surface using
  * Pango+Cairo.  The surface is cleared to transparent first.
- * This is called before compositing whenever the layer cache is dirty.
+ * Used for offline paths: tile compositing, export, and thumbnail generation.
  * @param layer An ImageLayer with layer_type == LAYER_TYPE_TEXT
  */
 void text_layer_render_to_surface(ImageLayer* layer);

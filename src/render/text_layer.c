@@ -5,92 +5,23 @@
 #include <stdlib.h>
 #include <string.h>
 
-/**
- * Free a TextLayer and its owned strings.
- */
-void text_layer_free(TextLayer* text) {
-    if (!text) {
-        return;
-    }
-
-    g_free(text->text);
-    g_free(text->font_family);
-    g_free(text);
-}
+/* -----------------------------------------------------------------------
+ * Private helpers
+ * --------------------------------------------------------------------- */
 
 /**
- * Create a new text layer with default properties.
- * The returned ImageLayer has layer_type == LAYER_TYPE_TEXT and text_data set.
- */
-ImageLayer* layer_create_text(const gchar* name, guint width, guint height,
-                               struct ImageDocument* doc) {
-    ImageLayer* layer = layer_new(name, width, height, TRUE,
-                                  LAYER_BACKGROUND_TRANSPARENT,
-                                  LAYER_POSITION_ABOVE_CURRENT,
-                                  NULL, doc);
-    if (!layer) {
-        return NULL;
-    }
-
-    TextLayer* text = (TextLayer*)g_malloc0(sizeof(TextLayer));
-    if (!text) {
-        layer_free(layer);
-        return NULL;
-    }
-
-    text->text          = g_strdup("");
-    text->font_family   = g_strdup("Sans");
-    text->font_size     = 24;
-    text->font_weight   = 400;   /* PANGO_WEIGHT_NORMAL */
-    text->italic        = FALSE;
-    text->color_r       = 0.0;
-    text->color_g       = 0.0;
-    text->color_b       = 0.0;
-    text->color_a       = 1.0;
-    text->line_spacing  = 0.0;
-    text->letter_spacing = 0.0;
-    text->alignment     = 0;     /* left */
-    text->rotation      = 0.0;
-    text->box_x         = 0.0;
-    text->box_y         = 0.0;
-    text->box_width     = (double)width;
-    text->box_height    = (double)height;
-    text->antialias     = TRUE;
-
-    layer->layer_type = LAYER_TYPE_TEXT;
-    layer->text_data  = text;
-
-    return layer;
-}
-
-/**
- * Render text onto the layer's Cairo surface using Pango+Cairo.
+ * Build and paint a PangoLayout onto @cr using every property from @text.
  *
- * The surface is fully cleared first so deleted characters don't linger.
- * Rotation is applied around the center of the text bounding box.
+ * Caller must have already positioned the context (translate to box origin,
+ * applied any zoom scale, etc.).  This helper is stateless with respect to
+ * @cr beyond antialias, a temporary rotation transform, source colour, and
+ * the final pango_cairo_show_layout call.
+ *
+ * A cairo_save/restore pair brackets the antialias and rotation changes so
+ * the caller's state is left intact afterwards.
  */
-void text_layer_render_to_surface(ImageLayer* layer) {
-    if (!layer || !layer->surface) {
-        return;
-    }
-    if (layer->layer_type != LAYER_TYPE_TEXT || !layer->text_data) {
-        return;
-    }
-
-    TextLayer* text = (TextLayer*)layer->text_data;
-    if (!text->text) {
-        return;
-    }
-
-    cairo_t* cr = cairo_create(layer->surface);
-    if (!cr) {
-        return;
-    }
-
-    /* Wipe layer surface to transparent */
-    cairo_set_operator(cr, CAIRO_OPERATOR_CLEAR);
-    cairo_paint(cr);
-    cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+static void text_layer_apply_to_cr(TextLayer* text, cairo_t* cr) {
+    cairo_save(cr);
 
     /* Antialias hint */
     cairo_set_antialias(cr,
@@ -131,7 +62,7 @@ void text_layer_render_to_surface(ImageLayer* layer) {
     }
     pango_layout_set_alignment(layout, pango_align);
 
-    /* Constrain layout width to the text box so Pango word-wraps */
+    /* Constrain layout width so Pango word-wraps within the text box */
     if (text->box_width > 0.0) {
         pango_layout_set_width(layout, (gint)(text->box_width * PANGO_SCALE));
         pango_layout_set_wrap(layout, PANGO_WRAP_WORD_CHAR);
@@ -161,5 +92,125 @@ void text_layer_render_to_surface(ImageLayer* layer) {
     pango_cairo_show_layout(cr, layout);
 
     g_object_unref(layout);
+
+    cairo_restore(cr);
+}
+
+/* -----------------------------------------------------------------------
+ * Public API
+ * --------------------------------------------------------------------- */
+
+/**
+ * Free a TextLayer and its owned strings.
+ */
+void text_layer_free(TextLayer* text) {
+    if (!text) {
+        return;
+    }
+
+    g_free(text->text);
+    g_free(text->font_family);
+    g_free(text);
+}
+
+/**
+ * Create a new text layer with default properties.
+ */
+ImageLayer* layer_create_text(const gchar* name, guint width, guint height,
+                               struct ImageDocument* doc) {
+    ImageLayer* layer = layer_new(name, width, height, TRUE,
+                                  LAYER_BACKGROUND_TRANSPARENT,
+                                  LAYER_POSITION_ABOVE_CURRENT,
+                                  NULL, doc);
+    if (!layer) {
+        return NULL;
+    }
+
+    TextLayer* text = (TextLayer*)g_malloc0(sizeof(TextLayer));
+    if (!text) {
+        layer_free(layer);
+        return NULL;
+    }
+
+    text->text           = g_strdup("");
+    text->font_family    = g_strdup("Sans");
+    text->font_size      = 24;
+    text->font_weight    = 400;   /* PANGO_WEIGHT_NORMAL */
+    text->italic         = FALSE;
+    text->color_r        = 0.0;
+    text->color_g        = 0.0;
+    text->color_b        = 0.0;
+    text->color_a        = 1.0;
+    text->line_spacing   = 0.0;
+    text->letter_spacing = 0.0;
+    text->alignment      = 0;     /* left */
+    text->rotation       = 0.0;
+    text->box_x          = 0.0;
+    text->box_y          = 0.0;
+    text->box_width      = (double)width;
+    text->box_height     = (double)height;
+    text->antialias      = TRUE;
+
+    layer->layer_type = LAYER_TYPE_TEXT;
+    layer->text_data  = text;
+
+    return layer;
+}
+
+/**
+ * Render text directly into an arbitrary Cairo context.
+ *
+ * @cr is expected to already carry the composite transform: zoom scale and
+ * layer offset translation have been applied by the caller.  Working in
+ * document-space coordinates (box_x, box_y, etc.) is therefore correct —
+ * Cairo maps them to the right screen pixels automatically.
+ *
+ * Because Pango measures glyphs after the transform is applied, the resulting
+ * glyphs are rasterised at true screen resolution for every zoom level,
+ * giving sharp vector-quality text regardless of zoom factor.
+ */
+void text_layer_render(TextLayer* layer, cairo_t* cr) {
+    if (!layer || !cr) {
+        return;
+    }
+    if (!layer->text || layer->text[0] == '\0') {
+        return;
+    }
+
+    text_layer_apply_to_cr(layer, cr);
+}
+
+/**
+ * Render text onto the layer's own Cairo surface (offline path).
+ *
+ * The surface is cleared to transparent first so stale glyphs don't linger.
+ * Called by layer_ensure_cache() and tile_composite() before the surface is
+ * used for tile compositing, export, or thumbnail generation.
+ */
+void text_layer_render_to_surface(ImageLayer* layer) {
+    if (!layer || !layer->surface) {
+        return;
+    }
+    if (layer->layer_type != LAYER_TYPE_TEXT || !layer->text_data) {
+        return;
+    }
+
+    TextLayer* text = (TextLayer*)layer->text_data;
+    if (!text->text) {
+        return;
+    }
+
+    cairo_t* cr = cairo_create(layer->surface);
+    if (!cr) {
+        return;
+    }
+
+    /* Wipe layer surface to transparent */
+    cairo_set_operator(cr, CAIRO_OPERATOR_CLEAR);
+    cairo_paint(cr);
+    cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+
+    text_layer_apply_to_cr(text, cr);
+
     cairo_destroy(cr);
 }

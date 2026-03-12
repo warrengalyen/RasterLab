@@ -2346,6 +2346,43 @@ Shortcut Key: W</property>
                   </packing>
                 </child>
                 <child>
+                  <object class="GtkToggleButton" id="tool_button_text">
+                    <property name="name">tool_button</property>
+                    <property name="width-request">32</property>
+                    <property name="height-request">32</property>
+                    <property name="visible">True</property>
+                    <property name="can-focus">True</property>
+                    <property name="receives-default">False</property>
+                    <property name="tooltip-text" translatable="yes">Text
+Shortcut Key: T</property>
+                    <property name="relief">none</property>
+                    <child>
+                      <object class="GtkImage" id="text_icon">
+                        <property name="visible">True</property>
+                        <property name="can-focus">False</property>
+                        <property name="pixel-size">24</property>
+                        <property name="resource">/icons/tool-text.png</property>
+                      </object>
+                    </child>
+                  </object>
+                  <packing>
+                    <property name="expand">False</property>
+                    <property name="fill">True</property>
+                    <property name="position">16</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkSeparator" id="tool_separator2">
+                    <property name="visible">True</property>
+                    <property name="can-focus">False</property>
+                  </object>
+                  <packing>
+                    <property name="expand">False</property>
+                    <property name="fill">True</property>
+                    <property name="position">17</property>
+                  </packing>
+                </child>
+                <child>
                   <object class="GtkBox" id="color_box">
                     <property name="visible">True</property>
                     <property name="can-focus">False</property>
@@ -2416,7 +2453,7 @@ Shortcut Key: W</property>
                   <packing>
                     <property name="expand">False</property>
                     <property name="fill">True</property>
-                    <property name="position">16</property>
+                    <property name="position">18</property>
                   </packing>
                 </child>
                 <child>
@@ -2427,7 +2464,7 @@ Shortcut Key: W</property>
                   <packing>
                     <property name="expand">True</property>
                     <property name="fill">True</property>
-                    <property name="position">17</property>
+                    <property name="position">19</property>
                   </packing>
                 </child>
               </object>

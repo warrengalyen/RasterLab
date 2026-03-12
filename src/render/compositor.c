@@ -1,6 +1,7 @@
 #include "render/compositor.h"
 #include "render/layer.h"
 #include "render/mipmap.h"
+#include "render/text_layer.h"
 #include "render/tile.h"
 #include "render/tile_thread_pool.h"
 #include "render/tile_worker.h"
@@ -585,6 +586,41 @@ void document_render_layers_at_zoom(ImageDocument* doc, cairo_t* cr,
 
         /* Translate to layer position */
         cairo_translate(cr, layer->offset_x, layer->offset_y);
+
+        /* ---- Text (vector) layers ----------------------------------------
+         * Render directly into this context, which already carries the full
+         * composite transform (zoom scale + layer offset).  Pango measures
+         * glyphs *after* the transform, so the output is rasterised at true
+         * screen resolution — crisp at any zoom level, with no blurry upscale
+         * from a pre-baked surface.
+         *
+         * Opacity is applied via a temporary group when opacity < 1.0.
+         * The blend operator is consumed here so is_first_visible_layer is
+         * updated consistently with the raster path below.
+         * ----------------------------------------------------------------- */
+        if (layer->layer_type == LAYER_TYPE_TEXT && layer->text_data) {
+            cairo_operator_t op;
+            if (is_first_visible_layer) {
+                op = CAIRO_OPERATOR_OVER;
+                is_first_visible_layer = FALSE;
+            } else {
+                op = blend_mode_to_cairo_operator(layer->blend_mode);
+            }
+
+            if (layer->opacity < 1.0) {
+                cairo_push_group(cr);
+                text_layer_render((TextLayer*)layer->text_data, cr);
+                cairo_pop_group_to_source(cr);
+                cairo_set_operator(cr, op);
+                cairo_paint_with_alpha(cr, layer->opacity);
+            } else {
+                cairo_set_operator(cr, op);
+                text_layer_render((TextLayer*)layer->text_data, cr);
+            }
+
+            cairo_restore(cr);
+            continue;
+        }
 
         /* Use mipmap if zoomed out */
         if (zoom_factor < 1.0) {
