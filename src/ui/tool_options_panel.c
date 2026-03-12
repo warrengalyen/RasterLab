@@ -2204,6 +2204,13 @@ void tool_options_panel_sync_text_layer(ToolOptionsPanel* panel,
     g_text_panel_syncing--;
 }
 
+void tool_options_panel_set_text_rotation(ToolOptionsPanel* panel, gdouble degrees) {
+    if (!panel || !panel->text_rotation_spin) return;
+    g_text_panel_syncing++;
+    gtk_spin_button_set_value(GTK_SPIN_BUTTON(panel->text_rotation_spin), degrees);
+    g_text_panel_syncing--;
+}
+
 ToolOptionsPanel* create_tool_options_panel(void) {
     ToolOptionsPanel* tool_opts_panel = (ToolOptionsPanel*)g_malloc(sizeof(ToolOptionsPanel));
 

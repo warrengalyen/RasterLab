@@ -12,14 +12,14 @@ typedef struct ImageLayer    ImageLayer;
  * Text Tool drag-mode values:
  *  -2  creating a new box (initial drag from empty canvas)
  *  -1  moving the whole box
- *   0  resize handle top-left
- *   1  resize handle top-right
- *   2  resize handle bottom-left
- *   3  resize handle bottom-right
- *   4  resize handle top-edge
- *   5  resize handle right-edge
- *   6  resize handle bottom-edge
- *   7  resize handle left-edge
+ *   0  resize handle — top-left corner
+ *   1  resize handle — top-right corner
+ *   2  resize handle — bottom-left corner
+ *   3  resize handle — bottom-right corner
+ *   4  rotation handle — top-edge midpoint   (circular)
+ *   5  rotation handle — right-edge midpoint (circular)
+ *   6  rotation handle — bottom-edge midpoint(circular)
+ *   7  rotation handle — left-edge midpoint  (circular)
  */
 
 /**

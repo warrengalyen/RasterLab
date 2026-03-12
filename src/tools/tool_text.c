@@ -58,35 +58,70 @@ static gboolean text_tool_layer_valid(ImageDocument* doc, ImageLayer* layer) {
 }
 
 /**
+ * Inverse-rotate a point around (cx, cy) by rotation_deg degrees.
+ * Used to map a cursor position into the text box's local (unrotated) frame
+ * before hit-testing against handle positions.
+ */
+static void text_inverse_rotate(gdouble  px, gdouble  py,
+                                 gdouble  cx, gdouble  cy,
+                                 gdouble  rotation_deg,
+                                 gdouble* out_x, gdouble* out_y) {
+    if (rotation_deg == 0.0) {
+        *out_x = px;
+        *out_y = py;
+        return;
+    }
+    gdouble rad = -rotation_deg * (M_PI / 180.0);
+    gdouble dx  = px - cx,  dy = py - cy;
+    *out_x = cx + dx * cos(rad) - dy * sin(rad);
+    *out_y = cy + dx * sin(rad) + dy * cos(rad);
+}
+
+/**
  * Detect which of the 8 handles (if any) lies under (x, y).
  * Coordinates are in document (image) space.
  * Returns 0-7 on hit, or -1 when no handle is hit.
  *
- * Handle order: 0=TL, 1=TR, 2=BL, 3=BR, 4=Top, 5=Right, 6=Bottom, 7=Left
+ * Handle order: 0=TL, 1=TR, 2=BL, 3=BR (resize squares)
+ *               4=Top, 5=Right, 6=Bottom, 7=Left (rotation circles)
+ *
+ * rotation_deg is the layer's current rotation.  The cursor is inverse-rotated
+ * into the box's local frame before testing so hit-areas match the visual handles.
  */
 static gint text_detect_handle(gdouble x, gdouble y,
                                 gdouble rx, gdouble ry,
                                 gdouble rw, gdouble rh,
+                                gdouble rotation_deg,
                                 gdouble zoom) {
+    /* Map cursor into the box's unrotated local frame */
+    gdouble lx = x, ly = y;
+    text_inverse_rotate(x, y, rx + rw * 0.5, ry + rh * 0.5,
+                        rotation_deg, &lx, &ly);
+
+    /* Corner resize handles — square hit area */
     gdouble half = 6.0 / zoom;
     if (half < 0.5) half = 0.5;
 
-    /* Corner positions */
-    const gdouble cx[4] = { rx,      rx + rw, rx,      rx + rw };
-    const gdouble cy[4] = { ry,      ry,      ry + rh, ry + rh };
+    const gdouble cnr_x[4] = { rx,      rx + rw, rx,      rx + rw };
+    const gdouble cnr_y[4] = { ry,      ry,      ry + rh, ry + rh };
     for (gint i = 0; i < 4; i++) {
-        if (fabs(x - cx[i]) <= half && fabs(y - cy[i]) <= half)
+        if (fabs(lx - cnr_x[i]) <= half && fabs(ly - cnr_y[i]) <= half)
             return i;
     }
 
-    /* Edge mid-point positions */
-    gdouble li = rx + half, ri = rx + rw - half;
-    gdouble ti = ry + half, bi = ry + rh - half;
+    /* Edge-midpoint rotation handles — circular hit area */
+    gdouble rot_r = 7.0 / zoom;
+    if (rot_r < 1.0) rot_r = 1.0;
 
-    if (rh > 2 * half && fabs(y - ry)        <= half && x >= li && x <= ri) return 4;
-    if (rw > 2 * half && fabs(x - (rx + rw)) <= half && y >= ti && y <= bi) return 5;
-    if (rh > 2 * half && fabs(y - (ry + rh)) <= half && x >= li && x <= ri) return 6;
-    if (rw > 2 * half && fabs(x - rx)        <= half && y >= ti && y <= bi) return 7;
+    const gdouble emid_x[4] = { rx + rw * 0.5, rx + rw,       rx + rw * 0.5, rx       };
+    const gdouble emid_y[4] = { ry,             ry + rh * 0.5, ry + rh,       ry + rh * 0.5 };
+
+    for (gint i = 0; i < 4; i++) {
+        gdouble ddx = lx - emid_x[i];
+        gdouble ddy = ly - emid_y[i];
+        if (ddx * ddx + ddy * ddy <= rot_r * rot_r)
+            return 4 + i;
+    }
 
     return -1;
 }
@@ -98,25 +133,16 @@ static void text_set_cursor(GdkWindow* window, gint handle, GdkCursor* default_c
     if (!window) return;
 
     if (handle >= -1 && handle <= 3) {
-        /* Reuse selection cursor logic for move (-1) and corners (0-3) */
+        /* Move (-1) and corner resize (0-3) */
         selection_set_cursor_for_handle(window, handle, default_cursor);
         return;
     }
-
-    GdkDisplay* display = gdk_window_get_display(window);
-    GdkCursor* cursor = NULL;
-
-    if (handle == 4 || handle == 6)
-        cursor = gdk_cursor_new_from_name(display, "ns-resize");
-    else if (handle == 5 || handle == 7)
-        cursor = gdk_cursor_new_from_name(display, "ew-resize");
-
-    if (cursor) {
-        gdk_window_set_cursor(window, cursor);
-        g_object_unref(cursor);
-    } else {
-        gdk_window_set_cursor(window, default_cursor);
+    if (handle >= 4 && handle <= 7) {
+        /* Rotation handles share the move cursor */
+        selection_set_cursor_for_handle(window, -1, default_cursor);
+        return;
     }
+    gdk_window_set_cursor(window, default_cursor);
 }
 
 /**
@@ -151,11 +177,17 @@ static ImageLayer* text_tool_find_layer_at_point(ImageDocument* doc, gint x, gin
         if (!layer || !layer->visible || layer->layer_type != LAYER_TYPE_TEXT || !layer->text_data)
             continue;
         TextLayer* tl = (TextLayer*)layer->text_data;
-        gint bx = (gint)tl->box_x + layer->offset_x;
-        gint by = (gint)tl->box_y + layer->offset_y;
-        gint bw = (gint)tl->box_width;
-        gint bh = (gint)tl->box_height;
-        if (x >= bx && x < bx + bw && y >= by && y < by + bh)
+        gdouble bx = tl->box_x + layer->offset_x;
+        gdouble by = tl->box_y + layer->offset_y;
+        gdouble bw = tl->box_width;
+        gdouble bh = tl->box_height;
+
+        /* Inverse-rotate the test point into the box's local frame */
+        gdouble lx, ly;
+        text_inverse_rotate((gdouble)x, (gdouble)y,
+                             bx + bw * 0.5, by + bh * 0.5,
+                             tl->rotation, &lx, &ly);
+        if (lx >= bx && lx < bx + bw && ly >= by && ly < by + bh)
             return layer;
     }
     return NULL;
@@ -300,13 +332,20 @@ static void text_tool_mouse_down(Tool* tool, struct ImageDocument* doc,
     TextToolState* state = (TextToolState*)tool->user_data;
 
     if (state->has_box && state->box_w > 0 && state->box_h > 0) {
+        /* Retrieve the current rotation so handle/interior tests are accurate */
+        gdouble box_rotation = 0.0;
+        if (state->layer && state->layer->layer_type == LAYER_TYPE_TEXT &&
+            state->layer->text_data)
+            box_rotation = ((TextLayer*)state->layer->text_data)->rotation;
+
         /* Hit-test handles first */
         gint handle = text_detect_handle((gdouble)event->x, (gdouble)event->y,
                                          (gdouble)state->box_x, (gdouble)state->box_y,
                                          (gdouble)state->box_w, (gdouble)state->box_h,
+                                         box_rotation,
                                          doc->zoom_factor);
         if (handle >= 0) {
-            /* Clicking a resize handle — exit editing, start resize */
+            /* Clicking a resize or rotation handle — exit editing, start drag */
             text_tool_exit_editing(state);
             state->drag_mode   = handle;
             state->is_dragging = TRUE;
@@ -316,8 +355,14 @@ static void text_tool_mouse_down(Tool* tool, struct ImageDocument* doc,
             return;
         }
 
-        if (event->x >= state->box_x && event->x < state->box_x + state->box_w &&
-            event->y >= state->box_y && event->y < state->box_y + state->box_h) {
+        /* Interior check: inverse-rotate click into box's local frame */
+        gdouble lx, ly;
+        text_inverse_rotate((gdouble)event->x, (gdouble)event->y,
+                             state->box_x + state->box_w * 0.5,
+                             state->box_y + state->box_h * 0.5,
+                             box_rotation, &lx, &ly);
+        if (lx >= state->box_x && lx < state->box_x + state->box_w &&
+            ly >= state->box_y && ly < state->box_y + state->box_h) {
             /* Click inside the text box */
             if (event->click_count >= 2) {
                 /* Double-click: enter editing mode and position cursor at click */
@@ -448,8 +493,39 @@ static void text_tool_mouse_move(Tool* tool, struct ImageDocument* doc,
             state->box_y  += dy;
             state->start_x = event->x;
             state->start_y = event->y;
+        } else if (state->drag_mode >= 4) {
+            /* Rotation drag: compute incremental angle delta from box centre */
+            if (state->layer && text_tool_layer_valid(doc, state->layer) &&
+                state->layer->layer_type == LAYER_TYPE_TEXT && state->layer->text_data) {
+                TextLayer* tl = (TextLayer*)state->layer->text_data;
+                gdouble cx = state->box_x + state->box_w * 0.5;
+                gdouble cy = state->box_y + state->box_h * 0.5;
+                gdouble prev_a = atan2((gdouble)state->start_y - cy,
+                                       (gdouble)state->start_x - cx);
+                gdouble curr_a = atan2((gdouble)event->y - cy,
+                                       (gdouble)event->x - cx);
+                gdouble delta  = curr_a - prev_a;
+                /* Normalise step to (−π, π] to avoid wrap-around jump */
+                while (delta >  M_PI) delta -= 2.0 * M_PI;
+                while (delta < -M_PI) delta += 2.0 * M_PI;
+                tl->rotation += delta * (180.0 / M_PI);
+
+                /* Live-update the rotation spin in the tool options panel */
+                if (doc->drawing_area) {
+                    GtkWidget* win = gtk_widget_get_toplevel(doc->drawing_area);
+                    if (win) {
+                        AppContext* ctx = (AppContext*)g_object_get_data(
+                                              G_OBJECT(win), "app_context");
+                        if (ctx && ctx->tool_options_panel)
+                            tool_options_panel_set_text_rotation(
+                                ctx->tool_options_panel, tl->rotation);
+                    }
+                }
+            }
+            state->start_x = event->x;
+            state->start_y = event->y;
         } else {
-            /* Resize via handle */
+            /* Resize corner handle (drag_mode 0–3) */
             switch (state->drag_mode) {
                 case 0: state->box_x += dx; state->box_y += dy;
                         state->box_w -= dx; state->box_h -= dy; break;
@@ -458,10 +534,6 @@ static void text_tool_mouse_move(Tool* tool, struct ImageDocument* doc,
                 case 2: state->box_x += dx;
                         state->box_w -= dx; state->box_h += dy; break;
                 case 3: state->box_w += dx; state->box_h += dy; break;
-                case 4: state->box_y += dy; state->box_h -= dy; break;
-                case 5: state->box_w += dx;                     break;
-                case 6: state->box_h += dy;                     break;
-                case 7: state->box_x += dx; state->box_w -= dx; break;
                 default: break;
             }
             state->start_x = event->x;
@@ -501,17 +573,30 @@ static void text_tool_mouse_move(Tool* tool, struct ImageDocument* doc,
 
     /* Not dragging: update hover state for cursor and handle highlight */
     if (state->has_box && state->box_w > 0 && state->box_h > 0) {
+        gdouble hover_rotation = 0.0;
+        if (state->layer && state->layer->layer_type == LAYER_TYPE_TEXT &&
+            state->layer->text_data)
+            hover_rotation = ((TextLayer*)state->layer->text_data)->rotation;
+
         gint hovered = text_detect_handle((gdouble)event->x, (gdouble)event->y,
                                           (gdouble)state->box_x, (gdouble)state->box_y,
                                           (gdouble)state->box_w, (gdouble)state->box_h,
+                                          hover_rotation,
                                           doc->zoom_factor);
         if (hovered >= 0) {
             state->hovered_handle = hovered;
-        } else if (event->x >= state->box_x && event->x < state->box_x + state->box_w &&
-                   event->y >= state->box_y && event->y < state->box_y + state->box_h) {
-            state->hovered_handle = -1;
         } else {
-            state->hovered_handle = -2;
+            /* Interior check in local (unrotated) frame */
+            gdouble lx, ly;
+            text_inverse_rotate((gdouble)event->x, (gdouble)event->y,
+                                 state->box_x + state->box_w * 0.5,
+                                 state->box_y + state->box_h * 0.5,
+                                 hover_rotation, &lx, &ly);
+            if (lx >= state->box_x && lx < state->box_x + state->box_w &&
+                ly >= state->box_y && ly < state->box_y + state->box_h)
+                state->hovered_handle = -1;
+            else
+                state->hovered_handle = -2;
         }
 
         if (window) {
@@ -813,20 +898,47 @@ void tool_text_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom) {
     gdouble line_width      = 1.0 / zoom;
     if (line_width < 0.5) line_width = 0.5;
 
+    /* Rotation from the active text layer (0 during rubber-band) */
+    gdouble rotation_deg = 0.0;
+    if (state->has_box && state->layer &&
+        state->layer->layer_type == LAYER_TYPE_TEXT && state->layer->text_data)
+        rotation_deg = ((TextLayer*)state->layer->text_data)->rotation;
+
     cairo_save(cr);
     if (zoom != 1.0)
         cairo_scale(cr, zoom, zoom);
 
+    /* Rotate all drawing around the box centre so the bounding box and
+     * handles follow the text rotation exactly. */
+    if (rotation_deg != 0.0 && state->has_box) {
+        gdouble dcx = rx + rw * 0.5;
+        gdouble dcy = ry + rh * 0.5;
+        cairo_translate(cr,  dcx,  dcy);
+        cairo_rotate(cr, rotation_deg * (M_PI / 180.0));
+        cairo_translate(cr, -dcx, -dcy);
+    }
+
+    /* TEXT_SNAP and CAIRO_ANTIALIAS_NONE only produce crisp results when the
+     * drawing is axis-aligned.  Once a rotation transform is in play every
+     * snapped coordinate maps to a *different* sub-pixel offset after the
+     * rotation, causing the outline and handles to appear jagged and warped.
+     * Switch to smooth antialiased rendering whenever the box is rotated. */
+    gboolean is_rotated = (rotation_deg != 0.0);
+
     /* ---- Bounding box border ---- */
     gdouble dash[] = { 5.0 / zoom, 3.0 / zoom };
     cairo_set_dash(cr, dash, 2, 0);
-    cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
+    cairo_set_antialias(cr, is_rotated ? CAIRO_ANTIALIAS_DEFAULT : CAIRO_ANTIALIAS_NONE);
     cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
 
-    cairo_rectangle(cr,
-        TEXT_SNAP(rx,      zoom), TEXT_SNAP(ry,      zoom),
-        TEXT_SNAP(rx + rw, zoom) - TEXT_SNAP(rx, zoom),
-        TEXT_SNAP(ry + rh, zoom) - TEXT_SNAP(ry, zoom));
+    if (is_rotated) {
+        cairo_rectangle(cr, (gdouble)rx, (gdouble)ry, (gdouble)rw, (gdouble)rh);
+    } else {
+        cairo_rectangle(cr,
+            TEXT_SNAP(rx,      zoom), TEXT_SNAP(ry,      zoom),
+            TEXT_SNAP(rx + rw, zoom) - TEXT_SNAP(rx, zoom),
+            TEXT_SNAP(ry + rh, zoom) - TEXT_SNAP(ry, zoom));
+    }
 
     /* Dark shadow stroke */
     cairo_set_source_rgba(cr, 0.1, 0.1, 0.1, 0.85);
@@ -845,38 +957,76 @@ void tool_text_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom) {
         return;
     }
 
-    /* 8 handle positions */
+    /* Handle positions — raw floats when rotated (snapping is meaningless
+     * once the coordinate frame is rotated), snapped otherwise. */
     gdouble hx[8], hy[8];
-    hx[0] = TEXT_SNAP(rx,       zoom); hy[0] = TEXT_SNAP(ry,       zoom);
-    hx[1] = TEXT_SNAP(rx + rw,  zoom); hy[1] = TEXT_SNAP(ry,       zoom);
-    hx[2] = TEXT_SNAP(rx,       zoom); hy[2] = TEXT_SNAP(ry + rh,  zoom);
-    hx[3] = TEXT_SNAP(rx + rw,  zoom); hy[3] = TEXT_SNAP(ry + rh,  zoom);
-    hx[4] = TEXT_SNAP(rx + rw * 0.5, zoom); hy[4] = TEXT_SNAP(ry,       zoom);
-    hx[5] = TEXT_SNAP(rx + rw,  zoom); hy[5] = TEXT_SNAP(ry + rh * 0.5, zoom);
-    hx[6] = TEXT_SNAP(rx + rw * 0.5, zoom); hy[6] = TEXT_SNAP(ry + rh,  zoom);
-    hx[7] = TEXT_SNAP(rx,       zoom); hy[7] = TEXT_SNAP(ry + rh * 0.5, zoom);
-
-    cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
+    if (is_rotated) {
+        hx[0] = (gdouble)rx;              hy[0] = (gdouble)ry;
+        hx[1] = (gdouble)(rx + rw);       hy[1] = (gdouble)ry;
+        hx[2] = (gdouble)rx;              hy[2] = (gdouble)(ry + rh);
+        hx[3] = (gdouble)(rx + rw);       hy[3] = (gdouble)(ry + rh);
+        hx[4] = rx + rw * 0.5;            hy[4] = (gdouble)ry;
+        hx[5] = (gdouble)(rx + rw);       hy[5] = ry + rh * 0.5;
+        hx[6] = rx + rw * 0.5;            hy[6] = (gdouble)(ry + rh);
+        hx[7] = (gdouble)rx;              hy[7] = ry + rh * 0.5;
+    } else {
+        hx[0] = TEXT_SNAP(rx,            zoom); hy[0] = TEXT_SNAP(ry,            zoom);
+        hx[1] = TEXT_SNAP(rx + rw,       zoom); hy[1] = TEXT_SNAP(ry,            zoom);
+        hx[2] = TEXT_SNAP(rx,            zoom); hy[2] = TEXT_SNAP(ry + rh,       zoom);
+        hx[3] = TEXT_SNAP(rx + rw,       zoom); hy[3] = TEXT_SNAP(ry + rh,       zoom);
+        hx[4] = TEXT_SNAP(rx + rw * 0.5, zoom); hy[4] = TEXT_SNAP(ry,            zoom);
+        hx[5] = TEXT_SNAP(rx + rw,       zoom); hy[5] = TEXT_SNAP(ry + rh * 0.5, zoom);
+        hx[6] = TEXT_SNAP(rx + rw * 0.5, zoom); hy[6] = TEXT_SNAP(ry + rh,       zoom);
+        hx[7] = TEXT_SNAP(rx,            zoom); hy[7] = TEXT_SNAP(ry + rh * 0.5, zoom);
+    }
 
     for (gint i = 0; i < 8; i++) {
         gboolean hovered = (state->hovered_handle == i);
-        gdouble bx  = TEXT_SNAP(hx[i] - half_handle, zoom);
-        gdouble by  = TEXT_SNAP(hy[i] - half_handle, zoom);
-        gdouble bw  = TEXT_SNAP(hx[i] + half_handle, zoom) - bx;
-        gdouble bh  = TEXT_SNAP(hy[i] + half_handle, zoom) - by;
 
-        cairo_rectangle(cr, bx, by, bw, bh);
-        /* Dark border */
-        cairo_set_source_rgba(cr, 0.1, 0.1, 0.1, 1.0);
-        cairo_set_line_width(cr, line_width * 3.0);
-        cairo_stroke_preserve(cr);
-        /* Fill: bright blue when hovered, white otherwise */
-        cairo_set_source_rgba(cr,
-            hovered ? 0.2 : 1.0,
-            hovered ? 0.6 : 1.0,
-            1.0, 1.0);
-        cairo_set_line_width(cr, line_width);
-        cairo_stroke(cr);
+        if (i >= 4) {
+            /* Rotation handle: circle — smooth rendering always */
+            cairo_set_antialias(cr, CAIRO_ANTIALIAS_DEFAULT);
+            cairo_arc(cr, hx[i], hy[i], half_handle, 0.0, 2.0 * M_PI);
+            /* Dark outer ring */
+            cairo_set_source_rgba(cr, 0.1, 0.1, 0.1, 1.0);
+            cairo_set_line_width(cr, line_width * 3.0);
+            cairo_stroke_preserve(cr);
+            /* Bright inner stroke: blue when hovered, white otherwise */
+            cairo_set_source_rgba(cr,
+                hovered ? 0.2 : 1.0,
+                hovered ? 0.6 : 1.0,
+                1.0, 1.0);
+            cairo_set_line_width(cr, line_width);
+            cairo_stroke(cr);
+        } else {
+            /* Resize handle: square — antialias when rotated */
+            cairo_set_antialias(cr, is_rotated ? CAIRO_ANTIALIAS_DEFAULT
+                                               : CAIRO_ANTIALIAS_NONE);
+            gdouble bx, by, bw, bh;
+            if (is_rotated) {
+                bx = hx[i] - half_handle;
+                by = hy[i] - half_handle;
+                bw = handle_size;
+                bh = handle_size;
+            } else {
+                bx = TEXT_SNAP(hx[i] - half_handle, zoom);
+                by = TEXT_SNAP(hy[i] - half_handle, zoom);
+                bw = TEXT_SNAP(hx[i] + half_handle, zoom) - bx;
+                bh = TEXT_SNAP(hy[i] + half_handle, zoom) - by;
+            }
+            cairo_rectangle(cr, bx, by, bw, bh);
+            /* Dark border */
+            cairo_set_source_rgba(cr, 0.1, 0.1, 0.1, 1.0);
+            cairo_set_line_width(cr, line_width * 3.0);
+            cairo_stroke_preserve(cr);
+            /* Bright inner stroke: blue when hovered, white otherwise */
+            cairo_set_source_rgba(cr,
+                hovered ? 0.2 : 1.0,
+                hovered ? 0.6 : 1.0,
+                1.0, 1.0);
+            cairo_set_line_width(cr, line_width);
+            cairo_stroke(cr);
+        }
     }
 
     /* ---- Text cursor (caret) ---- */

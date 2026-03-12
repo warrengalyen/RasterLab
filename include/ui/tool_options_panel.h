@@ -133,6 +133,15 @@ void tool_options_panel_set_tool_registry(ToolOptionsPanel* panel, ToolRegistry*
 void tool_options_panel_set_combine_mode(ToolOptionsPanel* panel, SelectionCombineMode mode);
 
 /**
+ * Update only the rotation spin button in the text options panel without
+ * triggering the signal handler back to the layer.  Call this during live
+ * rotation drags so the panel always shows the current angle.
+ * @param panel   Tool options panel (may be NULL — silently ignored)
+ * @param degrees New rotation value in degrees
+ */
+void tool_options_panel_set_text_rotation(ToolOptionsPanel* panel, gdouble degrees);
+
+/**
  * Sync the text tool options panel widgets to match the given text layer.
  * Call whenever the user activates an existing text layer so the panel
  * reflects its current font, color, alignment, spacing, etc.
