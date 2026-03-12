@@ -6,6 +6,7 @@
 #include "render/compositor.h"
 #include "render/dirty.h"
 #include "render/layer.h"
+#include "render/text_layer.h"
 #include "selection/selection_mask.h"
 #include "selection/selection_render.h"
 #include "tool_manager.h"
@@ -373,7 +374,23 @@ static struct ImageLayer* find_layer_at_point(struct ImageDocument* doc, gint do
     for (iter = g_list_last(doc->layers); iter; iter = iter->prev) {
         layer = (struct ImageLayer*)iter->data;
 
-        if (!layer || !layer->visible || layer->opacity <= 0.0 || !layer->surface) {
+        if (!layer || !layer->visible || layer->opacity <= 0.0) {
+            continue;
+        }
+
+        /* Text (vector) layers have no pixel surface; hit-test their box instead */
+        if (layer->layer_type == LAYER_TYPE_TEXT && layer->text_data) {
+            TextLayer* tl = (TextLayer*)layer->text_data;
+            gint bx = (gint)tl->box_x + layer->offset_x;
+            gint by = (gint)tl->box_y + layer->offset_y;
+            gint bw = (gint)tl->box_width;
+            gint bh = (gint)tl->box_height;
+            if (doc_x >= bx && doc_x < bx + bw && doc_y >= by && doc_y < by + bh)
+                return layer;
+            continue;
+        }
+
+        if (!layer->surface) {
             continue;
         }
 
@@ -529,11 +546,19 @@ static void move_tool_mouse_down(Tool* tool, struct ImageDocument* doc, MouseEve
     state->start_widget_x = (gdouble)event->x * doc->zoom_factor;
     state->start_widget_y = (gdouble)event->y * doc->zoom_factor;
     state->doc = doc;
-    state->initial_offset_x = active_layer->offset_x;
-    state->initial_offset_y = active_layer->offset_y;
-    state->last_offset_x = active_layer->offset_x;
-    state->last_offset_y = active_layer->offset_y;
     state->active_layer = active_layer;
+
+    /* For text (vector) layers store the box origin as the initial position */
+    if (active_layer->layer_type == LAYER_TYPE_TEXT && active_layer->text_data) {
+        TextLayer* tl = (TextLayer*)active_layer->text_data;
+        state->initial_offset_x = (gint)tl->box_x;
+        state->initial_offset_y = (gint)tl->box_y;
+    } else {
+        state->initial_offset_x = active_layer->offset_x;
+        state->initial_offset_y = active_layer->offset_y;
+    }
+    state->last_offset_x = state->initial_offset_x;
+    state->last_offset_y = state->initial_offset_y;
 
     /* Trigger viewport redraw to show the outline overlay */
     if (doc->viewport) {
@@ -603,6 +628,22 @@ static void move_tool_mouse_move(Tool* tool, struct ImageDocument* doc, MouseEve
     /* Union both regions */
     dirty_rect_union(&old_rect, &new_rect, &union_rect);
 
+    /* Text (vector) layers: move by updating box coordinates directly */
+    if (state->active_layer->layer_type == LAYER_TYPE_TEXT &&
+        state->active_layer->text_data) {
+        TextLayer* tl = (TextLayer*)state->active_layer->text_data;
+        tl->box_x = (double)new_x;
+        tl->box_y = (double)new_y;
+        state->last_offset_x = new_x;
+        state->last_offset_y = new_y;
+        document_invalidate_composite(doc);
+        if (doc->drawing_area)
+            gtk_widget_queue_draw(doc->drawing_area);
+        if (doc->viewport)
+            gtk_widget_queue_draw(doc->viewport);
+        return;
+    }
+
     /* Update layer offset AFTER calculating dirty regions but BEFORE invalidation
      * This ensures tiles are composited with the layer at its final position */
     state->active_layer->offset_x = new_x;
@@ -643,8 +684,21 @@ static void move_tool_mouse_up(Tool* tool, struct ImageDocument* doc, MouseEvent
         return;
     }
 
-    /* Check if we actually moved */
+    /* Text layers store position in box_x/y, not offset_x/y.
+     * Mark document modified when a text layer was moved. */
     if (state->active_layer &&
+        state->active_layer->layer_type == LAYER_TYPE_TEXT &&
+        state->active_layer->text_data) {
+        TextLayer* tl = (TextLayer*)state->active_layer->text_data;
+        if ((gint)tl->box_x != state->initial_offset_x ||
+            (gint)tl->box_y != state->initial_offset_y) {
+            doc->modified = TRUE;
+        }
+    }
+
+    /* Check if we actually moved (raster layers) */
+    if (state->active_layer &&
+        state->active_layer->layer_type != LAYER_TYPE_TEXT &&
         (state->active_layer->offset_x != state->initial_offset_x ||
          state->active_layer->offset_y != state->initial_offset_y)) {
 
@@ -759,11 +813,22 @@ void tool_move_draw_preview(struct ImageDocument* doc, cairo_t* cr, gdouble zoom
     /* Save Cairo state */
     cairo_save(cr);
 
-    /* Draw outline around entire layer bounds (including parts outside canvas/viewport) */
-    gint layer_x = state->active_layer->offset_x;
-    gint layer_y = state->active_layer->offset_y;
-    gint layer_w = state->active_layer->width;
-    gint layer_h = state->active_layer->height;
+    /* Draw outline around layer bounds.
+     * Text layers store their position in box_x/y rather than offset_x/y. */
+    gint layer_x, layer_y, layer_w, layer_h;
+    if (state->active_layer->layer_type == LAYER_TYPE_TEXT &&
+        state->active_layer->text_data) {
+        TextLayer* tl = (TextLayer*)state->active_layer->text_data;
+        layer_x = (gint)tl->box_x + state->active_layer->offset_x;
+        layer_y = (gint)tl->box_y + state->active_layer->offset_y;
+        layer_w = (gint)tl->box_width;
+        layer_h = (gint)tl->box_height;
+    } else {
+        layer_x = state->active_layer->offset_x;
+        layer_y = state->active_layer->offset_y;
+        layer_w = (gint)state->active_layer->width;
+        layer_h = (gint)state->active_layer->height;
+    }
 
     /* Apply zoom transform */
     if (zoom != 1.0) {

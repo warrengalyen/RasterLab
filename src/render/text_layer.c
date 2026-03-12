@@ -20,6 +20,54 @@
  * A cairo_save/restore pair brackets the antialias and rotation changes so
  * the caller's state is left intact afterwards.
  */
+PangoLayout* text_layer_create_layout(const TextLayer* tl, cairo_t* cr) {
+    PangoLayout* layout = pango_cairo_create_layout(cr);
+
+    pango_layout_set_text(layout, tl->text ? tl->text : "", -1);
+
+    /* Font description */
+    PangoFontDescription* font_desc = pango_font_description_new();
+    pango_font_description_set_family(font_desc,
+        tl->font_family ? tl->font_family : "Sans");
+    pango_font_description_set_size(font_desc, tl->font_size * PANGO_SCALE);
+    pango_font_description_set_weight(font_desc, (PangoWeight)tl->font_weight);
+    if (tl->italic)
+        pango_font_description_set_style(font_desc, PANGO_STYLE_ITALIC);
+    pango_layout_set_font_description(layout, font_desc);
+    pango_font_description_free(font_desc);
+
+    /* Paragraph alignment */
+    PangoAlignment pango_align;
+    switch (tl->alignment) {
+        case 1:  pango_align = PANGO_ALIGN_CENTER; break;
+        case 2:  pango_align = PANGO_ALIGN_RIGHT;  break;
+        default: pango_align = PANGO_ALIGN_LEFT;   break;
+    }
+    pango_layout_set_alignment(layout, pango_align);
+
+    /* Constrain layout width so Pango word-wraps within the text box */
+    if (tl->box_width > 0.0) {
+        pango_layout_set_width(layout, (gint)(tl->box_width * PANGO_SCALE));
+        pango_layout_set_wrap(layout, PANGO_WRAP_WORD_CHAR);
+    }
+
+    /* Line spacing (additional inter-line gap in Pango units) */
+    if (tl->line_spacing != 0.0)
+        pango_layout_set_spacing(layout, (gint)(tl->line_spacing * PANGO_SCALE));
+
+    /* Letter spacing via attribute list */
+    if (tl->letter_spacing != 0.0) {
+        PangoAttrList*  attrs = pango_attr_list_new();
+        PangoAttribute* attr  =
+            pango_attr_letter_spacing_new((gint)(tl->letter_spacing * PANGO_SCALE));
+        pango_attr_list_insert(attrs, attr);
+        pango_layout_set_attributes(layout, attrs);
+        pango_attr_list_unref(attrs);
+    }
+
+    return layout;
+}
+
 static void text_layer_apply_to_cr(TextLayer* text, cairo_t* cr) {
     cairo_save(cr);
 
@@ -36,54 +84,7 @@ static void text_layer_apply_to_cr(TextLayer* text, cairo_t* cr) {
         cairo_translate(cr, -cx, -cy);
     }
 
-    /* ---- Pango layout ---- */
-    PangoLayout* layout = pango_cairo_create_layout(cr);
-
-    pango_layout_set_text(layout, text->text, -1);
-
-    /* Font description */
-    PangoFontDescription* font_desc = pango_font_description_new();
-    pango_font_description_set_family(font_desc,
-        text->font_family ? text->font_family : "Sans");
-    pango_font_description_set_size(font_desc, text->font_size * PANGO_SCALE);
-    pango_font_description_set_weight(font_desc, (PangoWeight)text->font_weight);
-    if (text->italic) {
-        pango_font_description_set_style(font_desc, PANGO_STYLE_ITALIC);
-    }
-    pango_layout_set_font_description(layout, font_desc);
-    pango_font_description_free(font_desc);
-
-    /* Paragraph alignment */
-    PangoAlignment pango_align;
-    switch (text->alignment) {
-        case 1:  pango_align = PANGO_ALIGN_CENTER; break;
-        case 2:  pango_align = PANGO_ALIGN_RIGHT;  break;
-        default: pango_align = PANGO_ALIGN_LEFT;   break;
-    }
-    pango_layout_set_alignment(layout, pango_align);
-
-    /* Constrain layout width so Pango word-wraps within the text box */
-    if (text->box_width > 0.0) {
-        pango_layout_set_width(layout, (gint)(text->box_width * PANGO_SCALE));
-        pango_layout_set_wrap(layout, PANGO_WRAP_WORD_CHAR);
-    }
-
-    /* Line spacing (additional inter-line gap in Pango units) */
-    if (text->line_spacing != 0.0) {
-        pango_layout_set_spacing(layout,
-            (gint)(text->line_spacing * PANGO_SCALE));
-    }
-
-    /* Letter spacing via attribute list */
-    if (text->letter_spacing != 0.0) {
-        PangoAttrList*  attrs = pango_attr_list_new();
-        PangoAttribute* attr  =
-            pango_attr_letter_spacing_new(
-                (gint)(text->letter_spacing * PANGO_SCALE));
-        pango_attr_list_insert(attrs, attr);
-        pango_layout_set_attributes(layout, attrs);
-        pango_attr_list_unref(attrs);
-    }
+    PangoLayout* layout = text_layer_create_layout(text, cr);
 
     /* Paint text */
     cairo_set_source_rgba(cr,

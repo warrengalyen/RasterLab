@@ -3,6 +3,7 @@
 #include "tool_options.h"
 #include "tools/tool_crop.h"
 #include "tools/tool_magic_wand_select.h"
+#include "tools/tool_text.h"
 #include "ui.h"
 #include "ui/dialogs/color_chooser_dialog.h"
 #include "ui/layers_panel.h"
@@ -572,6 +573,15 @@ gboolean tools_panel_on_window_key_press(GtkWidget* widget, GdkEventKey* event, 
 
     if (!ctx || !ctx->tool_registry) {
         return FALSE;
+    }
+
+    /* Suppress tool hotkeys while the text tool is accepting keyboard input.
+     * Without this, typing characters like 'h', 'b', 'p' etc. would switch
+     * the active tool instead of being inserted into the text layer. */
+    {
+        Tool* at = tool_manager_get_active(ctx->tool_registry);
+        if (tool_text_is_editing(at))
+            return FALSE;
     }
 
     /* Get the modifier state, ignoring lock keys (Caps Lock, Num Lock) */

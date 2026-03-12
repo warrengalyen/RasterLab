@@ -4,9 +4,12 @@
 #include "render/text_layer.h"
 #include "selection.h"
 #include "tool_manager.h"
+#include "ui/layers_panel.h"
 #include <gdk/gdk.h>
 #include <gtk/gtk.h>
+#include <pango/pangocairo.h>
 #include <math.h>
+#include <string.h>
 
 /* Minimum box size in document pixels */
 #define TEXT_BOX_MIN_SIZE 4
@@ -136,6 +139,154 @@ static void text_sync_layer_box(ImageDocument* doc, TextToolState* state) {
     /* Full redraw is triggered by the caller via text_tool_queue_full() */
 }
 
+/**
+ * Search doc->layers (top-to-bottom) for a visible text layer whose bounding
+ * box contains the given document-space point.  Returns the first match or NULL.
+ */
+static ImageLayer* text_tool_find_layer_at_point(ImageDocument* doc, gint x, gint y) {
+    for (GList* it = g_list_last(doc->layers); it; it = it->prev) {
+        ImageLayer* layer = (ImageLayer*)it->data;
+        if (!layer || !layer->visible || layer->layer_type != LAYER_TYPE_TEXT || !layer->text_data)
+            continue;
+        TextLayer* tl = (TextLayer*)layer->text_data;
+        gint bx = (gint)tl->box_x + layer->offset_x;
+        gint by = (gint)tl->box_y + layer->offset_y;
+        gint bw = (gint)tl->box_width;
+        gint bh = (gint)tl->box_height;
+        if (x >= bx && x < bx + bw && y >= by && y < by + bh)
+            return layer;
+    }
+    return NULL;
+}
+
+/**
+ * Update the layers panel to reflect a newly added layer.
+ * Walks up the widget tree from the drawing area to find the LayersPanel.
+ */
+static void text_tool_notify_layers_panel(ImageDocument* doc, ImageLayer* layer) {
+    if (!doc || !doc->drawing_area || !GTK_IS_WIDGET(doc->drawing_area))
+        return;
+    GtkWidget* w = doc->drawing_area;
+    while (w && !GTK_IS_WINDOW(w))
+        w = gtk_widget_get_parent(w);
+    if (!w)
+        return;
+    LayersPanel* lp = (LayersPanel*)g_object_get_data(G_OBJECT(w), "layers_panel");
+    if (!lp)
+        return;
+    layers_panel_update(lp, doc);
+    if (layer)
+        layers_panel_select_layer(lp, doc, layer);
+}
+
+/* -----------------------------------------------------------------------
+ * Text editing helpers
+ * --------------------------------------------------------------------- */
+
+/**
+ * Blink-cursor GLib timeout callback.
+ * Toggles cursor visibility and queues an overlay redraw.
+ */
+static gboolean text_cursor_blink(gpointer user_data) {
+    TextToolState* state = (TextToolState*)user_data;
+
+    if (!state->is_editing) {
+        state->cursor_blink_tag = 0;
+        return G_SOURCE_REMOVE;
+    }
+
+    state->cursor_visible = !state->cursor_visible;
+    if (state->blink_doc && state->blink_doc->viewport)
+        gtk_widget_queue_draw(state->blink_doc->viewport);
+
+    return G_SOURCE_CONTINUE;
+}
+
+/**
+ * Enter text-editing mode for the currently active text layer.
+ * Grabs keyboard focus and starts the cursor blink timer.
+ */
+static void text_tool_enter_editing(TextToolState* state, ImageDocument* doc) {
+    if (state->is_editing)
+        return;
+
+    state->is_editing    = TRUE;
+    state->cursor_visible = TRUE;
+    state->blink_doc     = doc;
+
+    /* Place cursor at end of existing text */
+    if (state->layer && state->layer->text_data) {
+        TextLayer* tl = (TextLayer*)state->layer->text_data;
+        state->cursor_pos = tl->text ? (gint)strlen(tl->text) : 0;
+    } else {
+        state->cursor_pos = 0;
+    }
+
+    /* Grab keyboard focus so key-press-events reach the drawing area */
+    if (doc->drawing_area)
+        gtk_widget_grab_focus(doc->drawing_area);
+
+    /* Start blink timer (530 ms half-period) */
+    if (state->cursor_blink_tag == 0)
+        state->cursor_blink_tag = g_timeout_add(530, text_cursor_blink, state);
+}
+
+/**
+ * Exit text-editing mode, stop the blink timer, and hide the cursor.
+ */
+static void text_tool_exit_editing(TextToolState* state) {
+    if (!state->is_editing)
+        return;
+
+    state->is_editing     = FALSE;
+    state->cursor_visible = FALSE;
+
+    if (state->cursor_blink_tag) {
+        g_source_remove(state->cursor_blink_tag);
+        state->cursor_blink_tag = 0;
+    }
+    state->blink_doc = NULL;
+}
+
+/**
+ * Insert @insert_text at the current cursor position in tl->text.
+ * Advances cursor_pos past the inserted bytes.
+ */
+static void text_tool_insert(TextToolState* state, TextLayer* tl,
+                              const gchar* insert_text) {
+    gint ins_len  = (gint)strlen(insert_text);
+    gint text_len = tl->text ? (gint)strlen(tl->text) : 0;
+
+    /* Clamp cursor_pos to valid range */
+    if (state->cursor_pos < 0)           state->cursor_pos = 0;
+    if (state->cursor_pos > text_len)    state->cursor_pos = text_len;
+
+    gchar* new_text = g_malloc(text_len + ins_len + 1);
+    if (tl->text)
+        memcpy(new_text, tl->text, state->cursor_pos);
+    memcpy(new_text + state->cursor_pos, insert_text, ins_len);
+    if (tl->text)
+        memcpy(new_text + state->cursor_pos + ins_len,
+               tl->text + state->cursor_pos,
+               text_len - state->cursor_pos);
+    new_text[text_len + ins_len] = '\0';
+
+    g_free(tl->text);
+    tl->text = new_text;
+    state->cursor_pos += ins_len;
+}
+
+/**
+ * Invalidate the text layer cache and trigger a full canvas + overlay redraw.
+ */
+static void text_tool_invalidate(ImageDocument* doc, TextToolState* state) {
+    if (state->layer && text_tool_layer_valid(doc, state->layer)) {
+        layer_invalidate_cache(state->layer);
+        document_invalidate_composite(doc);
+    }
+    text_tool_queue_full(doc);
+}
+
 /* -----------------------------------------------------------------------
  * Mouse handlers
  * --------------------------------------------------------------------- */
@@ -147,12 +298,14 @@ static void text_tool_mouse_down(Tool* tool, struct ImageDocument* doc,
     TextToolState* state = (TextToolState*)tool->user_data;
 
     if (state->has_box && state->box_w > 0 && state->box_h > 0) {
-        /* Hit-test handles first, then interior */
+        /* Hit-test handles first */
         gint handle = text_detect_handle((gdouble)event->x, (gdouble)event->y,
                                          (gdouble)state->box_x, (gdouble)state->box_y,
                                          (gdouble)state->box_w, (gdouble)state->box_h,
                                          doc->zoom_factor);
         if (handle >= 0) {
+            /* Clicking a resize handle — exit editing, start resize */
+            text_tool_exit_editing(state);
             state->drag_mode   = handle;
             state->is_dragging = TRUE;
             state->start_x     = event->x;
@@ -163,16 +316,89 @@ static void text_tool_mouse_down(Tool* tool, struct ImageDocument* doc,
 
         if (event->x >= state->box_x && event->x < state->box_x + state->box_w &&
             event->y >= state->box_y && event->y < state->box_y + state->box_h) {
-            state->drag_mode   = -1; /* move */
-            state->is_dragging = TRUE;
-            state->start_x     = event->x;
-            state->start_y     = event->y;
-            text_tool_queue_overlay(doc);
+            /* Click inside the text box */
+            if (event->click_count >= 2) {
+                /* Double-click: enter editing mode and position cursor at click */
+                if (state->layer && text_tool_layer_valid(doc, state->layer) &&
+                    state->layer->layer_type == LAYER_TYPE_TEXT &&
+                    state->layer->text_data) {
+                    if (!state->is_editing)
+                        text_tool_enter_editing(state, doc);
+
+                    TextLayer* tl = (TextLayer*)state->layer->text_data;
+                    if (tl->text) {
+                        cairo_surface_t* tmp = cairo_image_surface_create(
+                            CAIRO_FORMAT_ARGB32, 1, 1);
+                        cairo_t* tmp_cr = cairo_create(tmp);
+                        cairo_scale(tmp_cr, doc->zoom_factor, doc->zoom_factor);
+                        PangoLayout* layout = text_layer_create_layout(tl, tmp_cr);
+
+                        gint x_pango = (gint)((event->x - tl->box_x) * PANGO_SCALE);
+                        gint y_pango = (gint)((event->y - tl->box_y) * PANGO_SCALE);
+                        gint idx = 0, trailing = 0;
+                        pango_layout_xy_to_index(layout, x_pango, y_pango,
+                                                 &idx, &trailing);
+                        if (trailing && tl->text[idx] != '\0') {
+                            const gchar* next = g_utf8_next_char(tl->text + idx);
+                            idx = (gint)(next - tl->text);
+                        }
+                        state->cursor_pos = CLAMP(idx, 0, (gint)strlen(tl->text));
+
+                        g_object_unref(layout);
+                        cairo_destroy(tmp_cr);
+                        cairo_surface_destroy(tmp);
+                    }
+                    state->cursor_visible = TRUE;
+                    text_tool_queue_overlay(doc);
+                }
+            } else {
+                /* Single-click: exit editing and start a move drag */
+                text_tool_exit_editing(state);
+                state->drag_mode   = -1;
+                state->is_dragging = TRUE;
+                state->start_x     = event->x;
+                state->start_y     = event->y;
+                text_tool_queue_overlay(doc);
+            }
+            return;
+        }
+
+        /* Clicked outside the box: deselect, fall through to find/create */
+        text_tool_exit_editing(state);
+        state->has_box = FALSE;
+        text_tool_queue_overlay(doc);
+    }
+
+    /* ── No active box: check if click lands on an existing text layer ─ */
+    {
+        ImageLayer* found = text_tool_find_layer_at_point(doc, event->x, event->y);
+        if (found) {
+            TextLayer* tl = (TextLayer*)found->text_data;
+            state->layer   = found;
+            state->box_x   = (gint)(tl->box_x + found->offset_x);
+            state->box_y   = (gint)(tl->box_y + found->offset_y);
+            state->box_w   = (gint)tl->box_width;
+            state->box_h   = (gint)tl->box_height;
+            state->has_box = TRUE;
+            doc->selected_layer = found;
+
+            if (event->click_count >= 2) {
+                text_tool_enter_editing(state, doc);
+                text_tool_queue_overlay(doc);
+            } else {
+                /* Single-click: start move drag */
+                state->drag_mode   = -1;
+                state->is_dragging = TRUE;
+                state->start_x     = event->x;
+                state->start_y     = event->y;
+                text_tool_queue_overlay(doc);
+            }
             return;
         }
     }
 
-    /* Start a new box */
+    /* ── Empty canvas: start rubber-band to define a new text box ───── */
+    text_tool_exit_editing(state);
     state->has_box        = FALSE;
     state->is_dragging    = TRUE;
     state->drag_mode      = -2;
@@ -200,7 +426,7 @@ static void text_tool_mouse_move(Tool* tool, struct ImageDocument* doc,
         gint dy = event->y - state->start_y;
 
         if (state->drag_mode == -2) {
-            /* Rubber-band: just track cursor, draw happens in draw_preview */
+            /* Rubber-band: just track cursor; overlay draw handles the preview */
             state->current_x = event->x;
             state->current_y = event->y;
         } else if (state->drag_mode == -1) {
@@ -297,7 +523,7 @@ static void text_tool_mouse_up(Tool* tool, struct ImageDocument* doc,
     state->is_dragging = FALSE;
 
     if (state->drag_mode == -2) {
-        /* Finalise new box from rubber-band drag */
+        /* Finalise rubber-band: compute box from drag, create the layer */
         gint x = state->start_x;
         gint y = state->start_y;
         gint w = state->current_x - state->start_x;
@@ -306,11 +532,10 @@ static void text_tool_mouse_up(Tool* tool, struct ImageDocument* doc,
         if (w < 0) { x += w; w = -w; }
         if (h < 0) { y += h; h = -h; }
 
-        /* A plain click (no meaningful drag) → apply a sensible default box */
+        /* A plain click (no meaningful drag) → sensible default size */
         if (w < TEXT_CLICK_THRESHOLD && h < TEXT_CLICK_THRESHOLD) {
             w = TEXT_DEFAULT_BOX_W;
             h = TEXT_DEFAULT_BOX_H;
-            /* Keep the click point as the top-left, clamped to the canvas */
             if (doc->width  > 0 && x + w > (gint)doc->width)
                 x = MAX(0, (gint)doc->width  - w);
             if (doc->height > 0 && y + h > (gint)doc->height)
@@ -328,7 +553,7 @@ static void text_tool_mouse_up(Tool* tool, struct ImageDocument* doc,
         state->box_h   = h;
         state->has_box = TRUE;
 
-        /* Create the text layer */
+        /* Create the text layer on release */
         if (doc->width > 0 && doc->height > 0) {
             ImageLayer* layer = layer_create_text("Text Layer",
                                                    doc->width, doc->height, doc);
@@ -346,6 +571,8 @@ static void text_tool_mouse_up(Tool* tool, struct ImageDocument* doc,
                 state->layer        = layer;
 
                 document_invalidate_composite(doc);
+                text_tool_notify_layers_panel(doc, layer);
+                text_tool_enter_editing(state, doc);
             }
         }
     } else {
@@ -357,6 +584,162 @@ static void text_tool_mouse_up(Tool* tool, struct ImageDocument* doc,
     state->drag_mode      = -1;
     state->hovered_handle = -2;
     text_tool_queue_full(doc);
+}
+
+/* -----------------------------------------------------------------------
+ * Keyboard handler
+ * --------------------------------------------------------------------- */
+
+static gboolean text_tool_key_press(Tool* tool, struct ImageDocument* doc,
+                                    GdkEventKey* event) {
+    if (!tool || !doc || !tool->user_data) return FALSE;
+
+    TextToolState* state = (TextToolState*)tool->user_data;
+
+    /* ESC always exits editing mode (or is a no-op when already idle).
+     * Handled here before the is_editing guard so pressing Escape is never
+     * silently ignored while the text tool is the active tool. */
+    if (event->keyval == GDK_KEY_Escape) {
+        if (state->is_editing) {
+            text_tool_exit_editing(state);
+            text_tool_queue_overlay(doc);
+        }
+        return TRUE;
+    }
+
+    if (!state->is_editing)
+        return FALSE;
+
+    if (!state->layer || !text_tool_layer_valid(doc, state->layer) ||
+        state->layer->layer_type != LAYER_TYPE_TEXT || !state->layer->text_data)
+        return FALSE;
+
+    TextLayer* tl = (TextLayer*)state->layer->text_data;
+    if (!tl->text) {
+        tl->text = g_strdup("");
+        state->cursor_pos = 0;
+    }
+
+    gint text_len = (gint)strlen(tl->text);
+    /* Keep cursor in bounds */
+    state->cursor_pos = CLAMP(state->cursor_pos, 0, text_len);
+
+    switch (event->keyval) {
+
+        /* ---- Delete backwards ---- */
+        case GDK_KEY_BackSpace:
+            if (state->cursor_pos > 0) {
+                const gchar* prev =
+                    g_utf8_prev_char(tl->text + state->cursor_pos);
+                gint prev_pos = (gint)(prev - tl->text);
+                gint del_len  = state->cursor_pos - prev_pos;
+
+                gchar* new_text = g_malloc(text_len - del_len + 1);
+                memcpy(new_text, tl->text, prev_pos);
+                memcpy(new_text + prev_pos,
+                       tl->text + state->cursor_pos,
+                       text_len - state->cursor_pos + 1);
+                g_free(tl->text);
+                tl->text = new_text;
+                state->cursor_pos = prev_pos;
+                text_tool_invalidate(doc, state);
+            } else {
+                /* Nothing to delete but still consume the key */
+                text_tool_queue_overlay(doc);
+            }
+            return TRUE;
+
+        /* ---- Delete forwards ---- */
+        case GDK_KEY_Delete:
+            if (tl->text[state->cursor_pos] != '\0') {
+                const gchar* next =
+                    g_utf8_next_char(tl->text + state->cursor_pos);
+                gint next_pos = (gint)(next - tl->text);
+                gint del_len  = next_pos - state->cursor_pos;
+
+                gchar* new_text = g_malloc(text_len - del_len + 1);
+                memcpy(new_text, tl->text, state->cursor_pos);
+                memcpy(new_text + state->cursor_pos,
+                       tl->text + next_pos,
+                       text_len - next_pos + 1);
+                g_free(tl->text);
+                tl->text = new_text;
+                text_tool_invalidate(doc, state);
+            } else {
+                text_tool_queue_overlay(doc);
+            }
+            return TRUE;
+
+        /* ---- Cursor movement ---- */
+        case GDK_KEY_Left:
+        case GDK_KEY_KP_Left:
+            if (state->cursor_pos > 0) {
+                const gchar* prev =
+                    g_utf8_prev_char(tl->text + state->cursor_pos);
+                state->cursor_pos = (gint)(prev - tl->text);
+            }
+            state->cursor_visible = TRUE;
+            text_tool_queue_overlay(doc);
+            return TRUE;
+
+        case GDK_KEY_Right:
+        case GDK_KEY_KP_Right:
+            if (tl->text[state->cursor_pos] != '\0') {
+                const gchar* next =
+                    g_utf8_next_char(tl->text + state->cursor_pos);
+                state->cursor_pos = (gint)(next - tl->text);
+            }
+            state->cursor_visible = TRUE;
+            text_tool_queue_overlay(doc);
+            return TRUE;
+
+        case GDK_KEY_Home:
+        case GDK_KEY_KP_Home: {
+            /* Move to start of current line */
+            gint pos = state->cursor_pos;
+            while (pos > 0 && tl->text[pos - 1] != '\n')
+                pos--;
+            state->cursor_pos = pos;
+            state->cursor_visible = TRUE;
+            text_tool_queue_overlay(doc);
+            return TRUE;
+        }
+
+        case GDK_KEY_End:
+        case GDK_KEY_KP_End: {
+            /* Move to end of current line */
+            gint pos = state->cursor_pos;
+            while (tl->text[pos] != '\0' && tl->text[pos] != '\n')
+                pos++;
+            state->cursor_pos = pos;
+            state->cursor_visible = TRUE;
+            text_tool_queue_overlay(doc);
+            return TRUE;
+        }
+
+        /* ---- Newline ---- */
+        case GDK_KEY_Return:
+        case GDK_KEY_KP_Enter:
+            text_tool_insert(state, tl, "\n");
+            text_tool_invalidate(doc, state);
+            return TRUE;
+
+        default:
+            break;
+    }
+
+    /* ---- Printable characters ---- */
+    gunichar uc = gdk_keyval_to_unicode(event->keyval);
+    if (uc >= 0x20 && uc != 0x7f) {
+        gchar buf[7];
+        gint  len = g_unichar_to_utf8(uc, buf);
+        buf[len]  = '\0';
+        text_tool_insert(state, tl, buf);
+        text_tool_invalidate(doc, state);
+        return TRUE;
+    }
+
+    return FALSE; /* Key not consumed by text editing */
 }
 
 /* -----------------------------------------------------------------------
@@ -409,7 +792,6 @@ void tool_text_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom) {
         cairo_scale(cr, zoom, zoom);
 
     /* ---- Bounding box border ---- */
-    /* Dashed blue/white line to distinguish from the crop tool */
     gdouble dash[] = { 5.0 / zoom, 3.0 / zoom };
     cairo_set_dash(cr, dash, 2, 0);
     cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
@@ -471,6 +853,51 @@ void tool_text_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom) {
         cairo_stroke(cr);
     }
 
+    /* ---- Text cursor (caret) ---- */
+    if (state->is_editing && state->cursor_visible &&
+        state->layer && text_tool_layer_valid(doc, state->layer) &&
+        state->layer->layer_type == LAYER_TYPE_TEXT &&
+        state->layer->text_data) {
+
+        TextLayer* tl = (TextLayer*)state->layer->text_data;
+        if (tl->text) {
+            gint text_len   = (gint)strlen(tl->text);
+            gint cursor_pos = CLAMP(state->cursor_pos, 0, text_len);
+
+            /* Create a layout with the same settings used for rendering.
+             * The cairo context already has cairo_scale(cr, zoom, zoom) so
+             * Pango computes metrics at the effective screen resolution.
+             * Positions returned by pango_layout_get_cursor_pos are in
+             * Pango units relative to the layout origin; divide by PANGO_SCALE
+             * to get user-space (document) coordinates. */
+            PangoLayout* layout = text_layer_create_layout(tl, cr);
+            PangoRectangle strong_pos;
+            pango_layout_get_cursor_pos(layout, cursor_pos, &strong_pos, NULL);
+            g_object_unref(layout);
+
+            gdouble cx = tl->box_x + (gdouble)strong_pos.x      / PANGO_SCALE;
+            gdouble cy = tl->box_y + (gdouble)strong_pos.y      / PANGO_SCALE;
+            gdouble ch =             (gdouble)strong_pos.height  / PANGO_SCALE;
+            if (ch < 1.0) ch = 1.0;
+
+            cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
+            cairo_set_line_width(cr, 1.5 / zoom);
+            cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+
+            /* White backing for visibility on dark text */
+            cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 0.9);
+            cairo_move_to(cr, cx + 1.0 / zoom, cy);
+            cairo_line_to(cr, cx + 1.0 / zoom, cy + ch);
+            cairo_stroke(cr);
+
+            /* Black caret */
+            cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.95);
+            cairo_move_to(cr, cx, cy);
+            cairo_line_to(cr, cx, cy + ch);
+            cairo_stroke(cr);
+        }
+    }
+
     cairo_set_antialias(cr, CAIRO_ANTIALIAS_DEFAULT);
     cairo_restore(cr);
 }
@@ -482,11 +909,21 @@ void tool_text_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom) {
 void tool_text_reset(Tool* tool) {
     if (!tool || !tool->user_data) return;
     TextToolState* state = (TextToolState*)tool->user_data;
+
+    text_tool_exit_editing(state);
+
     state->has_box        = FALSE;
     state->is_dragging    = FALSE;
     state->drag_mode      = -2;
     state->hovered_handle = -2;
     state->layer          = NULL;
+}
+
+gboolean tool_text_is_editing(Tool* tool) {
+    if (!tool || tool->type != TOOL_TEXT || !tool->user_data)
+        return FALSE;
+    TextToolState* state = (TextToolState*)tool->user_data;
+    return state->is_editing;
 }
 
 Tool* tool_text_create(void) {
@@ -496,6 +933,7 @@ Tool* tool_text_create(void) {
     tool->mouse_down = text_tool_mouse_down;
     tool->mouse_move = text_tool_mouse_move;
     tool->mouse_up   = text_tool_mouse_up;
+    tool->key_press  = text_tool_key_press;
 
     tool->user_data = g_malloc0(sizeof(TextToolState));
     if (!tool->user_data) {

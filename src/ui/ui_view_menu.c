@@ -1,6 +1,8 @@
 #include "ui/ui_view_menu.h"
 #include "app/settings.h"
 #include "document.h"
+#include "tool_manager.h"
+#include "tools/tool_text.h"
 #include "ui.h"
 #include <gtk/gtk.h>
 
@@ -237,6 +239,13 @@ void on_view_zoom_6_25(GtkWidget* widget, gpointer data) {
 static gboolean on_window_key_press_for_zoom(GtkWidget* widget, GdkEventKey* event, gpointer user_data) {
     (void)widget;
     AppContext* ctx = (AppContext*)user_data;
+
+    /* Don't steal number keys (1-5) when the text tool is in edit mode */
+    if (ctx && ctx->tool_registry) {
+        Tool* at = tool_manager_get_active(ctx->tool_registry);
+        if (tool_text_is_editing(at))
+            return FALSE;
+    }
 
     /* Get the modifier state, ignoring lock keys (Caps Lock, Num Lock) */
     GdkModifierType modifiers = event->state & gtk_accelerator_get_default_mod_mask();

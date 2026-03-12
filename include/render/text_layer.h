@@ -4,6 +4,7 @@
 #include "document.h"
 #include <cairo/cairo.h>
 #include <glib.h>
+#include <pango/pangocairo.h>
 
 /**
  * Vector text layer data — rendered dynamically via Pango+Cairo each composite.
@@ -84,5 +85,18 @@ void text_layer_render(TextLayer* layer, cairo_t* cr);
  * @param layer An ImageLayer with layer_type == LAYER_TYPE_TEXT
  */
 void text_layer_render_to_surface(ImageLayer* layer);
+
+/**
+ * Create a PangoLayout configured with all of @tl's text, font, alignment,
+ * wrapping and spacing settings applied to @cr.
+ *
+ * The caller owns the returned layout and must call g_object_unref() when done.
+ * Rotation is NOT applied (the layout is in the text box's local frame).
+ *
+ * @param tl  TextLayer whose settings to apply
+ * @param cr  Cairo context that provides the PangoCairo font map / DPI basis
+ * @return    A new PangoLayout (never NULL)
+ */
+PangoLayout* text_layer_create_layout(const TextLayer* tl, cairo_t* cr);
 
 #endif /* TEXT_LAYER_H */

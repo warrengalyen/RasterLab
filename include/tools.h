@@ -52,10 +52,11 @@ enum {
  * Mouse event data structure
  */
 typedef struct {
-    gint x;       /* X coordinate in image space */
-    gint y;       /* Y coordinate in image space */
-    guint button; /* Mouse button (1, 2, 3) */
-    guint state;  /* Modifier keys (shift, ctrl, etc) */
+    gint x;           /* X coordinate in image space */
+    gint y;           /* Y coordinate in image space */
+    guint button;     /* Mouse button (1, 2, 3) */
+    guint state;      /* Modifier keys (shift, ctrl, etc) */
+    gint click_count; /* 1 = single click, 2 = double click */
 } MouseEvent;
 
 /* Forward declare ImageDocument */
@@ -67,6 +68,8 @@ struct ImageDocument;
 typedef void (*ToolMouseDownHandler)(Tool* tool, struct ImageDocument* doc, MouseEvent* event);
 typedef void (*ToolMouseMoveHandler)(Tool* tool, struct ImageDocument* doc, MouseEvent* event);
 typedef void (*ToolMouseUpHandler)(Tool* tool, struct ImageDocument* doc, MouseEvent* event);
+/** Returns TRUE if the key was consumed and should not propagate further. */
+typedef gboolean (*ToolKeyPressHandler)(Tool* tool, struct ImageDocument* doc, GdkEventKey* event);
 
 /**
  * Tool structure
@@ -78,6 +81,7 @@ typedef struct _Tool {
     ToolMouseDownHandler mouse_down; /* Mouse down handler */
     ToolMouseMoveHandler mouse_move; /* Mouse move handler */
     ToolMouseUpHandler mouse_up;     /* Mouse up handler */
+    ToolKeyPressHandler key_press;   /* Key press handler (may be NULL) */
     gpointer user_data;              /* Tool-specific data */
     gpointer app_context;            /* App context for UI updates */
     ToolOptionFlags options;         /* Which options this tool supports */

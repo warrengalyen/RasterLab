@@ -1040,8 +1040,9 @@ static gboolean on_drawing_area_button_press(GtkWidget* widget, GdkEventButton* 
 
     /* Convert to image coordinates */
     widget_to_image_coords(doc, event->x, event->y, &tool_event.x, &tool_event.y);
-    tool_event.button = event->button;
-    tool_event.state = event->state;
+    tool_event.button      = event->button;
+    tool_event.state       = event->state;
+    tool_event.click_count = (event->type == GDK_2BUTTON_PRESS) ? 2 : 1;
 
     /* Call tool handler */
     active_tool->mouse_down(active_tool, doc, &tool_event);
@@ -1689,6 +1690,14 @@ static gboolean on_drawing_area_key_press(GtkWidget* widget, GdkEventKey* event,
     }
 
     Tool* active_tool = tool_manager_get_active(tool_registry);
+
+    /* Text tool: dispatch key events when in edit mode.  Must run before the
+     * selection-tool filter below so edit-mode keys are not silently dropped. */
+    if (active_tool && active_tool->type == TOOL_TEXT && active_tool->key_press) {
+        if (active_tool->key_press(active_tool, doc, event))
+            return TRUE;
+    }
+
     if (!active_tool || (active_tool->type != TOOL_RECT_SELECT && active_tool->type != TOOL_ELLIPSE_SELECT &&
                          active_tool->type != TOOL_POLYGON_SELECT && active_tool->type != TOOL_LASSO_SELECT &&
                          active_tool->type != TOOL_MAGIC_WAND)) {
