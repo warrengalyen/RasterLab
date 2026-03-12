@@ -4,7 +4,9 @@
 #include "render/text_layer.h"
 #include "selection.h"
 #include "tool_manager.h"
+#include "ui.h"
 #include "ui/layers_panel.h"
+#include "ui/tool_options_panel.h"
 #include <gdk/gdk.h>
 #include <gtk/gtk.h>
 #include <pango/pangocairo.h>
@@ -382,6 +384,17 @@ static void text_tool_mouse_down(Tool* tool, struct ImageDocument* doc,
             state->has_box = TRUE;
             doc->selected_layer = found;
 
+            /* Sync the text tool options panel to this layer's properties */
+            if (doc->drawing_area) {
+                GtkWidget* win = gtk_widget_get_toplevel(doc->drawing_area);
+                if (win) {
+                    AppContext* ctx =
+                        (AppContext*)g_object_get_data(G_OBJECT(win), "app_context");
+                    if (ctx && ctx->tool_options_panel)
+                        tool_options_panel_sync_text_layer(ctx->tool_options_panel, found);
+                }
+            }
+
             if (event->click_count >= 2) {
                 text_tool_enter_editing(state, doc);
                 text_tool_queue_overlay(doc);
@@ -572,6 +585,19 @@ static void text_tool_mouse_up(Tool* tool, struct ImageDocument* doc,
 
                 document_invalidate_composite(doc);
                 text_tool_notify_layers_panel(doc, layer);
+
+                /* Sync the tool-options panel to the new layer's defaults */
+                if (doc->drawing_area) {
+                    GtkWidget* win = gtk_widget_get_toplevel(doc->drawing_area);
+                    if (win) {
+                        AppContext* ctx =
+                            (AppContext*)g_object_get_data(G_OBJECT(win), "app_context");
+                        if (ctx && ctx->tool_options_panel)
+                            tool_options_panel_sync_text_layer(ctx->tool_options_panel,
+                                                               layer);
+                    }
+                }
+
                 text_tool_enter_editing(state, doc);
             }
         }

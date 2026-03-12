@@ -2,7 +2,9 @@
 #include "command.h"
 #include "commands/command_image.h"
 #include "document.h"
+#include "render/layer.h"
 #include "render/render_utils.h"
+#include "render/text_layer.h"
 #include "selection.h"
 #include "tool_manager.h"
 #include "tool_options.h"
@@ -13,7 +15,9 @@
 #include "tools/tool_rect_select.h"
 #include "ui.h"
 #include "ui/widgets/vertical_spin_button.h"
+#include <pango/pango.h>
 #include <stdio.h>
+#include <string.h>
 
 /* Flag to prevent recursive spin updates when crop link toggle is active */
 static gboolean g_crop_spin_updating = FALSE;
@@ -1947,6 +1951,259 @@ static void on_crop_apply_clicked(GtkButton* button, gpointer user_data) {
     }
 }
 
+/* =========================================================================
+ * Text tool options — helpers and signal handlers
+ * ========================================================================= */
+
+/* Guard flag: non-zero while the panel is being programmatically synced so
+ * that signal handlers do not recursively write back to the layer. */
+static gint g_text_panel_syncing = 0;
+
+/**
+ * Return the active TextLayer from the current document's selected layer,
+ * or NULL if no text layer is selected.
+ */
+static TextLayer* text_opts_get_layer(ToolOptionsPanel* panel) {
+    if (!panel || !panel->panel)
+        return NULL;
+    GtkWidget* win = gtk_widget_get_toplevel(panel->panel);
+    if (!win)
+        return NULL;
+    AppContext* ctx = (AppContext*)g_object_get_data(G_OBJECT(win), "app_context");
+    if (!ctx)
+        return NULL;
+    ImageDocument* doc = ui_get_active_document(ctx);
+    if (!doc)
+        return NULL;
+    ImageLayer* layer = document_get_selected_layer(doc);
+    if (!layer || layer->layer_type != LAYER_TYPE_TEXT || !layer->text_data)
+        return NULL;
+    return (TextLayer*)layer->text_data;
+}
+
+/**
+ * Invalidate the selected text layer's cache and queue a full redraw.
+ */
+static void text_opts_invalidate(ToolOptionsPanel* panel) {
+    if (!panel || !panel->panel)
+        return;
+    GtkWidget* win = gtk_widget_get_toplevel(panel->panel);
+    if (!win)
+        return;
+    AppContext* ctx = (AppContext*)g_object_get_data(G_OBJECT(win), "app_context");
+    if (!ctx)
+        return;
+    ImageDocument* doc = ui_get_active_document(ctx);
+    if (!doc)
+        return;
+    ImageLayer* layer = document_get_selected_layer(doc);
+    if (!layer || layer->layer_type != LAYER_TYPE_TEXT)
+        return;
+    layer_invalidate_cache(layer);
+    document_invalidate_composite(doc);
+    if (doc->drawing_area)
+        gtk_widget_queue_draw(doc->drawing_area);
+    if (doc->viewport)
+        gtk_widget_queue_draw(doc->viewport);
+}
+
+/* ── Signal handlers ─────────────────────────────────────────────────── */
+
+static void on_text_font_family_changed(GtkComboBox* combo, gpointer user_data) {
+    if (g_text_panel_syncing) return;
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    TextLayer* tl = text_opts_get_layer(panel);
+    if (!tl) return;
+
+    gchar* family = gtk_combo_box_text_get_active_text(GTK_COMBO_BOX_TEXT(combo));
+    if (!family) return;
+    g_free(tl->font_family);
+    tl->font_family = family; /* ownership transferred */
+    text_opts_invalidate(panel);
+}
+
+static void on_text_font_size_changed(GtkSpinButton* spin, gpointer user_data) {
+    if (g_text_panel_syncing) return;
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    TextLayer* tl = text_opts_get_layer(panel);
+    if (!tl) return;
+    tl->font_size = (int)gtk_spin_button_get_value(spin);
+    text_opts_invalidate(panel);
+}
+
+static void on_text_bold_toggled(GtkToggleButton* btn, gpointer user_data) {
+    if (g_text_panel_syncing) return;
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    TextLayer* tl = text_opts_get_layer(panel);
+    if (!tl) return;
+    tl->font_weight = gtk_toggle_button_get_active(btn) ? 700 : 400;
+    text_opts_invalidate(panel);
+}
+
+static void on_text_italic_toggled(GtkToggleButton* btn, gpointer user_data) {
+    if (g_text_panel_syncing) return;
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    TextLayer* tl = text_opts_get_layer(panel);
+    if (!tl) return;
+    tl->italic = gtk_toggle_button_get_active(btn);
+    text_opts_invalidate(panel);
+}
+
+static void on_text_color_set(GtkColorButton* btn, gpointer user_data) {
+    if (g_text_panel_syncing) return;
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    TextLayer* tl = text_opts_get_layer(panel);
+    if (!tl) return;
+    GdkRGBA color;
+    gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(btn), &color);
+    tl->color_r = color.red;
+    tl->color_g = color.green;
+    tl->color_b = color.blue;
+    tl->color_a = color.alpha;
+    text_opts_invalidate(panel);
+}
+
+/* Generic alignment handler: alignment value is stored as an int on the widget */
+static void on_text_align_toggled(GtkToggleButton* btn, gpointer user_data) {
+    if (g_text_panel_syncing) return;
+    if (!gtk_toggle_button_get_active(btn)) return; /* ignore deactivations */
+
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    TextLayer* tl = text_opts_get_layer(panel);
+    if (!tl) return;
+
+    gint align = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(btn), "alignment_value"));
+    tl->alignment = align;
+
+    /* Deactivate the other three alignment buttons (radio-button behaviour) */
+    GtkWidget* buttons[4] = {
+        panel->text_align_left_button,
+        panel->text_align_center_button,
+        panel->text_align_right_button,
+        panel->text_align_justify_button
+    };
+    g_text_panel_syncing++;
+    for (int i = 0; i < 4; i++) {
+        if (buttons[i] && GTK_WIDGET(btn) != buttons[i])
+            gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(buttons[i]), FALSE);
+    }
+    g_text_panel_syncing--;
+
+    text_opts_invalidate(panel);
+}
+
+static void on_text_line_spacing_changed(GtkSpinButton* spin, gpointer user_data) {
+    if (g_text_panel_syncing) return;
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    TextLayer* tl = text_opts_get_layer(panel);
+    if (!tl) return;
+    tl->line_spacing = gtk_spin_button_get_value(spin);
+    text_opts_invalidate(panel);
+}
+
+static void on_text_letter_spacing_changed(GtkSpinButton* spin, gpointer user_data) {
+    if (g_text_panel_syncing) return;
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    TextLayer* tl = text_opts_get_layer(panel);
+    if (!tl) return;
+    tl->letter_spacing = gtk_spin_button_get_value(spin);
+    text_opts_invalidate(panel);
+}
+
+static void on_text_antialias_toggled(GtkToggleButton* btn, gpointer user_data) {
+    if (g_text_panel_syncing) return;
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    TextLayer* tl = text_opts_get_layer(panel);
+    if (!tl) return;
+    tl->antialias = gtk_toggle_button_get_active(btn);
+    text_opts_invalidate(panel);
+}
+
+static void on_text_rotation_changed(GtkSpinButton* spin, gpointer user_data) {
+    if (g_text_panel_syncing) return;
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    TextLayer* tl = text_opts_get_layer(panel);
+    if (!tl) return;
+    tl->rotation = gtk_spin_button_get_value(spin);
+    text_opts_invalidate(panel);
+}
+
+/* =========================================================================
+ * Public sync function — update panel widgets from a live TextLayer
+ * ========================================================================= */
+
+void tool_options_panel_sync_text_layer(ToolOptionsPanel* panel,
+                                        struct ImageLayer* layer) {
+    if (!panel || !panel->text_panel) return;
+    if (!layer || layer->layer_type != LAYER_TYPE_TEXT || !layer->text_data) return;
+    TextLayer* tl = (TextLayer*)layer->text_data;
+
+    g_text_panel_syncing++;
+
+    /* Font family */
+    if (panel->text_font_family_combo && tl->font_family) {
+        if (!gtk_combo_box_set_active_id(GTK_COMBO_BOX(panel->text_font_family_combo),
+                                         tl->font_family)) {
+            /* Family not in list yet — append it then select */
+            gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(panel->text_font_family_combo),
+                                      tl->font_family, tl->font_family);
+            gtk_combo_box_set_active_id(GTK_COMBO_BOX(panel->text_font_family_combo),
+                                         tl->font_family);
+        }
+    }
+
+    /* Font size */
+    if (panel->text_font_size_spin)
+        gtk_spin_button_set_value(GTK_SPIN_BUTTON(panel->text_font_size_spin),
+                                  (gdouble)tl->font_size);
+
+    /* Bold / Italic */
+    if (panel->text_bold_button)
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->text_bold_button),
+                                     tl->font_weight >= 700);
+    if (panel->text_italic_button)
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->text_italic_button),
+                                     tl->italic);
+
+    /* Color */
+    if (panel->text_color_button) {
+        GdkRGBA color = { tl->color_r, tl->color_g, tl->color_b, tl->color_a };
+        gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(panel->text_color_button), &color);
+    }
+
+    /* Alignment (exclusive toggles) */
+    if (panel->text_align_left_button)
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->text_align_left_button),
+                                     tl->alignment == 0);
+    if (panel->text_align_center_button)
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->text_align_center_button),
+                                     tl->alignment == 1);
+    if (panel->text_align_right_button)
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->text_align_right_button),
+                                     tl->alignment == 2);
+    if (panel->text_align_justify_button)
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->text_align_justify_button),
+                                     tl->alignment == 3);
+
+    /* Spacing */
+    if (panel->text_line_spacing_spin)
+        gtk_spin_button_set_value(GTK_SPIN_BUTTON(panel->text_line_spacing_spin),
+                                  tl->line_spacing);
+    if (panel->text_letter_spacing_spin)
+        gtk_spin_button_set_value(GTK_SPIN_BUTTON(panel->text_letter_spacing_spin),
+                                  tl->letter_spacing);
+
+    /* Options */
+    if (panel->text_antialias_checkbox)
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->text_antialias_checkbox),
+                                     tl->antialias);
+    if (panel->text_rotation_spin)
+        gtk_spin_button_set_value(GTK_SPIN_BUTTON(panel->text_rotation_spin),
+                                  tl->rotation);
+
+    g_text_panel_syncing--;
+}
+
 ToolOptionsPanel* create_tool_options_panel(void) {
     ToolOptionsPanel* tool_opts_panel = (ToolOptionsPanel*)g_malloc(sizeof(ToolOptionsPanel));
 
@@ -1967,6 +2224,20 @@ ToolOptionsPanel* create_tool_options_panel(void) {
     tool_opts_panel->polygon_select_panel = NULL;
     tool_opts_panel->crop_panel = NULL;
     tool_opts_panel->move_panel = NULL;
+    tool_opts_panel->text_panel                = NULL;
+    tool_opts_panel->text_font_family_combo    = NULL;
+    tool_opts_panel->text_font_size_spin       = NULL;
+    tool_opts_panel->text_bold_button          = NULL;
+    tool_opts_panel->text_italic_button        = NULL;
+    tool_opts_panel->text_color_button         = NULL;
+    tool_opts_panel->text_align_left_button    = NULL;
+    tool_opts_panel->text_align_center_button  = NULL;
+    tool_opts_panel->text_align_right_button   = NULL;
+    tool_opts_panel->text_align_justify_button = NULL;
+    tool_opts_panel->text_line_spacing_spin    = NULL;
+    tool_opts_panel->text_letter_spacing_spin  = NULL;
+    tool_opts_panel->text_antialias_checkbox   = NULL;
+    tool_opts_panel->text_rotation_spin        = NULL;
     tool_opts_panel->title_label = NULL;
     tool_opts_panel->size_scale = NULL;
     tool_opts_panel->opacity_scale = NULL;
@@ -2902,6 +3173,136 @@ ToolOptionsPanel* create_tool_options_panel(void) {
         }
     }
 
+    /* ── Load text tool options panel from Glade ── */
+    {
+        GtkBuilder* builder = gtk_builder_new();
+        GError* err = NULL;
+        if (gtk_builder_add_from_resource(builder, "/ui/text_options.glade", &err)) {
+            tool_opts_panel->text_panel =
+                GTK_WIDGET(gtk_builder_get_object(builder, "text_options_panel"));
+
+            if (tool_opts_panel->text_panel) {
+                gtk_container_add(GTK_CONTAINER(container), tool_opts_panel->text_panel);
+
+                /* Grab widget references */
+                tool_opts_panel->text_font_family_combo =
+                    GTK_WIDGET(gtk_builder_get_object(builder, "text_font_family_combo"));
+                tool_opts_panel->text_font_size_spin =
+                    GTK_WIDGET(gtk_builder_get_object(builder, "text_font_size_spin"));
+                tool_opts_panel->text_bold_button =
+                    GTK_WIDGET(gtk_builder_get_object(builder, "text_bold_button"));
+                tool_opts_panel->text_italic_button =
+                    GTK_WIDGET(gtk_builder_get_object(builder, "text_italic_button"));
+                tool_opts_panel->text_color_button =
+                    GTK_WIDGET(gtk_builder_get_object(builder, "text_color_button"));
+                tool_opts_panel->text_align_left_button =
+                    GTK_WIDGET(gtk_builder_get_object(builder, "text_align_left_button"));
+                tool_opts_panel->text_align_center_button =
+                    GTK_WIDGET(gtk_builder_get_object(builder, "text_align_center_button"));
+                tool_opts_panel->text_align_right_button =
+                    GTK_WIDGET(gtk_builder_get_object(builder, "text_align_right_button"));
+                tool_opts_panel->text_align_justify_button =
+                    GTK_WIDGET(gtk_builder_get_object(builder, "text_align_justify_button"));
+                tool_opts_panel->text_line_spacing_spin =
+                    GTK_WIDGET(gtk_builder_get_object(builder, "text_line_spacing_spin"));
+                tool_opts_panel->text_letter_spacing_spin =
+                    GTK_WIDGET(gtk_builder_get_object(builder, "text_letter_spacing_spin"));
+                tool_opts_panel->text_antialias_checkbox =
+                    GTK_WIDGET(gtk_builder_get_object(builder, "text_antialias_checkbox"));
+                tool_opts_panel->text_rotation_spin =
+                    GTK_WIDGET(gtk_builder_get_object(builder, "text_rotation_spin"));
+
+                /* Populate font family combo with Pango font families */
+                if (tool_opts_panel->text_font_family_combo) {
+                    PangoFontMap* font_map = pango_cairo_font_map_get_default();
+                    PangoFontFamily** families = NULL;
+                    int n_families = 0;
+                    pango_font_map_list_families(font_map, &families, &n_families);
+                    for (int fi = 0; fi < n_families; fi++) {
+                        const char* name = pango_font_family_get_name(families[fi]);
+                        gtk_combo_box_text_append(
+                            GTK_COMBO_BOX_TEXT(tool_opts_panel->text_font_family_combo),
+                            name, name);
+                    }
+                    g_free(families);
+                    /* Select a sensible default */
+                    gtk_combo_box_set_active_id(
+                        GTK_COMBO_BOX(tool_opts_panel->text_font_family_combo), "Sans");
+                }
+
+                /* Alignment buttons: store their logical alignment value so the
+                 * shared handler knows which alignment to apply. */
+                if (tool_opts_panel->text_align_left_button)
+                    g_object_set_data(G_OBJECT(tool_opts_panel->text_align_left_button),
+                                      "alignment_value", GINT_TO_POINTER(0));
+                if (tool_opts_panel->text_align_center_button)
+                    g_object_set_data(G_OBJECT(tool_opts_panel->text_align_center_button),
+                                      "alignment_value", GINT_TO_POINTER(1));
+                if (tool_opts_panel->text_align_right_button)
+                    g_object_set_data(G_OBJECT(tool_opts_panel->text_align_right_button),
+                                      "alignment_value", GINT_TO_POINTER(2));
+                if (tool_opts_panel->text_align_justify_button)
+                    g_object_set_data(G_OBJECT(tool_opts_panel->text_align_justify_button),
+                                      "alignment_value", GINT_TO_POINTER(3));
+
+                /* Connect signals */
+                if (tool_opts_panel->text_font_family_combo)
+                    g_signal_connect(tool_opts_panel->text_font_family_combo, "changed",
+                                     G_CALLBACK(on_text_font_family_changed),
+                                     tool_opts_panel);
+                if (tool_opts_panel->text_font_size_spin)
+                    g_signal_connect(tool_opts_panel->text_font_size_spin, "value-changed",
+                                     G_CALLBACK(on_text_font_size_changed),
+                                     tool_opts_panel);
+                if (tool_opts_panel->text_bold_button)
+                    g_signal_connect(tool_opts_panel->text_bold_button, "toggled",
+                                     G_CALLBACK(on_text_bold_toggled), tool_opts_panel);
+                if (tool_opts_panel->text_italic_button)
+                    g_signal_connect(tool_opts_panel->text_italic_button, "toggled",
+                                     G_CALLBACK(on_text_italic_toggled), tool_opts_panel);
+                if (tool_opts_panel->text_color_button)
+                    g_signal_connect(tool_opts_panel->text_color_button, "color-set",
+                                     G_CALLBACK(on_text_color_set), tool_opts_panel);
+                if (tool_opts_panel->text_align_left_button)
+                    g_signal_connect(tool_opts_panel->text_align_left_button, "toggled",
+                                     G_CALLBACK(on_text_align_toggled), tool_opts_panel);
+                if (tool_opts_panel->text_align_center_button)
+                    g_signal_connect(tool_opts_panel->text_align_center_button, "toggled",
+                                     G_CALLBACK(on_text_align_toggled), tool_opts_panel);
+                if (tool_opts_panel->text_align_right_button)
+                    g_signal_connect(tool_opts_panel->text_align_right_button, "toggled",
+                                     G_CALLBACK(on_text_align_toggled), tool_opts_panel);
+                if (tool_opts_panel->text_align_justify_button)
+                    g_signal_connect(tool_opts_panel->text_align_justify_button, "toggled",
+                                     G_CALLBACK(on_text_align_toggled), tool_opts_panel);
+                if (tool_opts_panel->text_line_spacing_spin)
+                    g_signal_connect(tool_opts_panel->text_line_spacing_spin, "value-changed",
+                                     G_CALLBACK(on_text_line_spacing_changed),
+                                     tool_opts_panel);
+                if (tool_opts_panel->text_letter_spacing_spin)
+                    g_signal_connect(tool_opts_panel->text_letter_spacing_spin,
+                                     "value-changed",
+                                     G_CALLBACK(on_text_letter_spacing_changed),
+                                     tool_opts_panel);
+                if (tool_opts_panel->text_antialias_checkbox)
+                    g_signal_connect(tool_opts_panel->text_antialias_checkbox, "toggled",
+                                     G_CALLBACK(on_text_antialias_toggled), tool_opts_panel);
+                if (tool_opts_panel->text_rotation_spin)
+                    g_signal_connect(tool_opts_panel->text_rotation_spin, "value-changed",
+                                     G_CALLBACK(on_text_rotation_changed), tool_opts_panel);
+
+                /* Hide initially */
+                gtk_widget_set_visible(tool_opts_panel->text_panel, FALSE);
+                gtk_widget_set_no_show_all(tool_opts_panel->text_panel, TRUE);
+            }
+        } else {
+            g_warning("Failed to load text options panel: %s",
+                      err ? err->message : "Unknown error");
+            if (err) g_error_free(err);
+        }
+        g_object_unref(builder);
+    }
+
     /* Hide the container initially - will be shown when a tool with options is selected */
     gtk_widget_set_visible(container, FALSE);
 
@@ -2938,6 +3339,8 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
         new_tool_type = TOOL_MAGIC_WAND;
     } else if (g_strcmp0(tool_name, "Move") == 0) {
         new_tool_type = TOOL_MOVE;
+    } else if (g_strcmp0(tool_name, "Text") == 0) {
+        new_tool_type = TOOL_TEXT;
     } else if (g_strcmp0(tool_name, "Crop") == 0) {
         new_tool_type = TOOL_CROP;
     } else if (g_strcmp0(tool_name, "Color Picker") == 0) {
@@ -2987,6 +3390,9 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
     }
     if (panel->move_panel) {
         gtk_widget_set_visible(panel->move_panel, FALSE);
+    }
+    if (panel->text_panel) {
+        gtk_widget_set_visible(panel->text_panel, FALSE);
     }
 
     /* For crop tool, show the options panel */
@@ -3656,6 +4062,29 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
                 g_signal_connect(widget, "toggled", G_CALLBACK(on_move_auto_select_toggled), NULL);
             }
         }
+    } else if (new_tool_type == TOOL_TEXT && panel->text_panel) {
+        /* Show main panel container */
+        if (panel->panel)
+            gtk_widget_set_visible(panel->panel, TRUE);
+
+        gtk_widget_set_no_show_all(panel->text_panel, FALSE);
+        gtk_widget_set_visible(panel->text_panel, TRUE);
+        gtk_widget_show_all(panel->text_panel);
+
+        /* Sync panel to the currently selected text layer (if any) */
+        {
+            GtkWidget* win = gtk_widget_get_toplevel(panel->panel);
+            AppContext* ctx = win
+                ? (AppContext*)g_object_get_data(G_OBJECT(win), "app_context") : NULL;
+            if (ctx) {
+                ImageDocument* doc = ui_get_active_document(ctx);
+                if (doc) {
+                    ImageLayer* sel = document_get_selected_layer(doc);
+                    if (sel && sel->layer_type == LAYER_TYPE_TEXT)
+                        tool_options_panel_sync_text_layer(panel, sel);
+                }
+            }
+        }
     } else {
         /* For tools without options (Hand, Zoom, etc.), hide main panel container */
         if (panel->panel) {
@@ -3702,6 +4131,10 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
         if (panel->move_panel) {
             gtk_widget_set_no_show_all(panel->move_panel, TRUE);
             gtk_widget_hide(panel->move_panel);
+        }
+        if (panel->text_panel) {
+            gtk_widget_set_no_show_all(panel->text_panel, TRUE);
+            gtk_widget_hide(panel->text_panel);
         }
 
         /* Clear widget references */

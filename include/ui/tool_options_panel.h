@@ -5,6 +5,8 @@
 #include "tools.h"
 #include <gtk/gtk.h>
 
+struct ImageLayer;
+
 /**
  * Tool options panel structure
  */
@@ -78,6 +80,20 @@ typedef struct {
     GtkWidget* magicwand_contiguous_radio;
     GtkWidget* magicwand_global_radio;
     GtkWidget* move_auto_select_checkbox;        /* Auto-select layer checkbox (move tool only) */
+    GtkWidget* text_panel;                       /* Text tool options panel (from Glade) */
+    GtkWidget* text_font_family_combo;           /* Font family combo (text tool) */
+    GtkWidget* text_font_size_spin;              /* Font size spin button (text tool) */
+    GtkWidget* text_bold_button;                 /* Bold toggle button (text tool) */
+    GtkWidget* text_italic_button;               /* Italic toggle button (text tool) */
+    GtkWidget* text_color_button;                /* Text color button (text tool) */
+    GtkWidget* text_align_left_button;           /* Align-left toggle (text tool) */
+    GtkWidget* text_align_center_button;         /* Align-center toggle (text tool) */
+    GtkWidget* text_align_right_button;          /* Align-right toggle (text tool) */
+    GtkWidget* text_align_justify_button;        /* Justify toggle (text tool) */
+    GtkWidget* text_line_spacing_spin;           /* Line spacing spin (text tool) */
+    GtkWidget* text_letter_spacing_spin;         /* Letter spacing spin (text tool) */
+    GtkWidget* text_antialias_checkbox;          /* Antialias checkbox (text tool) */
+    GtkWidget* text_rotation_spin;               /* Rotation spin button (text tool) */
     ToolType current_tool_type;                  /* Currently displayed tool type */
     ToolRegistry* tool_registry;                 /* Tool registry for cursor updates */
 } ToolOptionsPanel;
@@ -115,6 +131,16 @@ void tool_options_panel_set_tool_registry(ToolOptionsPanel* panel, ToolRegistry*
  * @param mode The combine mode to display
  */
 void tool_options_panel_set_combine_mode(ToolOptionsPanel* panel, SelectionCombineMode mode);
+
+/**
+ * Sync the text tool options panel widgets to match the given text layer.
+ * Call whenever the user activates an existing text layer so the panel
+ * reflects its current font, color, alignment, spacing, etc.
+ * @param panel The tool options panel (may be NULL — silently ignored)
+ * @param layer An LAYER_TYPE_TEXT ImageLayer whose text_data will be read
+ */
+void tool_options_panel_sync_text_layer(ToolOptionsPanel* panel,
+                                        struct ImageLayer* layer);
 
 /**
  * Sync crop tool options (ratio, fixed size) and panel spinners from manual resize

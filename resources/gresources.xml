@@ -86,6 +86,7 @@
     <file>ui/crop_options.glade</file>
     <file>ui/color_picker_options.glade</file>
     <file>ui/move_options.glade</file>
+    <file>ui/text_options.glade</file>
     <file>ui/new_image_dialog.glade</file>
     <file>ui/new_layer_dialog.glade</file>
     <file>ui/canvas_size_dialog.glade</file>
