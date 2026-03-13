@@ -4,6 +4,8 @@
 #include "document.h"
 #include "render/layer.h"
 #include "render/text_layer.h"
+#include "tool_manager.h"
+#include "tools/tool_text.h"
 #include "ui.h"
 #include "ui/dialogs/new_layer_dialog.h"
 #include "ui/layers_panel.h"
@@ -153,7 +155,6 @@ void ui_layer_menu_setup(GtkBuilder* builder, AppContext* ctx) {
         g_signal_connect(ctx->layer_menu_visibility_show_all, "activate", G_CALLBACK(on_layer_visibility_show_all), ctx);
     if (ctx->layer_menu_visibility_hide_all)
         g_signal_connect(ctx->layer_menu_visibility_hide_all, "activate", G_CALLBACK(on_layer_visibility_hide_all), ctx);
-
 }
 
 /**
@@ -600,9 +601,11 @@ void on_layer_order_select_top(GtkWidget* widget, gpointer data) {
     AppContext* ctx = (AppContext*)data;
     ImageDocument* doc = ui_get_active_document(ctx);
     LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window), "layers_panel");
-    if (!doc || !layers_panel) return;
+    if (!doc || !layers_panel)
+        return;
     guint count = document_get_layer_count(doc);
-    if (count == 0) return;
+    if (count == 0)
+        return;
     ImageLayer* top = document_get_layer(doc, count - 1);
     if (top) {
         document_set_selected_layer(doc, top);
@@ -619,11 +622,14 @@ void on_layer_order_select_above(GtkWidget* widget, gpointer data) {
     AppContext* ctx = (AppContext*)data;
     ImageDocument* doc = ui_get_active_document(ctx);
     LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window), "layers_panel");
-    if (!doc || !layers_panel) return;
+    if (!doc || !layers_panel)
+        return;
     ImageLayer* selected = layers_panel_get_selected_layer(layers_panel);
-    if (!selected) return;
+    if (!selected)
+        return;
     GList* iter = g_list_find(doc->layers, selected);
-    if (!iter || !iter->next) return;
+    if (!iter || !iter->next)
+        return;
     ImageLayer* above = (ImageLayer*)iter->next->data;
     document_set_selected_layer(doc, above);
     layers_panel_select_layer(layers_panel, doc, above);
@@ -638,11 +644,14 @@ void on_layer_order_select_below(GtkWidget* widget, gpointer data) {
     AppContext* ctx = (AppContext*)data;
     ImageDocument* doc = ui_get_active_document(ctx);
     LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window), "layers_panel");
-    if (!doc || !layers_panel) return;
+    if (!doc || !layers_panel)
+        return;
     ImageLayer* selected = layers_panel_get_selected_layer(layers_panel);
-    if (!selected) return;
+    if (!selected)
+        return;
     GList* iter = g_list_find(doc->layers, selected);
-    if (!iter || !iter->prev) return;
+    if (!iter || !iter->prev)
+        return;
     ImageLayer* below = (ImageLayer*)iter->prev->data;
     document_set_selected_layer(doc, below);
     layers_panel_select_layer(layers_panel, doc, below);
@@ -657,9 +666,11 @@ void on_layer_order_select_bottom(GtkWidget* widget, gpointer data) {
     AppContext* ctx = (AppContext*)data;
     ImageDocument* doc = ui_get_active_document(ctx);
     LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window), "layers_panel");
-    if (!doc || !layers_panel) return;
+    if (!doc || !layers_panel)
+        return;
     guint count = document_get_layer_count(doc);
-    if (count == 0) return;
+    if (count == 0)
+        return;
     ImageLayer* bottom = document_get_layer(doc, 0);
     if (bottom) {
         document_set_selected_layer(doc, bottom);
@@ -678,19 +689,24 @@ void on_layer_order_move_top(GtkWidget* widget, gpointer data) {
     LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window), "layers_panel");
     Command* cmd;
     ImageLayer* selected;
-    if (!doc || !doc->layers) return;
+    if (!doc || !doc->layers)
+        return;
     selected = layers_panel ? layers_panel_get_selected_layer(layers_panel) : NULL;
-    if (!selected) return;
+    if (!selected)
+        return;
     cmd = command_create_layer_move_to_top(doc, selected);
-    if (!cmd) return;
+    if (!cmd)
+        return;
     command_execute(cmd, doc);
     if (doc->undo_stack) {
         command_stack_push(doc->undo_stack, cmd);
-        if (doc->redo_stack) command_stack_clear(doc->redo_stack);
+        if (doc->redo_stack)
+            command_stack_clear(doc->redo_stack);
     } else {
         command_free(cmd);
     }
-    if (layers_panel) layers_panel_update(layers_panel, doc);
+    if (layers_panel)
+        layers_panel_update(layers_panel, doc);
     ui_update_menu_and_button_states(ctx);
     ui_update_window_title(ctx, NULL);
     doc->modified = TRUE;
@@ -720,19 +736,24 @@ void on_layer_order_move_bottom(GtkWidget* widget, gpointer data) {
     LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window), "layers_panel");
     Command* cmd;
     ImageLayer* selected;
-    if (!doc || !doc->layers) return;
+    if (!doc || !doc->layers)
+        return;
     selected = layers_panel ? layers_panel_get_selected_layer(layers_panel) : NULL;
-    if (!selected) return;
+    if (!selected)
+        return;
     cmd = command_create_layer_move_to_bottom(doc, selected);
-    if (!cmd) return;
+    if (!cmd)
+        return;
     command_execute(cmd, doc);
     if (doc->undo_stack) {
         command_stack_push(doc->undo_stack, cmd);
-        if (doc->redo_stack) command_stack_clear(doc->redo_stack);
+        if (doc->redo_stack)
+            command_stack_clear(doc->redo_stack);
     } else {
         command_free(cmd);
     }
-    if (layers_panel) layers_panel_update(layers_panel, doc);
+    if (layers_panel)
+        layers_panel_update(layers_panel, doc);
     ui_update_menu_and_button_states(ctx);
     ui_update_window_title(ctx, NULL);
     doc->modified = TRUE;
@@ -758,7 +779,8 @@ void layer_visibility_update_check_state(AppContext* ctx) {
     doc = ui_get_active_document(ctx);
     layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window), "layers_panel");
     selected = (layers_panel && doc) ? layers_panel_get_selected_layer(layers_panel) : NULL;
-    if (!selected) return;
+    if (!selected)
+        return;
 
     check_item = GTK_CHECK_MENU_ITEM(ctx->layer_menu_visibility_show_current);
     if (gtk_check_menu_item_get_active(check_item) == selected->visible)
@@ -780,12 +802,14 @@ static void on_layer_visibility_show_current_toggled(GtkCheckMenuItem* check_ite
     LayersPanel* layers_panel;
     ImageLayer* selected;
 
-    if (visibility_check_updating) return; /* Programmatic update, ignore */
+    if (visibility_check_updating)
+        return; /* Programmatic update, ignore */
 
     doc = ui_get_active_document(ctx);
     layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window), "layers_panel");
     selected = layers_panel ? layers_panel_get_selected_layer(layers_panel) : NULL;
-    if (!doc || !selected) return;
+    if (!doc || !selected)
+        return;
 
     layer_visibility_toggle_execute(ctx, doc, selected);
 }
@@ -797,21 +821,25 @@ void layer_visibility_toggle_execute(AppContext* ctx, ImageDocument* doc, ImageL
     Command* cmd;
     LayersPanel* layers_panel;
 
-    if (!ctx || !doc || !layer) return;
+    if (!ctx || !doc || !layer)
+        return;
 
     cmd = command_create_layer_visibility_toggle(doc, layer);
-    if (!cmd) return;
+    if (!cmd)
+        return;
 
     command_execute(cmd, doc);
     if (doc->undo_stack) {
         command_stack_push(doc->undo_stack, cmd);
-        if (doc->redo_stack) command_stack_clear(doc->redo_stack);
+        if (doc->redo_stack)
+            command_stack_clear(doc->redo_stack);
     } else {
         command_free(cmd);
     }
 
     layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window), "layers_panel");
-    if (layers_panel) layers_panel_update(layers_panel, doc);
+    if (layers_panel)
+        layers_panel_update(layers_panel, doc);
     ui_update_menu_and_button_states(ctx);
     doc->modified = TRUE;
 }
@@ -826,9 +854,11 @@ void on_layer_visibility_show_current(GtkWidget* widget, gpointer data) {
     ImageLayer* selected;
 
     (void)widget;
-    if (!doc || !doc->layers) return;
+    if (!doc || !doc->layers)
+        return;
     selected = layers_panel ? layers_panel_get_selected_layer(layers_panel) : NULL;
-    if (!selected) return;
+    if (!selected)
+        return;
 
     layer_visibility_toggle_execute(ctx, doc, selected);
 }
@@ -843,19 +873,24 @@ void on_layer_visibility_show_only(GtkWidget* widget, gpointer data) {
     LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window), "layers_panel");
     Command* cmd;
     ImageLayer* selected;
-    if (!doc || !doc->layers) return;
+    if (!doc || !doc->layers)
+        return;
     selected = layers_panel ? layers_panel_get_selected_layer(layers_panel) : NULL;
-    if (!selected) return;
+    if (!selected)
+        return;
     cmd = command_create_layer_visibility_show_only(doc, selected);
-    if (!cmd) return;
+    if (!cmd)
+        return;
     command_execute(cmd, doc);
     if (doc->undo_stack) {
         command_stack_push(doc->undo_stack, cmd);
-        if (doc->redo_stack) command_stack_clear(doc->redo_stack);
+        if (doc->redo_stack)
+            command_stack_clear(doc->redo_stack);
     } else {
         command_free(cmd);
     }
-    if (layers_panel) layers_panel_update(layers_panel, doc);
+    if (layers_panel)
+        layers_panel_update(layers_panel, doc);
     ui_update_menu_and_button_states(ctx);
     doc->modified = TRUE;
 }
@@ -870,19 +905,24 @@ void on_layer_visibility_hide_only(GtkWidget* widget, gpointer data) {
     LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window), "layers_panel");
     Command* cmd;
     ImageLayer* selected;
-    if (!doc || !doc->layers) return;
+    if (!doc || !doc->layers)
+        return;
     selected = layers_panel ? layers_panel_get_selected_layer(layers_panel) : NULL;
-    if (!selected) return;
+    if (!selected)
+        return;
     cmd = command_create_layer_visibility_hide_only(doc, selected);
-    if (!cmd) return;
+    if (!cmd)
+        return;
     command_execute(cmd, doc);
     if (doc->undo_stack) {
         command_stack_push(doc->undo_stack, cmd);
-        if (doc->redo_stack) command_stack_clear(doc->redo_stack);
+        if (doc->redo_stack)
+            command_stack_clear(doc->redo_stack);
     } else {
         command_free(cmd);
     }
-    if (layers_panel) layers_panel_update(layers_panel, doc);
+    if (layers_panel)
+        layers_panel_update(layers_panel, doc);
     ui_update_menu_and_button_states(ctx);
     doc->modified = TRUE;
 }
@@ -896,17 +936,21 @@ void on_layer_visibility_show_all(GtkWidget* widget, gpointer data) {
     ImageDocument* doc = ui_get_active_document(ctx);
     LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window), "layers_panel");
     Command* cmd;
-    if (!doc || !doc->layers) return;
+    if (!doc || !doc->layers)
+        return;
     cmd = command_create_layer_visibility_show_all(doc);
-    if (!cmd) return;
+    if (!cmd)
+        return;
     command_execute(cmd, doc);
     if (doc->undo_stack) {
         command_stack_push(doc->undo_stack, cmd);
-        if (doc->redo_stack) command_stack_clear(doc->redo_stack);
+        if (doc->redo_stack)
+            command_stack_clear(doc->redo_stack);
     } else {
         command_free(cmd);
     }
-    if (layers_panel) layers_panel_update(layers_panel, doc);
+    if (layers_panel)
+        layers_panel_update(layers_panel, doc);
     ui_update_menu_and_button_states(ctx);
     doc->modified = TRUE;
 }
@@ -920,27 +964,30 @@ void on_layer_visibility_hide_all(GtkWidget* widget, gpointer data) {
     ImageDocument* doc = ui_get_active_document(ctx);
     LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window), "layers_panel");
     Command* cmd;
-    if (!doc || !doc->layers) return;
+    if (!doc || !doc->layers)
+        return;
     cmd = command_create_layer_visibility_hide_all(doc);
-    if (!cmd) return;
+    if (!cmd)
+        return;
     command_execute(cmd, doc);
     if (doc->undo_stack) {
         command_stack_push(doc->undo_stack, cmd);
-        if (doc->redo_stack) command_stack_clear(doc->redo_stack);
+        if (doc->redo_stack)
+            command_stack_clear(doc->redo_stack);
     } else {
         command_free(cmd);
     }
-    if (layers_panel) layers_panel_update(layers_panel, doc);
+    if (layers_panel)
+        layers_panel_update(layers_panel, doc);
     ui_update_menu_and_button_states(ctx);
     doc->modified = TRUE;
 }
 
-
 void on_layer_rasterize_text(GtkWidget* widget, gpointer data) {
     (void)widget;
-    AppContext*    ctx         = (AppContext*)data;
-    ImageDocument* doc         = ui_get_active_document(ctx);
-    LayersPanel*   layers_panel =
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc = ui_get_active_document(ctx);
+    LayersPanel* layers_panel =
         (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window), "layers_panel");
 
     if (!doc)
@@ -957,8 +1004,67 @@ void on_layer_rasterize_text(GtkWidget* widget, gpointer data) {
         return;
     }
 
-    /* command_create_text_layer_rasterize renders the text, converts the
-     * layer to LAYER_TYPE_RASTER, and returns an undo command. */
+    /* Always confirm before rasterizing 
+     *
+     * Rasterizing permanently converts a vector text layer to pixels.
+     * When the text tool is mid-edit the secondary message also mentions
+     * that the current edits will be committed.
+     * ----------------------------------------------------------------------- */
+    Tool* active_tool = ctx->tool_registry
+                            ? tool_manager_get_active(ctx->tool_registry)
+                            : NULL;
+    gboolean editing_this_layer = FALSE;
+    if (active_tool && tool_text_is_editing(active_tool) && active_tool->user_data) {
+        TextToolState* ts = (TextToolState*)active_tool->user_data;
+        editing_this_layer = (ts->layer == layer);
+    }
+
+    {
+        const gchar* secondary =
+            editing_this_layer
+                ? "This layer is currently being edited. "
+                  "Rasterizing will commit the current text and "
+                  "permanently convert it to pixels — it will no longer "
+                  "be editable as a text layer.\n\n"
+                  "This action can be undone."
+                : "The text layer will be permanently converted to pixels "
+                  "and will no longer be editable as a text layer.\n\n"
+                  "This action can be undone.";
+
+        GtkWidget* dialog = gtk_message_dialog_new(
+            GTK_WINDOW(ctx->window),
+            GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+            GTK_MESSAGE_WARNING,
+            GTK_BUTTONS_CANCEL,
+            "Rasterize text layer?");
+        gtk_message_dialog_format_secondary_text(
+            GTK_MESSAGE_DIALOG(dialog), "%s", secondary);
+        gtk_dialog_add_button(GTK_DIALOG(dialog), "Rasterize", GTK_RESPONSE_ACCEPT);
+        gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_CANCEL);
+
+        gint response = gtk_dialog_run(GTK_DIALOG(dialog));
+        gtk_widget_destroy(dialog);
+
+        if (response != GTK_RESPONSE_ACCEPT)
+            return;
+    }
+
+    /* If mid-edit, commit the editing session before rasterizing so the
+     * text edits land as a discrete "Edit Text" undo entry first. */
+    if (editing_this_layer)
+        tool_text_reset(active_tool);
+
+    /* Rasterize
+     *
+     * command_create_text_layer_rasterize:
+     *   1. Renders the text onto the layer's existing surface (preserving
+     *      layer size, position via offset_x/y, and rotation baked in).
+     *   2. Snapshots the result for redo.
+     *   3. Frees text_data and changes layer_type to LAYER_TYPE_RASTER.
+     *
+     * The returned Command encapsulates undo (restore text_data) and
+     * redo (re-apply raster snapshot).
+     * ----------------------------------------------------------------------- */
     Command* cmd = command_create_text_layer_rasterize(doc, layer);
     if (!cmd)
         return;
@@ -971,6 +1077,19 @@ void on_layer_rasterize_text(GtkWidget* widget, gpointer data) {
         command_free(cmd);
     }
 
+    /* Clean up text-tool overlay state
+     *
+     * If the text tool still tracks this layer (selected but not editing),
+     * clear its overlay so handles don't appear over a raster layer.
+     * ----------------------------------------------------------------------- */
+    if (active_tool && active_tool->type == TOOL_TEXT && active_tool->user_data) {
+        TextToolState* ts = (TextToolState*)active_tool->user_data;
+        if (ts->layer == layer) {
+            ts->has_box = FALSE;
+            ts->layer = NULL;
+        }
+    }
+
     doc->modified = TRUE;
     if (layers_panel)
         layers_panel_update(layers_panel, doc);
@@ -978,4 +1097,6 @@ void on_layer_rasterize_text(GtkWidget* widget, gpointer data) {
     ui_update_window_title(ctx, NULL);
     if (doc->drawing_area)
         gtk_widget_queue_draw(doc->drawing_area);
+    if (doc->viewport)
+        gtk_widget_queue_draw(doc->viewport);
 }
