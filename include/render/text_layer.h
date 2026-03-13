@@ -9,17 +9,27 @@
 /**
  * Vector text layer data — rendered dynamically via Pango+Cairo each composite.
  *
- * All string fields are heap-allocated (g_strdup / g_malloc).
+ * Typography notes:
+ *   font_weight  — PangoWeight value (e.g. PANGO_WEIGHT_NORMAL=400, PANGO_WEIGHT_BOLD=700).
+ *   font_style   — PangoStyle: PANGO_STYLE_NORMAL / OBLIQUE / ITALIC.
+ *   kerning      — When FALSE the OpenType kern feature is explicitly disabled.
+ *   opentype_features — CSS font-feature-settings string applied via
+ *                        PangoAttrFontFeatures (Pango ≥ 1.38 / HarfBuzz back-end).
+ *                        Example: "liga=1, smcp=1, onum=1"
+ *                        NULL or "" means no additional features.
+ *
+ * HarfBuzz shaping is automatic: pango_cairo_create_layout() uses the default
+ * PangoCairo font-map which delegates shaping to HarfBuzz when available.
+ *
  * Alignment: 0 = left, 1 = center, 2 = right.
- * font_weight maps directly to PangoWeight (e.g. 400 = normal, 700 = bold).
  * rotation is in degrees; box coordinates are in layer-local pixels.
  */
 typedef struct {
-    char *text;
-    char *font_family;
-    int   font_size;
-    int   font_weight;
-    gboolean italic;
+    char       *text;
+    char       *font_family;
+    int         font_size;
+    PangoWeight font_weight;    /* PANGO_WEIGHT_NORMAL=400, PANGO_WEIGHT_BOLD=700, … */
+    PangoStyle  font_style;     /* PANGO_STYLE_NORMAL / OBLIQUE / ITALIC              */
 
     double color_r;
     double color_g;
@@ -39,6 +49,10 @@ typedef struct {
     double box_height;
 
     gboolean antialias;
+
+    /* Extended typography */
+    gboolean  kerning;           /* FALSE disables the OpenType kern feature           */
+    char     *opentype_features; /* CSS font-feature-settings string; may be NULL/"" */
 } TextLayer;
 
 /**
@@ -64,14 +78,9 @@ void text_layer_free(TextLayer* text);
  * Render text directly into an arbitrary Cairo context.
  *
  * The caller is responsible for all canvas/zoom transforms already being
- * applied to @cr before this call (e.g. cairo_scale for zoom, cairo_translate
- * for layer offset).  Because @cr carries those transforms, Pango measures and
- * lays out glyphs at the effective on-screen resolution, giving crisp
- * vector-quality text at any zoom level.
- *
- * Use this function from the main on-screen render loop
- * (document_render_layers_at_zoom) so that text bypasses the pre-rasterised
- * cache surface and is drawn at the native display resolution.
+ * applied to @cr before this call.  Because @cr carries those transforms,
+ * Pango measures and lays out glyphs at the effective on-screen resolution,
+ * giving crisp vector-quality text at any zoom level.
  *
  * @param layer TextLayer that holds all text properties
  * @param cr    Cairo context to draw into (must not be NULL)
@@ -88,7 +97,11 @@ void text_layer_render_to_surface(ImageLayer* layer);
 
 /**
  * Create a PangoLayout configured with all of @tl's text, font, alignment,
- * wrapping and spacing settings applied to @cr.
+ * wrapping, spacing, and OpenType feature settings.
+ *
+ * Letter spacing is applied via PangoAttrLetterSpacing.
+ * OpenType features (including kerning) are applied via PangoAttrFontFeatures,
+ * which are passed through to the HarfBuzz shaper automatically.
  *
  * The caller owns the returned layout and must call g_object_unref() when done.
  * Rotation is NOT applied (the layout is in the text box's local frame).

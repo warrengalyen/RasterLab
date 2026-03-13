@@ -54,24 +54,26 @@ TextLayerState *text_layer_state_create(const void *tl_ptr) {
     const TextLayer *tl    = (const TextLayer *)tl_ptr;
     TextLayerState  *state = (TextLayerState *)g_malloc0(sizeof(TextLayerState));
 
-    state->text           = g_strdup(tl->text        ? tl->text        : "");
-    state->font_family    = g_strdup(tl->font_family  ? tl->font_family : "");
-    state->font_size      = tl->font_size;
-    state->font_weight    = tl->font_weight;
-    state->italic         = tl->italic;
-    state->color_r        = tl->color_r;
-    state->color_g        = tl->color_g;
-    state->color_b        = tl->color_b;
-    state->color_a        = tl->color_a;
-    state->line_spacing   = tl->line_spacing;
-    state->letter_spacing = tl->letter_spacing;
-    state->alignment      = tl->alignment;
-    state->rotation       = tl->rotation;
-    state->box_x          = tl->box_x;
-    state->box_y          = tl->box_y;
-    state->box_width      = tl->box_width;
-    state->box_height     = tl->box_height;
-    state->antialias      = tl->antialias;
+    state->text              = g_strdup(tl->text        ? tl->text        : "");
+    state->font_family       = g_strdup(tl->font_family  ? tl->font_family : "");
+    state->font_size         = tl->font_size;
+    state->font_weight       = tl->font_weight;
+    state->font_style        = tl->font_style;
+    state->color_r           = tl->color_r;
+    state->color_g           = tl->color_g;
+    state->color_b           = tl->color_b;
+    state->color_a           = tl->color_a;
+    state->line_spacing      = tl->line_spacing;
+    state->letter_spacing    = tl->letter_spacing;
+    state->alignment         = tl->alignment;
+    state->rotation          = tl->rotation;
+    state->box_x             = tl->box_x;
+    state->box_y             = tl->box_y;
+    state->box_width         = tl->box_width;
+    state->box_height        = tl->box_height;
+    state->antialias         = tl->antialias;
+    state->kerning           = tl->kerning;
+    state->opentype_features = g_strdup(tl->opentype_features ? tl->opentype_features : "");
 
     return state;
 }
@@ -88,22 +90,25 @@ void text_layer_state_restore(void *tl_ptr, const TextLayerState *state) {
     g_free(tl->font_family);
     tl->font_family = g_strdup(state->font_family ? state->font_family : "");
 
-    tl->font_size      = state->font_size;
-    tl->font_weight    = state->font_weight;
-    tl->italic         = state->italic;
-    tl->color_r        = state->color_r;
-    tl->color_g        = state->color_g;
-    tl->color_b        = state->color_b;
-    tl->color_a        = state->color_a;
-    tl->line_spacing   = state->line_spacing;
-    tl->letter_spacing = state->letter_spacing;
-    tl->alignment      = state->alignment;
-    tl->rotation       = state->rotation;
-    tl->box_x          = state->box_x;
-    tl->box_y          = state->box_y;
-    tl->box_width      = state->box_width;
-    tl->box_height     = state->box_height;
-    tl->antialias      = state->antialias;
+    tl->font_size         = state->font_size;
+    tl->font_weight       = state->font_weight;
+    tl->font_style        = state->font_style;
+    tl->color_r           = state->color_r;
+    tl->color_g           = state->color_g;
+    tl->color_b           = state->color_b;
+    tl->color_a           = state->color_a;
+    tl->line_spacing      = state->line_spacing;
+    tl->letter_spacing    = state->letter_spacing;
+    tl->alignment         = state->alignment;
+    tl->rotation          = state->rotation;
+    tl->box_x             = state->box_x;
+    tl->box_y             = state->box_y;
+    tl->box_width         = state->box_width;
+    tl->box_height        = state->box_height;
+    tl->antialias         = state->antialias;
+    tl->kerning           = state->kerning;
+    g_free(tl->opentype_features);
+    tl->opentype_features = g_strdup(state->opentype_features ? state->opentype_features : "");
 }
 
 void text_layer_state_free(TextLayerState *state) {
@@ -111,6 +116,7 @@ void text_layer_state_free(TextLayerState *state) {
         return;
     g_free(state->text);
     g_free(state->font_family);
+    g_free(state->opentype_features);
     g_free(state);
 }
 
@@ -126,7 +132,8 @@ typedef struct {
 } TextLayerUndoOp;
 
 static gboolean prop_is_string(TextLayerProperty prop) {
-    return prop == TEXT_PROP_TEXT || prop == TEXT_PROP_FONT;
+    return prop == TEXT_PROP_TEXT || prop == TEXT_PROP_FONT ||
+           prop == TEXT_PROP_OT_FEATURES;
 }
 
 static TextLayerPropValue prop_value_dup(TextLayerProperty       prop,
@@ -181,10 +188,10 @@ static void text_undo_op_apply_value(TextLayer              *tl,
         tl->font_size = v->int_val;
         break;
     case TEXT_PROP_WEIGHT:
-        tl->font_weight = v->int_val;
+        tl->font_weight = (PangoWeight)v->int_val;
         break;
-    case TEXT_PROP_ITALIC:
-        tl->italic = v->bool_val;
+    case TEXT_PROP_STYLE:
+        tl->font_style = (PangoStyle)v->int_val;
         break;
     case TEXT_PROP_COLOR:
         tl->color_r = v->color.r;
@@ -212,6 +219,13 @@ static void text_undo_op_apply_value(TextLayer              *tl,
         break;
     case TEXT_PROP_ANTIALIAS:
         tl->antialias = v->bool_val;
+        break;
+    case TEXT_PROP_KERNING:
+        tl->kerning = v->bool_val;
+        break;
+    case TEXT_PROP_OT_FEATURES:
+        g_free(tl->opentype_features);
+        tl->opentype_features = g_strdup(v->string_val ? v->string_val : "");
         break;
     }
 }
@@ -321,7 +335,7 @@ static const char *prop_name(TextLayerProperty prop) {
     case TEXT_PROP_FONT:           return "Change Font";
     case TEXT_PROP_SIZE:           return "Change Font Size";
     case TEXT_PROP_WEIGHT:         return "Toggle Bold";
-    case TEXT_PROP_ITALIC:         return "Toggle Italic";
+    case TEXT_PROP_STYLE:          return "Change Font Style";
     case TEXT_PROP_COLOR:          return "Change Text Color";
     case TEXT_PROP_ALIGNMENT:      return "Change Alignment";
     case TEXT_PROP_LINE_SPACING:   return "Change Line Spacing";
@@ -329,6 +343,8 @@ static const char *prop_name(TextLayerProperty prop) {
     case TEXT_PROP_ROTATION:       return "Rotate Text";
     case TEXT_PROP_BOX_GEOMETRY:   return "Transform Text Box";
     case TEXT_PROP_ANTIALIAS:      return "Toggle Antialias";
+    case TEXT_PROP_KERNING:        return "Toggle Kerning";
+    case TEXT_PROP_OT_FEATURES:    return "Change OpenType Features";
     default:                       return "Edit Text Layer";
     }
 }

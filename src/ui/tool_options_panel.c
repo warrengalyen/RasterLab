@@ -2116,10 +2116,11 @@ static void on_text_italic_toggled(GtkToggleButton* btn, gpointer user_data) {
     TextLayer* tl = text_opts_get_context(panel, &doc, &img_layer);
     if (!tl) return;
     TextLayerPropValue before_v, after_v;
-    before_v.bool_val = tl->italic;
-    tl->italic        = gtk_toggle_button_get_active(btn);
-    after_v.bool_val  = tl->italic;
-    text_opts_push_prop(doc, img_layer, TEXT_PROP_ITALIC, &before_v, &after_v);
+    before_v.int_val = (int)tl->font_style;
+    tl->font_style   = gtk_toggle_button_get_active(btn)
+                           ? PANGO_STYLE_ITALIC : PANGO_STYLE_NORMAL;
+    after_v.int_val  = (int)tl->font_style;
+    text_opts_push_prop(doc, img_layer, TEXT_PROP_STYLE, &before_v, &after_v);
     text_opts_invalidate(panel);
 }
 
@@ -2283,7 +2284,7 @@ void tool_options_panel_sync_text_layer(ToolOptionsPanel* panel,
                                      tl->font_weight >= 700);
     if (panel->text_italic_button)
         gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->text_italic_button),
-                                     tl->italic);
+                                     tl->font_style != PANGO_STYLE_NORMAL);
 
     /* Color */
     if (panel->text_color_button) {

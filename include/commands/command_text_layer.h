@@ -3,6 +3,7 @@
 
 #include "command.h"
 #include <glib.h>
+#include <pango/pango.h>   /* PangoWeight, PangoStyle */
 
 struct ImageDocument;
 struct ImageLayer;
@@ -15,11 +16,11 @@ struct ImageLayer;
  * ========================================================================= */
 
 typedef struct {
-    char    *text;
-    char    *font_family;
-    int      font_size;
-    int      font_weight;
-    gboolean italic;
+    char       *text;
+    char       *font_family;
+    int         font_size;
+    PangoWeight font_weight;
+    PangoStyle  font_style;
 
     double   color_r;
     double   color_g;
@@ -38,6 +39,10 @@ typedef struct {
     double   box_height;
 
     gboolean antialias;
+
+    /* Extended typography */
+    gboolean  kerning;
+    char     *opentype_features;
 } TextLayerState;
 
 TextLayerState *text_layer_state_create (const void *tl);
@@ -57,18 +62,20 @@ void            text_layer_state_free   (TextLayerState *state);
  * ========================================================================= */
 
 typedef enum {
-    TEXT_PROP_TEXT,           /* char*   — full text string           */
-    TEXT_PROP_FONT,           /* char*   — font-family name           */
-    TEXT_PROP_SIZE,           /* int     — font size in points        */
-    TEXT_PROP_WEIGHT,         /* int     — 400 normal / 700 bold      */
-    TEXT_PROP_ITALIC,         /* bool                                 */
-    TEXT_PROP_COLOR,          /* color   — r/g/b/a doubles            */
-    TEXT_PROP_ALIGNMENT,      /* int     — PANGO_ALIGN_*              */
-    TEXT_PROP_LINE_SPACING,   /* double                               */
-    TEXT_PROP_LETTER_SPACING, /* double                               */
-    TEXT_PROP_ROTATION,       /* double  — degrees                    */
-    TEXT_PROP_BOX_GEOMETRY,   /* box     — x/y/w/h doubles            */
-    TEXT_PROP_ANTIALIAS       /* bool                                 */
+    TEXT_PROP_TEXT,           /* char*        — full text string              */
+    TEXT_PROP_FONT,           /* char*        — font-family name              */
+    TEXT_PROP_SIZE,           /* int          — font size in points           */
+    TEXT_PROP_WEIGHT,         /* int          — PangoWeight (400, 700, …)     */
+    TEXT_PROP_STYLE,          /* int          — PangoStyle (NORMAL/OBLIQUE/ITALIC) */
+    TEXT_PROP_COLOR,          /* color        — r/g/b/a doubles               */
+    TEXT_PROP_ALIGNMENT,      /* int          — 0/1/2 = left/center/right     */
+    TEXT_PROP_LINE_SPACING,   /* double                                       */
+    TEXT_PROP_LETTER_SPACING, /* double                                       */
+    TEXT_PROP_ROTATION,       /* double       — degrees                       */
+    TEXT_PROP_BOX_GEOMETRY,   /* box          — x/y/w/h doubles               */
+    TEXT_PROP_ANTIALIAS,      /* bool                                         */
+    TEXT_PROP_KERNING,        /* bool         — disable/enable kern feature   */
+    TEXT_PROP_OT_FEATURES     /* char*        — CSS font-feature-settings str */
 } TextLayerProperty;
 
 /* Tagged union — only the field matching @property is valid. */
