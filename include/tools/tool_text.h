@@ -2,7 +2,6 @@
 #define TOOL_TEXT_H
 
 #include "tools.h"
-#include "commands/command_text_layer.h"
 #include <cairo/cairo.h>
 
 /* Forward declarations */
@@ -54,9 +53,17 @@ typedef struct {
     guint     cursor_blink_tag; /* GLib timeout source id; 0 when stopped */
     ImageDocument* blink_doc;   /* Weak ref for blink-timer callback */
 
-    /* Undo state snapshots */
-    TextLayerState *pre_drag_state; /* Layer state captured at drag start (move/resize/rotate) */
-    TextLayerState *pre_edit_state; /* Layer state captured when entering text-edit mode */
+    /* Undo state — drag (move / resize / rotate) */
+    gboolean  has_pre_drag;         /* TRUE while a tracked drag is in progress   */
+    gdouble   pre_drag_box_x;       /* Box geometry at the start of the drag      */
+    gdouble   pre_drag_box_y;
+    gdouble   pre_drag_box_w;
+    gdouble   pre_drag_box_h;
+    gdouble   pre_drag_rotation;    /* Rotation angle at the start of a rotate drag */
+    gint      pre_drag_mode;        /* drag_mode value when the drag began         */
+
+    /* Undo state — text editing session */
+    gchar    *pre_edit_text;        /* g_strdup of tl->text when entering edit mode */
 } TextToolState;
 
 /**

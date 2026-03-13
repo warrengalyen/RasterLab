@@ -2013,45 +2013,17 @@ static TextLayer* text_opts_get_context(ToolOptionsPanel* panel,
 }
 
 /**
- * Push a text-layer property-change command onto the undo stack.
- * Ownership of @before and @after is transferred; the caller must NOT free them.
- * If either is NULL the function is a no-op and both are freed safely.
+ * Push a single-property undo entry for a TextLayer change.
+ * @before/@after hold the property value before/after the change was applied.
  */
-static void text_opts_push_command(ToolOptionsPanel* panel,
-                                   ImageDocument*    doc,
-                                   ImageLayer*       layer,
-                                   TextLayerState*   before,
-                                   TextLayerState*   after,
-                                   const char*       name) {
-    if (!before || !after || !doc || !layer) {
-        text_layer_state_free(before);
-        text_layer_state_free(after);
+static void text_opts_push_prop(ImageDocument*          doc,
+                                ImageLayer*             layer,
+                                TextLayerProperty       property,
+                                const TextLayerPropValue *before,
+                                const TextLayerPropValue *after) {
+    if (!doc || !layer || !before || !after)
         return;
-    }
-    Command* cmd = command_create_text_layer_prop(doc, layer, before, after, name);
-    if (!cmd)
-        return; /* command_create_text_layer_prop already freed before/after */
-
-    if (doc->undo_stack) {
-        command_stack_push(doc->undo_stack, cmd);
-        if (doc->redo_stack)
-            command_stack_clear(doc->redo_stack);
-        doc->modified = TRUE;
-
-        if (panel->panel) {
-            GtkWidget* win = gtk_widget_get_toplevel(panel->panel);
-            if (win) {
-                AppContext* ctx =
-                    (AppContext*)g_object_get_data(G_OBJECT(win), "app_context");
-                if (ctx) {
-                    ui_update_menu_and_button_states(ctx);
-                    ui_update_window_title(ctx, NULL);
-                }
-            }
-        }
-    } else {
-        command_free(cmd);
-    }
+    text_layer_push_property_change(doc, layer, property, before, after);
 }
 
 /**
@@ -2093,11 +2065,16 @@ static void on_text_font_family_changed(GtkComboBox* combo, gpointer user_data) 
     gchar* family = gtk_combo_box_text_get_active_text(GTK_COMBO_BOX_TEXT(combo));
     if (!family) return;
 
-    TextLayerState* before = text_layer_state_create(tl);
+    /* Duplicate old family before freeing so before_v.string_val stays valid
+     * across the call to text_layer_push_property_change (which g_strdup's it). */
+    gchar* old_family = g_strdup(tl->font_family ? tl->font_family : "");
     g_free(tl->font_family);
-    tl->font_family = family; /* ownership transferred */
-    TextLayerState* after = text_layer_state_create(tl);
-    text_opts_push_command(panel, doc, img_layer, before, after, "Change Font");
+    tl->font_family = family;  /* ownership transferred */
+    TextLayerPropValue before_v, after_v;
+    before_v.string_val = old_family;
+    after_v.string_val  = family;
+    text_opts_push_prop(doc, img_layer, TEXT_PROP_FONT, &before_v, &after_v);
+    g_free(old_family);        /* push_prop g_strdup'd it internally */
     text_opts_invalidate(panel);
 }
 
@@ -2108,10 +2085,11 @@ static void on_text_font_size_changed(GtkSpinButton* spin, gpointer user_data) {
     ImageLayer*    img_layer = NULL;
     TextLayer* tl = text_opts_get_context(panel, &doc, &img_layer);
     if (!tl) return;
-    TextLayerState* before = text_layer_state_create(tl);
-    tl->font_size = (int)gtk_spin_button_get_value(spin);
-    TextLayerState* after = text_layer_state_create(tl);
-    text_opts_push_command(panel, doc, img_layer, before, after, "Change Font Size");
+    TextLayerPropValue before_v, after_v;
+    before_v.int_val = tl->font_size;
+    tl->font_size    = (int)gtk_spin_button_get_value(spin);
+    after_v.int_val  = tl->font_size;
+    text_opts_push_prop(doc, img_layer, TEXT_PROP_SIZE, &before_v, &after_v);
     text_opts_invalidate(panel);
 }
 
@@ -2122,10 +2100,11 @@ static void on_text_bold_toggled(GtkToggleButton* btn, gpointer user_data) {
     ImageLayer*    img_layer = NULL;
     TextLayer* tl = text_opts_get_context(panel, &doc, &img_layer);
     if (!tl) return;
-    TextLayerState* before = text_layer_state_create(tl);
-    tl->font_weight = gtk_toggle_button_get_active(btn) ? 700 : 400;
-    TextLayerState* after = text_layer_state_create(tl);
-    text_opts_push_command(panel, doc, img_layer, before, after, "Toggle Bold");
+    TextLayerPropValue before_v, after_v;
+    before_v.int_val = tl->font_weight;
+    tl->font_weight  = gtk_toggle_button_get_active(btn) ? 700 : 400;
+    after_v.int_val  = tl->font_weight;
+    text_opts_push_prop(doc, img_layer, TEXT_PROP_WEIGHT, &before_v, &after_v);
     text_opts_invalidate(panel);
 }
 
@@ -2136,10 +2115,11 @@ static void on_text_italic_toggled(GtkToggleButton* btn, gpointer user_data) {
     ImageLayer*    img_layer = NULL;
     TextLayer* tl = text_opts_get_context(panel, &doc, &img_layer);
     if (!tl) return;
-    TextLayerState* before = text_layer_state_create(tl);
-    tl->italic = gtk_toggle_button_get_active(btn);
-    TextLayerState* after = text_layer_state_create(tl);
-    text_opts_push_command(panel, doc, img_layer, before, after, "Toggle Italic");
+    TextLayerPropValue before_v, after_v;
+    before_v.bool_val = tl->italic;
+    tl->italic        = gtk_toggle_button_get_active(btn);
+    after_v.bool_val  = tl->italic;
+    text_opts_push_prop(doc, img_layer, TEXT_PROP_ITALIC, &before_v, &after_v);
     text_opts_invalidate(panel);
 }
 
@@ -2150,15 +2130,22 @@ static void on_text_color_set(GtkColorButton* btn, gpointer user_data) {
     ImageLayer*    img_layer = NULL;
     TextLayer* tl = text_opts_get_context(panel, &doc, &img_layer);
     if (!tl) return;
-    TextLayerState* before = text_layer_state_create(tl);
+    TextLayerPropValue before_v, after_v;
+    before_v.color.r = tl->color_r;
+    before_v.color.g = tl->color_g;
+    before_v.color.b = tl->color_b;
+    before_v.color.a = tl->color_a;
     GdkRGBA color;
     gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(btn), &color);
     tl->color_r = color.red;
     tl->color_g = color.green;
     tl->color_b = color.blue;
     tl->color_a = color.alpha;
-    TextLayerState* after = text_layer_state_create(tl);
-    text_opts_push_command(panel, doc, img_layer, before, after, "Change Text Color");
+    after_v.color.r = tl->color_r;
+    after_v.color.g = tl->color_g;
+    after_v.color.b = tl->color_b;
+    after_v.color.a = tl->color_a;
+    text_opts_push_prop(doc, img_layer, TEXT_PROP_COLOR, &before_v, &after_v);
     text_opts_invalidate(panel);
 }
 
@@ -2173,8 +2160,7 @@ static void on_text_align_toggled(GtkToggleButton* btn, gpointer user_data) {
     TextLayer* tl = text_opts_get_context(panel, &doc, &img_layer);
     if (!tl) return;
 
-    TextLayerState* before = text_layer_state_create(tl);
-
+    gint old_align = tl->alignment;
     gint align = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(btn), "alignment_value"));
     tl->alignment = align;
 
@@ -2192,14 +2178,12 @@ static void on_text_align_toggled(GtkToggleButton* btn, gpointer user_data) {
     }
     g_text_panel_syncing--;
 
-    TextLayerState* after = text_layer_state_create(tl);
     /* Only push if alignment actually changed */
-    if (before && after && before->alignment != after->alignment)
-        text_opts_push_command(panel, doc, img_layer, before, after,
-                               "Change Alignment");
-    else {
-        text_layer_state_free(before);
-        text_layer_state_free(after);
+    if (old_align != align) {
+        TextLayerPropValue before_v, after_v;
+        before_v.int_val = old_align;
+        after_v.int_val  = align;
+        text_opts_push_prop(doc, img_layer, TEXT_PROP_ALIGNMENT, &before_v, &after_v);
     }
     text_opts_invalidate(panel);
 }
@@ -2211,10 +2195,11 @@ static void on_text_line_spacing_changed(GtkSpinButton* spin, gpointer user_data
     ImageLayer*    img_layer = NULL;
     TextLayer* tl = text_opts_get_context(panel, &doc, &img_layer);
     if (!tl) return;
-    TextLayerState* before = text_layer_state_create(tl);
-    tl->line_spacing = gtk_spin_button_get_value(spin);
-    TextLayerState* after = text_layer_state_create(tl);
-    text_opts_push_command(panel, doc, img_layer, before, after, "Change Line Spacing");
+    TextLayerPropValue before_v, after_v;
+    before_v.double_val = tl->line_spacing;
+    tl->line_spacing    = gtk_spin_button_get_value(spin);
+    after_v.double_val  = tl->line_spacing;
+    text_opts_push_prop(doc, img_layer, TEXT_PROP_LINE_SPACING, &before_v, &after_v);
     text_opts_invalidate(panel);
 }
 
@@ -2225,11 +2210,11 @@ static void on_text_letter_spacing_changed(GtkSpinButton* spin, gpointer user_da
     ImageLayer*    img_layer = NULL;
     TextLayer* tl = text_opts_get_context(panel, &doc, &img_layer);
     if (!tl) return;
-    TextLayerState* before = text_layer_state_create(tl);
-    tl->letter_spacing = gtk_spin_button_get_value(spin);
-    TextLayerState* after = text_layer_state_create(tl);
-    text_opts_push_command(panel, doc, img_layer, before, after,
-                           "Change Letter Spacing");
+    TextLayerPropValue before_v, after_v;
+    before_v.double_val = tl->letter_spacing;
+    tl->letter_spacing  = gtk_spin_button_get_value(spin);
+    after_v.double_val  = tl->letter_spacing;
+    text_opts_push_prop(doc, img_layer, TEXT_PROP_LETTER_SPACING, &before_v, &after_v);
     text_opts_invalidate(panel);
 }
 
@@ -2240,10 +2225,11 @@ static void on_text_antialias_toggled(GtkToggleButton* btn, gpointer user_data) 
     ImageLayer*    img_layer = NULL;
     TextLayer* tl = text_opts_get_context(panel, &doc, &img_layer);
     if (!tl) return;
-    TextLayerState* before = text_layer_state_create(tl);
-    tl->antialias = gtk_toggle_button_get_active(btn);
-    TextLayerState* after = text_layer_state_create(tl);
-    text_opts_push_command(panel, doc, img_layer, before, after, "Toggle Antialias");
+    TextLayerPropValue before_v, after_v;
+    before_v.bool_val = tl->antialias;
+    tl->antialias     = gtk_toggle_button_get_active(btn);
+    after_v.bool_val  = tl->antialias;
+    text_opts_push_prop(doc, img_layer, TEXT_PROP_ANTIALIAS, &before_v, &after_v);
     text_opts_invalidate(panel);
 }
 
@@ -2254,10 +2240,11 @@ static void on_text_rotation_changed(GtkSpinButton* spin, gpointer user_data) {
     ImageLayer*    img_layer = NULL;
     TextLayer* tl = text_opts_get_context(panel, &doc, &img_layer);
     if (!tl) return;
-    TextLayerState* before = text_layer_state_create(tl);
-    tl->rotation = gtk_spin_button_get_value(spin);
-    TextLayerState* after = text_layer_state_create(tl);
-    text_opts_push_command(panel, doc, img_layer, before, after, "Change Rotation");
+    TextLayerPropValue before_v, after_v;
+    before_v.double_val = tl->rotation;
+    tl->rotation        = gtk_spin_button_get_value(spin);
+    after_v.double_val  = tl->rotation;
+    text_opts_push_prop(doc, img_layer, TEXT_PROP_ROTATION, &before_v, &after_v);
     text_opts_invalidate(panel);
 }
 

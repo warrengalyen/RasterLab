@@ -291,15 +291,15 @@ static void text_tool_enter_editing(TextToolState* state, ImageDocument* doc) {
         state->cursor_pos = 0;
     }
 
-    /* Capture text layer state before the user starts editing (for undo grouping).
-     * All keystrokes within one editing session are collapsed into a single undo. */
+    /* Snapshot the text content before the editing session begins.
+     * All keystrokes are collapsed into a single undo entry committed when
+     * the session ends (in text_tool_exit_editing). */
     if (state->layer && state->layer->layer_type == LAYER_TYPE_TEXT &&
         state->layer->text_data) {
-        if (state->pre_edit_state) {
-            text_layer_state_free(state->pre_edit_state);
-        }
-        state->pre_edit_state =
-            text_layer_state_create(state->layer->text_data);
+        g_free(state->pre_edit_text);
+        TextLayer* tl = (TextLayer*)state->layer->text_data;
+        state->pre_edit_text = g_strdup(tl->text ? tl->text : "");
+        undo_begin_transaction(doc, "Edit Text");
     }
 
     /* Grab keyboard focus so key-press-events reach the drawing area */
@@ -319,29 +319,34 @@ static void text_tool_exit_editing(TextToolState* state) {
     if (!state->is_editing)
         return;
 
-    /* Push a single undo entry that spans the entire editing session */
+    /* Commit a single undo entry for the entire editing session. */
     ImageDocument* doc = state->blink_doc;
-    if (doc && state->pre_edit_state && state->layer &&
+    if (doc && state->pre_edit_text && state->layer &&
         text_tool_layer_valid(doc, state->layer) &&
         state->layer->layer_type == LAYER_TYPE_TEXT &&
         state->layer->text_data) {
-        TextLayer*      tl    = (TextLayer*)state->layer->text_data;
-        TextLayerState* after = text_layer_state_create(tl);
-        if (after && g_strcmp0(state->pre_edit_state->text, after->text) != 0) {
-            Command* cmd = command_create_text_layer_prop(doc, state->layer,
-                                                         state->pre_edit_state,
-                                                         after, "Edit Text");
-            state->pre_edit_state = NULL; /* ownership transferred to command */
-            text_tool_push_command(doc, cmd);
+
+        TextLayer* tl = (TextLayer*)state->layer->text_data;
+        const gchar* current_text = tl->text ? tl->text : "";
+
+        if (g_strcmp0(state->pre_edit_text, current_text) != 0) {
+            /* Text changed: push the TEXT_PROP_TEXT op and commit. */
+            TextLayerPropValue before_val, after_val;
+            before_val.string_val = state->pre_edit_text;
+            after_val.string_val  = (char *)current_text;
+            text_layer_push_property_change(doc, state->layer,
+                                            TEXT_PROP_TEXT,
+                                            &before_val, &after_val);
+            undo_commit_transaction(doc);
         } else {
-            text_layer_state_free(after);
-            text_layer_state_free(state->pre_edit_state);
-            state->pre_edit_state = NULL;
+            undo_cancel_transaction();
         }
-    } else if (state->pre_edit_state) {
-        text_layer_state_free(state->pre_edit_state);
-        state->pre_edit_state = NULL;
+    } else {
+        undo_cancel_transaction();
     }
+
+    g_free(state->pre_edit_text);
+    state->pre_edit_text = NULL;
 
     state->is_editing     = FALSE;
     state->cursor_visible = FALSE;
@@ -421,13 +426,21 @@ static void text_tool_mouse_down(Tool* tool, struct ImageDocument* doc,
         if (handle >= 0) {
             /* Clicking a resize or rotation handle — exit editing, start drag */
             text_tool_exit_editing(state);
-            /* Snapshot layer state before resize/rotate for undo */
+            /* Capture before-state for the upcoming drag undo entry. */
             if (state->layer && text_tool_layer_valid(doc, state->layer) &&
                 state->layer->layer_type == LAYER_TYPE_TEXT &&
                 state->layer->text_data) {
-                text_layer_state_free(state->pre_drag_state);
-                state->pre_drag_state =
-                    text_layer_state_create(state->layer->text_data);
+                TextLayer* tl = (TextLayer*)state->layer->text_data;
+                state->has_pre_drag       = TRUE;
+                state->pre_drag_mode      = handle;
+                state->pre_drag_box_x     = tl->box_x;
+                state->pre_drag_box_y     = tl->box_y;
+                state->pre_drag_box_w     = tl->box_width;
+                state->pre_drag_box_h     = tl->box_height;
+                state->pre_drag_rotation  = tl->rotation;
+                const char* tx_name = (handle >= 4) ? "Rotate Text"
+                                                     : "Resize Text Box";
+                undo_begin_transaction(doc, tx_name);
             }
             state->drag_mode   = handle;
             state->is_dragging = TRUE;
@@ -483,13 +496,18 @@ static void text_tool_mouse_down(Tool* tool, struct ImageDocument* doc,
             } else {
                 /* Single-click: exit editing and start a move drag */
                 text_tool_exit_editing(state);
-                /* Snapshot state before move for undo */
                 if (state->layer && text_tool_layer_valid(doc, state->layer) &&
                     state->layer->layer_type == LAYER_TYPE_TEXT &&
                     state->layer->text_data) {
-                    text_layer_state_free(state->pre_drag_state);
-                    state->pre_drag_state =
-                        text_layer_state_create(state->layer->text_data);
+                    TextLayer* tl = (TextLayer*)state->layer->text_data;
+                    state->has_pre_drag      = TRUE;
+                    state->pre_drag_mode     = -1;
+                    state->pre_drag_box_x    = tl->box_x;
+                    state->pre_drag_box_y    = tl->box_y;
+                    state->pre_drag_box_w    = tl->box_width;
+                    state->pre_drag_box_h    = tl->box_height;
+                    state->pre_drag_rotation = tl->rotation;
+                    undo_begin_transaction(doc, "Move Text");
                 }
                 state->drag_mode   = -1;
                 state->is_dragging = TRUE;
@@ -534,10 +552,16 @@ static void text_tool_mouse_down(Tool* tool, struct ImageDocument* doc,
                 text_tool_enter_editing(state, doc);
                 text_tool_queue_overlay(doc);
             } else {
-                /* Single-click: start move drag; snapshot for undo */
-                text_layer_state_free(state->pre_drag_state);
-                state->pre_drag_state =
-                    text_layer_state_create(found->text_data);
+                /* Single-click: start move drag; capture before-state for undo */
+                TextLayer* tl_found = (TextLayer*)found->text_data;
+                state->has_pre_drag      = TRUE;
+                state->pre_drag_mode     = -1;
+                state->pre_drag_box_x    = tl_found->box_x;
+                state->pre_drag_box_y    = tl_found->box_y;
+                state->pre_drag_box_w    = tl_found->box_width;
+                state->pre_drag_box_h    = tl_found->box_height;
+                state->pre_drag_rotation = tl_found->rotation;
+                undo_begin_transaction(doc, "Move Text");
                 state->drag_mode   = -1;
                 state->is_dragging = TRUE;
                 state->start_x     = event->x;
@@ -823,28 +847,61 @@ static void text_tool_mouse_up(Tool* tool, struct ImageDocument* doc,
             }
         }
     } else {
-        /* Move / resize complete — push final geometry to the layer once,
-         * then record an undo command that spans the whole drag. */
+        /* Move / resize / rotate complete — sync final geometry, then commit
+         * the transaction as a single undo entry spanning the whole drag. */
         state->has_box = (state->box_w > 0 && state->box_h > 0);
         text_sync_layer_box(doc, state);
 
-        if (state->pre_drag_state && state->layer &&
+        if (state->has_pre_drag && state->layer &&
             text_tool_layer_valid(doc, state->layer) &&
             state->layer->layer_type == LAYER_TYPE_TEXT &&
             state->layer->text_data) {
-            TextLayerState* after =
-                text_layer_state_create(state->layer->text_data);
-            const char* op_name =
-                (state->drag_mode == -1)  ? "Move Text" :
-                (state->drag_mode >= 4)   ? "Rotate Text" : "Resize Text Box";
-            Command* drag_cmd = command_create_text_layer_prop(
-                doc, state->layer, state->pre_drag_state, after, op_name);
-            state->pre_drag_state = NULL; /* ownership transferred */
-            text_tool_push_command(doc, drag_cmd);
+
+            TextLayer* tl = (TextLayer*)state->layer->text_data;
+            gboolean changed = FALSE;
+
+            if (state->pre_drag_mode >= 4) {
+                /* Rotation drag */
+                if (tl->rotation != state->pre_drag_rotation) {
+                    TextLayerPropValue before_v, after_v;
+                    before_v.double_val = state->pre_drag_rotation;
+                    after_v.double_val  = tl->rotation;
+                    text_layer_push_property_change(doc, state->layer,
+                                                    TEXT_PROP_ROTATION,
+                                                    &before_v, &after_v);
+                    changed = TRUE;
+                }
+            } else {
+                /* Move or resize drag — compare box geometry */
+                if (tl->box_x != state->pre_drag_box_x ||
+                    tl->box_y != state->pre_drag_box_y ||
+                    tl->box_width  != state->pre_drag_box_w ||
+                    tl->box_height != state->pre_drag_box_h) {
+
+                    TextLayerPropValue before_v, after_v;
+                    before_v.box.x = state->pre_drag_box_x;
+                    before_v.box.y = state->pre_drag_box_y;
+                    before_v.box.w = state->pre_drag_box_w;
+                    before_v.box.h = state->pre_drag_box_h;
+                    after_v.box.x  = tl->box_x;
+                    after_v.box.y  = tl->box_y;
+                    after_v.box.w  = tl->box_width;
+                    after_v.box.h  = tl->box_height;
+                    text_layer_push_property_change(doc, state->layer,
+                                                    TEXT_PROP_BOX_GEOMETRY,
+                                                    &before_v, &after_v);
+                    changed = TRUE;
+                }
+            }
+
+            if (changed)
+                undo_commit_transaction(doc);
+            else
+                undo_cancel_transaction();
         } else {
-            text_layer_state_free(state->pre_drag_state);
-            state->pre_drag_state = NULL;
+            undo_cancel_transaction();
         }
+        state->has_pre_drag = FALSE;
     }
 
     state->drag_mode      = -1;
@@ -1033,10 +1090,27 @@ void tool_text_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom) {
 
     /* If the active text layer was removed (e.g. by undo), clear stale state */
     if (state->layer && !text_tool_layer_valid(doc, state->layer)) {
-        text_layer_state_free(state->pre_drag_state);
-        state->pre_drag_state = NULL;
-        state->has_box  = FALSE;
-        state->layer    = NULL;
+        if (state->has_pre_drag) {
+            undo_cancel_transaction();
+            state->has_pre_drag = FALSE;
+        }
+        state->has_box = FALSE;
+        state->layer   = NULL;
+    }
+
+    /* Sync overlay box geometry from the layer whenever the tool is idle.
+     * This ensures that undo/redo operations (which update tl->box_x/y/width/
+     * height directly) are immediately visible in the preview without needing
+     * a separate notification path back to the tool state. */
+    if (!state->is_dragging && state->has_box && state->layer &&
+        text_tool_layer_valid(doc, state->layer) &&
+        state->layer->layer_type == LAYER_TYPE_TEXT &&
+        state->layer->text_data) {
+        TextLayer* tl = (TextLayer*)state->layer->text_data;
+        state->box_x = (gint)(tl->box_x + state->layer->offset_x);
+        state->box_y = (gint)(tl->box_y + state->layer->offset_y);
+        state->box_w = (gint)tl->box_width;
+        state->box_h = (gint)tl->box_height;
     }
 
     gint rx, ry, rw, rh;
@@ -1281,16 +1355,15 @@ void tool_text_reset(Tool* tool) {
 
     text_tool_exit_editing(state);
 
-    /* Free any pending undo snapshots that weren't committed */
-    if (state->pre_drag_state) {
-        text_layer_state_free(state->pre_drag_state);
-        state->pre_drag_state = NULL;
+    /* Cancel any pending drag transaction and clean up drag state. */
+    if (state->has_pre_drag) {
+        undo_cancel_transaction();
+        state->has_pre_drag = FALSE;
     }
-    /* pre_edit_state should have been freed by text_tool_exit_editing above;
-     * free it here as a safety net in case of unexpected call sequences. */
-    if (state->pre_edit_state) {
-        text_layer_state_free(state->pre_edit_state);
-        state->pre_edit_state = NULL;
+    /* pre_edit_text is freed by text_tool_exit_editing; safety net. */
+    if (state->pre_edit_text) {
+        g_free(state->pre_edit_text);
+        state->pre_edit_text = NULL;
     }
 
     state->has_box        = FALSE;

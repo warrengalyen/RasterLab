@@ -4,17 +4,14 @@
 #include "command.h"
 #include <glib.h>
 
-/**
- * Forward declarations
- */
 struct ImageDocument;
 struct ImageLayer;
 
 /* =========================================================================
- * TextLayerState — a deep copy of all TextLayer properties
+ * TextLayerState — full deep-copy snapshot of all TextLayer properties.
  *
- * Used to snapshot text layer state before and after an operation so that
- * undo/redo can restore every property in a single atomic step.
+ * Used exclusively by the rasterize command, which must restore every
+ * property at once when undoing a text→raster conversion.
  * ========================================================================= */
 
 typedef struct {
@@ -43,74 +40,100 @@ typedef struct {
     gboolean antialias;
 } TextLayerState;
 
-/**
- * Create a deep copy of all TextLayer properties.
- * @param tl  Source TextLayer (must not be NULL)
- * @return    Newly allocated TextLayerState, or NULL on allocation failure.
- *            Caller must call text_layer_state_free() when done.
- */
-TextLayerState *text_layer_state_create(const void *tl);
-
-/**
- * Restore a TextLayer's properties from a previously captured state.
- * All string fields are deep-copied; the layer's existing strings are freed.
- * @param tl     Destination TextLayer
- * @param state  Source state
- */
-void text_layer_state_restore(void *tl, const TextLayerState *state);
-
-/**
- * Free a TextLayerState and its owned strings.
- * Safe to call with NULL.
- */
-void text_layer_state_free(TextLayerState *state);
+TextLayerState *text_layer_state_create (const void *tl);
+void            text_layer_state_restore(void *tl, const TextLayerState *state);
+void            text_layer_state_free   (TextLayerState *state);
 
 /* =========================================================================
- * Text layer property-change command
+ * Property-based undo for TextLayer
  *
- * Covers all single-property and multi-property edits: text content, font,
- * size, weight, italic, color, alignment, spacing, rotation, box geometry,
- * and antialias.  The before/after TextLayerState pair is stored and used
- * for undo and redo respectively.
+ * Instead of snapshotting the full TextLayer for every change, only the
+ * modified property is recorded.  Multiple related changes are batched into
+ * a transaction and pushed to the undo stack as a single atomic Command.
  *
- * Ownership of @before and @after is transferred to the command; they must
- * NOT be freed by the caller.  On failure both are freed automatically.
+ * Coalescing: if the same (layer, property) pair is pushed more than once
+ * within one transaction, only the first "before" and the most recent
+ * "after" value are retained, so the undo stack stays compact.
  * ========================================================================= */
 
-/**
- * Create a text layer property-change command.
+typedef enum {
+    TEXT_PROP_TEXT,           /* char*   — full text string           */
+    TEXT_PROP_FONT,           /* char*   — font-family name           */
+    TEXT_PROP_SIZE,           /* int     — font size in points        */
+    TEXT_PROP_WEIGHT,         /* int     — 400 normal / 700 bold      */
+    TEXT_PROP_ITALIC,         /* bool                                 */
+    TEXT_PROP_COLOR,          /* color   — r/g/b/a doubles            */
+    TEXT_PROP_ALIGNMENT,      /* int     — PANGO_ALIGN_*              */
+    TEXT_PROP_LINE_SPACING,   /* double                               */
+    TEXT_PROP_LETTER_SPACING, /* double                               */
+    TEXT_PROP_ROTATION,       /* double  — degrees                    */
+    TEXT_PROP_BOX_GEOMETRY,   /* box     — x/y/w/h doubles            */
+    TEXT_PROP_ANTIALIAS       /* bool                                 */
+} TextLayerProperty;
+
+/* Tagged union — only the field matching @property is valid. */
+typedef union {
+    char    *string_val;         /* TEXT_PROP_TEXT, TEXT_PROP_FONT */
+    int      int_val;            /* TEXT_PROP_SIZE, TEXT_PROP_WEIGHT, TEXT_PROP_ALIGNMENT */
+    double   double_val;         /* TEXT_PROP_ROTATION, *_SPACING */
+    gboolean bool_val;           /* TEXT_PROP_ITALIC, TEXT_PROP_ANTIALIAS */
+    struct { double x, y, w, h; } box;   /* TEXT_PROP_BOX_GEOMETRY */
+    struct { double r, g, b, a; } color; /* TEXT_PROP_COLOR */
+} TextLayerPropValue;
+
+/* ── Transaction API ─────────────────────────────────────────────────────
  *
- * @param doc    Document that owns the layer
- * @param layer  The text ImageLayer whose properties were changed
- * @param before State snapshot taken BEFORE the change (ownership transferred)
- * @param after  State snapshot taken AFTER the change  (ownership transferred)
- * @param name   Human-readable undo name (e.g. "Change Font", "Edit Text")
- * @return       New Command ready to push on the undo stack, or NULL on error.
+ * Usage pattern for a drag operation:
+ *
+ *   undo_begin_transaction(doc, "Move Text");
+ *   // ... drag updates tl->box_x/y in real-time, no undo calls here ...
+ *   // On mouse-up:
+ *   text_layer_push_property_change(doc, layer, TEXT_PROP_BOX_GEOMETRY, &before, &after);
+ *   undo_commit_transaction(doc);   // → one entry on the undo stack
+ *
+ * Usage pattern for a text-editing session:
+ *
+ *   undo_begin_transaction(doc, "Edit Text");
+ *   // ... keystrokes modify tl->text, no undo calls per keystroke ...
+ *   // On session end:
+ *   text_layer_push_property_change(doc, layer, TEXT_PROP_TEXT, &before, &after);
+ *   undo_commit_transaction(doc);   // → one entry on the undo stack
+ *
+ * If nothing was pushed between begin and commit the transaction is a no-op.
+ * Calling undo_cancel_transaction() discards any pending operations.
+ * ------------------------------------------------------------------------- */
+
+void undo_begin_transaction  (struct ImageDocument *doc, const char *name);
+void undo_commit_transaction (struct ImageDocument *doc);
+void undo_cancel_transaction (void);
+
+/* Push a single property change.
+ *
+ * If a transaction is active the change is collected inside it (with
+ * coalescing).  Otherwise a Command is created and pushed immediately.
+ *
+ * @before  Value of @property before the change was applied.
+ * @after   Value of @property after  the change was applied.
+ *
+ * For string properties (TEXT_PROP_TEXT, TEXT_PROP_FONT) the strings pointed
+ * to by before->string_val / after->string_val are g_strdup'd internally;
+ * the caller retains ownership of its originals.
  */
-Command *command_create_text_layer_prop(struct ImageDocument *doc,
-                                        struct ImageLayer    *layer,
-                                        TextLayerState       *before,
-                                        TextLayerState       *after,
-                                        const char           *name);
+void text_layer_push_property_change(struct ImageDocument    *doc,
+                                     struct ImageLayer       *layer,
+                                     TextLayerProperty        property,
+                                     const TextLayerPropValue *before,
+                                     const TextLayerPropValue *after);
 
 /* =========================================================================
- * Text layer rasterize command
+ * Rasterize command
  *
- * Converts a LAYER_TYPE_TEXT layer to a LAYER_TYPE_RASTER layer in-place:
- *   1. Renders text to layer->surface via Pango+Cairo.
- *   2. Frees text_data and marks the layer as raster.
- *
- * Undo restores text_data from the captured TextLayerState and reverts the
- * layer type back to LAYER_TYPE_TEXT so the text remains vector-editable.
- *
- * This function BOTH performs the rasterization AND creates the Command.
- * The caller only needs to push the returned command onto the undo stack.
- *
- * @param doc    Document that owns the layer
- * @param layer  An ImageLayer with layer_type == LAYER_TYPE_TEXT
- * @return       Command ready to push on the undo stack, or NULL on error.
- *               On success the layer has already been rasterized.
- ========================================================================= */
+ * Converts a LAYER_TYPE_TEXT layer to LAYER_TYPE_RASTER in-place.
+ * Undo restores the full TextLayer; redo re-applies the raster surface.
+ * The caller only needs to push the returned Command onto the undo stack.
+ * Returns NULL on error; on success the layer is already rasterized.
+ * ========================================================================= */
+
 Command *command_create_text_layer_rasterize(struct ImageDocument *doc,
                                               struct ImageLayer    *layer);
 
