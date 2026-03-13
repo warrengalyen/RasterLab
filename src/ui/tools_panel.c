@@ -575,13 +575,33 @@ gboolean tools_panel_on_window_key_press(GtkWidget* widget, GdkEventKey* event, 
         return FALSE;
     }
 
-    /* Suppress tool hotkeys while the text tool is accepting keyboard input.
-     * Without this, typing characters like 'h', 'b', 'p' etc. would switch
-     * the active tool instead of being inserted into the text layer. */
+    /* When the text tool is in editing mode, route ALL key events directly to
+     * the text tool's own key handler and return TRUE.  This prevents GTK's
+     * accelerator group (processed by the window's *default* signal handler,
+     * which runs AFTER our connected handler) from stealing bare keys such as
+     * Delete → Edit > Clear.  We handle the event here, so the default handler
+     * never runs and the accel group is never consulted.
+     *
+     * Modifier combos (Ctrl+*, Alt+*) are passed through so that Ctrl+Z,
+     * Ctrl+S etc. still work normally while editing. */
     {
         Tool* at = tool_manager_get_active(ctx->tool_registry);
-        if (tool_text_is_editing(at))
+        if (tool_text_is_editing(at)) {
+            GdkModifierType mods = event->state & gtk_accelerator_get_default_mod_mask();
+            gboolean has_ctrl = (mods & GDK_CONTROL_MASK) != 0;
+            gboolean has_alt  = (mods & GDK_MOD1_MASK)    != 0;
+
+            if (!has_ctrl && !has_alt) {
+                /* Forward to the text tool and consume the event so the
+                 * accelerator group never sees it. */
+                ImageDocument* doc = ui_get_active_document(ctx);
+                if (doc && at->key_press)
+                    at->key_press(at, doc, event);
+                return TRUE;
+            }
+            /* Let Ctrl/Alt combos fall through to their normal handlers. */
             return FALSE;
+        }
     }
 
     /* Get the modifier state, ignoring lock keys (Caps Lock, Num Lock) */

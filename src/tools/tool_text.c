@@ -355,6 +355,7 @@ static void text_tool_exit_editing(TextToolState* state) {
         g_source_remove(state->cursor_blink_tag);
         state->cursor_blink_tag = 0;
     }
+
     state->blink_doc = NULL;
 }
 
