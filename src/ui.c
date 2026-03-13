@@ -342,6 +342,7 @@ AppContext* ui_create_main_window(void) {
     ctx->layer_menu_duplicate = NULL;
     ctx->layer_menu_merge_up = NULL;
     ctx->layer_menu_merge_down = NULL;
+    ctx->layer_menu_rasterize_text = NULL;
     ctx->layer_menu_order_select_top = NULL;
     ctx->layer_menu_order_select_above = NULL;
     ctx->layer_menu_order_select_below = NULL;
@@ -2673,6 +2674,11 @@ void ui_update_menu_and_button_states(AppContext* ctx) {
         gboolean can_merge_down = has_document && has_selection && selected_layer &&
                                   document_layer_can_move_down(doc, selected_layer);
         gtk_widget_set_sensitive(ctx->layer_menu_merge_down, can_merge_down);
+    }
+    if (ctx->layer_menu_rasterize_text && GTK_IS_WIDGET(ctx->layer_menu_rasterize_text)) {
+        gboolean can_rasterize = has_document && has_selection && selected_layer &&
+                                 selected_layer->layer_type == LAYER_TYPE_TEXT;
+        gtk_widget_set_sensitive(ctx->layer_menu_rasterize_text, can_rasterize);
     }
 
     /* Layer > Order submenu: select and move commands */

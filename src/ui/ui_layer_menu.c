@@ -1,7 +1,9 @@
 #include "ui/ui_layer_menu.h"
 #include "commands/command_layer.h"
+#include "commands/command_text_layer.h"
 #include "document.h"
 #include "render/layer.h"
+#include "render/text_layer.h"
 #include "ui.h"
 #include "ui/dialogs/new_layer_dialog.h"
 #include "ui/layers_panel.h"
@@ -86,6 +88,7 @@ void ui_layer_menu_setup(GtkBuilder* builder, AppContext* ctx) {
     ctx->layer_menu_delete = GTK_WIDGET(gtk_builder_get_object(builder, "layer_menu_delete"));
     ctx->layer_menu_merge_up = GTK_WIDGET(gtk_builder_get_object(builder, "layer_menu_merge_up"));
     ctx->layer_menu_merge_down = GTK_WIDGET(gtk_builder_get_object(builder, "layer_menu_merge_down"));
+    ctx->layer_menu_rasterize_text = GTK_WIDGET(gtk_builder_get_object(builder, "layer_menu_rasterize_text"));
 
     /* Connect Layer menu signals */
     if (ctx->layer_menu_new) {
@@ -102,6 +105,10 @@ void ui_layer_menu_setup(GtkBuilder* builder, AppContext* ctx) {
     }
     if (ctx->layer_menu_merge_down) {
         g_signal_connect(ctx->layer_menu_merge_down, "activate", G_CALLBACK(on_layer_merge_down), ctx);
+    }
+    if (ctx->layer_menu_rasterize_text) {
+        g_signal_connect(ctx->layer_menu_rasterize_text, "activate",
+                         G_CALLBACK(on_layer_rasterize_text), ctx);
     }
 
     /* Get and connect Layer > Order submenu items */
@@ -926,4 +933,49 @@ void on_layer_visibility_hide_all(GtkWidget* widget, gpointer data) {
     if (layers_panel) layers_panel_update(layers_panel, doc);
     ui_update_menu_and_button_states(ctx);
     doc->modified = TRUE;
+}
+
+
+void on_layer_rasterize_text(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext*    ctx         = (AppContext*)data;
+    ImageDocument* doc         = ui_get_active_document(ctx);
+    LayersPanel*   layers_panel =
+        (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window), "layers_panel");
+
+    if (!doc)
+        return;
+
+    ImageLayer* layer = NULL;
+    if (layers_panel)
+        layer = layers_panel_get_selected_layer(layers_panel);
+    if (!layer)
+        layer = document_get_selected_layer(doc);
+
+    if (!layer || layer->layer_type != LAYER_TYPE_TEXT) {
+        g_warning("Rasterize Text: no text layer selected");
+        return;
+    }
+
+    /* command_create_text_layer_rasterize renders the text, converts the
+     * layer to LAYER_TYPE_RASTER, and returns an undo command. */
+    Command* cmd = command_create_text_layer_rasterize(doc, layer);
+    if (!cmd)
+        return;
+
+    if (doc->undo_stack) {
+        command_stack_push(doc->undo_stack, cmd);
+        if (doc->redo_stack)
+            command_stack_clear(doc->redo_stack);
+    } else {
+        command_free(cmd);
+    }
+
+    doc->modified = TRUE;
+    if (layers_panel)
+        layers_panel_update(layers_panel, doc);
+    ui_update_menu_and_button_states(ctx);
+    ui_update_window_title(ctx, NULL);
+    if (doc->drawing_area)
+        gtk_widget_queue_draw(doc->drawing_area);
 }

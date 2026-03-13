@@ -1268,6 +1268,20 @@
       </object>
     </child>
     <child>
+      <object class="GtkSeparatorMenuItem" id="layer_separator_rasterize">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="layer_menu_rasterize_text">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Rasterize Text Layer</property>
+        <property name="use-underline">True</property>
+      </object>
+    </child>
+    <child>
       <object class="GtkSeparatorMenuItem" id="layer_separator">
         <property name="visible">True</property>
         <property name="can-focus">False</property>

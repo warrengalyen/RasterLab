@@ -1,6 +1,7 @@
 #include "ui/tool_options_panel.h"
 #include "command.h"
 #include "commands/command_image.h"
+#include "commands/command_text_layer.h"
 #include "document.h"
 #include "render/layer.h"
 #include "render/render_utils.h"
@@ -1982,6 +1983,78 @@ static TextLayer* text_opts_get_layer(ToolOptionsPanel* panel) {
 }
 
 /**
+ * Like text_opts_get_layer(), but also returns the owning ImageLayer and
+ * ImageDocument via out-parameters.  Any out-parameter may be NULL.
+ */
+static TextLayer* text_opts_get_context(ToolOptionsPanel* panel,
+                                        ImageDocument**   out_doc,
+                                        ImageLayer**      out_layer) {
+    if (out_doc)   *out_doc   = NULL;
+    if (out_layer) *out_layer = NULL;
+
+    if (!panel || !panel->panel)
+        return NULL;
+    GtkWidget* win = gtk_widget_get_toplevel(panel->panel);
+    if (!win)
+        return NULL;
+    AppContext* ctx = (AppContext*)g_object_get_data(G_OBJECT(win), "app_context");
+    if (!ctx)
+        return NULL;
+    ImageDocument* doc = ui_get_active_document(ctx);
+    if (!doc)
+        return NULL;
+    ImageLayer* layer = document_get_selected_layer(doc);
+    if (!layer || layer->layer_type != LAYER_TYPE_TEXT || !layer->text_data)
+        return NULL;
+
+    if (out_doc)   *out_doc   = doc;
+    if (out_layer) *out_layer = layer;
+    return (TextLayer*)layer->text_data;
+}
+
+/**
+ * Push a text-layer property-change command onto the undo stack.
+ * Ownership of @before and @after is transferred; the caller must NOT free them.
+ * If either is NULL the function is a no-op and both are freed safely.
+ */
+static void text_opts_push_command(ToolOptionsPanel* panel,
+                                   ImageDocument*    doc,
+                                   ImageLayer*       layer,
+                                   TextLayerState*   before,
+                                   TextLayerState*   after,
+                                   const char*       name) {
+    if (!before || !after || !doc || !layer) {
+        text_layer_state_free(before);
+        text_layer_state_free(after);
+        return;
+    }
+    Command* cmd = command_create_text_layer_prop(doc, layer, before, after, name);
+    if (!cmd)
+        return; /* command_create_text_layer_prop already freed before/after */
+
+    if (doc->undo_stack) {
+        command_stack_push(doc->undo_stack, cmd);
+        if (doc->redo_stack)
+            command_stack_clear(doc->redo_stack);
+        doc->modified = TRUE;
+
+        if (panel->panel) {
+            GtkWidget* win = gtk_widget_get_toplevel(panel->panel);
+            if (win) {
+                AppContext* ctx =
+                    (AppContext*)g_object_get_data(G_OBJECT(win), "app_context");
+                if (ctx) {
+                    ui_update_menu_and_button_states(ctx);
+                    ui_update_window_title(ctx, NULL);
+                }
+            }
+        }
+    } else {
+        command_free(cmd);
+    }
+}
+
+/**
  * Invalidate the selected text layer's cache and queue a full redraw.
  */
 static void text_opts_invalidate(ToolOptionsPanel* panel) {
@@ -2012,54 +2085,80 @@ static void text_opts_invalidate(ToolOptionsPanel* panel) {
 static void on_text_font_family_changed(GtkComboBox* combo, gpointer user_data) {
     if (g_text_panel_syncing) return;
     ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
-    TextLayer* tl = text_opts_get_layer(panel);
+    ImageDocument* doc = NULL;
+    ImageLayer*    img_layer = NULL;
+    TextLayer* tl = text_opts_get_context(panel, &doc, &img_layer);
     if (!tl) return;
 
     gchar* family = gtk_combo_box_text_get_active_text(GTK_COMBO_BOX_TEXT(combo));
     if (!family) return;
+
+    TextLayerState* before = text_layer_state_create(tl);
     g_free(tl->font_family);
     tl->font_family = family; /* ownership transferred */
+    TextLayerState* after = text_layer_state_create(tl);
+    text_opts_push_command(panel, doc, img_layer, before, after, "Change Font");
     text_opts_invalidate(panel);
 }
 
 static void on_text_font_size_changed(GtkSpinButton* spin, gpointer user_data) {
     if (g_text_panel_syncing) return;
     ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
-    TextLayer* tl = text_opts_get_layer(panel);
+    ImageDocument* doc = NULL;
+    ImageLayer*    img_layer = NULL;
+    TextLayer* tl = text_opts_get_context(panel, &doc, &img_layer);
     if (!tl) return;
+    TextLayerState* before = text_layer_state_create(tl);
     tl->font_size = (int)gtk_spin_button_get_value(spin);
+    TextLayerState* after = text_layer_state_create(tl);
+    text_opts_push_command(panel, doc, img_layer, before, after, "Change Font Size");
     text_opts_invalidate(panel);
 }
 
 static void on_text_bold_toggled(GtkToggleButton* btn, gpointer user_data) {
     if (g_text_panel_syncing) return;
     ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
-    TextLayer* tl = text_opts_get_layer(panel);
+    ImageDocument* doc = NULL;
+    ImageLayer*    img_layer = NULL;
+    TextLayer* tl = text_opts_get_context(panel, &doc, &img_layer);
     if (!tl) return;
+    TextLayerState* before = text_layer_state_create(tl);
     tl->font_weight = gtk_toggle_button_get_active(btn) ? 700 : 400;
+    TextLayerState* after = text_layer_state_create(tl);
+    text_opts_push_command(panel, doc, img_layer, before, after, "Toggle Bold");
     text_opts_invalidate(panel);
 }
 
 static void on_text_italic_toggled(GtkToggleButton* btn, gpointer user_data) {
     if (g_text_panel_syncing) return;
     ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
-    TextLayer* tl = text_opts_get_layer(panel);
+    ImageDocument* doc = NULL;
+    ImageLayer*    img_layer = NULL;
+    TextLayer* tl = text_opts_get_context(panel, &doc, &img_layer);
     if (!tl) return;
+    TextLayerState* before = text_layer_state_create(tl);
     tl->italic = gtk_toggle_button_get_active(btn);
+    TextLayerState* after = text_layer_state_create(tl);
+    text_opts_push_command(panel, doc, img_layer, before, after, "Toggle Italic");
     text_opts_invalidate(panel);
 }
 
 static void on_text_color_set(GtkColorButton* btn, gpointer user_data) {
     if (g_text_panel_syncing) return;
     ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
-    TextLayer* tl = text_opts_get_layer(panel);
+    ImageDocument* doc = NULL;
+    ImageLayer*    img_layer = NULL;
+    TextLayer* tl = text_opts_get_context(panel, &doc, &img_layer);
     if (!tl) return;
+    TextLayerState* before = text_layer_state_create(tl);
     GdkRGBA color;
     gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(btn), &color);
     tl->color_r = color.red;
     tl->color_g = color.green;
     tl->color_b = color.blue;
     tl->color_a = color.alpha;
+    TextLayerState* after = text_layer_state_create(tl);
+    text_opts_push_command(panel, doc, img_layer, before, after, "Change Text Color");
     text_opts_invalidate(panel);
 }
 
@@ -2069,8 +2168,12 @@ static void on_text_align_toggled(GtkToggleButton* btn, gpointer user_data) {
     if (!gtk_toggle_button_get_active(btn)) return; /* ignore deactivations */
 
     ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
-    TextLayer* tl = text_opts_get_layer(panel);
+    ImageDocument* doc = NULL;
+    ImageLayer*    img_layer = NULL;
+    TextLayer* tl = text_opts_get_context(panel, &doc, &img_layer);
     if (!tl) return;
+
+    TextLayerState* before = text_layer_state_create(tl);
 
     gint align = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(btn), "alignment_value"));
     tl->alignment = align;
@@ -2089,42 +2192,72 @@ static void on_text_align_toggled(GtkToggleButton* btn, gpointer user_data) {
     }
     g_text_panel_syncing--;
 
+    TextLayerState* after = text_layer_state_create(tl);
+    /* Only push if alignment actually changed */
+    if (before && after && before->alignment != after->alignment)
+        text_opts_push_command(panel, doc, img_layer, before, after,
+                               "Change Alignment");
+    else {
+        text_layer_state_free(before);
+        text_layer_state_free(after);
+    }
     text_opts_invalidate(panel);
 }
 
 static void on_text_line_spacing_changed(GtkSpinButton* spin, gpointer user_data) {
     if (g_text_panel_syncing) return;
     ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
-    TextLayer* tl = text_opts_get_layer(panel);
+    ImageDocument* doc = NULL;
+    ImageLayer*    img_layer = NULL;
+    TextLayer* tl = text_opts_get_context(panel, &doc, &img_layer);
     if (!tl) return;
+    TextLayerState* before = text_layer_state_create(tl);
     tl->line_spacing = gtk_spin_button_get_value(spin);
+    TextLayerState* after = text_layer_state_create(tl);
+    text_opts_push_command(panel, doc, img_layer, before, after, "Change Line Spacing");
     text_opts_invalidate(panel);
 }
 
 static void on_text_letter_spacing_changed(GtkSpinButton* spin, gpointer user_data) {
     if (g_text_panel_syncing) return;
     ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
-    TextLayer* tl = text_opts_get_layer(panel);
+    ImageDocument* doc = NULL;
+    ImageLayer*    img_layer = NULL;
+    TextLayer* tl = text_opts_get_context(panel, &doc, &img_layer);
     if (!tl) return;
+    TextLayerState* before = text_layer_state_create(tl);
     tl->letter_spacing = gtk_spin_button_get_value(spin);
+    TextLayerState* after = text_layer_state_create(tl);
+    text_opts_push_command(panel, doc, img_layer, before, after,
+                           "Change Letter Spacing");
     text_opts_invalidate(panel);
 }
 
 static void on_text_antialias_toggled(GtkToggleButton* btn, gpointer user_data) {
     if (g_text_panel_syncing) return;
     ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
-    TextLayer* tl = text_opts_get_layer(panel);
+    ImageDocument* doc = NULL;
+    ImageLayer*    img_layer = NULL;
+    TextLayer* tl = text_opts_get_context(panel, &doc, &img_layer);
     if (!tl) return;
+    TextLayerState* before = text_layer_state_create(tl);
     tl->antialias = gtk_toggle_button_get_active(btn);
+    TextLayerState* after = text_layer_state_create(tl);
+    text_opts_push_command(panel, doc, img_layer, before, after, "Toggle Antialias");
     text_opts_invalidate(panel);
 }
 
 static void on_text_rotation_changed(GtkSpinButton* spin, gpointer user_data) {
     if (g_text_panel_syncing) return;
     ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
-    TextLayer* tl = text_opts_get_layer(panel);
+    ImageDocument* doc = NULL;
+    ImageLayer*    img_layer = NULL;
+    TextLayer* tl = text_opts_get_context(panel, &doc, &img_layer);
     if (!tl) return;
+    TextLayerState* before = text_layer_state_create(tl);
     tl->rotation = gtk_spin_button_get_value(spin);
+    TextLayerState* after = text_layer_state_create(tl);
+    text_opts_push_command(panel, doc, img_layer, before, after, "Change Rotation");
     text_opts_invalidate(panel);
 }
 

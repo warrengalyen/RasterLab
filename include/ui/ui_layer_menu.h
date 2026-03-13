@@ -28,6 +28,7 @@ void on_layer_visibility_hide_only(GtkWidget* widget, gpointer data);
 void on_layer_visibility_show_all(GtkWidget* widget, gpointer data);
 void on_layer_visibility_hide_all(GtkWidget* widget, gpointer data);
 void on_layer_selection_changed(GtkTreeSelection* selection, gpointer user_data);
+void on_layer_rasterize_text(GtkWidget* widget, gpointer data);
 
 /**
  * Update the "Show this layer" check state to match selected layer visibility.

@@ -1,4 +1,6 @@
 #include "tools/tool_text.h"
+#include "commands/command_layer.h"
+#include "commands/command_text_layer.h"
 #include "document.h"
 #include "render/layer.h"
 #include "render/text_layer.h"
@@ -9,19 +11,19 @@
 #include "ui/tool_options_panel.h"
 #include <gdk/gdk.h>
 #include <gtk/gtk.h>
-#include <pango/pangocairo.h>
 #include <math.h>
+#include <pango/pangocairo.h>
 #include <string.h>
 
 /* Minimum box size in document pixels */
 #define TEXT_BOX_MIN_SIZE 4
 
 /* Default box size applied when the user clicks without dragging */
-#define TEXT_DEFAULT_BOX_W    200
-#define TEXT_DEFAULT_BOX_H     60
+#define TEXT_DEFAULT_BOX_W 200
+#define TEXT_DEFAULT_BOX_H 60
 
 /* Drag displacement smaller than this is treated as a plain click */
-#define TEXT_CLICK_THRESHOLD    8
+#define TEXT_CLICK_THRESHOLD 8
 
 /* -----------------------------------------------------------------------
  * Internal helpers
@@ -38,13 +40,43 @@ static void text_tool_queue_overlay(ImageDocument* doc) {
 
 /**
  * Full redraw: viewport overlay AND drawing area (compositor).
- * Use this only when the text layer geometry is finalised (mouse_up).
+ * Use this only when the text layer geometry is finalzsed (mouse_up).
  */
 static void text_tool_queue_full(ImageDocument* doc) {
     if (doc->drawing_area)
         gtk_widget_queue_draw(doc->drawing_area);
     if (doc->viewport)
         gtk_widget_queue_draw(doc->viewport);
+}
+
+/**
+ * Push @cmd onto the undo stack, clear the redo stack, mark the document
+ * modified, and refresh menu/button states.
+ * Takes ownership of @cmd — if it cannot be pushed, it is freed.
+ */
+static void text_tool_push_command(ImageDocument* doc, Command* cmd) {
+    if (!cmd)
+        return;
+    if (!doc || !doc->undo_stack) {
+        command_free(cmd);
+        return;
+    }
+    command_stack_push(doc->undo_stack, cmd);
+    if (doc->redo_stack)
+        command_stack_clear(doc->redo_stack);
+    doc->modified = TRUE;
+
+    if (doc->drawing_area) {
+        GtkWidget* win = gtk_widget_get_toplevel(doc->drawing_area);
+        if (win) {
+            AppContext* ctx =
+                (AppContext*)g_object_get_data(G_OBJECT(win), "app_context");
+            if (ctx) {
+                ui_update_menu_and_button_states(ctx);
+                ui_update_window_title(ctx, NULL);
+            }
+        }
+    }
 }
 
 /**
@@ -62,17 +94,17 @@ static gboolean text_tool_layer_valid(ImageDocument* doc, ImageLayer* layer) {
  * Used to map a cursor position into the text box's local (unrotated) frame
  * before hit-testing against handle positions.
  */
-static void text_inverse_rotate(gdouble  px, gdouble  py,
-                                 gdouble  cx, gdouble  cy,
-                                 gdouble  rotation_deg,
-                                 gdouble* out_x, gdouble* out_y) {
+static void text_inverse_rotate(gdouble px, gdouble py,
+                                gdouble cx, gdouble cy,
+                                gdouble rotation_deg,
+                                gdouble* out_x, gdouble* out_y) {
     if (rotation_deg == 0.0) {
         *out_x = px;
         *out_y = py;
         return;
     }
     gdouble rad = -rotation_deg * (M_PI / 180.0);
-    gdouble dx  = px - cx,  dy = py - cy;
+    gdouble dx = px - cx, dy = py - cy;
     *out_x = cx + dx * cos(rad) - dy * sin(rad);
     *out_y = cy + dx * sin(rad) + dy * cos(rad);
 }
@@ -89,10 +121,10 @@ static void text_inverse_rotate(gdouble  px, gdouble  py,
  * into the box's local frame before testing so hit-areas match the visual handles.
  */
 static gint text_detect_handle(gdouble x, gdouble y,
-                                gdouble rx, gdouble ry,
-                                gdouble rw, gdouble rh,
-                                gdouble rotation_deg,
-                                gdouble zoom) {
+                               gdouble rx, gdouble ry,
+                               gdouble rw, gdouble rh,
+                               gdouble rotation_deg,
+                               gdouble zoom) {
     /* Map cursor into the box's unrotated local frame */
     gdouble lx = x, ly = y;
     text_inverse_rotate(x, y, rx + rw * 0.5, ry + rh * 0.5,
@@ -100,10 +132,11 @@ static gint text_detect_handle(gdouble x, gdouble y,
 
     /* Corner resize handles — square hit area */
     gdouble half = 6.0 / zoom;
-    if (half < 0.5) half = 0.5;
+    if (half < 0.5)
+        half = 0.5;
 
-    const gdouble cnr_x[4] = { rx,      rx + rw, rx,      rx + rw };
-    const gdouble cnr_y[4] = { ry,      ry,      ry + rh, ry + rh };
+    const gdouble cnr_x[4] = {rx, rx + rw, rx, rx + rw};
+    const gdouble cnr_y[4] = {ry, ry, ry + rh, ry + rh};
     for (gint i = 0; i < 4; i++) {
         if (fabs(lx - cnr_x[i]) <= half && fabs(ly - cnr_y[i]) <= half)
             return i;
@@ -111,10 +144,11 @@ static gint text_detect_handle(gdouble x, gdouble y,
 
     /* Edge-midpoint rotation handles — circular hit area */
     gdouble rot_r = 7.0 / zoom;
-    if (rot_r < 1.0) rot_r = 1.0;
+    if (rot_r < 1.0)
+        rot_r = 1.0;
 
-    const gdouble emid_x[4] = { rx + rw * 0.5, rx + rw,       rx + rw * 0.5, rx       };
-    const gdouble emid_y[4] = { ry,             ry + rh * 0.5, ry + rh,       ry + rh * 0.5 };
+    const gdouble emid_x[4] = {rx + rw * 0.5, rx + rw, rx + rw * 0.5, rx};
+    const gdouble emid_y[4] = {ry, ry + rh * 0.5, ry + rh, ry + rh * 0.5};
 
     for (gint i = 0; i < 4; i++) {
         gdouble ddx = lx - emid_x[i];
@@ -130,7 +164,8 @@ static gint text_detect_handle(gdouble x, gdouble y,
  * Set cursor for the given drag mode.
  */
 static void text_set_cursor(GdkWindow* window, gint handle, GdkCursor* default_cursor) {
-    if (!window) return;
+    if (!window)
+        return;
 
     if (handle >= -1 && handle <= 3) {
         /* Move (-1) and corner resize (0-3) */
@@ -157,9 +192,9 @@ static void text_sync_layer_box(ImageDocument* doc, TextToolState* state) {
         return;
 
     TextLayer* tl = (TextLayer*)state->layer->text_data;
-    tl->box_x      = (double)state->box_x;
-    tl->box_y      = (double)state->box_y;
-    tl->box_width  = (double)state->box_w;
+    tl->box_x = (double)state->box_x;
+    tl->box_y = (double)state->box_y;
+    tl->box_width = (double)state->box_w;
     tl->box_height = (double)state->box_h;
 
     layer_invalidate_cache(state->layer);
@@ -185,8 +220,8 @@ static ImageLayer* text_tool_find_layer_at_point(ImageDocument* doc, gint x, gin
         /* Inverse-rotate the test point into the box's local frame */
         gdouble lx, ly;
         text_inverse_rotate((gdouble)x, (gdouble)y,
-                             bx + bw * 0.5, by + bh * 0.5,
-                             tl->rotation, &lx, &ly);
+                            bx + bw * 0.5, by + bh * 0.5,
+                            tl->rotation, &lx, &ly);
         if (lx >= bx && lx < bx + bw && ly >= by && ly < by + bh)
             return layer;
     }
@@ -244,9 +279,9 @@ static void text_tool_enter_editing(TextToolState* state, ImageDocument* doc) {
     if (state->is_editing)
         return;
 
-    state->is_editing    = TRUE;
+    state->is_editing     = TRUE;
     state->cursor_visible = TRUE;
-    state->blink_doc     = doc;
+    state->blink_doc      = doc;
 
     /* Place cursor at end of existing text */
     if (state->layer && state->layer->text_data) {
@@ -254,6 +289,17 @@ static void text_tool_enter_editing(TextToolState* state, ImageDocument* doc) {
         state->cursor_pos = tl->text ? (gint)strlen(tl->text) : 0;
     } else {
         state->cursor_pos = 0;
+    }
+
+    /* Capture text layer state before the user starts editing (for undo grouping).
+     * All keystrokes within one editing session are collapsed into a single undo. */
+    if (state->layer && state->layer->layer_type == LAYER_TYPE_TEXT &&
+        state->layer->text_data) {
+        if (state->pre_edit_state) {
+            text_layer_state_free(state->pre_edit_state);
+        }
+        state->pre_edit_state =
+            text_layer_state_create(state->layer->text_data);
     }
 
     /* Grab keyboard focus so key-press-events reach the drawing area */
@@ -266,11 +312,36 @@ static void text_tool_enter_editing(TextToolState* state, ImageDocument* doc) {
 }
 
 /**
- * Exit text-editing mode, stop the blink timer, and hide the cursor.
+ * Exit text-editing mode, commit an undo entry if text changed, stop the
+ * blink timer, and hide the cursor.
  */
 static void text_tool_exit_editing(TextToolState* state) {
     if (!state->is_editing)
         return;
+
+    /* Push a single undo entry that spans the entire editing session */
+    ImageDocument* doc = state->blink_doc;
+    if (doc && state->pre_edit_state && state->layer &&
+        text_tool_layer_valid(doc, state->layer) &&
+        state->layer->layer_type == LAYER_TYPE_TEXT &&
+        state->layer->text_data) {
+        TextLayer*      tl    = (TextLayer*)state->layer->text_data;
+        TextLayerState* after = text_layer_state_create(tl);
+        if (after && g_strcmp0(state->pre_edit_state->text, after->text) != 0) {
+            Command* cmd = command_create_text_layer_prop(doc, state->layer,
+                                                         state->pre_edit_state,
+                                                         after, "Edit Text");
+            state->pre_edit_state = NULL; /* ownership transferred to command */
+            text_tool_push_command(doc, cmd);
+        } else {
+            text_layer_state_free(after);
+            text_layer_state_free(state->pre_edit_state);
+            state->pre_edit_state = NULL;
+        }
+    } else if (state->pre_edit_state) {
+        text_layer_state_free(state->pre_edit_state);
+        state->pre_edit_state = NULL;
+    }
 
     state->is_editing     = FALSE;
     state->cursor_visible = FALSE;
@@ -287,13 +358,15 @@ static void text_tool_exit_editing(TextToolState* state) {
  * Advances cursor_pos past the inserted bytes.
  */
 static void text_tool_insert(TextToolState* state, TextLayer* tl,
-                              const gchar* insert_text) {
-    gint ins_len  = (gint)strlen(insert_text);
+                             const gchar* insert_text) {
+    gint ins_len = (gint)strlen(insert_text);
     gint text_len = tl->text ? (gint)strlen(tl->text) : 0;
 
     /* Clamp cursor_pos to valid range */
-    if (state->cursor_pos < 0)           state->cursor_pos = 0;
-    if (state->cursor_pos > text_len)    state->cursor_pos = text_len;
+    if (state->cursor_pos < 0)
+        state->cursor_pos = 0;
+    if (state->cursor_pos > text_len)
+        state->cursor_pos = text_len;
 
     gchar* new_text = g_malloc(text_len + ins_len + 1);
     if (tl->text)
@@ -327,7 +400,8 @@ static void text_tool_invalidate(ImageDocument* doc, TextToolState* state) {
 
 static void text_tool_mouse_down(Tool* tool, struct ImageDocument* doc,
                                  MouseEvent* event) {
-    if (!tool || !doc || !tool->user_data) return;
+    if (!tool || !doc || !tool->user_data)
+        return;
 
     TextToolState* state = (TextToolState*)tool->user_data;
 
@@ -347,6 +421,14 @@ static void text_tool_mouse_down(Tool* tool, struct ImageDocument* doc,
         if (handle >= 0) {
             /* Clicking a resize or rotation handle — exit editing, start drag */
             text_tool_exit_editing(state);
+            /* Snapshot layer state before resize/rotate for undo */
+            if (state->layer && text_tool_layer_valid(doc, state->layer) &&
+                state->layer->layer_type == LAYER_TYPE_TEXT &&
+                state->layer->text_data) {
+                text_layer_state_free(state->pre_drag_state);
+                state->pre_drag_state =
+                    text_layer_state_create(state->layer->text_data);
+            }
             state->drag_mode   = handle;
             state->is_dragging = TRUE;
             state->start_x     = event->x;
@@ -358,9 +440,9 @@ static void text_tool_mouse_down(Tool* tool, struct ImageDocument* doc,
         /* Interior check: inverse-rotate click into box's local frame */
         gdouble lx, ly;
         text_inverse_rotate((gdouble)event->x, (gdouble)event->y,
-                             state->box_x + state->box_w * 0.5,
-                             state->box_y + state->box_h * 0.5,
-                             box_rotation, &lx, &ly);
+                            state->box_x + state->box_w * 0.5,
+                            state->box_y + state->box_h * 0.5,
+                            box_rotation, &lx, &ly);
         if (lx >= state->box_x && lx < state->box_x + state->box_w &&
             ly >= state->box_y && ly < state->box_y + state->box_h) {
             /* Click inside the text box */
@@ -401,6 +483,14 @@ static void text_tool_mouse_down(Tool* tool, struct ImageDocument* doc,
             } else {
                 /* Single-click: exit editing and start a move drag */
                 text_tool_exit_editing(state);
+                /* Snapshot state before move for undo */
+                if (state->layer && text_tool_layer_valid(doc, state->layer) &&
+                    state->layer->layer_type == LAYER_TYPE_TEXT &&
+                    state->layer->text_data) {
+                    text_layer_state_free(state->pre_drag_state);
+                    state->pre_drag_state =
+                        text_layer_state_create(state->layer->text_data);
+                }
                 state->drag_mode   = -1;
                 state->is_dragging = TRUE;
                 state->start_x     = event->x;
@@ -421,11 +511,11 @@ static void text_tool_mouse_down(Tool* tool, struct ImageDocument* doc,
         ImageLayer* found = text_tool_find_layer_at_point(doc, event->x, event->y);
         if (found) {
             TextLayer* tl = (TextLayer*)found->text_data;
-            state->layer   = found;
-            state->box_x   = (gint)(tl->box_x + found->offset_x);
-            state->box_y   = (gint)(tl->box_y + found->offset_y);
-            state->box_w   = (gint)tl->box_width;
-            state->box_h   = (gint)tl->box_height;
+            state->layer = found;
+            state->box_x = (gint)(tl->box_x + found->offset_x);
+            state->box_y = (gint)(tl->box_y + found->offset_y);
+            state->box_w = (gint)tl->box_width;
+            state->box_h = (gint)tl->box_height;
             state->has_box = TRUE;
             doc->selected_layer = found;
 
@@ -444,7 +534,10 @@ static void text_tool_mouse_down(Tool* tool, struct ImageDocument* doc,
                 text_tool_enter_editing(state, doc);
                 text_tool_queue_overlay(doc);
             } else {
-                /* Single-click: start move drag */
+                /* Single-click: start move drag; snapshot for undo */
+                text_layer_state_free(state->pre_drag_state);
+                state->pre_drag_state =
+                    text_layer_state_create(found->text_data);
                 state->drag_mode   = -1;
                 state->is_dragging = TRUE;
                 state->start_x     = event->x;
@@ -457,24 +550,26 @@ static void text_tool_mouse_down(Tool* tool, struct ImageDocument* doc,
 
     /* ── Empty canvas: start rubber-band to define a new text box ───── */
     text_tool_exit_editing(state);
-    state->has_box        = FALSE;
-    state->is_dragging    = TRUE;
-    state->drag_mode      = -2;
-    state->start_x        = event->x;
-    state->start_y        = event->y;
-    state->current_x      = event->x;
-    state->current_y      = event->y;
+    state->has_box = FALSE;
+    state->is_dragging = TRUE;
+    state->drag_mode = -2;
+    state->start_x = event->x;
+    state->start_y = event->y;
+    state->current_x = event->x;
+    state->current_y = event->y;
     state->hovered_handle = -2;
     text_tool_queue_overlay(doc);
 }
 
 static void text_tool_mouse_move(Tool* tool, struct ImageDocument* doc,
                                  MouseEvent* event) {
-    if (!tool || !doc || !tool->user_data) return;
+    if (!tool || !doc || !tool->user_data)
+        return;
 
     TextToolState* state = (TextToolState*)tool->user_data;
     GdkWindow* window = doc->drawing_area
-                        ? gtk_widget_get_window(doc->drawing_area) : NULL;
+                            ? gtk_widget_get_window(doc->drawing_area)
+                            : NULL;
 
     if (state->is_dragging) {
         if (window)
@@ -489,8 +584,8 @@ static void text_tool_mouse_move(Tool* tool, struct ImageDocument* doc,
             state->current_y = event->y;
         } else if (state->drag_mode == -1) {
             /* Move */
-            state->box_x  += dx;
-            state->box_y  += dy;
+            state->box_x += dx;
+            state->box_y += dy;
             state->start_x = event->x;
             state->start_y = event->y;
         } else if (state->drag_mode >= 4) {
@@ -504,10 +599,12 @@ static void text_tool_mouse_move(Tool* tool, struct ImageDocument* doc,
                                        (gdouble)state->start_x - cx);
                 gdouble curr_a = atan2((gdouble)event->y - cy,
                                        (gdouble)event->x - cx);
-                gdouble delta  = curr_a - prev_a;
+                gdouble delta = curr_a - prev_a;
                 /* Normalise step to (−π, π] to avoid wrap-around jump */
-                while (delta >  M_PI) delta -= 2.0 * M_PI;
-                while (delta < -M_PI) delta += 2.0 * M_PI;
+                while (delta > M_PI)
+                    delta -= 2.0 * M_PI;
+                while (delta < -M_PI)
+                    delta += 2.0 * M_PI;
                 tl->rotation += delta * (180.0 / M_PI);
 
                 /* Live-update the rotation spin in the tool options panel */
@@ -515,7 +612,7 @@ static void text_tool_mouse_move(Tool* tool, struct ImageDocument* doc,
                     GtkWidget* win = gtk_widget_get_toplevel(doc->drawing_area);
                     if (win) {
                         AppContext* ctx = (AppContext*)g_object_get_data(
-                                              G_OBJECT(win), "app_context");
+                            G_OBJECT(win), "app_context");
                         if (ctx && ctx->tool_options_panel)
                             tool_options_panel_set_text_rotation(
                                 ctx->tool_options_panel, tl->rotation);
@@ -527,23 +624,45 @@ static void text_tool_mouse_move(Tool* tool, struct ImageDocument* doc,
         } else {
             /* Resize corner handle (drag_mode 0–3) */
             switch (state->drag_mode) {
-                case 0: state->box_x += dx; state->box_y += dy;
-                        state->box_w -= dx; state->box_h -= dy; break;
-                case 1: state->box_y += dy;
-                        state->box_w += dx; state->box_h -= dy; break;
-                case 2: state->box_x += dx;
-                        state->box_w -= dx; state->box_h += dy; break;
-                case 3: state->box_w += dx; state->box_h += dy; break;
-                default: break;
+                case 0:
+                    state->box_x += dx;
+                    state->box_y += dy;
+                    state->box_w -= dx;
+                    state->box_h -= dy;
+                    break;
+                case 1:
+                    state->box_y += dy;
+                    state->box_w += dx;
+                    state->box_h -= dy;
+                    break;
+                case 2:
+                    state->box_x += dx;
+                    state->box_w -= dx;
+                    state->box_h += dy;
+                    break;
+                case 3:
+                    state->box_w += dx;
+                    state->box_h += dy;
+                    break;
+                default:
+                    break;
             }
             state->start_x = event->x;
             state->start_y = event->y;
 
             /* Normalise negative dimensions */
-            if (state->box_w < 0) { state->box_x += state->box_w; state->box_w = -state->box_w; }
-            if (state->box_h < 0) { state->box_y += state->box_h; state->box_h = -state->box_h; }
-            if (state->box_w < TEXT_BOX_MIN_SIZE) state->box_w = TEXT_BOX_MIN_SIZE;
-            if (state->box_h < TEXT_BOX_MIN_SIZE) state->box_h = TEXT_BOX_MIN_SIZE;
+            if (state->box_w < 0) {
+                state->box_x += state->box_w;
+                state->box_w = -state->box_w;
+            }
+            if (state->box_h < 0) {
+                state->box_y += state->box_h;
+                state->box_h = -state->box_h;
+            }
+            if (state->box_w < TEXT_BOX_MIN_SIZE)
+                state->box_w = TEXT_BOX_MIN_SIZE;
+            if (state->box_h < TEXT_BOX_MIN_SIZE)
+                state->box_h = TEXT_BOX_MIN_SIZE;
         }
 
         /* Propagate updated box geometry directly into the TextLayer struct.
@@ -560,9 +679,9 @@ static void text_tool_mouse_move(Tool* tool, struct ImageDocument* doc,
             state->layer && text_tool_layer_valid(doc, state->layer) &&
             state->layer->layer_type == LAYER_TYPE_TEXT && state->layer->text_data) {
             TextLayer* tl = (TextLayer*)state->layer->text_data;
-            tl->box_x      = (double)state->box_x;
-            tl->box_y      = (double)state->box_y;
-            tl->box_width  = (double)state->box_w;
+            tl->box_x = (double)state->box_x;
+            tl->box_y = (double)state->box_y;
+            tl->box_width = (double)state->box_w;
             tl->box_height = (double)state->box_h;
         }
 
@@ -589,9 +708,9 @@ static void text_tool_mouse_move(Tool* tool, struct ImageDocument* doc,
             /* Interior check in local (unrotated) frame */
             gdouble lx, ly;
             text_inverse_rotate((gdouble)event->x, (gdouble)event->y,
-                                 state->box_x + state->box_w * 0.5,
-                                 state->box_y + state->box_h * 0.5,
-                                 hover_rotation, &lx, &ly);
+                                state->box_x + state->box_w * 0.5,
+                                state->box_y + state->box_h * 0.5,
+                                hover_rotation, &lx, &ly);
             if (lx >= state->box_x && lx < state->box_x + state->box_w &&
                 ly >= state->box_y && ly < state->box_y + state->box_h)
                 state->hovered_handle = -1;
@@ -611,13 +730,15 @@ static void text_tool_mouse_move(Tool* tool, struct ImageDocument* doc,
 
 static void text_tool_mouse_up(Tool* tool, struct ImageDocument* doc,
                                MouseEvent* event) {
-    if (!tool || !doc || !tool->user_data) return;
+    if (!tool || !doc || !tool->user_data)
+        return;
 
     TextToolState* state = (TextToolState*)tool->user_data;
 
     (void)event;
 
-    if (!state->is_dragging) return;
+    if (!state->is_dragging)
+        return;
     state->is_dragging = FALSE;
 
     if (state->drag_mode == -2) {
@@ -627,46 +748,54 @@ static void text_tool_mouse_up(Tool* tool, struct ImageDocument* doc,
         gint w = state->current_x - state->start_x;
         gint h = state->current_y - state->start_y;
 
-        if (w < 0) { x += w; w = -w; }
-        if (h < 0) { y += h; h = -h; }
+        if (w < 0) {
+            x += w;
+            w = -w;
+        }
+        if (h < 0) {
+            y += h;
+            h = -h;
+        }
 
         /* A plain click (no meaningful drag) → sensible default size */
         if (w < TEXT_CLICK_THRESHOLD && h < TEXT_CLICK_THRESHOLD) {
             w = TEXT_DEFAULT_BOX_W;
             h = TEXT_DEFAULT_BOX_H;
-            if (doc->width  > 0 && x + w > (gint)doc->width)
-                x = MAX(0, (gint)doc->width  - w);
+            if (doc->width > 0 && x + w > (gint)doc->width)
+                x = MAX(0, (gint)doc->width - w);
             if (doc->height > 0 && y + h > (gint)doc->height)
                 y = MAX(0, (gint)doc->height - h);
             w = MIN(w, (gint)doc->width);
             h = MIN(h, (gint)doc->height);
         }
 
-        if (w < TEXT_BOX_MIN_SIZE) w = TEXT_BOX_MIN_SIZE;
-        if (h < TEXT_BOX_MIN_SIZE) h = TEXT_BOX_MIN_SIZE;
+        if (w < TEXT_BOX_MIN_SIZE)
+            w = TEXT_BOX_MIN_SIZE;
+        if (h < TEXT_BOX_MIN_SIZE)
+            h = TEXT_BOX_MIN_SIZE;
 
-        state->box_x   = x;
-        state->box_y   = y;
-        state->box_w   = w;
-        state->box_h   = h;
+        state->box_x = x;
+        state->box_y = y;
+        state->box_w = w;
+        state->box_h = h;
         state->has_box = TRUE;
 
         /* Create the text layer on release */
         if (doc->width > 0 && doc->height > 0) {
             ImageLayer* layer = layer_create_text("Text Layer",
-                                                   doc->width, doc->height, doc);
+                                                  doc->width, doc->height, doc);
             if (layer) {
                 TextLayer* tl = (TextLayer*)layer->text_data;
-                tl->box_x      = (double)x;
-                tl->box_y      = (double)y;
-                tl->box_width  = (double)w;
+                tl->box_x = (double)x;
+                tl->box_y = (double)y;
+                tl->box_width = (double)w;
                 tl->box_height = (double)h;
                 g_free(tl->text);
                 tl->text = g_strdup("Text");
 
-                doc->layers         = g_list_append(doc->layers, layer);
+                doc->layers = g_list_append(doc->layers, layer);
                 doc->selected_layer = layer;
-                state->layer        = layer;
+                state->layer = layer;
 
                 document_invalidate_composite(doc);
                 text_tool_notify_layers_panel(doc, layer);
@@ -683,13 +812,39 @@ static void text_tool_mouse_up(Tool* tool, struct ImageDocument* doc,
                     }
                 }
 
+                /* Push an undo entry so "Create Text Layer" can be undone.
+                 * The layer is already in doc->layers so we do NOT call
+                 * command_execute — the command is purely for undo/redo. */
+                Command* add_cmd = command_create_layer_add(doc, layer);
+                if (add_cmd)
+                    text_tool_push_command(doc, add_cmd);
+
                 text_tool_enter_editing(state, doc);
             }
         }
     } else {
-        /* Move / resize complete — push final geometry to the layer once */
+        /* Move / resize complete — push final geometry to the layer once,
+         * then record an undo command that spans the whole drag. */
         state->has_box = (state->box_w > 0 && state->box_h > 0);
         text_sync_layer_box(doc, state);
+
+        if (state->pre_drag_state && state->layer &&
+            text_tool_layer_valid(doc, state->layer) &&
+            state->layer->layer_type == LAYER_TYPE_TEXT &&
+            state->layer->text_data) {
+            TextLayerState* after =
+                text_layer_state_create(state->layer->text_data);
+            const char* op_name =
+                (state->drag_mode == -1)  ? "Move Text" :
+                (state->drag_mode >= 4)   ? "Rotate Text" : "Resize Text Box";
+            Command* drag_cmd = command_create_text_layer_prop(
+                doc, state->layer, state->pre_drag_state, after, op_name);
+            state->pre_drag_state = NULL; /* ownership transferred */
+            text_tool_push_command(doc, drag_cmd);
+        } else {
+            text_layer_state_free(state->pre_drag_state);
+            state->pre_drag_state = NULL;
+        }
     }
 
     state->drag_mode      = -1;
@@ -703,7 +858,8 @@ static void text_tool_mouse_up(Tool* tool, struct ImageDocument* doc,
 
 static gboolean text_tool_key_press(Tool* tool, struct ImageDocument* doc,
                                     GdkEventKey* event) {
-    if (!tool || !doc || !tool->user_data) return FALSE;
+    if (!tool || !doc || !tool->user_data)
+        return FALSE;
 
     TextToolState* state = (TextToolState*)tool->user_data;
 
@@ -743,7 +899,7 @@ static gboolean text_tool_key_press(Tool* tool, struct ImageDocument* doc,
                 const gchar* prev =
                     g_utf8_prev_char(tl->text + state->cursor_pos);
                 gint prev_pos = (gint)(prev - tl->text);
-                gint del_len  = state->cursor_pos - prev_pos;
+                gint del_len = state->cursor_pos - prev_pos;
 
                 gchar* new_text = g_malloc(text_len - del_len + 1);
                 memcpy(new_text, tl->text, prev_pos);
@@ -766,7 +922,7 @@ static gboolean text_tool_key_press(Tool* tool, struct ImageDocument* doc,
                 const gchar* next =
                     g_utf8_next_char(tl->text + state->cursor_pos);
                 gint next_pos = (gint)(next - tl->text);
-                gint del_len  = next_pos - state->cursor_pos;
+                gint del_len = next_pos - state->cursor_pos;
 
                 gchar* new_text = g_malloc(text_len - del_len + 1);
                 memcpy(new_text, tl->text, state->cursor_pos);
@@ -843,8 +999,8 @@ static gboolean text_tool_key_press(Tool* tool, struct ImageDocument* doc,
     gunichar uc = gdk_keyval_to_unicode(event->keyval);
     if (uc >= 0x20 && uc != 0x7f) {
         gchar buf[7];
-        gint  len = g_unichar_to_utf8(uc, buf);
-        buf[len]  = '\0';
+        gint len = g_unichar_to_utf8(uc, buf);
+        buf[len] = '\0';
         text_tool_insert(state, tl, buf);
         text_tool_invalidate(doc, state);
         return TRUE;
@@ -861,16 +1017,27 @@ static gboolean text_tool_key_press(Tool* tool, struct ImageDocument* doc,
 #define TEXT_SNAP(c, z) (floor((c) * (z) + 0.5) / (z))
 
 void tool_text_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom) {
-    if (!doc || !cr) return;
+    if (!doc || !cr)
+        return;
 
     ToolRegistry* reg = (ToolRegistry*)g_object_get_data(
-                            G_OBJECT(doc->drawing_area), "tool_registry");
-    if (!reg) return;
+        G_OBJECT(doc->drawing_area), "tool_registry");
+    if (!reg)
+        return;
 
     Tool* active = tool_manager_get_active(reg);
-    if (!active || active->type != TOOL_TEXT || !active->user_data) return;
+    if (!active || active->type != TOOL_TEXT || !active->user_data)
+        return;
 
     TextToolState* state = (TextToolState*)active->user_data;
+
+    /* If the active text layer was removed (e.g. by undo), clear stale state */
+    if (state->layer && !text_tool_layer_valid(doc, state->layer)) {
+        text_layer_state_free(state->pre_drag_state);
+        state->pre_drag_state = NULL;
+        state->has_box  = FALSE;
+        state->layer    = NULL;
+    }
 
     gint rx, ry, rw, rh;
 
@@ -880,8 +1047,14 @@ void tool_text_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom) {
         ry = state->start_y;
         rw = state->current_x - state->start_x;
         rh = state->current_y - state->start_y;
-        if (rw < 0) { rx += rw; rw = -rw; }
-        if (rh < 0) { ry += rh; rh = -rh; }
+        if (rw < 0) {
+            rx += rw;
+            rw = -rw;
+        }
+        if (rh < 0) {
+            ry += rh;
+            rh = -rh;
+        }
     } else if (state->has_box) {
         rx = state->box_x;
         ry = state->box_y;
@@ -891,12 +1064,14 @@ void tool_text_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom) {
         return;
     }
 
-    if (rw <= 0 || rh <= 0) return;
+    if (rw <= 0 || rh <= 0)
+        return;
 
-    gdouble handle_size     = 12.0 / zoom;
-    gdouble half_handle     = handle_size * 0.5;
-    gdouble line_width      = 1.0 / zoom;
-    if (line_width < 0.5) line_width = 0.5;
+    gdouble handle_size = 12.0 / zoom;
+    gdouble half_handle = handle_size * 0.5;
+    gdouble line_width = 1.0 / zoom;
+    if (line_width < 0.5)
+        line_width = 0.5;
 
     /* Rotation from the active text layer (0 during rubber-band) */
     gdouble rotation_deg = 0.0;
@@ -913,7 +1088,7 @@ void tool_text_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom) {
     if (rotation_deg != 0.0 && state->has_box) {
         gdouble dcx = rx + rw * 0.5;
         gdouble dcy = ry + rh * 0.5;
-        cairo_translate(cr,  dcx,  dcy);
+        cairo_translate(cr, dcx, dcy);
         cairo_rotate(cr, rotation_deg * (M_PI / 180.0));
         cairo_translate(cr, -dcx, -dcy);
     }
@@ -926,7 +1101,7 @@ void tool_text_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom) {
     gboolean is_rotated = (rotation_deg != 0.0);
 
     /* ---- Bounding box border ---- */
-    gdouble dash[] = { 5.0 / zoom, 3.0 / zoom };
+    gdouble dash[] = {5.0 / zoom, 3.0 / zoom};
     cairo_set_dash(cr, dash, 2, 0);
     cairo_set_antialias(cr, is_rotated ? CAIRO_ANTIALIAS_DEFAULT : CAIRO_ANTIALIAS_NONE);
     cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
@@ -935,9 +1110,9 @@ void tool_text_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom) {
         cairo_rectangle(cr, (gdouble)rx, (gdouble)ry, (gdouble)rw, (gdouble)rh);
     } else {
         cairo_rectangle(cr,
-            TEXT_SNAP(rx,      zoom), TEXT_SNAP(ry,      zoom),
-            TEXT_SNAP(rx + rw, zoom) - TEXT_SNAP(rx, zoom),
-            TEXT_SNAP(ry + rh, zoom) - TEXT_SNAP(ry, zoom));
+                        TEXT_SNAP(rx, zoom), TEXT_SNAP(ry, zoom),
+                        TEXT_SNAP(rx + rw, zoom) - TEXT_SNAP(rx, zoom),
+                        TEXT_SNAP(ry + rh, zoom) - TEXT_SNAP(ry, zoom));
     }
 
     /* Dark shadow stroke */
@@ -951,7 +1126,7 @@ void tool_text_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom) {
 
     cairo_set_dash(cr, NULL, 0, 0);
 
-    /* ---- Only draw handles when we have a finalised box ---- */
+    /* ---- Only draw handles when we have a finalized box ---- */
     if (!state->has_box) {
         cairo_restore(cr);
         return;
@@ -961,23 +1136,39 @@ void tool_text_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom) {
      * once the coordinate frame is rotated), snapped otherwise. */
     gdouble hx[8], hy[8];
     if (is_rotated) {
-        hx[0] = (gdouble)rx;              hy[0] = (gdouble)ry;
-        hx[1] = (gdouble)(rx + rw);       hy[1] = (gdouble)ry;
-        hx[2] = (gdouble)rx;              hy[2] = (gdouble)(ry + rh);
-        hx[3] = (gdouble)(rx + rw);       hy[3] = (gdouble)(ry + rh);
-        hx[4] = rx + rw * 0.5;            hy[4] = (gdouble)ry;
-        hx[5] = (gdouble)(rx + rw);       hy[5] = ry + rh * 0.5;
-        hx[6] = rx + rw * 0.5;            hy[6] = (gdouble)(ry + rh);
-        hx[7] = (gdouble)rx;              hy[7] = ry + rh * 0.5;
+        hx[0] = (gdouble)rx;
+        hy[0] = (gdouble)ry;
+        hx[1] = (gdouble)(rx + rw);
+        hy[1] = (gdouble)ry;
+        hx[2] = (gdouble)rx;
+        hy[2] = (gdouble)(ry + rh);
+        hx[3] = (gdouble)(rx + rw);
+        hy[3] = (gdouble)(ry + rh);
+        hx[4] = rx + rw * 0.5;
+        hy[4] = (gdouble)ry;
+        hx[5] = (gdouble)(rx + rw);
+        hy[5] = ry + rh * 0.5;
+        hx[6] = rx + rw * 0.5;
+        hy[6] = (gdouble)(ry + rh);
+        hx[7] = (gdouble)rx;
+        hy[7] = ry + rh * 0.5;
     } else {
-        hx[0] = TEXT_SNAP(rx,            zoom); hy[0] = TEXT_SNAP(ry,            zoom);
-        hx[1] = TEXT_SNAP(rx + rw,       zoom); hy[1] = TEXT_SNAP(ry,            zoom);
-        hx[2] = TEXT_SNAP(rx,            zoom); hy[2] = TEXT_SNAP(ry + rh,       zoom);
-        hx[3] = TEXT_SNAP(rx + rw,       zoom); hy[3] = TEXT_SNAP(ry + rh,       zoom);
-        hx[4] = TEXT_SNAP(rx + rw * 0.5, zoom); hy[4] = TEXT_SNAP(ry,            zoom);
-        hx[5] = TEXT_SNAP(rx + rw,       zoom); hy[5] = TEXT_SNAP(ry + rh * 0.5, zoom);
-        hx[6] = TEXT_SNAP(rx + rw * 0.5, zoom); hy[6] = TEXT_SNAP(ry + rh,       zoom);
-        hx[7] = TEXT_SNAP(rx,            zoom); hy[7] = TEXT_SNAP(ry + rh * 0.5, zoom);
+        hx[0] = TEXT_SNAP(rx, zoom);
+        hy[0] = TEXT_SNAP(ry, zoom);
+        hx[1] = TEXT_SNAP(rx + rw, zoom);
+        hy[1] = TEXT_SNAP(ry, zoom);
+        hx[2] = TEXT_SNAP(rx, zoom);
+        hy[2] = TEXT_SNAP(ry + rh, zoom);
+        hx[3] = TEXT_SNAP(rx + rw, zoom);
+        hy[3] = TEXT_SNAP(ry + rh, zoom);
+        hx[4] = TEXT_SNAP(rx + rw * 0.5, zoom);
+        hy[4] = TEXT_SNAP(ry, zoom);
+        hx[5] = TEXT_SNAP(rx + rw, zoom);
+        hy[5] = TEXT_SNAP(ry + rh * 0.5, zoom);
+        hx[6] = TEXT_SNAP(rx + rw * 0.5, zoom);
+        hy[6] = TEXT_SNAP(ry + rh, zoom);
+        hx[7] = TEXT_SNAP(rx, zoom);
+        hy[7] = TEXT_SNAP(ry + rh * 0.5, zoom);
     }
 
     for (gint i = 0; i < 8; i++) {
@@ -993,9 +1184,9 @@ void tool_text_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom) {
             cairo_stroke_preserve(cr);
             /* Bright inner stroke: blue when hovered, white otherwise */
             cairo_set_source_rgba(cr,
-                hovered ? 0.2 : 1.0,
-                hovered ? 0.6 : 1.0,
-                1.0, 1.0);
+                                  hovered ? 0.2 : 1.0,
+                                  hovered ? 0.6 : 1.0,
+                                  1.0, 1.0);
             cairo_set_line_width(cr, line_width);
             cairo_stroke(cr);
         } else {
@@ -1021,9 +1212,9 @@ void tool_text_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom) {
             cairo_stroke_preserve(cr);
             /* Bright inner stroke: blue when hovered, white otherwise */
             cairo_set_source_rgba(cr,
-                hovered ? 0.2 : 1.0,
-                hovered ? 0.6 : 1.0,
-                1.0, 1.0);
+                                  hovered ? 0.2 : 1.0,
+                                  hovered ? 0.6 : 1.0,
+                                  1.0, 1.0);
             cairo_set_line_width(cr, line_width);
             cairo_stroke(cr);
         }
@@ -1037,7 +1228,7 @@ void tool_text_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom) {
 
         TextLayer* tl = (TextLayer*)state->layer->text_data;
         if (tl->text) {
-            gint text_len   = (gint)strlen(tl->text);
+            gint text_len = (gint)strlen(tl->text);
             gint cursor_pos = CLAMP(state->cursor_pos, 0, text_len);
 
             /* Create a layout with the same settings used for rendering.
@@ -1051,10 +1242,11 @@ void tool_text_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom) {
             pango_layout_get_cursor_pos(layout, cursor_pos, &strong_pos, NULL);
             g_object_unref(layout);
 
-            gdouble cx = tl->box_x + (gdouble)strong_pos.x      / PANGO_SCALE;
-            gdouble cy = tl->box_y + (gdouble)strong_pos.y      / PANGO_SCALE;
-            gdouble ch =             (gdouble)strong_pos.height  / PANGO_SCALE;
-            if (ch < 1.0) ch = 1.0;
+            gdouble cx = tl->box_x + (gdouble)strong_pos.x / PANGO_SCALE;
+            gdouble cy = tl->box_y + (gdouble)strong_pos.y / PANGO_SCALE;
+            gdouble ch = (gdouble)strong_pos.height / PANGO_SCALE;
+            if (ch < 1.0)
+                ch = 1.0;
 
             cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
             cairo_set_line_width(cr, 1.5 / zoom);
@@ -1083,10 +1275,23 @@ void tool_text_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom) {
  * --------------------------------------------------------------------- */
 
 void tool_text_reset(Tool* tool) {
-    if (!tool || !tool->user_data) return;
+    if (!tool || !tool->user_data)
+        return;
     TextToolState* state = (TextToolState*)tool->user_data;
 
     text_tool_exit_editing(state);
+
+    /* Free any pending undo snapshots that weren't committed */
+    if (state->pre_drag_state) {
+        text_layer_state_free(state->pre_drag_state);
+        state->pre_drag_state = NULL;
+    }
+    /* pre_edit_state should have been freed by text_tool_exit_editing above;
+     * free it here as a safety net in case of unexpected call sequences. */
+    if (state->pre_edit_state) {
+        text_layer_state_free(state->pre_edit_state);
+        state->pre_edit_state = NULL;
+    }
 
     state->has_box        = FALSE;
     state->is_dragging    = FALSE;
@@ -1104,12 +1309,13 @@ gboolean tool_text_is_editing(Tool* tool) {
 
 Tool* tool_text_create(void) {
     Tool* tool = tool_new("Text", TOOL_TEXT, GDK_XTERM, TOOL_OPT_NONE);
-    if (!tool) return NULL;
+    if (!tool)
+        return NULL;
 
     tool->mouse_down = text_tool_mouse_down;
     tool->mouse_move = text_tool_mouse_move;
-    tool->mouse_up   = text_tool_mouse_up;
-    tool->key_press  = text_tool_key_press;
+    tool->mouse_up = text_tool_mouse_up;
+    tool->key_press = text_tool_key_press;
 
     tool->user_data = g_malloc0(sizeof(TextToolState));
     if (!tool->user_data) {
@@ -1118,7 +1324,7 @@ Tool* tool_text_create(void) {
     }
 
     TextToolState* state = (TextToolState*)tool->user_data;
-    state->drag_mode      = -2;
+    state->drag_mode = -2;
     state->hovered_handle = -2;
 
     return tool;

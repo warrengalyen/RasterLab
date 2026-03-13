@@ -2,6 +2,7 @@
 #define TOOL_TEXT_H
 
 #include "tools.h"
+#include "commands/command_text_layer.h"
 #include <cairo/cairo.h>
 
 /* Forward declarations */
@@ -52,6 +53,10 @@ typedef struct {
     gboolean  cursor_visible;   /* Current blink state (TRUE = draw caret) */
     guint     cursor_blink_tag; /* GLib timeout source id; 0 when stopped */
     ImageDocument* blink_doc;   /* Weak ref for blink-timer callback */
+
+    /* Undo state snapshots */
+    TextLayerState *pre_drag_state; /* Layer state captured at drag start (move/resize/rotate) */
+    TextLayerState *pre_edit_state; /* Layer state captured when entering text-edit mode */
 } TextToolState;
 
 /**
