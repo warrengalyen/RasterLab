@@ -1175,9 +1175,8 @@ void tool_text_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom) {
      * Switch to smooth antialiased rendering whenever the box is rotated. */
     gboolean is_rotated = (rotation_deg != 0.0);
 
-    /* ---- Bounding box border ---- */
-    gdouble dash[] = {5.0 / zoom, 3.0 / zoom};
-    cairo_set_dash(cr, dash, 2, 0);
+    /* ---- Bounding box border (same style as resize handles: solid outline) ---- */
+    cairo_set_dash(cr, NULL, 0, 0);
     cairo_set_antialias(cr, is_rotated ? CAIRO_ANTIALIAS_DEFAULT : CAIRO_ANTIALIAS_NONE);
     cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
 
@@ -1190,16 +1189,14 @@ void tool_text_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom) {
                         TEXT_SNAP(ry + rh, zoom) - TEXT_SNAP(ry, zoom));
     }
 
-    /* Dark shadow stroke */
-    cairo_set_source_rgba(cr, 0.1, 0.1, 0.1, 0.85);
+    /* Dark outer stroke (matches resize handle border) */
+    cairo_set_source_rgba(cr, 0.1, 0.1, 0.1, 1.0);
     cairo_set_line_width(cr, line_width * 3.0);
     cairo_stroke_preserve(cr);
-    /* Bright blue stroke */
-    cairo_set_source_rgba(cr, 0.2, 0.6, 1.0, 1.0);
+    /* Bright inner stroke (matches resize handle fill) */
+    cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 1.0);
     cairo_set_line_width(cr, line_width);
     cairo_stroke(cr);
-
-    cairo_set_dash(cr, NULL, 0, 0);
 
     /* ---- Only draw handles when we have a finalized box ---- */
     if (!state->has_box) {
