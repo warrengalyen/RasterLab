@@ -15,6 +15,8 @@
 #include "tools/tool_magic_wand_select.h"
 #include "tools/tool_rect_select.h"
 #include "ui.h"
+#include "ui/dialogs/color_chooser_dialog.h"
+#include "ui/ui_utils.h"
 #include "ui/widgets/vertical_spin_button.h"
 #include <pango/pango.h>
 #include <stdio.h>
@@ -77,6 +79,34 @@ static void add_spin_button_to_scale(GtkBuilder* builder, const gchar* scale_id,
     /* Add the spin button to the control box */
     gtk_box_pack_start(GTK_BOX(control_box), spin_button, FALSE, FALSE, 0);
     gtk_widget_show_all(spin_button);
+}
+
+/**
+ * Add a vertical spin button to a box (used when there is no scale, e.g. text tool).
+ * @param builder The GtkBuilder containing the adjustment and box
+ * @param adjustment_id The ID of the GtkAdjustment
+ * @param box_id The ID of the GtkBox to pack the spin into
+ * @param climb_rate Step rate for the spin
+ * @param digits Decimal digits to display
+ * @return The VerticalSpinButton widget, or NULL on failure
+ */
+static GtkWidget* add_vertical_spin_to_box(GtkBuilder* builder, const gchar* adjustment_id,
+                                           const gchar* box_id, gdouble climb_rate, guint digits) {
+    if (!builder || !adjustment_id || !box_id) {
+        return NULL;
+    }
+    GtkAdjustment* adjustment = GTK_ADJUSTMENT(gtk_builder_get_object(builder, adjustment_id));
+    GtkWidget* box = GTK_WIDGET(gtk_builder_get_object(builder, box_id));
+    if (!adjustment || !box) {
+        return NULL;
+    }
+    GtkWidget* spin = vertical_spin_button_new(adjustment, climb_rate, digits);
+    if (!spin) {
+        return NULL;
+    }
+    gtk_box_pack_start(GTK_BOX(box), spin, FALSE, FALSE, 0);
+    gtk_widget_show_all(spin);
+    return spin;
 }
 
 /**
@@ -1405,13 +1435,17 @@ static gboolean crop_panel_do_redraw_idle(gpointer user_data) {
 }
 
 static void magic_wand_trigger_redraw(ToolOptionsPanel* panel) {
-    if (!panel || !panel->panel) return;
+    if (!panel || !panel->panel)
+        return;
     GtkWidget* window = gtk_widget_get_toplevel(panel->panel);
-    if (!window) return;
+    if (!window)
+        return;
     AppContext* ctx = (AppContext*)g_object_get_data(G_OBJECT(window), "app_context");
-    if (!ctx || !ctx->tool_registry) return;
+    if (!ctx || !ctx->tool_registry)
+        return;
     ImageDocument* doc = ui_get_active_document(ctx);
-    if (!doc) return;
+    if (!doc)
+        return;
 
     /* Recompute the flood-fill with the new option values if the tool is active */
     Tool* active_tool = tool_manager_get_active(ctx->tool_registry);
@@ -1419,7 +1453,8 @@ static void magic_wand_trigger_redraw(ToolOptionsPanel* panel) {
         tool_magic_wand_select_update_preview(active_tool, doc);
     } else {
         /* Fallback: simple redraw (should not normally happen) */
-        if (doc->drawing_area) gtk_widget_queue_draw(doc->drawing_area);
+        if (doc->drawing_area)
+            gtk_widget_queue_draw(doc->drawing_area);
     }
 }
 
@@ -1427,7 +1462,8 @@ static void update_magicwand_combine_mode_buttons(ToolOptionsPanel* panel, Selec
 
 static void on_magicwand_combine_button_toggled(GtkToggleButton* button, gpointer user_data) {
     ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
-    if (!gtk_toggle_button_get_active(button)) return;
+    if (!gtk_toggle_button_get_active(button))
+        return;
     SelectionCombineMode mode = SELECTION_COMBINE_NEW;
     if (button == GTK_TOGGLE_BUTTON(panel->magicwand_combine_new_button))
         mode = SELECTION_COMBINE_NEW;
@@ -1463,12 +1499,14 @@ static void on_magicwand_combine_button_toggled(GtkToggleButton* button, gpointe
         g_signal_handlers_unblock_by_func(panel->magicwand_combine_intersect_button, G_CALLBACK(on_magicwand_combine_button_toggled), panel);
 
     ToolOptions* opts = tool_options_get_for_tool(TOOL_MAGIC_WAND);
-    if (opts) tool_options_set_magicwand_combine(opts, mode);
+    if (opts)
+        tool_options_set_magicwand_combine(opts, mode);
     save_tool_options_to_settings(panel, TOOL_MAGIC_WAND);
 }
 
 static void update_magicwand_combine_mode_buttons(ToolOptionsPanel* panel, SelectionCombineMode mode) {
-    if (!panel || !panel->magicwand_combine_new_button) return;
+    if (!panel || !panel->magicwand_combine_new_button)
+        return;
     g_signal_handlers_block_by_func(panel->magicwand_combine_new_button, G_CALLBACK(on_magicwand_combine_button_toggled), panel);
     if (panel->magicwand_combine_add_button)
         g_signal_handlers_block_by_func(panel->magicwand_combine_add_button, G_CALLBACK(on_magicwand_combine_button_toggled), panel);
@@ -1549,18 +1587,22 @@ static void on_magicwand_compare_changed(GtkComboBox* combo, gpointer user_data)
 
 static void on_magicwand_contiguous_toggled(GtkToggleButton* button, gpointer user_data) {
     ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
-    if (!gtk_toggle_button_get_active(button)) return;
+    if (!gtk_toggle_button_get_active(button))
+        return;
     ToolOptions* opts = tool_options_get_for_tool(TOOL_MAGIC_WAND);
-    if (opts) tool_options_set_magicwand_contiguous(opts, TRUE);
+    if (opts)
+        tool_options_set_magicwand_contiguous(opts, TRUE);
     save_tool_options_to_settings(panel, TOOL_MAGIC_WAND);
     magic_wand_trigger_redraw(panel);
 }
 
 static void on_magicwand_global_toggled(GtkToggleButton* button, gpointer user_data) {
     ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
-    if (!gtk_toggle_button_get_active(button)) return;
+    if (!gtk_toggle_button_get_active(button))
+        return;
     ToolOptions* opts = tool_options_get_for_tool(TOOL_MAGIC_WAND);
-    if (opts) tool_options_set_magicwand_contiguous(opts, FALSE);
+    if (opts)
+        tool_options_set_magicwand_contiguous(opts, FALSE);
     save_tool_options_to_settings(panel, TOOL_MAGIC_WAND);
     magic_wand_trigger_redraw(panel);
 }
@@ -1987,10 +2029,12 @@ static TextLayer* text_opts_get_layer(ToolOptionsPanel* panel) {
  * ImageDocument via out-parameters.  Any out-parameter may be NULL.
  */
 static TextLayer* text_opts_get_context(ToolOptionsPanel* panel,
-                                        ImageDocument**   out_doc,
-                                        ImageLayer**      out_layer) {
-    if (out_doc)   *out_doc   = NULL;
-    if (out_layer) *out_layer = NULL;
+                                        ImageDocument** out_doc,
+                                        ImageLayer** out_layer) {
+    if (out_doc)
+        *out_doc = NULL;
+    if (out_layer)
+        *out_layer = NULL;
 
     if (!panel || !panel->panel)
         return NULL;
@@ -2007,8 +2051,10 @@ static TextLayer* text_opts_get_context(ToolOptionsPanel* panel,
     if (!layer || layer->layer_type != LAYER_TYPE_TEXT || !layer->text_data)
         return NULL;
 
-    if (out_doc)   *out_doc   = doc;
-    if (out_layer) *out_layer = layer;
+    if (out_doc)
+        *out_doc = doc;
+    if (out_layer)
+        *out_layer = layer;
     return (TextLayer*)layer->text_data;
 }
 
@@ -2016,11 +2062,11 @@ static TextLayer* text_opts_get_context(ToolOptionsPanel* panel,
  * Push a single-property undo entry for a TextLayer change.
  * @before/@after hold the property value before/after the change was applied.
  */
-static void text_opts_push_prop(ImageDocument*          doc,
-                                ImageLayer*             layer,
-                                TextLayerProperty       property,
-                                const TextLayerPropValue *before,
-                                const TextLayerPropValue *after) {
+static void text_opts_push_prop(ImageDocument* doc,
+                                ImageLayer* layer,
+                                TextLayerProperty property,
+                                const TextLayerPropValue* before,
+                                const TextLayerPropValue* after) {
     if (!doc || !layer || !before || !after)
         return;
     text_layer_push_property_change(doc, layer, property, before, after);
@@ -2055,196 +2101,266 @@ static void text_opts_invalidate(ToolOptionsPanel* panel) {
 /* ── Signal handlers ─────────────────────────────────────────────────── */
 
 static void on_text_font_family_changed(GtkComboBox* combo, gpointer user_data) {
-    if (g_text_panel_syncing) return;
+    if (g_text_panel_syncing)
+        return;
     ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
     ImageDocument* doc = NULL;
-    ImageLayer*    img_layer = NULL;
+    ImageLayer* img_layer = NULL;
     TextLayer* tl = text_opts_get_context(panel, &doc, &img_layer);
-    if (!tl) return;
+    if (!tl)
+        return;
 
     gchar* family = gtk_combo_box_text_get_active_text(GTK_COMBO_BOX_TEXT(combo));
-    if (!family) return;
+    if (!family)
+        return;
 
     /* Duplicate old family before freeing so before_v.string_val stays valid
      * across the call to text_layer_push_property_change (which g_strdup's it). */
     gchar* old_family = g_strdup(tl->font_family ? tl->font_family : "");
     g_free(tl->font_family);
-    tl->font_family = family;  /* ownership transferred */
+    tl->font_family = family; /* ownership transferred */
     TextLayerPropValue before_v, after_v;
     before_v.string_val = old_family;
-    after_v.string_val  = family;
+    after_v.string_val = family;
     text_opts_push_prop(doc, img_layer, TEXT_PROP_FONT, &before_v, &after_v);
-    g_free(old_family);        /* push_prop g_strdup'd it internally */
+    g_free(old_family); /* push_prop g_strdup'd it internally */
     text_opts_invalidate(panel);
 }
 
-static void on_text_font_size_changed(GtkSpinButton* spin, gpointer user_data) {
-    if (g_text_panel_syncing) return;
+static void on_text_font_size_changed(GtkWidget* spin_widget, gpointer user_data) {
+    if (g_text_panel_syncing)
+        return;
     ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
     ImageDocument* doc = NULL;
-    ImageLayer*    img_layer = NULL;
+    ImageLayer* img_layer = NULL;
     TextLayer* tl = text_opts_get_context(panel, &doc, &img_layer);
-    if (!tl) return;
+    if (!tl)
+        return;
     TextLayerPropValue before_v, after_v;
     before_v.int_val = tl->font_size;
-    tl->font_size    = (int)gtk_spin_button_get_value(spin);
-    after_v.int_val  = tl->font_size;
+    tl->font_size = (int)vertical_spin_button_get_value(VERTICAL_SPIN_BUTTON(spin_widget));
+    after_v.int_val = tl->font_size;
     text_opts_push_prop(doc, img_layer, TEXT_PROP_SIZE, &before_v, &after_v);
     text_opts_invalidate(panel);
 }
 
 static void on_text_bold_toggled(GtkToggleButton* btn, gpointer user_data) {
-    if (g_text_panel_syncing) return;
+    if (g_text_panel_syncing)
+        return;
     ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
     ImageDocument* doc = NULL;
-    ImageLayer*    img_layer = NULL;
+    ImageLayer* img_layer = NULL;
     TextLayer* tl = text_opts_get_context(panel, &doc, &img_layer);
-    if (!tl) return;
+    if (!tl)
+        return;
     TextLayerPropValue before_v, after_v;
     before_v.int_val = tl->font_weight;
-    tl->font_weight  = gtk_toggle_button_get_active(btn) ? 700 : 400;
-    after_v.int_val  = tl->font_weight;
+    tl->font_weight = gtk_toggle_button_get_active(btn) ? 700 : 400;
+    after_v.int_val = tl->font_weight;
     text_opts_push_prop(doc, img_layer, TEXT_PROP_WEIGHT, &before_v, &after_v);
     text_opts_invalidate(panel);
 }
 
 static void on_text_italic_toggled(GtkToggleButton* btn, gpointer user_data) {
-    if (g_text_panel_syncing) return;
+    if (g_text_panel_syncing)
+        return;
     ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
     ImageDocument* doc = NULL;
-    ImageLayer*    img_layer = NULL;
+    ImageLayer* img_layer = NULL;
     TextLayer* tl = text_opts_get_context(panel, &doc, &img_layer);
-    if (!tl) return;
+    if (!tl)
+        return;
     TextLayerPropValue before_v, after_v;
     before_v.int_val = (int)tl->font_style;
-    tl->font_style   = gtk_toggle_button_get_active(btn)
-                           ? PANGO_STYLE_ITALIC : PANGO_STYLE_NORMAL;
-    after_v.int_val  = (int)tl->font_style;
+    tl->font_style = gtk_toggle_button_get_active(btn)
+                         ? PANGO_STYLE_ITALIC
+                         : PANGO_STYLE_NORMAL;
+    after_v.int_val = (int)tl->font_style;
     text_opts_push_prop(doc, img_layer, TEXT_PROP_STYLE, &before_v, &after_v);
     text_opts_invalidate(panel);
 }
 
-static void on_text_color_set(GtkColorButton* btn, gpointer user_data) {
-    if (g_text_panel_syncing) return;
+static void on_text_color_clicked(GtkButton* btn, gpointer user_data) {
+    if (g_text_panel_syncing)
+        return;
     ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+
+    GtkWidget* toplevel = gtk_widget_get_toplevel(panel->panel);
+    if (!toplevel || !GTK_IS_WINDOW(toplevel))
+        return;
+    GtkWindow* parent = GTK_WINDOW(toplevel);
+
     ImageDocument* doc = NULL;
-    ImageLayer*    img_layer = NULL;
+    ImageLayer* img_layer = NULL;
     TextLayer* tl = text_opts_get_context(panel, &doc, &img_layer);
-    if (!tl) return;
-    TextLayerPropValue before_v, after_v;
-    before_v.color.r = tl->color_r;
-    before_v.color.g = tl->color_g;
-    before_v.color.b = tl->color_b;
-    before_v.color.a = tl->color_a;
-    GdkRGBA color;
-    gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(btn), &color);
-    tl->color_r = color.red;
-    tl->color_g = color.green;
-    tl->color_b = color.blue;
-    tl->color_a = color.alpha;
-    after_v.color.r = tl->color_r;
-    after_v.color.g = tl->color_g;
-    after_v.color.b = tl->color_b;
-    after_v.color.a = tl->color_a;
-    text_opts_push_prop(doc, img_layer, TEXT_PROP_COLOR, &before_v, &after_v);
-    text_opts_invalidate(panel);
+
+    GdkRGBA initial;
+    if (tl) {
+        initial.red = (double)tl->color_r;
+        initial.green = (double)tl->color_g;
+        initial.blue = (double)tl->color_b;
+        initial.alpha = (double)tl->color_a;
+    } else {
+        initial.red = 0.0;
+        initial.green = 0.0;
+        initial.blue = 0.0;
+        initial.alpha = 1.0;
+    }
+
+    GtkWidget* color_dialog = color_chooser_dialog_new(
+        parent,
+        "Choose Text Color",
+        &initial,
+        NULL,
+        NULL,
+        FALSE);
+    gtk_dialog_run(GTK_DIALOG(color_dialog));
+
+    double r, g, b;
+    color_chooser_dialog_get_color(color_dialog, &r, &g, &b);
+    gtk_widget_destroy(color_dialog);
+
+    if (tl) {
+        TextLayerPropValue before_v, after_v;
+        before_v.color.r = tl->color_r;
+        before_v.color.g = tl->color_g;
+        before_v.color.b = tl->color_b;
+        before_v.color.a = tl->color_a;
+        tl->color_r = (float)r;
+        tl->color_g = (float)g;
+        tl->color_b = (float)b;
+        tl->color_a = 1.0f;
+        after_v.color.r = tl->color_r;
+        after_v.color.g = tl->color_g;
+        after_v.color.b = tl->color_b;
+        after_v.color.a = tl->color_a;
+        text_opts_push_prop(doc, img_layer, TEXT_PROP_COLOR, &before_v, &after_v);
+        text_opts_invalidate(panel);
+    }
+
+    GdkRGBA color = {r, g, b, 1.0};
+    update_color_button_appearance(panel->text_color_button, &color);
 }
 
-/* Generic alignment handler: alignment value is stored as an int on the widget */
+/* Generic alignment handler: alignment value is stored as an int on the widget.
+ * Buttons act as a toggle group (only one active at a time); re-activating the
+ * current button if the user toggles it off so one option is always selected. */
 static void on_text_align_toggled(GtkToggleButton* btn, gpointer user_data) {
-    if (g_text_panel_syncing) return;
-    if (!gtk_toggle_button_get_active(btn)) return; /* ignore deactivations */
+    if (g_text_panel_syncing)
+        return;
 
     ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    GtkWidget* buttons[4] = {
+        panel->text_align_left_button,
+        panel->text_align_center_button,
+        panel->text_align_right_button,
+        panel->text_align_justify_button};
+
+    /* If user toggled off the current alignment, keep one selected (radio behaviour) */
+    if (!gtk_toggle_button_get_active(btn)) {
+        g_signal_handlers_block_by_func(btn, G_CALLBACK(on_text_align_toggled), panel);
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(btn), TRUE);
+        g_signal_handlers_unblock_by_func(btn, G_CALLBACK(on_text_align_toggled), panel);
+        return;
+    }
+
+    /* Block all four buttons so deactivating others does not re-enter */
+    for (int i = 0; i < 4; i++) {
+        if (buttons[i])
+            g_signal_handlers_block_by_func(buttons[i], G_CALLBACK(on_text_align_toggled), panel);
+    }
+    for (int i = 0; i < 4; i++) {
+        if (buttons[i] && GTK_WIDGET(btn) != buttons[i])
+            gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(buttons[i]), FALSE);
+    }
+    for (int i = 0; i < 4; i++) {
+        if (buttons[i])
+            g_signal_handlers_unblock_by_func(buttons[i], G_CALLBACK(on_text_align_toggled), panel);
+    }
+
     ImageDocument* doc = NULL;
-    ImageLayer*    img_layer = NULL;
+    ImageLayer* img_layer = NULL;
     TextLayer* tl = text_opts_get_context(panel, &doc, &img_layer);
-    if (!tl) return;
+    if (!tl)
+        return;
 
     gint old_align = tl->alignment;
     gint align = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(btn), "alignment_value"));
     tl->alignment = align;
 
-    /* Deactivate the other three alignment buttons (radio-button behaviour) */
-    GtkWidget* buttons[4] = {
-        panel->text_align_left_button,
-        panel->text_align_center_button,
-        panel->text_align_right_button,
-        panel->text_align_justify_button
-    };
-    g_text_panel_syncing++;
-    for (int i = 0; i < 4; i++) {
-        if (buttons[i] && GTK_WIDGET(btn) != buttons[i])
-            gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(buttons[i]), FALSE);
-    }
-    g_text_panel_syncing--;
-
-    /* Only push if alignment actually changed */
     if (old_align != align) {
         TextLayerPropValue before_v, after_v;
         before_v.int_val = old_align;
-        after_v.int_val  = align;
+        after_v.int_val = align;
         text_opts_push_prop(doc, img_layer, TEXT_PROP_ALIGNMENT, &before_v, &after_v);
     }
     text_opts_invalidate(panel);
 }
 
-static void on_text_line_spacing_changed(GtkSpinButton* spin, gpointer user_data) {
-    if (g_text_panel_syncing) return;
+static void on_text_line_spacing_changed(GtkWidget* spin_widget, gpointer user_data) {
+    if (g_text_panel_syncing)
+        return;
     ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
     ImageDocument* doc = NULL;
-    ImageLayer*    img_layer = NULL;
+    ImageLayer* img_layer = NULL;
     TextLayer* tl = text_opts_get_context(panel, &doc, &img_layer);
-    if (!tl) return;
+    if (!tl)
+        return;
     TextLayerPropValue before_v, after_v;
     before_v.double_val = tl->line_spacing;
-    tl->line_spacing    = gtk_spin_button_get_value(spin);
-    after_v.double_val  = tl->line_spacing;
+    tl->line_spacing = vertical_spin_button_get_value(VERTICAL_SPIN_BUTTON(spin_widget));
+    after_v.double_val = tl->line_spacing;
     text_opts_push_prop(doc, img_layer, TEXT_PROP_LINE_SPACING, &before_v, &after_v);
     text_opts_invalidate(panel);
 }
 
-static void on_text_letter_spacing_changed(GtkSpinButton* spin, gpointer user_data) {
-    if (g_text_panel_syncing) return;
+static void on_text_letter_spacing_changed(GtkWidget* spin_widget, gpointer user_data) {
+    if (g_text_panel_syncing)
+        return;
     ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
     ImageDocument* doc = NULL;
-    ImageLayer*    img_layer = NULL;
+    ImageLayer* img_layer = NULL;
     TextLayer* tl = text_opts_get_context(panel, &doc, &img_layer);
-    if (!tl) return;
+    if (!tl)
+        return;
     TextLayerPropValue before_v, after_v;
     before_v.double_val = tl->letter_spacing;
-    tl->letter_spacing  = gtk_spin_button_get_value(spin);
-    after_v.double_val  = tl->letter_spacing;
+    tl->letter_spacing = vertical_spin_button_get_value(VERTICAL_SPIN_BUTTON(spin_widget));
+    after_v.double_val = tl->letter_spacing;
     text_opts_push_prop(doc, img_layer, TEXT_PROP_LETTER_SPACING, &before_v, &after_v);
     text_opts_invalidate(panel);
 }
 
 static void on_text_antialias_toggled(GtkToggleButton* btn, gpointer user_data) {
-    if (g_text_panel_syncing) return;
+    if (g_text_panel_syncing)
+        return;
     ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
     ImageDocument* doc = NULL;
-    ImageLayer*    img_layer = NULL;
+    ImageLayer* img_layer = NULL;
     TextLayer* tl = text_opts_get_context(panel, &doc, &img_layer);
-    if (!tl) return;
+    if (!tl)
+        return;
     TextLayerPropValue before_v, after_v;
     before_v.bool_val = tl->antialias;
-    tl->antialias     = gtk_toggle_button_get_active(btn);
-    after_v.bool_val  = tl->antialias;
+    tl->antialias = gtk_toggle_button_get_active(btn);
+    after_v.bool_val = tl->antialias;
     text_opts_push_prop(doc, img_layer, TEXT_PROP_ANTIALIAS, &before_v, &after_v);
     text_opts_invalidate(panel);
 }
 
-static void on_text_rotation_changed(GtkSpinButton* spin, gpointer user_data) {
-    if (g_text_panel_syncing) return;
+static void on_text_rotation_changed(GtkWidget* spin_widget, gpointer user_data) {
+    if (g_text_panel_syncing)
+        return;
     ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
     ImageDocument* doc = NULL;
-    ImageLayer*    img_layer = NULL;
+    ImageLayer* img_layer = NULL;
     TextLayer* tl = text_opts_get_context(panel, &doc, &img_layer);
-    if (!tl) return;
+    if (!tl)
+        return;
     TextLayerPropValue before_v, after_v;
     before_v.double_val = tl->rotation;
-    tl->rotation        = gtk_spin_button_get_value(spin);
-    after_v.double_val  = tl->rotation;
+    tl->rotation = vertical_spin_button_get_value(VERTICAL_SPIN_BUTTON(spin_widget));
+    after_v.double_val = tl->rotation;
     text_opts_push_prop(doc, img_layer, TEXT_PROP_ROTATION, &before_v, &after_v);
     text_opts_invalidate(panel);
 }
@@ -2255,8 +2371,10 @@ static void on_text_rotation_changed(GtkSpinButton* spin, gpointer user_data) {
 
 void tool_options_panel_sync_text_layer(ToolOptionsPanel* panel,
                                         struct ImageLayer* layer) {
-    if (!panel || !panel->text_panel) return;
-    if (!layer || layer->layer_type != LAYER_TYPE_TEXT || !layer->text_data) return;
+    if (!panel || !panel->text_panel)
+        return;
+    if (!layer || layer->layer_type != LAYER_TYPE_TEXT || !layer->text_data)
+        return;
     TextLayer* tl = (TextLayer*)layer->text_data;
 
     g_text_panel_syncing++;
@@ -2269,14 +2387,14 @@ void tool_options_panel_sync_text_layer(ToolOptionsPanel* panel,
             gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(panel->text_font_family_combo),
                                       tl->font_family, tl->font_family);
             gtk_combo_box_set_active_id(GTK_COMBO_BOX(panel->text_font_family_combo),
-                                         tl->font_family);
+                                        tl->font_family);
         }
     }
 
     /* Font size */
     if (panel->text_font_size_spin)
-        gtk_spin_button_set_value(GTK_SPIN_BUTTON(panel->text_font_size_spin),
-                                  (gdouble)tl->font_size);
+        vertical_spin_button_set_value(VERTICAL_SPIN_BUTTON(panel->text_font_size_spin),
+                                       (gdouble)tl->font_size);
 
     /* Bold / Italic */
     if (panel->text_bold_button)
@@ -2288,8 +2406,8 @@ void tool_options_panel_sync_text_layer(ToolOptionsPanel* panel,
 
     /* Color */
     if (panel->text_color_button) {
-        GdkRGBA color = { tl->color_r, tl->color_g, tl->color_b, tl->color_a };
-        gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(panel->text_color_button), &color);
+        GdkRGBA color = {(double)tl->color_r, (double)tl->color_g, (double)tl->color_b, (double)tl->color_a};
+        update_color_button_appearance(panel->text_color_button, &color);
     }
 
     /* Alignment (exclusive toggles) */
@@ -2308,27 +2426,28 @@ void tool_options_panel_sync_text_layer(ToolOptionsPanel* panel,
 
     /* Spacing */
     if (panel->text_line_spacing_spin)
-        gtk_spin_button_set_value(GTK_SPIN_BUTTON(panel->text_line_spacing_spin),
-                                  tl->line_spacing);
+        vertical_spin_button_set_value(VERTICAL_SPIN_BUTTON(panel->text_line_spacing_spin),
+                                       tl->line_spacing);
     if (panel->text_letter_spacing_spin)
-        gtk_spin_button_set_value(GTK_SPIN_BUTTON(panel->text_letter_spacing_spin),
-                                  tl->letter_spacing);
+        vertical_spin_button_set_value(VERTICAL_SPIN_BUTTON(panel->text_letter_spacing_spin),
+                                       tl->letter_spacing);
 
     /* Options */
     if (panel->text_antialias_checkbox)
         gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->text_antialias_checkbox),
                                      tl->antialias);
     if (panel->text_rotation_spin)
-        gtk_spin_button_set_value(GTK_SPIN_BUTTON(panel->text_rotation_spin),
-                                  tl->rotation);
+        vertical_spin_button_set_value(VERTICAL_SPIN_BUTTON(panel->text_rotation_spin),
+                                       tl->rotation);
 
     g_text_panel_syncing--;
 }
 
 void tool_options_panel_set_text_rotation(ToolOptionsPanel* panel, gdouble degrees) {
-    if (!panel || !panel->text_rotation_spin) return;
+    if (!panel || !panel->text_rotation_spin)
+        return;
     g_text_panel_syncing++;
-    gtk_spin_button_set_value(GTK_SPIN_BUTTON(panel->text_rotation_spin), degrees);
+    vertical_spin_button_set_value(VERTICAL_SPIN_BUTTON(panel->text_rotation_spin), degrees);
     g_text_panel_syncing--;
 }
 
@@ -2352,20 +2471,20 @@ ToolOptionsPanel* create_tool_options_panel(void) {
     tool_opts_panel->polygon_select_panel = NULL;
     tool_opts_panel->crop_panel = NULL;
     tool_opts_panel->move_panel = NULL;
-    tool_opts_panel->text_panel                = NULL;
-    tool_opts_panel->text_font_family_combo    = NULL;
-    tool_opts_panel->text_font_size_spin       = NULL;
-    tool_opts_panel->text_bold_button          = NULL;
-    tool_opts_panel->text_italic_button        = NULL;
-    tool_opts_panel->text_color_button         = NULL;
-    tool_opts_panel->text_align_left_button    = NULL;
-    tool_opts_panel->text_align_center_button  = NULL;
-    tool_opts_panel->text_align_right_button   = NULL;
+    tool_opts_panel->text_panel = NULL;
+    tool_opts_panel->text_font_family_combo = NULL;
+    tool_opts_panel->text_font_size_spin = NULL;
+    tool_opts_panel->text_bold_button = NULL;
+    tool_opts_panel->text_italic_button = NULL;
+    tool_opts_panel->text_color_button = NULL;
+    tool_opts_panel->text_align_left_button = NULL;
+    tool_opts_panel->text_align_center_button = NULL;
+    tool_opts_panel->text_align_right_button = NULL;
     tool_opts_panel->text_align_justify_button = NULL;
-    tool_opts_panel->text_line_spacing_spin    = NULL;
-    tool_opts_panel->text_letter_spacing_spin  = NULL;
-    tool_opts_panel->text_antialias_checkbox   = NULL;
-    tool_opts_panel->text_rotation_spin        = NULL;
+    tool_opts_panel->text_line_spacing_spin = NULL;
+    tool_opts_panel->text_letter_spacing_spin = NULL;
+    tool_opts_panel->text_antialias_checkbox = NULL;
+    tool_opts_panel->text_rotation_spin = NULL;
     tool_opts_panel->title_label = NULL;
     tool_opts_panel->size_scale = NULL;
     tool_opts_panel->opacity_scale = NULL;
@@ -3042,17 +3161,17 @@ ToolOptionsPanel* create_tool_options_panel(void) {
         if (tool_opts_panel->magic_wand_panel) {
             gtk_container_add(GTK_CONTAINER(container), tool_opts_panel->magic_wand_panel);
 
-            tool_opts_panel->magicwand_combine_new_button       = GTK_WIDGET(gtk_builder_get_object(magic_wand_builder, "magicwand_select_combine_new_button"));
-            tool_opts_panel->magicwand_combine_add_button       = GTK_WIDGET(gtk_builder_get_object(magic_wand_builder, "magicwand_select_combine_add_button"));
-            tool_opts_panel->magicwand_combine_subtract_button  = GTK_WIDGET(gtk_builder_get_object(magic_wand_builder, "magicwand_select_combine_subtract_button"));
+            tool_opts_panel->magicwand_combine_new_button = GTK_WIDGET(gtk_builder_get_object(magic_wand_builder, "magicwand_select_combine_new_button"));
+            tool_opts_panel->magicwand_combine_add_button = GTK_WIDGET(gtk_builder_get_object(magic_wand_builder, "magicwand_select_combine_add_button"));
+            tool_opts_panel->magicwand_combine_subtract_button = GTK_WIDGET(gtk_builder_get_object(magic_wand_builder, "magicwand_select_combine_subtract_button"));
             tool_opts_panel->magicwand_combine_intersect_button = GTK_WIDGET(gtk_builder_get_object(magic_wand_builder, "magicwand_select_combine_intersect_button"));
-            tool_opts_panel->magicwand_smooth_combo             = GTK_WIDGET(gtk_builder_get_object(magic_wand_builder, "magicwand_select_smooth_combo"));
-            tool_opts_panel->magicwand_feather_scale            = GTK_WIDGET(gtk_builder_get_object(magic_wand_builder, "magicwand_select_feather_scale"));
-            tool_opts_panel->magicwand_animate_checkbox         = GTK_WIDGET(gtk_builder_get_object(magic_wand_builder, "magicwand_select_animate_checkbox"));
-            tool_opts_panel->magicwand_tolerance_scale          = GTK_WIDGET(gtk_builder_get_object(magic_wand_builder, "magicwand_select_tolernace_scale"));
-            tool_opts_panel->magicwand_compare_combo            = GTK_WIDGET(gtk_builder_get_object(magic_wand_builder, "paintbucket_compare_combo"));
-            tool_opts_panel->magicwand_contiguous_radio         = GTK_WIDGET(gtk_builder_get_object(magic_wand_builder, "paintbucket_contiguous_radio"));
-            tool_opts_panel->magicwand_global_radio             = GTK_WIDGET(gtk_builder_get_object(magic_wand_builder, "paintbucket_global_radio"));
+            tool_opts_panel->magicwand_smooth_combo = GTK_WIDGET(gtk_builder_get_object(magic_wand_builder, "magicwand_select_smooth_combo"));
+            tool_opts_panel->magicwand_feather_scale = GTK_WIDGET(gtk_builder_get_object(magic_wand_builder, "magicwand_select_feather_scale"));
+            tool_opts_panel->magicwand_animate_checkbox = GTK_WIDGET(gtk_builder_get_object(magic_wand_builder, "magicwand_select_animate_checkbox"));
+            tool_opts_panel->magicwand_tolerance_scale = GTK_WIDGET(gtk_builder_get_object(magic_wand_builder, "magicwand_select_tolernace_scale"));
+            tool_opts_panel->magicwand_compare_combo = GTK_WIDGET(gtk_builder_get_object(magic_wand_builder, "paintbucket_compare_combo"));
+            tool_opts_panel->magicwand_contiguous_radio = GTK_WIDGET(gtk_builder_get_object(magic_wand_builder, "paintbucket_contiguous_radio"));
+            tool_opts_panel->magicwand_global_radio = GTK_WIDGET(gtk_builder_get_object(magic_wand_builder, "paintbucket_global_radio"));
 
             if (tool_opts_panel->magicwand_combine_new_button)
                 g_signal_connect(tool_opts_panel->magicwand_combine_new_button, "toggled", G_CALLBACK(on_magicwand_combine_button_toggled), tool_opts_panel);
@@ -3068,7 +3187,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
                 gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(tool_opts_panel->magicwand_smooth_combo), "Antialiased");
                 gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(tool_opts_panel->magicwand_smooth_combo), "Feathered");
                 gtk_combo_box_set_active(GTK_COMBO_BOX(tool_opts_panel->magicwand_smooth_combo),
-                    magicwand_opts ? (gint)magicwand_opts->magicwand_smooth : 1);
+                                         magicwand_opts ? (gint)magicwand_opts->magicwand_smooth : 1);
                 g_signal_connect(tool_opts_panel->magicwand_smooth_combo, "changed",
                                  G_CALLBACK(on_magicwand_smooth_changed), tool_opts_panel);
             }
@@ -3080,7 +3199,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
             }
             if (tool_opts_panel->magicwand_animate_checkbox) {
                 gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(tool_opts_panel->magicwand_animate_checkbox),
-                    magicwand_opts ? magicwand_opts->magicwand_animate : TRUE);
+                                             magicwand_opts ? magicwand_opts->magicwand_animate : TRUE);
                 g_signal_connect(tool_opts_panel->magicwand_animate_checkbox, "toggled",
                                  G_CALLBACK(on_magicwand_animate_toggled), tool_opts_panel);
             }
@@ -3093,7 +3212,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
             if (tool_opts_panel->magicwand_compare_combo) {
                 g_object_set_data(G_OBJECT(tool_opts_panel->magicwand_compare_combo), "tool_options_panel", tool_opts_panel);
                 gtk_combo_box_set_active(GTK_COMBO_BOX(tool_opts_panel->magicwand_compare_combo),
-                    magicwand_opts ? (gint)magicwand_opts->magicwand_compare_mode : 0);
+                                         magicwand_opts ? (gint)magicwand_opts->magicwand_compare_mode : 0);
                 g_signal_connect(tool_opts_panel->magicwand_compare_combo, "changed",
                                  G_CALLBACK(on_magicwand_compare_changed), NULL);
             }
@@ -3113,7 +3232,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
 
             if (magicwand_opts)
                 update_magicwand_combine_mode_buttons(tool_opts_panel,
-                    (SelectionCombineMode)magicwand_opts->magicwand_combine);
+                                                      (SelectionCombineMode)magicwand_opts->magicwand_combine);
 
             gtk_widget_set_visible(tool_opts_panel->magic_wand_panel, FALSE);
             gtk_widget_set_no_show_all(tool_opts_panel->magic_wand_panel, TRUE);
@@ -3315,8 +3434,10 @@ ToolOptionsPanel* create_tool_options_panel(void) {
                 /* Grab widget references */
                 tool_opts_panel->text_font_family_combo =
                     GTK_WIDGET(gtk_builder_get_object(builder, "text_font_family_combo"));
-                tool_opts_panel->text_font_size_spin =
-                    GTK_WIDGET(gtk_builder_get_object(builder, "text_font_size_spin"));
+                tool_opts_panel->text_font_size_spin = add_vertical_spin_to_box(
+                    builder, "text_font_size_adjustment", "font_group_controls_box", 1.0, 0);
+                if (tool_opts_panel->text_font_size_spin)
+                    gtk_widget_set_tooltip_text(tool_opts_panel->text_font_size_spin, "Font size in points");
                 tool_opts_panel->text_bold_button =
                     GTK_WIDGET(gtk_builder_get_object(builder, "text_bold_button"));
                 tool_opts_panel->text_italic_button =
@@ -3331,14 +3452,23 @@ ToolOptionsPanel* create_tool_options_panel(void) {
                     GTK_WIDGET(gtk_builder_get_object(builder, "text_align_right_button"));
                 tool_opts_panel->text_align_justify_button =
                     GTK_WIDGET(gtk_builder_get_object(builder, "text_align_justify_button"));
-                tool_opts_panel->text_line_spacing_spin =
-                    GTK_WIDGET(gtk_builder_get_object(builder, "text_line_spacing_spin"));
-                tool_opts_panel->text_letter_spacing_spin =
-                    GTK_WIDGET(gtk_builder_get_object(builder, "text_letter_spacing_spin"));
+                tool_opts_panel->text_line_spacing_spin = add_vertical_spin_to_box(
+                    builder, "text_line_spacing_adjustment", "spacing_line_controls_box", 0.1, 2);
+                if (tool_opts_panel->text_line_spacing_spin)
+                    gtk_widget_set_tooltip_text(tool_opts_panel->text_line_spacing_spin,
+                                                "Line spacing multiplier (1.0 = normal)");
+                tool_opts_panel->text_letter_spacing_spin = add_vertical_spin_to_box(
+                    builder, "text_letter_spacing_adjustment", "spacing_letter_controls_box", 10.0, 0);
+                if (tool_opts_panel->text_letter_spacing_spin)
+                    gtk_widget_set_tooltip_text(tool_opts_panel->text_letter_spacing_spin,
+                                                "Letter spacing in Pango units (1024 = 1 pt)");
                 tool_opts_panel->text_antialias_checkbox =
                     GTK_WIDGET(gtk_builder_get_object(builder, "text_antialias_checkbox"));
-                tool_opts_panel->text_rotation_spin =
-                    GTK_WIDGET(gtk_builder_get_object(builder, "text_rotation_spin"));
+                tool_opts_panel->text_rotation_spin = add_vertical_spin_to_box(
+                    builder, "text_rotation_adjustment", "text_rotation_controls_box", 1.0, 0);
+                if (tool_opts_panel->text_rotation_spin)
+                    gtk_widget_set_tooltip_text(tool_opts_panel->text_rotation_spin,
+                                                "Rotation angle in degrees (−360 to 360)");
 
                 /* Populate font family combo with Pango font families */
                 if (tool_opts_panel->text_font_family_combo) {
@@ -3388,9 +3518,12 @@ ToolOptionsPanel* create_tool_options_panel(void) {
                 if (tool_opts_panel->text_italic_button)
                     g_signal_connect(tool_opts_panel->text_italic_button, "toggled",
                                      G_CALLBACK(on_text_italic_toggled), tool_opts_panel);
-                if (tool_opts_panel->text_color_button)
-                    g_signal_connect(tool_opts_panel->text_color_button, "color-set",
-                                     G_CALLBACK(on_text_color_set), tool_opts_panel);
+                if (tool_opts_panel->text_color_button) {
+                    GdkRGBA init_color = {0.0, 0.0, 0.0, 1.0};
+                    update_color_button_appearance(tool_opts_panel->text_color_button, &init_color);
+                    g_signal_connect(tool_opts_panel->text_color_button, "clicked",
+                                     G_CALLBACK(on_text_color_clicked), tool_opts_panel);
+                }
                 if (tool_opts_panel->text_align_left_button)
                     g_signal_connect(tool_opts_panel->text_align_left_button, "toggled",
                                      G_CALLBACK(on_text_align_toggled), tool_opts_panel);
@@ -3426,7 +3559,8 @@ ToolOptionsPanel* create_tool_options_panel(void) {
         } else {
             g_warning("Failed to load text options panel: %s",
                       err ? err->message : "Unknown error");
-            if (err) g_error_free(err);
+            if (err)
+                g_error_free(err);
         }
         g_object_unref(builder);
     }
@@ -4203,7 +4337,8 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
         {
             GtkWidget* win = gtk_widget_get_toplevel(panel->panel);
             AppContext* ctx = win
-                ? (AppContext*)g_object_get_data(G_OBJECT(win), "app_context") : NULL;
+                                  ? (AppContext*)g_object_get_data(G_OBJECT(win), "app_context")
+                                  : NULL;
             if (ctx) {
                 ImageDocument* doc = ui_get_active_document(ctx);
                 if (doc) {

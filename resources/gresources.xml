@@ -16,6 +16,10 @@
     <file preprocess="to-pixdata">icons/tool-lasso-select.png</file>
     <file preprocess="to-pixdata">icons/tool-magicwand-select.png</file>
     <file preprocess="to-pixdata">icons/tool-text.png</file>
+    <file preprocess="to-pixdata">icons/text-align-left.png</file>
+    <file preprocess="to-pixdata">icons/text-align-center.png</file>
+    <file preprocess="to-pixdata">icons/text-align-right.png</file>
+    <file preprocess="to-pixdata">icons/text-align-justify.png</file>
     <file preprocess="to-pixdata">icons/chevron.png</file>
     <file preprocess="to-pixdata">icons/layer-add.png</file>
     <file preprocess="to-pixdata">icons/layer-delete.png</file>
