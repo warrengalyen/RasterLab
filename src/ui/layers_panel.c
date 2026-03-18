@@ -16,7 +16,19 @@
 
 /* Forward declarations */
 static GdkPixbuf* create_layer_thumbnail(cairo_surface_t* layer_surface, gint thumb_size, gboolean visible);
+static GdkPixbuf* create_text_layer_thumbnail(gint thumb_max_size, gboolean visible);
 static GdkPixbuf* get_visibility_icon(gboolean visible);
+
+/** Thumbnail for layers panel: text layers use icon on white; raster uses surface. */
+static GdkPixbuf* layer_row_thumbnail(ImageLayer* layer, gint thumb_size) {
+    if (layer && layer->layer_type == LAYER_TYPE_TEXT && layer->text_data) {
+        GdkPixbuf* t = create_text_layer_thumbnail(thumb_size, layer->visible);
+        if (t)
+            return t;
+    }
+    return create_layer_thumbnail(layer ? layer->surface : NULL, thumb_size,
+                                  layer ? layer->visible : TRUE);
+}
 
 /**
  * Treeview button press event handler - handles visibility icon clicks
@@ -517,6 +529,87 @@ static GdkPixbuf* create_layer_thumbnail(cairo_surface_t* layer_surface, gint th
     return full_pixbuf;
 }
 
+/* tool-text.png is a fixed 50x50 square asset (see resources/icons/tool-text.png). */
+#define TEXT_TOOL_ICON_SRC_PX 50
+
+/**
+ * Layers panel thumbnail for vector text layers: white tile + text tool icon.
+ */
+static GdkPixbuf* create_text_layer_thumbnail(gint thumb_max_size, gboolean visible) {
+    cairo_surface_t* thumb_surface;
+    cairo_t* cr;
+    GdkPixbuf* icon;
+    GdkPixbuf* scaled;
+    GdkPixbuf* result;
+    GError* error = NULL;
+    gint tw;
+    gint ox, oy;
+
+    if (thumb_max_size < 1)
+        thumb_max_size = 1;
+
+    thumb_surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, thumb_max_size, thumb_max_size);
+    if (!thumb_surface || cairo_surface_status(thumb_surface) != CAIRO_STATUS_SUCCESS) {
+        if (thumb_surface)
+            cairo_surface_destroy(thumb_surface);
+        return NULL;
+    }
+
+    cr = cairo_create(thumb_surface);
+    cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+    cairo_paint(cr);
+
+    icon = gdk_pixbuf_new_from_resource("/icons/tool-text.png", &error);
+    if (!icon) {
+        if (error) {
+            g_warning("create_text_layer_thumbnail: %s", error->message);
+            g_error_free(error);
+        }
+        cairo_destroy(cr);
+        result = cairo_surface_to_pixbuf(thumb_surface, TRUE);
+        cairo_surface_destroy(thumb_surface);
+        return result;
+    }
+
+    if (gdk_pixbuf_get_width(icon) != TEXT_TOOL_ICON_SRC_PX ||
+        gdk_pixbuf_get_height(icon) != TEXT_TOOL_ICON_SRC_PX) {
+        g_warning("tool-text.png expected %dx%d, got %dx%d", TEXT_TOOL_ICON_SRC_PX,
+                  TEXT_TOOL_ICON_SRC_PX, gdk_pixbuf_get_width(icon), gdk_pixbuf_get_height(icon));
+    }
+
+    tw = thumb_max_size * 3 / 5;
+    if (tw < 12)
+        tw = 12;
+    /* Square source: single scale factor for both dimensions */
+    scaled = gdk_pixbuf_scale_simple(icon, tw, tw, GDK_INTERP_BILINEAR);
+    g_object_unref(icon);
+    if (!scaled) {
+        cairo_destroy(cr);
+        result = cairo_surface_to_pixbuf(thumb_surface, TRUE);
+        cairo_surface_destroy(thumb_surface);
+        return result;
+    }
+
+    ox = (thumb_max_size - tw) / 2;
+    oy = (thumb_max_size - tw) / 2;
+
+    gdk_cairo_set_source_pixbuf(cr, scaled, ox, oy);
+    cairo_rectangle(cr, (gdouble)ox, (gdouble)oy, (gdouble)tw, (gdouble)tw);
+    cairo_fill(cr);
+    g_object_unref(scaled);
+
+    if (!visible) {
+        cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+        cairo_set_source_rgba(cr, 0.5, 0.5, 0.5, 0.5);
+        cairo_paint(cr);
+    }
+
+    cairo_destroy(cr);
+    result = cairo_surface_to_pixbuf(thumb_surface, TRUE);
+    cairo_surface_destroy(thumb_surface);
+    return result;
+}
+
 /**
  * Get visibility icon pixbuf
  */
@@ -710,7 +803,7 @@ LayersPanel* create_layers_panel(AppContext* ctx) {
     /* Store column reference for click detection */
     g_object_set_data(G_OBJECT(layers_panel->tree_view), "visibility_column", column);
 
-    /* Thumbnail column */
+    /* Thumbnail column: pixbufs are 48x48; xpad 4 each side needs 48+8=56 or the image is clipped */
     renderer = gtk_cell_renderer_pixbuf_new();
     g_object_set(renderer, "xpad", 4, "ypad", 4, "xalign", 0.5, NULL);
     column = gtk_tree_view_column_new_with_attributes("Thumbnail",
@@ -718,7 +811,7 @@ LayersPanel* create_layers_panel(AppContext* ctx) {
                                                       "pixbuf", 1,
                                                       NULL);
     gtk_tree_view_column_set_sizing(column, GTK_TREE_VIEW_COLUMN_FIXED);
-    gtk_tree_view_column_set_fixed_width(column, 48);
+    gtk_tree_view_column_set_fixed_width(column, 56);
     gtk_tree_view_append_column(GTK_TREE_VIEW(layers_panel->tree_view), column);
 
     /* Name column (editable on double-click only - editable=FALSE prevents single-click) */
@@ -921,7 +1014,7 @@ void layers_panel_update(LayersPanel* layers_panel, ImageDocument* doc) {
         if (layer) {
             GtkTreeIter iter;
             GdkPixbuf* visibility_icon = get_visibility_icon(layer->visible);
-            GdkPixbuf* thumbnail = create_layer_thumbnail(layer->surface, 48, layer->visible);
+            GdkPixbuf* thumbnail = layer_row_thumbnail(layer, 48);
 
             gtk_list_store_append(layers_panel->store, &iter);
             gtk_list_store_set(layers_panel->store, &iter,
@@ -988,7 +1081,7 @@ void layers_panel_refresh_thumbnails(LayersPanel* layers_panel) {
             ImageLayer* layer = document_get_layer(layers_panel->current_doc, layer_index);
 
             if (layer) {
-                GdkPixbuf* thumbnail = create_layer_thumbnail(layer->surface, 48, layer->visible);
+                GdkPixbuf* thumbnail = layer_row_thumbnail(layer, 48);
                 GdkPixbuf* visibility_icon = get_visibility_icon(layer->visible);
 
                 if (thumbnail && visibility_icon) {
@@ -1034,7 +1127,10 @@ void layers_panel_update_selected_thumbnail(LayersPanel* layers_panel) {
 
     /* Get the document's selected layer directly */
     selected_layer = document_get_selected_layer(doc);
-    if (!selected_layer || !selected_layer->surface) {
+    if (!selected_layer) {
+        return;
+    }
+    if (selected_layer->layer_type != LAYER_TYPE_TEXT && !selected_layer->surface) {
         return;
     }
 
@@ -1066,7 +1162,7 @@ void layers_panel_update_selected_thumbnail(LayersPanel* layers_panel) {
     g_free(layer_name);
 
     /* Generate new thumbnail and visibility icon */
-    thumbnail = create_layer_thumbnail(selected_layer->surface, 48, selected_layer->visible);
+    thumbnail = layer_row_thumbnail(selected_layer, 48);
     visibility_icon = get_visibility_icon(selected_layer->visible);
 
     if (thumbnail && visibility_icon) {
