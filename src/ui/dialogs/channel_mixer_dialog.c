@@ -2,6 +2,7 @@
 #include "ui/filters/filter_utils.h"
 #include "ui/ui_utils.h"
 #include "ui/widgets/filter_preview.h"
+#include "ui/widgets/vertical_spin_button.h"
 #include <glib.h>
 #include <stdlib.h>
 #include <string.h>
@@ -44,7 +45,7 @@ struct _ChannelMixerDialog {
 };
 
 static void on_scale_value_changed(GtkRange* range, gpointer user_data);
-static void on_spin_value_changed(GtkSpinButton* spin, gpointer user_data);
+static void on_spin_value_changed(GtkWidget* spin, gpointer user_data);
 
 static void mixer_row_to_sliders(ChannelMixerDialog* dialog, int row) {
     if (!dialog->scale[0]) {
@@ -62,7 +63,7 @@ static void mixer_row_to_sliders(ChannelMixerDialog* dialog, int row) {
     for (int i = 0; i < 4; i++) {
         gfloat v = dialog->mixer[row * 4 + i];
         gtk_range_set_value(GTK_RANGE(dialog->scale[i]), (gdouble)v);
-        gtk_spin_button_set_value(GTK_SPIN_BUTTON(dialog->spin[i]), (gdouble)v);
+        vertical_spin_button_set_value(VERTICAL_SPIN_BUTTON(dialog->spin[i]), (gdouble)v);
     }
 
     g_signal_handlers_unblock_by_func(dialog->scale[0], G_CALLBACK(on_scale_value_changed), dialog);
@@ -131,18 +132,19 @@ static void on_scale_value_changed(GtkRange* range, gpointer user_data) {
     ChannelMixerDialog* dialog = (ChannelMixerDialog*)user_data;
     int idx = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(range), "channel_mixer_idx"));
     if (dialog->spin[idx]) {
-        gtk_spin_button_set_value(GTK_SPIN_BUTTON(dialog->spin[idx]), gtk_range_get_value(range));
+        vertical_spin_button_set_value(VERTICAL_SPIN_BUTTON(dialog->spin[idx]), gtk_range_get_value(range));
     }
     int row = dialog->monochrome ? OUTPUT_GRAY : dialog->output_channel;
     sliders_to_mixer_row(dialog, row);
     fire_preview(dialog);
 }
 
-static void on_spin_value_changed(GtkSpinButton* spin, gpointer user_data) {
+static void on_spin_value_changed(GtkWidget* spin, gpointer user_data) {
     ChannelMixerDialog* dialog = (ChannelMixerDialog*)user_data;
     int idx = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(spin), "channel_mixer_idx"));
     if (dialog->scale[idx]) {
-        gtk_range_set_value(GTK_RANGE(dialog->scale[idx]), gtk_spin_button_get_value(spin));
+        gtk_range_set_value(GTK_RANGE(dialog->scale[idx]),
+                            vertical_spin_button_get_value(VERTICAL_SPIN_BUTTON(spin)));
     }
     int row = dialog->monochrome ? OUTPUT_GRAY : dialog->output_channel;
     sliders_to_mixer_row(dialog, row);
@@ -260,20 +262,25 @@ static GtkWidget* create_input_slider_row(ChannelMixerDialog* dialog, int idx,
     gtk_box_pack_start(GTK_BOX(row_vbox), lbl, FALSE, FALSE, 0);
 
     slider_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+    gtk_widget_set_hexpand(slider_hbox, TRUE);
+    gtk_widget_set_halign(slider_hbox, GTK_ALIGN_FILL);
     adj = gtk_adjustment_new(0.0, min_val, max_val, 1.0, 10.0, 0.0);
     scale = gtk_scale_new(GTK_ORIENTATION_HORIZONTAL, adj);
     gtk_scale_set_draw_value(GTK_SCALE(scale), FALSE);
     gtk_widget_set_hexpand(scale, TRUE);
+    gtk_widget_set_halign(scale, GTK_ALIGN_FILL);
     g_object_set_data(G_OBJECT(scale), "channel_mixer_idx", GINT_TO_POINTER(idx));
     g_signal_connect(scale, "value-changed", G_CALLBACK(on_scale_value_changed), dialog);
     gtk_box_pack_start(GTK_BOX(slider_hbox), scale, TRUE, TRUE, 0);
     dialog->scale[idx] = scale;
 
-    spin = gtk_spin_button_new(adj, 1.0, 0);
+    spin = vertical_spin_button_new(adj, 1.0, 0);
     gtk_widget_set_size_request(spin, 55, -1);
+    gtk_widget_set_hexpand(spin, FALSE);
+    gtk_widget_set_halign(spin, GTK_ALIGN_END);
     g_object_set_data(G_OBJECT(spin), "channel_mixer_idx", GINT_TO_POINTER(idx));
     g_signal_connect(spin, "value-changed", G_CALLBACK(on_spin_value_changed), dialog);
-    gtk_box_pack_start(GTK_BOX(slider_hbox), spin, FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(slider_hbox), spin, FALSE, FALSE, 0);
     dialog->spin[idx] = spin;
 
     gtk_box_pack_start(GTK_BOX(row_vbox), slider_hbox, TRUE, TRUE, 0);

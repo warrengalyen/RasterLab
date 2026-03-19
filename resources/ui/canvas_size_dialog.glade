@@ -195,11 +195,13 @@
                             <property name="visible">True</property>
                             <property name="can-focus">False</property>
                             <child>
-                              <object class="GtkSpinButton" id="canvas_size_width_spin">
+                              <object class="GtkBox" id="canvas_size_width_spin_placeholder">
                                 <property name="visible">True</property>
-                                <property name="can-focus">True</property>
-                                <property name="margin-right">5</property>
+                                <property name="can-focus">False</property>
                                 <property name="margin-end">5</property>
+                                <child>
+                                  <placeholder/>
+                                </child>
                               </object>
                               <packing>
                                 <property name="expand">False</property>
@@ -250,11 +252,13 @@
                             <property name="visible">True</property>
                             <property name="can-focus">False</property>
                             <child>
-                              <object class="GtkSpinButton" id="canvas_size_height_spin">
+                              <object class="GtkBox" id="canvas_size_height_spin_placeholder">
                                 <property name="visible">True</property>
-                                <property name="can-focus">True</property>
-                                <property name="margin-right">5</property>
+                                <property name="can-focus">False</property>
                                 <property name="margin-end">5</property>
+                                <child>
+                                  <placeholder/>
+                                </child>
                               </object>
                               <packing>
                                 <property name="expand">False</property>
@@ -302,11 +306,13 @@
                             <property name="visible">True</property>
                             <property name="can-focus">False</property>
                             <child>
-                              <object class="GtkSpinButton" id="canvas_size_resolution_spin">
+                              <object class="GtkBox" id="canvas_size_resolution_spin_placeholder">
                                 <property name="visible">True</property>
-                                <property name="can-focus">True</property>
-                                <property name="margin-right">5</property>
+                                <property name="can-focus">False</property>
                                 <property name="margin-end">5</property>
+                                <child>
+                                  <placeholder/>
+                                </child>
                               </object>
                               <packing>
                                 <property name="expand">False</property>

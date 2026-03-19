@@ -50,6 +50,22 @@ gboolean get_custom_color_button_color(GtkWidget* button, GdkRGBA* color);
 void set_custom_color_button_color(GtkWidget* button, GdkRGBA* color);
 
 /**
+ * Replace a GtkSpinButton widget with a VerticalSpinButton in-place.
+ * Preserves parent box packing, position, and margins.
+ * @param old_spin Existing GtkSpinButton widget
+ * @return New VerticalSpinButton widget, or old widget if replacement failed
+ */
+GtkWidget* ui_utils_replace_spin_with_vertical(GtkWidget* old_spin);
+
+/**
+ * Replace a builder spin widget (by object id) with a VerticalSpinButton.
+ * @param builder GtkBuilder containing the widget
+ * @param spin_id Builder object id of GtkSpinButton
+ * @return New VerticalSpinButton widget, or NULL on failure
+ */
+GtkWidget* ui_utils_replace_builder_spin_with_vertical(GtkBuilder* builder, const gchar* spin_id);
+
+/**
  * Replace default titlebar with header bar for a dialog window
  * @param window The window to set header bar for
  * @param title The title to display in the header bar

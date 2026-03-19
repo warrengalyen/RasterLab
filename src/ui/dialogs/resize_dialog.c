@@ -6,6 +6,7 @@
 #include "ui/dialogs/resize_dialog.h"
 #include "document.h"
 #include "ui/ui_utils.h"
+#include "ui/widgets/vertical_spin_button.h"
 #include <glib.h>
 #include <gtk/gtk.h>
 #include <math.h>
@@ -69,12 +70,12 @@ static gdouble pixels_to_unit(guint pixels, DimensionUnit unit, gdouble resoluti
 static guint unit_to_pixels(gdouble value, DimensionUnit unit, gdouble resolution);
 static gdouble resolution_convert(gdouble value, ResolutionUnit from, ResolutionUnit to);
 static gchar* format_file_size(guint64 bytes);
-static void on_width_value_changed(GtkSpinButton* spin, gpointer user_data);
-static void on_height_value_changed(GtkSpinButton* spin, gpointer user_data);
+static void on_width_value_changed(GtkWidget* spin, gpointer user_data);
+static void on_height_value_changed(GtkWidget* spin, gpointer user_data);
 static void on_width_unit_changed(GtkComboBox* combo, gpointer user_data);
 static void on_height_unit_changed(GtkComboBox* combo, gpointer user_data);
 static void on_resolution_unit_changed(GtkComboBox* combo, gpointer user_data);
-static void on_resolution_value_changed(GtkSpinButton* spin, gpointer user_data);
+static void on_resolution_value_changed(GtkWidget* spin, gpointer user_data);
 static void on_preserve_ratio_toggled(GtkToggleButton* button, gpointer user_data);
 static void on_width_reset_clicked(GtkButton* button, gpointer user_data);
 static void on_height_reset_clicked(GtkButton* button, gpointer user_data);
@@ -123,9 +124,9 @@ static void on_resolution_unit_changed(GtkComboBox* combo, gpointer user_data) {
     }
 }
 
-static void on_width_value_changed(GtkSpinButton* spin, gpointer user_data) {
+static void on_width_value_changed(GtkWidget* spin, gpointer user_data) {
     ResizeDialog* dialog = (ResizeDialog*)user_data;
-    gdouble value = gtk_spin_button_get_value(spin);
+    gdouble value = vertical_spin_button_get_value(VERTICAL_SPIN_BUTTON(spin));
     guint new_width = (dialog->width_unit == UNIT_PERCENT)
                           ? (guint)(dialog->original_width * value / 100.0 + 0.5)
                           : unit_to_pixels(value, (DimensionUnit)dialog->width_unit, dialog->current_resolution);
@@ -136,7 +137,7 @@ static void on_width_value_changed(GtkSpinButton* spin, gpointer user_data) {
         gdouble height_value = (dialog->height_unit == UNIT_PERCENT)
                                    ? (gdouble)new_height / (gdouble)dialog->original_height * 100.0
                                    : pixels_to_unit(new_height, (DimensionUnit)dialog->height_unit, dialog->current_resolution);
-        gtk_spin_button_set_value(GTK_SPIN_BUTTON(dialog->height_spin), height_value);
+        vertical_spin_button_set_value(VERTICAL_SPIN_BUTTON(dialog->height_spin), height_value);
         g_signal_handlers_unblock_by_func(dialog->height_spin, G_CALLBACK(on_height_value_changed), dialog);
     }
     dialog->current_width = new_width;
@@ -144,9 +145,9 @@ static void on_width_value_changed(GtkSpinButton* spin, gpointer user_data) {
     update_aspect_ratio_label(dialog);
 }
 
-static void on_height_value_changed(GtkSpinButton* spin, gpointer user_data) {
+static void on_height_value_changed(GtkWidget* spin, gpointer user_data) {
     ResizeDialog* dialog = (ResizeDialog*)user_data;
-    gdouble value = gtk_spin_button_get_value(spin);
+    gdouble value = vertical_spin_button_get_value(VERTICAL_SPIN_BUTTON(spin));
     guint new_height = (dialog->height_unit == UNIT_PERCENT)
                            ? (guint)(dialog->original_height * value / 100.0 + 0.5)
                            : unit_to_pixels(value, (DimensionUnit)dialog->height_unit, dialog->current_resolution);
@@ -157,7 +158,7 @@ static void on_height_value_changed(GtkSpinButton* spin, gpointer user_data) {
         gdouble width_value = (dialog->width_unit == UNIT_PERCENT)
                                   ? (gdouble)new_width / (gdouble)dialog->original_width * 100.0
                                   : pixels_to_unit(new_width, (DimensionUnit)dialog->width_unit, dialog->current_resolution);
-        gtk_spin_button_set_value(GTK_SPIN_BUTTON(dialog->width_spin), width_value);
+        vertical_spin_button_set_value(VERTICAL_SPIN_BUTTON(dialog->width_spin), width_value);
         g_signal_handlers_unblock_by_func(dialog->width_spin, G_CALLBACK(on_width_value_changed), dialog);
     }
     dialog->current_height = new_height;
@@ -165,9 +166,9 @@ static void on_height_value_changed(GtkSpinButton* spin, gpointer user_data) {
     update_aspect_ratio_label(dialog);
 }
 
-static void on_resolution_value_changed(GtkSpinButton* spin, gpointer user_data) {
+static void on_resolution_value_changed(GtkWidget* spin, gpointer user_data) {
     ResizeDialog* dialog = (ResizeDialog*)user_data;
-    gdouble value = gtk_spin_button_get_value(spin);
+    gdouble value = vertical_spin_button_get_value(VERTICAL_SPIN_BUTTON(spin));
     if ((ResolutionUnit)dialog->resolution_unit == RES_UNIT_PPCM)
         dialog->current_resolution = value * INCHES_TO_CM;
     else
@@ -278,7 +279,7 @@ static void convert_width_to_unit(ResizeDialog* dialog, DimensionUnit unit) {
                         ? (gdouble)dialog->current_width / (gdouble)dialog->original_width * 100.0
                         : pixels_to_unit(dialog->current_width, unit, dialog->current_resolution);
     g_signal_handlers_block_by_func(dialog->width_spin, G_CALLBACK(on_width_value_changed), dialog);
-    gtk_spin_button_set_value(GTK_SPIN_BUTTON(dialog->width_spin), value);
+    vertical_spin_button_set_value(VERTICAL_SPIN_BUTTON(dialog->width_spin), value);
     g_signal_handlers_unblock_by_func(dialog->width_spin, G_CALLBACK(on_width_value_changed), dialog);
 }
 
@@ -287,14 +288,14 @@ static void convert_height_to_unit(ResizeDialog* dialog, DimensionUnit unit) {
                         ? (gdouble)dialog->current_height / (gdouble)dialog->original_height * 100.0
                         : pixels_to_unit(dialog->current_height, unit, dialog->current_resolution);
     g_signal_handlers_block_by_func(dialog->height_spin, G_CALLBACK(on_height_value_changed), dialog);
-    gtk_spin_button_set_value(GTK_SPIN_BUTTON(dialog->height_spin), value);
+    vertical_spin_button_set_value(VERTICAL_SPIN_BUTTON(dialog->height_spin), value);
     g_signal_handlers_unblock_by_func(dialog->height_spin, G_CALLBACK(on_height_value_changed), dialog);
 }
 
 static void convert_resolution_to_unit(ResizeDialog* dialog, ResolutionUnit unit) {
     gdouble value = resolution_convert(dialog->current_resolution, RES_UNIT_PPI, unit);
     g_signal_handlers_block_by_func(dialog->resolution_spin, G_CALLBACK(on_resolution_value_changed), dialog);
-    gtk_spin_button_set_value(GTK_SPIN_BUTTON(dialog->resolution_spin), value);
+    vertical_spin_button_set_value(VERTICAL_SPIN_BUTTON(dialog->resolution_spin), value);
     g_signal_handlers_unblock_by_func(dialog->resolution_spin, G_CALLBACK(on_resolution_value_changed), dialog);
 }
 
@@ -465,6 +466,10 @@ ResizeDialog* resize_dialog_new(ImageDocument* doc) {
     dialog->aspect_ratio_text = GTK_WIDGET(gtk_builder_get_object(builder, "resize_aspect_ratio_text"));
     dialog->resampling_combo = GTK_WIDGET(gtk_builder_get_object(builder, "resampling_combo"));
 
+    dialog->width_spin = ui_utils_replace_spin_with_vertical(dialog->width_spin);
+    dialog->height_spin = ui_utils_replace_spin_with_vertical(dialog->height_spin);
+    dialog->resolution_spin = ui_utils_replace_spin_with_vertical(dialog->resolution_spin);
+
     if (!dialog->width_spin || !dialog->height_spin || !dialog->resolution_spin ||
         !dialog->width_units_combo || !dialog->height_units_combo || !dialog->resolution_units_combo ||
         !dialog->width_reset_button || !dialog->height_reset_button || !dialog->resolution_reset_button ||
@@ -554,12 +559,12 @@ ResizeDialog* resize_dialog_new(ImageDocument* doc) {
     GtkAdjustment* width_adj = gtk_adjustment_new(dialog->current_width, 1.0, 100000.0, 1.0, 10.0, 0.0);
     GtkAdjustment* height_adj = gtk_adjustment_new(dialog->current_height, 1.0, 100000.0, 1.0, 10.0, 0.0);
     GtkAdjustment* resolution_adj = gtk_adjustment_new(dialog->current_resolution, 1.0, 10000.0, 0.1, 1.0, 0.0);
-    gtk_spin_button_set_adjustment(GTK_SPIN_BUTTON(dialog->width_spin), width_adj);
-    gtk_spin_button_set_adjustment(GTK_SPIN_BUTTON(dialog->height_spin), height_adj);
-    gtk_spin_button_set_adjustment(GTK_SPIN_BUTTON(dialog->resolution_spin), resolution_adj);
-    gtk_spin_button_set_value(GTK_SPIN_BUTTON(dialog->width_spin), dialog->current_width);
-    gtk_spin_button_set_value(GTK_SPIN_BUTTON(dialog->height_spin), dialog->current_height);
-    gtk_spin_button_set_value(GTK_SPIN_BUTTON(dialog->resolution_spin), dialog->current_resolution);
+    vertical_spin_button_set_adjustment(VERTICAL_SPIN_BUTTON(dialog->width_spin), width_adj);
+    vertical_spin_button_set_adjustment(VERTICAL_SPIN_BUTTON(dialog->height_spin), height_adj);
+    vertical_spin_button_set_adjustment(VERTICAL_SPIN_BUTTON(dialog->resolution_spin), resolution_adj);
+    vertical_spin_button_set_value(VERTICAL_SPIN_BUTTON(dialog->width_spin), dialog->current_width);
+    vertical_spin_button_set_value(VERTICAL_SPIN_BUTTON(dialog->height_spin), dialog->current_height);
+    vertical_spin_button_set_value(VERTICAL_SPIN_BUTTON(dialog->resolution_spin), dialog->current_resolution);
 
     set_reset_button_icon(GTK_BUTTON(dialog->width_reset_button));
     set_reset_button_icon(GTK_BUTTON(dialog->height_reset_button));

@@ -43,6 +43,7 @@ typedef enum {
 } CmsProfileValidationResult;
 static CmsProfileValidationResult cms_icc_path_validate(const gchar* path);
 
+
 /* Set a notebook tab to show icon (from resource) before the existing label. */
 static void set_tab_icon_label(GtkNotebook* notebook, GtkWidget* page_child, GtkWidget* tab_label,
                                const gchar* icon_resource) {
@@ -759,6 +760,12 @@ void settings_dialog_show(AppContext* ctx) {
         }
     }
 
+    ui_utils_replace_builder_spin_with_vertical(builder, "undo_limit_spin");
+    ui_utils_replace_builder_spin_with_vertical(builder, "undo_compression_level_spin");
+    ui_utils_replace_builder_spin_with_vertical(builder, "threads_spin");
+    ui_utils_replace_builder_spin_with_vertical(builder, "recent_files_max_spin");
+    ui_utils_replace_builder_spin_with_vertical(builder, "file_recovery_interval_spin");
+
     /* Undo limit: settings use 1-100 */
     GtkAdjustment* undo_adj = GTK_ADJUSTMENT(gtk_builder_get_object(builder, "undo_limit_adjustment"));
     if (undo_adj) {
@@ -770,11 +777,6 @@ void settings_dialog_show(AppContext* ctx) {
                      NULL);
         gint levels = settings_get_undo_levels(ctx->settings);
         gtk_adjustment_set_value(undo_adj, (gdouble)levels);
-    }
-
-    GtkSpinButton* undo_spin = GTK_SPIN_BUTTON(gtk_builder_get_object(builder, "undo_limit_spin"));
-    if (undo_spin && undo_adj) {
-        gtk_spin_button_set_adjustment(undo_spin, undo_adj);
     }
 
     /* Undo compression level: ensure lower=1 (glade may only set upper=9) */

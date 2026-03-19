@@ -1,5 +1,6 @@
 #include "ui/dialogs/selection_radius_dialog.h"
 #include "ui/ui_utils.h"
+#include "ui/widgets/vertical_spin_button.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -24,13 +25,13 @@ static void on_radius_scale_changed(GtkRange* range, gpointer user_data) {
     }
 
     value = (gint)gtk_range_get_value(range);
-    gtk_spin_button_set_value(GTK_SPIN_BUTTON(dialog->radius_spin), (gdouble)value);
+    vertical_spin_button_set_value(VERTICAL_SPIN_BUTTON(dialog->radius_spin), (gdouble)value);
 }
 
 /**
  * Radius spin value changed callback
  */
-static void on_radius_spin_changed(GtkSpinButton* spin, gpointer user_data) {
+static void on_radius_spin_changed(GtkWidget* spin, gpointer user_data) {
     SelectionRadiusDialog* dialog = (SelectionRadiusDialog*)user_data;
     gint value;
 
@@ -38,7 +39,7 @@ static void on_radius_spin_changed(GtkSpinButton* spin, gpointer user_data) {
         return;
     }
 
-    value = (gint)gtk_spin_button_get_value(spin);
+    value = (gint)vertical_spin_button_get_value(VERTICAL_SPIN_BUTTON(spin));
     gtk_range_set_value(GTK_RANGE(dialog->radius_scale), (gdouble)value);
 }
 
@@ -104,19 +105,24 @@ SelectionRadiusDialog* selection_radius_dialog_new(const gchar* title) {
     gtk_box_pack_start(GTK_BOX(control_vbox), label, FALSE, FALSE, 0);
 
     scale_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+    gtk_widget_set_hexpand(scale_hbox, TRUE);
+    gtk_widget_set_halign(scale_hbox, GTK_ALIGN_FILL);
     gtk_box_pack_start(GTK_BOX(control_vbox), scale_hbox, TRUE, TRUE, 0);
 
     adjustment = gtk_adjustment_new(1.0, 1.0, 500.0, 1.0, 10.0, 0.0);
     scale = gtk_scale_new(GTK_ORIENTATION_HORIZONTAL, adjustment);
     gtk_scale_set_draw_value(GTK_SCALE(scale), FALSE);
     gtk_widget_set_hexpand(scale, TRUE);
+    gtk_widget_set_halign(scale, GTK_ALIGN_FILL);
     gtk_box_pack_start(GTK_BOX(scale_hbox), scale, TRUE, TRUE, 0);
     dialog->radius_scale = scale;
     g_signal_connect(scale, "value-changed", G_CALLBACK(on_radius_scale_changed), dialog);
 
-    spin = gtk_spin_button_new(adjustment, 1.0, 0);
+    spin = vertical_spin_button_new(adjustment, 1.0, 0);
     gtk_widget_set_size_request(spin, 60, -1);
-    gtk_box_pack_start(GTK_BOX(scale_hbox), spin, FALSE, FALSE, 0);
+    gtk_widget_set_hexpand(spin, FALSE);
+    gtk_widget_set_halign(spin, GTK_ALIGN_END);
+    gtk_box_pack_end(GTK_BOX(scale_hbox), spin, FALSE, FALSE, 0);
     dialog->radius_spin = spin;
     g_signal_connect(spin, "value-changed", G_CALLBACK(on_radius_spin_changed), dialog);
 

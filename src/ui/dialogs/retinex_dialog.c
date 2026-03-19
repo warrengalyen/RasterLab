@@ -6,6 +6,7 @@
 #include "ui/filters/filter_utils.h"
 #include "ui/ui_utils.h"
 #include "ui/widgets/filter_preview.h"
+#include "ui/widgets/vertical_spin_button.h"
 #include <cairo.h>
 #include <glib.h>
 #include <stdlib.h>
@@ -87,14 +88,14 @@ static void on_scale_changed(GtkRange* range, gpointer user_data) {
     }
 
     value = gtk_range_get_value(range);
-    gtk_spin_button_set_value(GTK_SPIN_BUTTON(dialog->scale_spin), value);
+    vertical_spin_button_set_value(VERTICAL_SPIN_BUTTON(dialog->scale_spin), value);
     update_preview(dialog);
 }
 
 /**
  * Scale spin value changed callback
  */
-static void on_scale_spin_changed(GtkSpinButton* spin, gpointer user_data) {
+static void on_scale_spin_changed(GtkWidget* spin, gpointer user_data) {
     RetinexDialog* dialog = (RetinexDialog*)user_data;
     gdouble value;
 
@@ -102,7 +103,7 @@ static void on_scale_spin_changed(GtkSpinButton* spin, gpointer user_data) {
         return;
     }
 
-    value = gtk_spin_button_get_value(spin);
+    value = vertical_spin_button_get_value(VERTICAL_SPIN_BUTTON(spin));
     gtk_range_set_value(GTK_RANGE(dialog->scale_scale), value);
 }
 
@@ -118,14 +119,14 @@ static void on_num_scales_changed(GtkRange* range, gpointer user_data) {
     }
 
     value = gtk_range_get_value(range);
-    gtk_spin_button_set_value(GTK_SPIN_BUTTON(dialog->num_scales_spin), value);
+    vertical_spin_button_set_value(VERTICAL_SPIN_BUTTON(dialog->num_scales_spin), value);
     update_preview(dialog);
 }
 
 /**
  * Num scales spin value changed callback
  */
-static void on_num_scales_spin_changed(GtkSpinButton* spin, gpointer user_data) {
+static void on_num_scales_spin_changed(GtkWidget* spin, gpointer user_data) {
     RetinexDialog* dialog = (RetinexDialog*)user_data;
     gdouble value;
 
@@ -133,7 +134,7 @@ static void on_num_scales_spin_changed(GtkSpinButton* spin, gpointer user_data) 
         return;
     }
 
-    value = gtk_spin_button_get_value(spin);
+    value = vertical_spin_button_get_value(VERTICAL_SPIN_BUTTON(spin));
     gtk_range_set_value(GTK_RANGE(dialog->num_scales_scale), value);
 }
 
@@ -149,14 +150,14 @@ static void on_dynamic_changed(GtkRange* range, gpointer user_data) {
     }
 
     value = gtk_range_get_value(range);
-    gtk_spin_button_set_value(GTK_SPIN_BUTTON(dialog->dynamic_spin), value);
+    vertical_spin_button_set_value(VERTICAL_SPIN_BUTTON(dialog->dynamic_spin), value);
     update_preview(dialog);
 }
 
 /**
  * Dynamic spin value changed callback
  */
-static void on_dynamic_spin_changed(GtkSpinButton* spin, gpointer user_data) {
+static void on_dynamic_spin_changed(GtkWidget* spin, gpointer user_data) {
     RetinexDialog* dialog = (RetinexDialog*)user_data;
     gdouble value;
 
@@ -164,7 +165,7 @@ static void on_dynamic_spin_changed(GtkSpinButton* spin, gpointer user_data) {
         return;
     }
 
-    value = gtk_spin_button_get_value(spin);
+    value = vertical_spin_button_get_value(VERTICAL_SPIN_BUTTON(spin));
     gtk_range_set_value(GTK_RANGE(dialog->dynamic_scale), value);
 }
 
@@ -267,7 +268,9 @@ RetinexDialog* retinex_dialog_new(const gchar* title) {
     gtk_widget_set_size_request(right_vbox, 320, -1);
     gtk_widget_set_margin_start(right_vbox, 0);
     gtk_widget_set_margin_end(right_vbox, 0);
-    gtk_box_pack_start(GTK_BOX(main_hbox), right_vbox, FALSE, FALSE, 0);
+    gtk_widget_set_hexpand(right_vbox, TRUE);
+    gtk_widget_set_halign(right_vbox, GTK_ALIGN_FILL);
+    gtk_box_pack_start(GTK_BOX(main_hbox), right_vbox, TRUE, TRUE, 0);
 
     /* Create mode combo */
     combo_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
@@ -300,19 +303,24 @@ RetinexDialog* retinex_dialog_new(const gchar* title) {
     gtk_box_pack_start(GTK_BOX(control_vbox), label, FALSE, FALSE, 0);
 
     scale_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+    gtk_widget_set_hexpand(scale_hbox, TRUE);
+    gtk_widget_set_halign(scale_hbox, GTK_ALIGN_FILL);
     gtk_box_pack_start(GTK_BOX(control_vbox), scale_hbox, TRUE, TRUE, 0);
 
     adjustment = gtk_adjustment_new((gdouble)dialog->scale, 16.0, 250.0, 1.0, 1.0, 0.0);
     scale = gtk_scale_new(GTK_ORIENTATION_HORIZONTAL, adjustment);
     gtk_scale_set_draw_value(GTK_SCALE(scale), FALSE);
     gtk_widget_set_hexpand(scale, TRUE);
+    gtk_widget_set_halign(scale, GTK_ALIGN_FILL);
     gtk_box_pack_start(GTK_BOX(scale_hbox), scale, TRUE, TRUE, 0);
     dialog->scale_scale = scale;
     g_signal_connect(scale, "value-changed", G_CALLBACK(on_scale_changed), dialog);
 
-    spin = gtk_spin_button_new(adjustment, 1.0, 0);
+    spin = vertical_spin_button_new(adjustment, 1.0, 0);
     gtk_widget_set_size_request(spin, 60, -1);
-    gtk_box_pack_start(GTK_BOX(scale_hbox), spin, FALSE, FALSE, 0);
+    gtk_widget_set_hexpand(spin, FALSE);
+    gtk_widget_set_halign(spin, GTK_ALIGN_END);
+    gtk_box_pack_end(GTK_BOX(scale_hbox), spin, FALSE, FALSE, 0);
     dialog->scale_spin = spin;
     g_signal_connect(spin, "value-changed", G_CALLBACK(on_scale_spin_changed), dialog);
 
@@ -327,19 +335,24 @@ RetinexDialog* retinex_dialog_new(const gchar* title) {
     gtk_box_pack_start(GTK_BOX(control_vbox), label, FALSE, FALSE, 0);
 
     scale_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+    gtk_widget_set_hexpand(scale_hbox, TRUE);
+    gtk_widget_set_halign(scale_hbox, GTK_ALIGN_FILL);
     gtk_box_pack_start(GTK_BOX(control_vbox), scale_hbox, TRUE, TRUE, 0);
 
     adjustment = gtk_adjustment_new((gdouble)dialog->num_scales, 1.0, 8.0, 0.1, 1.0, 0.0);
     scale = gtk_scale_new(GTK_ORIENTATION_HORIZONTAL, adjustment);
     gtk_scale_set_draw_value(GTK_SCALE(scale), FALSE);
     gtk_widget_set_hexpand(scale, TRUE);
+    gtk_widget_set_halign(scale, GTK_ALIGN_FILL);
     gtk_box_pack_start(GTK_BOX(scale_hbox), scale, TRUE, TRUE, 0);
     dialog->num_scales_scale = scale;
     g_signal_connect(scale, "value-changed", G_CALLBACK(on_num_scales_changed), dialog);
 
-    spin = gtk_spin_button_new(adjustment, 0.1, 1);
+    spin = vertical_spin_button_new(adjustment, 0.1, 1);
     gtk_widget_set_size_request(spin, 60, -1);
-    gtk_box_pack_start(GTK_BOX(scale_hbox), spin, FALSE, FALSE, 0);
+    gtk_widget_set_hexpand(spin, FALSE);
+    gtk_widget_set_halign(spin, GTK_ALIGN_END);
+    gtk_box_pack_end(GTK_BOX(scale_hbox), spin, FALSE, FALSE, 0);
     dialog->num_scales_spin = spin;
     g_signal_connect(spin, "value-changed", G_CALLBACK(on_num_scales_spin_changed), dialog);
 
@@ -354,19 +367,24 @@ RetinexDialog* retinex_dialog_new(const gchar* title) {
     gtk_box_pack_start(GTK_BOX(control_vbox), label, FALSE, FALSE, 0);
 
     scale_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+    gtk_widget_set_hexpand(scale_hbox, TRUE);
+    gtk_widget_set_halign(scale_hbox, GTK_ALIGN_FILL);
     gtk_box_pack_start(GTK_BOX(control_vbox), scale_hbox, TRUE, TRUE, 0);
 
     adjustment = gtk_adjustment_new((gdouble)dialog->dynamic, 0.05, 4.0, 1.0, 10.0, 0.0);
     scale = gtk_scale_new(GTK_ORIENTATION_HORIZONTAL, adjustment);
     gtk_scale_set_draw_value(GTK_SCALE(scale), FALSE);
     gtk_widget_set_hexpand(scale, TRUE);
+    gtk_widget_set_halign(scale, GTK_ALIGN_FILL);
     gtk_box_pack_start(GTK_BOX(scale_hbox), scale, TRUE, TRUE, 0);
     dialog->dynamic_scale = scale;
     g_signal_connect(scale, "value-changed", G_CALLBACK(on_dynamic_changed), dialog);
 
-    spin = gtk_spin_button_new(adjustment, 1.0, 0);
+    spin = vertical_spin_button_new(adjustment, 1.0, 0);
     gtk_widget_set_size_request(spin, 60, -1);
-    gtk_box_pack_start(GTK_BOX(scale_hbox), spin, FALSE, FALSE, 0);
+    gtk_widget_set_hexpand(spin, FALSE);
+    gtk_widget_set_halign(spin, GTK_ALIGN_END);
+    gtk_box_pack_end(GTK_BOX(scale_hbox), spin, FALSE, FALSE, 0);
     dialog->dynamic_spin = spin;
     g_signal_connect(spin, "value-changed", G_CALLBACK(on_dynamic_spin_changed), dialog);
 

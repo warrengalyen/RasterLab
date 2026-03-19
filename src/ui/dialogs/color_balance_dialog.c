@@ -4,6 +4,7 @@
 #include "ui/filters/filter_utils.h"
 #include "ui/ui_utils.h"
 #include "ui/widgets/filter_preview.h"
+#include "ui/widgets/vertical_spin_button.h"
 #include <cairo.h>
 #include <glib.h>
 #include <stdlib.h>
@@ -43,7 +44,7 @@ static void on_red_scale_changed(GtkRange* range, gpointer user_data) {
     }
 
     value = (gint)gtk_range_get_value(range);
-    gtk_spin_button_set_value(GTK_SPIN_BUTTON(dialog->red_spin), (gdouble)value);
+    vertical_spin_button_set_value(VERTICAL_SPIN_BUTTON(dialog->red_spin), (gdouble)value);
 
     /* Trigger preview update */
     if (dialog->preview_callback) {
@@ -67,7 +68,7 @@ static void on_green_scale_changed(GtkRange* range, gpointer user_data) {
     }
 
     value = (gint)gtk_range_get_value(range);
-    gtk_spin_button_set_value(GTK_SPIN_BUTTON(dialog->green_spin), (gdouble)value);
+    vertical_spin_button_set_value(VERTICAL_SPIN_BUTTON(dialog->green_spin), (gdouble)value);
 
     /* Trigger preview update */
     if (dialog->preview_callback) {
@@ -91,7 +92,7 @@ static void on_blue_scale_changed(GtkRange* range, gpointer user_data) {
     }
 
     value = (gint)gtk_range_get_value(range);
-    gtk_spin_button_set_value(GTK_SPIN_BUTTON(dialog->blue_spin), (gdouble)value);
+    vertical_spin_button_set_value(VERTICAL_SPIN_BUTTON(dialog->blue_spin), (gdouble)value);
 
     /* Trigger preview update */
     if (dialog->preview_callback) {
@@ -106,7 +107,7 @@ static void on_blue_scale_changed(GtkRange* range, gpointer user_data) {
 /**
  * Red spin value changed callback
  */
-static void on_red_spin_changed(GtkSpinButton* spin, gpointer user_data) {
+static void on_red_spin_changed(GtkWidget* spin, gpointer user_data) {
     ColorBalanceDialog* dialog = (ColorBalanceDialog*)user_data;
     gint value;
 
@@ -114,14 +115,14 @@ static void on_red_spin_changed(GtkSpinButton* spin, gpointer user_data) {
         return;
     }
 
-    value = (gint)gtk_spin_button_get_value(spin);
+    value = (gint)vertical_spin_button_get_value(VERTICAL_SPIN_BUTTON(spin));
     gtk_range_set_value(GTK_RANGE(dialog->red_scale), (gdouble)value);
 }
 
 /**
  * Green spin value changed callback
  */
-static void on_green_spin_changed(GtkSpinButton* spin, gpointer user_data) {
+static void on_green_spin_changed(GtkWidget* spin, gpointer user_data) {
     ColorBalanceDialog* dialog = (ColorBalanceDialog*)user_data;
     gint value;
 
@@ -129,14 +130,14 @@ static void on_green_spin_changed(GtkSpinButton* spin, gpointer user_data) {
         return;
     }
 
-    value = (gint)gtk_spin_button_get_value(spin);
+    value = (gint)vertical_spin_button_get_value(VERTICAL_SPIN_BUTTON(spin));
     gtk_range_set_value(GTK_RANGE(dialog->green_scale), (gdouble)value);
 }
 
 /**
  * Blue spin value changed callback
  */
-static void on_blue_spin_changed(GtkSpinButton* spin, gpointer user_data) {
+static void on_blue_spin_changed(GtkWidget* spin, gpointer user_data) {
     ColorBalanceDialog* dialog = (ColorBalanceDialog*)user_data;
     gint value;
 
@@ -144,7 +145,7 @@ static void on_blue_spin_changed(GtkSpinButton* spin, gpointer user_data) {
         return;
     }
 
-    value = (gint)gtk_spin_button_get_value(spin);
+    value = (gint)vertical_spin_button_get_value(VERTICAL_SPIN_BUTTON(spin));
     gtk_range_set_value(GTK_RANGE(dialog->blue_scale), (gdouble)value);
 }
 
@@ -290,7 +291,9 @@ ColorBalanceDialog* color_balance_dialog_new(const gchar* title) {
     gtk_widget_set_size_request(right_vbox, 320, -1);
     gtk_widget_set_margin_start(right_vbox, 0);
     gtk_widget_set_margin_end(right_vbox, 0);
-    gtk_box_pack_start(GTK_BOX(main_hbox), right_vbox, FALSE, FALSE, 0);
+    gtk_widget_set_hexpand(right_vbox, TRUE);
+    gtk_widget_set_halign(right_vbox, GTK_ALIGN_FILL);
+    gtk_box_pack_start(GTK_BOX(main_hbox), right_vbox, TRUE, TRUE, 0);
 
     /* Create red control */
     control_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
@@ -303,19 +306,24 @@ ColorBalanceDialog* color_balance_dialog_new(const gchar* title) {
     gtk_box_pack_start(GTK_BOX(control_vbox), label, FALSE, FALSE, 0);
 
     scale_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+    gtk_widget_set_hexpand(scale_hbox, TRUE);
+    gtk_widget_set_halign(scale_hbox, GTK_ALIGN_FILL);
     gtk_box_pack_start(GTK_BOX(control_vbox), scale_hbox, TRUE, TRUE, 0);
 
     adjustment = gtk_adjustment_new(0.0, -100.0, 100.0, 1.0, 10.0, 0.0);
     scale = gtk_scale_new(GTK_ORIENTATION_HORIZONTAL, adjustment);
     gtk_scale_set_draw_value(GTK_SCALE(scale), FALSE);
     gtk_widget_set_hexpand(scale, TRUE);
+    gtk_widget_set_halign(scale, GTK_ALIGN_FILL);
     gtk_box_pack_start(GTK_BOX(scale_hbox), scale, TRUE, TRUE, 0);
     dialog->red_scale = scale;
     g_signal_connect(scale, "value-changed", G_CALLBACK(on_red_scale_changed), dialog);
 
-    spin = gtk_spin_button_new(adjustment, 1.0, 0);
+    spin = vertical_spin_button_new(adjustment, 1.0, 0);
     gtk_widget_set_size_request(spin, 60, -1);
-    gtk_box_pack_start(GTK_BOX(scale_hbox), spin, FALSE, FALSE, 0);
+    gtk_widget_set_hexpand(spin, FALSE);
+    gtk_widget_set_halign(spin, GTK_ALIGN_END);
+    gtk_box_pack_end(GTK_BOX(scale_hbox), spin, FALSE, FALSE, 0);
     dialog->red_spin = spin;
     g_signal_connect(spin, "value-changed", G_CALLBACK(on_red_spin_changed), dialog);
 
@@ -330,19 +338,24 @@ ColorBalanceDialog* color_balance_dialog_new(const gchar* title) {
     gtk_box_pack_start(GTK_BOX(control_vbox), label, FALSE, FALSE, 0);
 
     scale_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+    gtk_widget_set_hexpand(scale_hbox, TRUE);
+    gtk_widget_set_halign(scale_hbox, GTK_ALIGN_FILL);
     gtk_box_pack_start(GTK_BOX(control_vbox), scale_hbox, TRUE, TRUE, 0);
 
     adjustment = gtk_adjustment_new(0.0, -100.0, 100.0, 1.0, 10.0, 0.0);
     scale = gtk_scale_new(GTK_ORIENTATION_HORIZONTAL, adjustment);
     gtk_scale_set_draw_value(GTK_SCALE(scale), FALSE);
     gtk_widget_set_hexpand(scale, TRUE);
+    gtk_widget_set_halign(scale, GTK_ALIGN_FILL);
     gtk_box_pack_start(GTK_BOX(scale_hbox), scale, TRUE, TRUE, 0);
     dialog->green_scale = scale;
     g_signal_connect(scale, "value-changed", G_CALLBACK(on_green_scale_changed), dialog);
 
-    spin = gtk_spin_button_new(adjustment, 1.0, 0);
+    spin = vertical_spin_button_new(adjustment, 1.0, 0);
     gtk_widget_set_size_request(spin, 60, -1);
-    gtk_box_pack_start(GTK_BOX(scale_hbox), spin, FALSE, FALSE, 0);
+    gtk_widget_set_hexpand(spin, FALSE);
+    gtk_widget_set_halign(spin, GTK_ALIGN_END);
+    gtk_box_pack_end(GTK_BOX(scale_hbox), spin, FALSE, FALSE, 0);
     dialog->green_spin = spin;
     g_signal_connect(spin, "value-changed", G_CALLBACK(on_green_spin_changed), dialog);
 
@@ -357,19 +370,24 @@ ColorBalanceDialog* color_balance_dialog_new(const gchar* title) {
     gtk_box_pack_start(GTK_BOX(control_vbox), label, FALSE, FALSE, 0);
 
     scale_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+    gtk_widget_set_hexpand(scale_hbox, TRUE);
+    gtk_widget_set_halign(scale_hbox, GTK_ALIGN_FILL);
     gtk_box_pack_start(GTK_BOX(control_vbox), scale_hbox, TRUE, TRUE, 0);
 
     adjustment = gtk_adjustment_new(0.0, -100.0, 100.0, 1.0, 10.0, 0.0);
     scale = gtk_scale_new(GTK_ORIENTATION_HORIZONTAL, adjustment);
     gtk_scale_set_draw_value(GTK_SCALE(scale), FALSE);
     gtk_widget_set_hexpand(scale, TRUE);
+    gtk_widget_set_halign(scale, GTK_ALIGN_FILL);
     gtk_box_pack_start(GTK_BOX(scale_hbox), scale, TRUE, TRUE, 0);
     dialog->blue_scale = scale;
     g_signal_connect(scale, "value-changed", G_CALLBACK(on_blue_scale_changed), dialog);
 
-    spin = gtk_spin_button_new(adjustment, 1.0, 0);
+    spin = vertical_spin_button_new(adjustment, 1.0, 0);
     gtk_widget_set_size_request(spin, 60, -1);
-    gtk_box_pack_start(GTK_BOX(scale_hbox), spin, FALSE, FALSE, 0);
+    gtk_widget_set_hexpand(spin, FALSE);
+    gtk_widget_set_halign(spin, GTK_ALIGN_END);
+    gtk_box_pack_end(GTK_BOX(scale_hbox), spin, FALSE, FALSE, 0);
     dialog->blue_spin = spin;
     g_signal_connect(spin, "value-changed", G_CALLBACK(on_blue_spin_changed), dialog);
 

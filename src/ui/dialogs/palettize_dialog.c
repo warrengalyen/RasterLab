@@ -6,6 +6,7 @@
 #include "ui/filters/filter_utils.h"
 #include "ui/ui_utils.h"
 #include "ui/widgets/filter_preview.h"
+#include "ui/widgets/vertical_spin_button.h"
 #include <cairo.h>
 #include <glib.h>
 #include <stdlib.h>
@@ -173,7 +174,7 @@ static void update_preview(PalettizeDialog* dialog) {
         /* Optimal tab - get all parameters */
         gint quantize_index = gtk_combo_box_get_active(GTK_COMBO_BOX(dialog->quantize_method_combo));
         dialog->params.quantize_method = (OcQuantizeMethod)quantize_index;
-        dialog->params.max_colors = (gint)gtk_spin_button_get_value(GTK_SPIN_BUTTON(dialog->max_colors_spin));
+        dialog->params.max_colors = (gint)vertical_spin_button_get_value(VERTICAL_SPIN_BUTTON(dialog->max_colors_spin));
 
         gint dither_index = gtk_combo_box_get_active(GTK_COMBO_BOX(dialog->dither_method_combo));
         dialog->params.dither_method = (OcDitherMethod)dither_index;
@@ -200,7 +201,7 @@ static void on_quantize_method_changed(GtkComboBox* combo, gpointer user_data) {
 /**
  * Max colors changed callback
  */
-static void on_max_colors_changed(GtkSpinButton* spin, gpointer user_data) {
+static void on_max_colors_changed(GtkWidget* spin, gpointer user_data) {
     PalettizeDialog* dialog = (PalettizeDialog*)user_data;
     (void)spin;
     update_preview(dialog);
@@ -227,14 +228,14 @@ static void on_dither_amount_changed(GtkRange* range, gpointer user_data) {
     }
 
     value = gtk_range_get_value(range);
-    gtk_spin_button_set_value(GTK_SPIN_BUTTON(dialog->dither_amount_spin), value);
+    vertical_spin_button_set_value(VERTICAL_SPIN_BUTTON(dialog->dither_amount_spin), value);
     update_preview(dialog);
 }
 
 /**
  * Dither amount spin changed callback
  */
-static void on_dither_amount_spin_changed(GtkSpinButton* spin, gpointer user_data) {
+static void on_dither_amount_spin_changed(GtkWidget* spin, gpointer user_data) {
     PalettizeDialog* dialog = (PalettizeDialog*)user_data;
     gdouble value;
 
@@ -242,7 +243,7 @@ static void on_dither_amount_spin_changed(GtkSpinButton* spin, gpointer user_dat
         return;
     }
 
-    value = gtk_spin_button_get_value(spin);
+    value = vertical_spin_button_get_value(VERTICAL_SPIN_BUTTON(spin));
     gtk_range_set_value(GTK_RANGE(dialog->dither_amount_scale), value);
 }
 
@@ -267,14 +268,14 @@ static void on_file_dither_amount_changed(GtkRange* range, gpointer user_data) {
     }
 
     value = gtk_range_get_value(range);
-    gtk_spin_button_set_value(GTK_SPIN_BUTTON(dialog->file_dither_amount_spin), value);
+    vertical_spin_button_set_value(VERTICAL_SPIN_BUTTON(dialog->file_dither_amount_spin), value);
     update_preview(dialog);
 }
 
 /**
  * File dither amount spin changed callback
  */
-static void on_file_dither_amount_spin_changed(GtkSpinButton* spin, gpointer user_data) {
+static void on_file_dither_amount_spin_changed(GtkWidget* spin, gpointer user_data) {
     PalettizeDialog* dialog = (PalettizeDialog*)user_data;
     gdouble value;
 
@@ -282,7 +283,7 @@ static void on_file_dither_amount_spin_changed(GtkSpinButton* spin, gpointer use
         return;
     }
 
-    value = gtk_spin_button_get_value(spin);
+    value = vertical_spin_button_get_value(VERTICAL_SPIN_BUTTON(spin));
     gtk_range_set_value(GTK_RANGE(dialog->file_dither_amount_scale), value);
 }
 
@@ -448,7 +449,7 @@ static GtkWidget* create_optimal_tab(PalettizeDialog* dialog) {
     gtk_box_pack_start(GTK_BOX(control_vbox), label, FALSE, FALSE, 0);
 
     adjustment = gtk_adjustment_new(256.0, 2.0, 256.0, 1.0, 10.0, 0.0);
-    spin = gtk_spin_button_new(adjustment, 1.0, 0);
+    spin = vertical_spin_button_new(adjustment, 1.0, 0);
     gtk_widget_set_size_request(spin, 100, -1);
     gtk_box_pack_start(GTK_BOX(control_vbox), spin, FALSE, FALSE, 0);
     dialog->max_colors_spin = spin;
@@ -493,19 +494,24 @@ static GtkWidget* create_optimal_tab(PalettizeDialog* dialog) {
     gtk_box_pack_start(GTK_BOX(control_vbox), label, FALSE, FALSE, 0);
 
     scale_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+    gtk_widget_set_hexpand(scale_hbox, TRUE);
+    gtk_widget_set_halign(scale_hbox, GTK_ALIGN_FILL);
     gtk_box_pack_start(GTK_BOX(control_vbox), scale_hbox, TRUE, TRUE, 0);
 
     adjustment = gtk_adjustment_new(50.0, 0.0, 100.0, 1.0, 10.0, 0.0);
     scale = gtk_scale_new(GTK_ORIENTATION_HORIZONTAL, adjustment);
     gtk_scale_set_draw_value(GTK_SCALE(scale), FALSE);
     gtk_widget_set_hexpand(scale, TRUE);
+    gtk_widget_set_halign(scale, GTK_ALIGN_FILL);
     gtk_box_pack_start(GTK_BOX(scale_hbox), scale, TRUE, TRUE, 0);
     dialog->dither_amount_scale = scale;
     g_signal_connect(scale, "value-changed", G_CALLBACK(on_dither_amount_changed), dialog);
 
-    spin = gtk_spin_button_new(adjustment, 1.0, 0);
+    spin = vertical_spin_button_new(adjustment, 1.0, 0);
     gtk_widget_set_size_request(spin, 60, -1);
-    gtk_box_pack_start(GTK_BOX(scale_hbox), spin, FALSE, FALSE, 0);
+    gtk_widget_set_hexpand(spin, FALSE);
+    gtk_widget_set_halign(spin, GTK_ALIGN_END);
+    gtk_box_pack_end(GTK_BOX(scale_hbox), spin, FALSE, FALSE, 0);
     dialog->dither_amount_spin = spin;
     g_signal_connect(spin, "value-changed", G_CALLBACK(on_dither_amount_spin_changed), dialog);
 
@@ -590,19 +596,24 @@ static GtkWidget* create_from_file_tab(PalettizeDialog* dialog) {
     gtk_box_pack_start(GTK_BOX(control_vbox), label, FALSE, FALSE, 0);
 
     scale_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+    gtk_widget_set_hexpand(scale_hbox, TRUE);
+    gtk_widget_set_halign(scale_hbox, GTK_ALIGN_FILL);
     gtk_box_pack_start(GTK_BOX(control_vbox), scale_hbox, TRUE, TRUE, 0);
 
     adjustment = gtk_adjustment_new(50.0, 0.0, 100.0, 1.0, 10.0, 0.0);
     scale = gtk_scale_new(GTK_ORIENTATION_HORIZONTAL, adjustment);
     gtk_scale_set_draw_value(GTK_SCALE(scale), FALSE);
     gtk_widget_set_hexpand(scale, TRUE);
+    gtk_widget_set_halign(scale, GTK_ALIGN_FILL);
     gtk_box_pack_start(GTK_BOX(scale_hbox), scale, TRUE, TRUE, 0);
     dialog->file_dither_amount_scale = scale;
     g_signal_connect(scale, "value-changed", G_CALLBACK(on_file_dither_amount_changed), dialog);
 
-    spin = gtk_spin_button_new(adjustment, 1.0, 0);
+    spin = vertical_spin_button_new(adjustment, 1.0, 0);
     gtk_widget_set_size_request(spin, 60, -1);
-    gtk_box_pack_start(GTK_BOX(scale_hbox), spin, FALSE, FALSE, 0);
+    gtk_widget_set_hexpand(spin, FALSE);
+    gtk_widget_set_halign(spin, GTK_ALIGN_END);
+    gtk_box_pack_end(GTK_BOX(scale_hbox), spin, FALSE, FALSE, 0);
     dialog->file_dither_amount_spin = spin;
     g_signal_connect(spin, "value-changed", G_CALLBACK(on_file_dither_amount_spin_changed), dialog);
 
@@ -688,7 +699,9 @@ PalettizeDialog* palettize_dialog_new(const gchar* title) {
     gtk_widget_set_size_request(right_vbox, 320, -1);
     gtk_widget_set_margin_start(right_vbox, 0);
     gtk_widget_set_margin_end(right_vbox, 0);
-    gtk_box_pack_start(GTK_BOX(main_hbox), right_vbox, FALSE, FALSE, 0);
+    gtk_widget_set_hexpand(right_vbox, TRUE);
+    gtk_widget_set_halign(right_vbox, GTK_ALIGN_FILL);
+    gtk_box_pack_start(GTK_BOX(main_hbox), right_vbox, TRUE, TRUE, 0);
 
     /* Create notebook for tabs */
     notebook = gtk_notebook_new();
@@ -842,7 +855,7 @@ gint palettize_dialog_run(PalettizeDialog* dialog, GtkWindow* parent, PalettizeP
             /* Optional tab */
             gint quantize_index = gtk_combo_box_get_active(GTK_COMBO_BOX(dialog->quantize_method_combo));
             params->quantize_method = (OcQuantizeMethod)quantize_index;
-            params->max_colors = (gint)gtk_spin_button_get_value(GTK_SPIN_BUTTON(dialog->max_colors_spin));
+            params->max_colors = (gint)vertical_spin_button_get_value(VERTICAL_SPIN_BUTTON(dialog->max_colors_spin));
 
             gint dither_index = gtk_combo_box_get_active(GTK_COMBO_BOX(dialog->dither_method_combo));
             params->dither_method = (OcDitherMethod)dither_index;
@@ -890,7 +903,7 @@ void palettize_dialog_reset(PalettizeDialog* dialog) {
 
     /* Reset optional tab */
     gtk_combo_box_set_active(GTK_COMBO_BOX(dialog->quantize_method_combo), 0);
-    gtk_spin_button_set_value(GTK_SPIN_BUTTON(dialog->max_colors_spin), 256.0);
+    vertical_spin_button_set_value(VERTICAL_SPIN_BUTTON(dialog->max_colors_spin), 256.0);
     gtk_combo_box_set_active(GTK_COMBO_BOX(dialog->dither_method_combo), 0);
     gtk_range_set_value(GTK_RANGE(dialog->dither_amount_scale), 50.0);
 

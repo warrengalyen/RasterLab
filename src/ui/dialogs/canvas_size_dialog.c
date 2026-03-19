@@ -2,6 +2,7 @@
 #include "document.h"
 #include "ui/ui_utils.h"
 #include "ui/widgets/anchor_position_widget.h"
+#include "ui/widgets/vertical_spin_button.h"
 #include <glib.h>
 #include <gtk/gtk.h>
 #include <math.h>
@@ -80,8 +81,9 @@ static gdouble pixels_to_unit(guint pixels, DimensionUnit unit, gdouble resoluti
 static guint unit_to_pixels(gdouble value, DimensionUnit unit, gdouble resolution);
 static gdouble resolution_convert(gdouble value, ResolutionUnit from, ResolutionUnit to);
 static gchar* format_file_size(guint64 bytes);
-static void on_width_value_changed(GtkSpinButton* spin, gpointer user_data);
-static void on_height_value_changed(GtkSpinButton* spin, gpointer user_data);
+static void on_width_value_changed(GtkWidget* spin, gpointer user_data);
+static void on_height_value_changed(GtkWidget* spin, gpointer user_data);
+static void on_resolution_value_changed(GtkWidget* spin, gpointer user_data);
 static void on_width_unit_changed(GtkComboBox* combo, gpointer user_data);
 static void on_height_unit_changed(GtkComboBox* combo, gpointer user_data);
 
@@ -152,9 +154,9 @@ static void on_resolution_unit_changed(GtkComboBox* combo, gpointer user_data) {
 /**
  * Width value changed callback
  */
-static void on_width_value_changed(GtkSpinButton* spin, gpointer user_data) {
+static void on_width_value_changed(GtkWidget* spin, gpointer user_data) {
     CanvasSizeDialog* dialog = (CanvasSizeDialog*)user_data;
-    gdouble value = gtk_spin_button_get_value(spin);
+    gdouble value = vertical_spin_button_get_value(VERTICAL_SPIN_BUTTON(spin));
     guint new_width;
 
     /* Convert from current unit to pixels */
@@ -177,7 +179,7 @@ static void on_width_value_changed(GtkSpinButton* spin, gpointer user_data) {
         } else {
             height_value = pixels_to_unit(new_height, (DimensionUnit)dialog->height_unit, dialog->current_resolution);
         }
-        gtk_spin_button_set_value(GTK_SPIN_BUTTON(dialog->height_spin), height_value);
+        vertical_spin_button_set_value(VERTICAL_SPIN_BUTTON(dialog->height_spin), height_value);
         g_signal_handlers_unblock_by_func(dialog->height_spin, G_CALLBACK(on_height_value_changed), dialog);
     }
 
@@ -189,9 +191,9 @@ static void on_width_value_changed(GtkSpinButton* spin, gpointer user_data) {
 /**
  * Height value changed callback
  */
-static void on_height_value_changed(GtkSpinButton* spin, gpointer user_data) {
+static void on_height_value_changed(GtkWidget* spin, gpointer user_data) {
     CanvasSizeDialog* dialog = (CanvasSizeDialog*)user_data;
-    gdouble value = gtk_spin_button_get_value(spin);
+    gdouble value = vertical_spin_button_get_value(VERTICAL_SPIN_BUTTON(spin));
     guint new_height;
 
     /* Convert from current unit to pixels */
@@ -214,7 +216,7 @@ static void on_height_value_changed(GtkSpinButton* spin, gpointer user_data) {
         } else {
             width_value = pixels_to_unit(new_width, (DimensionUnit)dialog->width_unit, dialog->current_resolution);
         }
-        gtk_spin_button_set_value(GTK_SPIN_BUTTON(dialog->width_spin), width_value);
+        vertical_spin_button_set_value(VERTICAL_SPIN_BUTTON(dialog->width_spin), width_value);
         g_signal_handlers_unblock_by_func(dialog->width_spin, G_CALLBACK(on_width_value_changed), dialog);
     }
 
@@ -226,9 +228,9 @@ static void on_height_value_changed(GtkSpinButton* spin, gpointer user_data) {
 /**
  * Resolution value changed callback
  */
-static void on_resolution_value_changed(GtkSpinButton* spin, gpointer user_data) {
+static void on_resolution_value_changed(GtkWidget* spin, gpointer user_data) {
     CanvasSizeDialog* dialog = (CanvasSizeDialog*)user_data;
-    gdouble value = gtk_spin_button_get_value(spin);
+    gdouble value = vertical_spin_button_get_value(VERTICAL_SPIN_BUTTON(spin));
 
     /* Convert from current unit to PPI */
     ResolutionUnit unit = (ResolutionUnit)dialog->resolution_unit;
@@ -393,7 +395,7 @@ static void convert_width_to_unit(CanvasSizeDialog* dialog, DimensionUnit unit) 
     }
 
     g_signal_handlers_block_by_func(dialog->width_spin, G_CALLBACK(on_width_value_changed), dialog);
-    gtk_spin_button_set_value(GTK_SPIN_BUTTON(dialog->width_spin), value);
+    vertical_spin_button_set_value(VERTICAL_SPIN_BUTTON(dialog->width_spin), value);
     g_signal_handlers_unblock_by_func(dialog->width_spin, G_CALLBACK(on_width_value_changed), dialog);
 }
 
@@ -410,7 +412,7 @@ static void convert_height_to_unit(CanvasSizeDialog* dialog, DimensionUnit unit)
     }
 
     g_signal_handlers_block_by_func(dialog->height_spin, G_CALLBACK(on_height_value_changed), dialog);
-    gtk_spin_button_set_value(GTK_SPIN_BUTTON(dialog->height_spin), value);
+    vertical_spin_button_set_value(VERTICAL_SPIN_BUTTON(dialog->height_spin), value);
     g_signal_handlers_unblock_by_func(dialog->height_spin, G_CALLBACK(on_height_value_changed), dialog);
 }
 
@@ -421,7 +423,7 @@ static void convert_resolution_to_unit(CanvasSizeDialog* dialog, ResolutionUnit 
     gdouble value = resolution_convert(dialog->current_resolution, RES_UNIT_PPI, unit);
 
     g_signal_handlers_block_by_func(dialog->resolution_spin, G_CALLBACK(on_resolution_value_changed), dialog);
-    gtk_spin_button_set_value(GTK_SPIN_BUTTON(dialog->resolution_spin), value);
+    vertical_spin_button_set_value(VERTICAL_SPIN_BUTTON(dialog->resolution_spin), value);
     g_signal_handlers_unblock_by_func(dialog->resolution_spin, G_CALLBACK(on_resolution_value_changed), dialog);
 }
 
@@ -687,9 +689,27 @@ CanvasSizeDialog* canvas_size_dialog_new(ImageDocument* doc) {
     }
 
     /* Get all widgets */
-    dialog->width_spin = GTK_WIDGET(gtk_builder_get_object(builder, "canvas_size_width_spin"));
-    dialog->height_spin = GTK_WIDGET(gtk_builder_get_object(builder, "canvas_size_height_spin"));
-    dialog->resolution_spin = GTK_WIDGET(gtk_builder_get_object(builder, "canvas_size_resolution_spin"));
+    {
+        GtkWidget* wph = GTK_WIDGET(gtk_builder_get_object(builder, "canvas_size_width_spin_placeholder"));
+        GtkWidget* hph = GTK_WIDGET(gtk_builder_get_object(builder, "canvas_size_height_spin_placeholder"));
+        GtkWidget* rph = GTK_WIDGET(gtk_builder_get_object(builder, "canvas_size_resolution_spin_placeholder"));
+        GtkAdjustment* width_adj = gtk_adjustment_new(dialog->current_width, 1.0, 100000.0, 1.0, 10.0, 0.0);
+        GtkAdjustment* height_adj = gtk_adjustment_new(dialog->current_height, 1.0, 100000.0, 1.0, 10.0, 0.0);
+        GtkAdjustment* resolution_adj = gtk_adjustment_new(dialog->current_resolution, 1.0, 10000.0, 0.1, 1.0, 0.0);
+
+        dialog->width_spin = wph ? vertical_spin_button_new(width_adj, 1.0, 2) : NULL;
+        dialog->height_spin = hph ? vertical_spin_button_new(height_adj, 1.0, 2) : NULL;
+        dialog->resolution_spin = rph ? vertical_spin_button_new(resolution_adj, 1.0, 2) : NULL;
+        if (dialog->width_spin && wph) {
+            gtk_box_pack_start(GTK_BOX(wph), dialog->width_spin, FALSE, TRUE, 0);
+        }
+        if (dialog->height_spin && hph) {
+            gtk_box_pack_start(GTK_BOX(hph), dialog->height_spin, FALSE, TRUE, 0);
+        }
+        if (dialog->resolution_spin && rph) {
+            gtk_box_pack_start(GTK_BOX(rph), dialog->resolution_spin, FALSE, TRUE, 0);
+        }
+    }
     dialog->width_units_combo = GTK_WIDGET(gtk_builder_get_object(builder, "canvas_size_width_units_combo"));
     dialog->height_units_combo = GTK_WIDGET(gtk_builder_get_object(builder, "canvas_size_height_units_combo"));
     dialog->resolution_units_combo = GTK_WIDGET(gtk_builder_get_object(builder, "canvas_size_resolution_units_combo"));
@@ -710,6 +730,29 @@ CanvasSizeDialog* canvas_size_dialog_new(ImageDocument* doc) {
         g_object_unref(builder);
         g_free(dialog);
         return NULL;
+    }
+
+    /* Keep all three rows visually aligned regardless of combo natural width. */
+    {
+        GtkSizeGroup* spin_group = gtk_size_group_new(GTK_SIZE_GROUP_HORIZONTAL);
+        GtkSizeGroup* reset_group = gtk_size_group_new(GTK_SIZE_GROUP_HORIZONTAL);
+        GtkSizeGroup* unit_group = gtk_size_group_new(GTK_SIZE_GROUP_HORIZONTAL);
+
+        gtk_size_group_add_widget(spin_group, dialog->width_spin);
+        gtk_size_group_add_widget(spin_group, dialog->height_spin);
+        gtk_size_group_add_widget(spin_group, dialog->resolution_spin);
+
+        gtk_size_group_add_widget(reset_group, dialog->width_reset_button);
+        gtk_size_group_add_widget(reset_group, dialog->height_reset_button);
+        gtk_size_group_add_widget(reset_group, dialog->resolution_reset_button);
+
+        gtk_size_group_add_widget(unit_group, dialog->width_units_combo);
+        gtk_size_group_add_widget(unit_group, dialog->height_units_combo);
+        gtk_size_group_add_widget(unit_group, dialog->resolution_units_combo);
+
+        g_object_unref(spin_group);
+        g_object_unref(reset_group);
+        g_object_unref(unit_group);
     }
 
     /* Create anchor position widget */
@@ -821,19 +864,6 @@ CanvasSizeDialog* canvas_size_dialog_new(ImageDocument* doc) {
 
     /* Set default: PPI */
     gtk_combo_box_set_active(GTK_COMBO_BOX(dialog->resolution_units_combo), RES_UNIT_PPI);
-
-    /* Set up spin button adjustments */
-    GtkAdjustment* width_adj = gtk_adjustment_new(dialog->current_width, 1.0, 100000.0, 1.0, 10.0, 0.0);
-    GtkAdjustment* height_adj = gtk_adjustment_new(dialog->current_height, 1.0, 100000.0, 1.0, 10.0, 0.0);
-    GtkAdjustment* resolution_adj = gtk_adjustment_new(dialog->current_resolution, 1.0, 10000.0, 0.1, 1.0, 0.0);
-
-    gtk_spin_button_set_adjustment(GTK_SPIN_BUTTON(dialog->width_spin), width_adj);
-    gtk_spin_button_set_adjustment(GTK_SPIN_BUTTON(dialog->height_spin), height_adj);
-    gtk_spin_button_set_adjustment(GTK_SPIN_BUTTON(dialog->resolution_spin), resolution_adj);
-
-    gtk_spin_button_set_value(GTK_SPIN_BUTTON(dialog->width_spin), dialog->current_width);
-    gtk_spin_button_set_value(GTK_SPIN_BUTTON(dialog->height_spin), dialog->current_height);
-    gtk_spin_button_set_value(GTK_SPIN_BUTTON(dialog->resolution_spin), dialog->current_resolution);
 
     /* Set reset button icons */
     set_reset_button_icon(GTK_BUTTON(dialog->width_reset_button));

@@ -1,5 +1,6 @@
 #include "ui/dialogs/rotate_dialog.h"
 #include "ui/ui_utils.h"
+#include "ui/widgets/vertical_spin_button.h"
 #include <glib.h>
 
 struct _RotateDialog {
@@ -67,16 +68,16 @@ static void on_angle_scale_changed(GtkRange* range, gpointer user_data) {
         return;
     }
     gdouble value = gtk_range_get_value(range);
-    gtk_spin_button_set_value(GTK_SPIN_BUTTON(dialog->angle_spin), value);
+    vertical_spin_button_set_value(VERTICAL_SPIN_BUTTON(dialog->angle_spin), value);
     trigger_preview(dialog);
 }
 
-static void on_angle_spin_changed(GtkSpinButton* spin, gpointer user_data) {
+static void on_angle_spin_changed(GtkWidget* spin, gpointer user_data) {
     RotateDialog* dialog = (RotateDialog*)user_data;
     if (!dialog || !dialog->angle_scale) {
         return;
     }
-    gdouble value = gtk_spin_button_get_value(spin);
+    gdouble value = vertical_spin_button_get_value(VERTICAL_SPIN_BUTTON(spin));
     gtk_range_set_value(GTK_RANGE(dialog->angle_scale), value);
 }
 
@@ -198,7 +199,9 @@ RotateDialog* rotate_dialog_new(const gchar* title) {
     /* Controls (right) */
     GtkWidget* right_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
     gtk_widget_set_size_request(right_vbox, 320, -1);
-    gtk_box_pack_start(GTK_BOX(main_hbox), right_vbox, FALSE, FALSE, 0);
+    gtk_widget_set_hexpand(right_vbox, TRUE);
+    gtk_widget_set_halign(right_vbox, GTK_ALIGN_FILL);
+    gtk_box_pack_start(GTK_BOX(main_hbox), right_vbox, TRUE, TRUE, 0);
 
     /* Angle */
     {
@@ -212,6 +215,8 @@ RotateDialog* rotate_dialog_new(const gchar* title) {
         gtk_box_pack_start(GTK_BOX(control_vbox), label, FALSE, FALSE, 0);
 
         GtkWidget* row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+        gtk_widget_set_hexpand(row, TRUE);
+        gtk_widget_set_halign(row, GTK_ALIGN_FILL);
         gtk_box_pack_start(GTK_BOX(control_vbox), row, TRUE, TRUE, 0);
 
         GtkAdjustment* adj = gtk_adjustment_new(0.0, -360.0, 360.0, 1.0, 10.0, 0.0);
@@ -219,12 +224,15 @@ RotateDialog* rotate_dialog_new(const gchar* title) {
         gtk_scale_set_draw_value(GTK_SCALE(dialog->angle_scale), FALSE);
         gtk_scale_set_digits(GTK_SCALE(dialog->angle_scale), 2);
         gtk_widget_set_hexpand(dialog->angle_scale, TRUE);
+        gtk_widget_set_halign(dialog->angle_scale, GTK_ALIGN_FILL);
         gtk_box_pack_start(GTK_BOX(row), dialog->angle_scale, TRUE, TRUE, 0);
         g_signal_connect(dialog->angle_scale, "value-changed", G_CALLBACK(on_angle_scale_changed), dialog);
 
-        dialog->angle_spin = gtk_spin_button_new(adj, 1.0, 2);
+        dialog->angle_spin = vertical_spin_button_new(adj, 1.0, 2);
         gtk_widget_set_size_request(dialog->angle_spin, 70, -1);
-        gtk_box_pack_start(GTK_BOX(row), dialog->angle_spin, FALSE, FALSE, 0);
+        gtk_widget_set_hexpand(dialog->angle_spin, FALSE);
+        gtk_widget_set_halign(dialog->angle_spin, GTK_ALIGN_END);
+        gtk_box_pack_end(GTK_BOX(row), dialog->angle_spin, FALSE, FALSE, 0);
         g_signal_connect(dialog->angle_spin, "value-changed", G_CALLBACK(on_angle_spin_changed), dialog);
 
         dialog->angle_reset_button = gtk_button_new();
@@ -236,6 +244,9 @@ RotateDialog* rotate_dialog_new(const gchar* title) {
             gtk_button_set_label(GTK_BUTTON(dialog->angle_reset_button), "↺");
         }
         gtk_box_pack_start(GTK_BOX(row), dialog->angle_reset_button, FALSE, FALSE, 0);
+        gtk_box_reorder_child(GTK_BOX(row), dialog->angle_scale, 0);
+        gtk_box_reorder_child(GTK_BOX(row), dialog->angle_spin, 1);
+        gtk_box_reorder_child(GTK_BOX(row), dialog->angle_reset_button, 2);
         g_signal_connect(dialog->angle_reset_button, "clicked", G_CALLBACK(on_angle_reset_clicked), dialog);
     }
 

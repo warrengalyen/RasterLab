@@ -6,11 +6,11 @@
 #include "ui/filters/filter_utils.h"
 #include "ui/ui_utils.h"
 #include "ui/widgets/filter_preview.h"
+#include "ui/widgets/vertical_spin_button.h"
 #include <cairo.h>
 #include <glib.h>
 #include <stdlib.h>
 #include <string.h>
-
 
 /**
  * BEEPS dialog structure
@@ -66,14 +66,14 @@ static void on_photometric_changed(GtkRange* range, gpointer user_data) {
     }
 
     value = gtk_range_get_value(range);
-    gtk_spin_button_set_value(GTK_SPIN_BUTTON(dialog->photometric_spin), value);
+    vertical_spin_button_set_value(VERTICAL_SPIN_BUTTON(dialog->photometric_spin), value);
     update_preview(dialog);
 }
 
 /**
  * Photometric spin value changed callback
  */
-static void on_photometric_spin_changed(GtkSpinButton* spin, gpointer user_data) {
+static void on_photometric_spin_changed(GtkWidget* spin, gpointer user_data) {
     BEEPSDialog* dialog = (BEEPSDialog*)user_data;
     gdouble value;
 
@@ -81,7 +81,7 @@ static void on_photometric_spin_changed(GtkSpinButton* spin, gpointer user_data)
         return;
     }
 
-    value = gtk_spin_button_get_value(spin);
+    value = vertical_spin_button_get_value(VERTICAL_SPIN_BUTTON(spin));
     gtk_range_set_value(GTK_RANGE(dialog->photometric_scale), value);
 }
 
@@ -97,14 +97,14 @@ static void on_spatial_decay_changed(GtkRange* range, gpointer user_data) {
     }
 
     value = gtk_range_get_value(range);
-    gtk_spin_button_set_value(GTK_SPIN_BUTTON(dialog->spatial_decay_spin), value);
+    vertical_spin_button_set_value(VERTICAL_SPIN_BUTTON(dialog->spatial_decay_spin), value);
     update_preview(dialog);
 }
 
 /**
  * Spatial decay spin value changed callback
  */
-static void on_spatial_decay_spin_changed(GtkSpinButton* spin, gpointer user_data) {
+static void on_spatial_decay_spin_changed(GtkWidget* spin, gpointer user_data) {
     BEEPSDialog* dialog = (BEEPSDialog*)user_data;
     gdouble value;
 
@@ -112,7 +112,7 @@ static void on_spatial_decay_spin_changed(GtkSpinButton* spin, gpointer user_dat
         return;
     }
 
-    value = gtk_spin_button_get_value(spin);
+    value = vertical_spin_button_get_value(VERTICAL_SPIN_BUTTON(spin));
     gtk_range_set_value(GTK_RANGE(dialog->spatial_decay_scale), value);
 }
 
@@ -199,6 +199,8 @@ BEEPSDialog* beeps_dialog_new(const gchar* title) {
 
     /* Create main horizontal box */
     main_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+    gtk_widget_set_hexpand(main_hbox, TRUE);
+    gtk_widget_set_halign(main_hbox, GTK_ALIGN_FILL);
     gtk_container_add(GTK_CONTAINER(content_area), main_hbox);
 
     /* Create filter preview widget (left side) */
@@ -211,9 +213,11 @@ BEEPSDialog* beeps_dialog_new(const gchar* title) {
     /* Create right side vertical box */
     right_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
     gtk_widget_set_size_request(right_vbox, 320, -1);
-    gtk_widget_set_margin_start(right_vbox, 0);
-    gtk_widget_set_margin_end(right_vbox, 0);
-    gtk_box_pack_start(GTK_BOX(main_hbox), right_vbox, FALSE, FALSE, 0);
+    gtk_widget_set_hexpand(right_vbox, TRUE);
+    gtk_widget_set_halign(right_vbox, GTK_ALIGN_FILL);
+    gtk_widget_set_margin_start(right_vbox, 10);
+    gtk_widget_set_margin_end(right_vbox, 10);
+    gtk_box_pack_start(GTK_BOX(main_hbox), right_vbox, TRUE, TRUE, 0);
 
     /* Create range filter combo */
     combo_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
@@ -237,6 +241,7 @@ BEEPSDialog* beeps_dialog_new(const gchar* title) {
 
     /* Create photometric standard deviation control */
     control_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+    gtk_widget_set_hexpand(control_vbox, TRUE);
     gtk_widget_set_margin_bottom(control_vbox, 10);
     gtk_box_pack_start(GTK_BOX(right_vbox), control_vbox, FALSE, FALSE, 0);
 
@@ -246,24 +251,30 @@ BEEPSDialog* beeps_dialog_new(const gchar* title) {
     gtk_box_pack_start(GTK_BOX(control_vbox), label, FALSE, FALSE, 0);
 
     scale_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+    gtk_widget_set_hexpand(scale_hbox, TRUE);
+    gtk_widget_set_halign(scale_hbox, GTK_ALIGN_FILL);
     gtk_box_pack_start(GTK_BOX(control_vbox), scale_hbox, TRUE, TRUE, 0);
 
     adjustment = gtk_adjustment_new((gdouble)dialog->photometric_std_dev, 1.0, 255.0, 1.0, 10.0, 0.0);
     scale = gtk_scale_new(GTK_ORIENTATION_HORIZONTAL, adjustment);
     gtk_scale_set_draw_value(GTK_SCALE(scale), FALSE);
     gtk_widget_set_hexpand(scale, TRUE);
+    gtk_widget_set_halign(scale, GTK_ALIGN_FILL);
     gtk_box_pack_start(GTK_BOX(scale_hbox), scale, TRUE, TRUE, 0);
     dialog->photometric_scale = scale;
     g_signal_connect(scale, "value-changed", G_CALLBACK(on_photometric_changed), dialog);
 
-    spin = gtk_spin_button_new(adjustment, 1.0, 0);
+    spin = vertical_spin_button_new(adjustment, 1.0, 0);
     gtk_widget_set_size_request(spin, 60, -1);
-    gtk_box_pack_start(GTK_BOX(scale_hbox), spin, FALSE, FALSE, 0);
+    gtk_widget_set_hexpand(spin, FALSE);
+    gtk_widget_set_halign(spin, GTK_ALIGN_END);
+    gtk_box_pack_end(GTK_BOX(scale_hbox), spin, FALSE, FALSE, 0);
     dialog->photometric_spin = spin;
     g_signal_connect(spin, "value-changed", G_CALLBACK(on_photometric_spin_changed), dialog);
 
     /* Create spatial decay control */
     control_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+    gtk_widget_set_hexpand(control_vbox, TRUE);
     gtk_widget_set_margin_bottom(control_vbox, 10);
     gtk_box_pack_start(GTK_BOX(right_vbox), control_vbox, FALSE, FALSE, 0);
 
@@ -273,19 +284,24 @@ BEEPSDialog* beeps_dialog_new(const gchar* title) {
     gtk_box_pack_start(GTK_BOX(control_vbox), label, FALSE, FALSE, 0);
 
     scale_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+    gtk_widget_set_hexpand(scale_hbox, TRUE);
+    gtk_widget_set_halign(scale_hbox, GTK_ALIGN_FILL);
     gtk_box_pack_start(GTK_BOX(control_vbox), scale_hbox, TRUE, TRUE, 0);
 
     adjustment = gtk_adjustment_new((gdouble)dialog->spatial_decay, 0.01, 0.25, 0.01, 0.05, 0.0);
     scale = gtk_scale_new(GTK_ORIENTATION_HORIZONTAL, adjustment);
     gtk_scale_set_draw_value(GTK_SCALE(scale), FALSE);
     gtk_widget_set_hexpand(scale, TRUE);
+    gtk_widget_set_halign(scale, GTK_ALIGN_FILL);
     gtk_box_pack_start(GTK_BOX(scale_hbox), scale, TRUE, TRUE, 0);
     dialog->spatial_decay_scale = scale;
     g_signal_connect(scale, "value-changed", G_CALLBACK(on_spatial_decay_changed), dialog);
 
-    spin = gtk_spin_button_new(adjustment, 0.01, 2);
+    spin = vertical_spin_button_new(adjustment, 0.01, 2);
     gtk_widget_set_size_request(spin, 60, -1);
-    gtk_box_pack_start(GTK_BOX(scale_hbox), spin, FALSE, FALSE, 0);
+    gtk_widget_set_hexpand(spin, FALSE);
+    gtk_widget_set_halign(spin, GTK_ALIGN_END);
+    gtk_box_pack_end(GTK_BOX(scale_hbox), spin, FALSE, FALSE, 0);
     dialog->spatial_decay_spin = spin;
     g_signal_connect(spin, "value-changed", G_CALLBACK(on_spatial_decay_spin_changed), dialog);
 

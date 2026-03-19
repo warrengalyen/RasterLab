@@ -9,6 +9,7 @@
 #include "ui/tools_panel.h"
 #include "ui/ui_layer_menu.h"
 #include "ui/ui_utils.h"
+#include "ui/widgets/vertical_spin_button.h"
 #include <glib/gstdio.h>
 #include <math.h>
 #include <stdio.h>
@@ -94,7 +95,7 @@ static gboolean on_treeview_button_press(GtkWidget* widget,
 
 /* Forward declarations for opacity callbacks */
 static void on_opacity_scale_changed(GtkRange* range, gpointer user_data);
-static void on_opacity_spin_changed(GtkSpinButton* spin_button, gpointer user_data);
+static void on_opacity_spin_changed(GtkWidget* spin_button, gpointer user_data);
 static void on_opacity_reset_clicked(GtkButton* button, gpointer user_data);
 
 /* Forward declaration for blend mode callback */
@@ -231,7 +232,7 @@ static void on_opacity_scale_changed(GtkRange* range, gpointer user_data) {
         g_signal_handlers_block_by_func(layers_panel->spin_opacity,
                                         G_CALLBACK(on_opacity_spin_changed),
                                         layers_panel);
-        gtk_spin_button_set_value(GTK_SPIN_BUTTON(layers_panel->spin_opacity), value);
+        vertical_spin_button_set_value(VERTICAL_SPIN_BUTTON(layers_panel->spin_opacity), value);
         g_signal_handlers_unblock_by_func(layers_panel->spin_opacity,
                                           G_CALLBACK(on_opacity_spin_changed),
                                           layers_panel);
@@ -254,9 +255,9 @@ static void on_opacity_scale_changed(GtkRange* range, gpointer user_data) {
 /**
  * Opacity spin button changed callback
  */
-static void on_opacity_spin_changed(GtkSpinButton* spin_button, gpointer user_data) {
+static void on_opacity_spin_changed(GtkWidget* spin_button, gpointer user_data) {
     LayersPanel* layers_panel = (LayersPanel*)user_data;
-    gdouble value = gtk_spin_button_get_value(spin_button);
+    gdouble value = vertical_spin_button_get_value(VERTICAL_SPIN_BUTTON(spin_button));
     ImageLayer* selected_layer;
 
     if (!layers_panel || !layers_panel->current_doc) {
@@ -338,7 +339,7 @@ static void on_opacity_reset_clicked(GtkButton* button, gpointer user_data) {
         g_signal_handlers_block_by_func(layers_panel->spin_opacity,
                                         G_CALLBACK(on_opacity_spin_changed),
                                         layers_panel);
-        gtk_spin_button_set_value(GTK_SPIN_BUTTON(layers_panel->spin_opacity), 100.0);
+        vertical_spin_button_set_value(VERTICAL_SPIN_BUTTON(layers_panel->spin_opacity), 100.0);
         g_signal_handlers_unblock_by_func(layers_panel->spin_opacity,
                                           G_CALLBACK(on_opacity_spin_changed),
                                           layers_panel);
@@ -759,7 +760,16 @@ LayersPanel* create_layers_panel(AppContext* ctx) {
 
     /* Get opacity controls from builder */
     layers_panel->scale_opacity = GTK_WIDGET(gtk_builder_get_object(builder, "scale_opacity"));
-    layers_panel->spin_opacity = GTK_WIDGET(gtk_builder_get_object(builder, "spin_opacity"));
+    {
+        GtkWidget* placeholder = GTK_WIDGET(gtk_builder_get_object(builder, "spin_opacity_placeholder"));
+        if (placeholder) {
+            GtkAdjustment* adj = gtk_adjustment_new(100.0, 0.0, 100.0, 1.0, 10.0, 0.0);
+            layers_panel->spin_opacity = vertical_spin_button_new(adj, 1.0, 0);
+            gtk_box_pack_start(GTK_BOX(placeholder), layers_panel->spin_opacity, FALSE, TRUE, 0);
+        } else {
+            layers_panel->spin_opacity = NULL;
+        }
+    }
     layers_panel->btn_opacity_reset = GTK_WIDGET(gtk_builder_get_object(builder, "btn_opacity_reset"));
 
     /* Get blend mode combo box from builder */
@@ -880,9 +890,6 @@ LayersPanel* create_layers_panel(AppContext* ctx) {
     }
 
     if (layers_panel->spin_opacity) {
-        GtkAdjustment* adj = gtk_adjustment_new(100.0, 0.0, 100.0, 1.0, 10.0, 0.0);
-        gtk_spin_button_set_adjustment(GTK_SPIN_BUTTON(layers_panel->spin_opacity), adj);
-        gtk_spin_button_set_digits(GTK_SPIN_BUTTON(layers_panel->spin_opacity), 0);
         g_signal_connect(layers_panel->spin_opacity, "value-changed",
                          G_CALLBACK(on_opacity_spin_changed), layers_panel);
     }
@@ -1308,7 +1315,7 @@ void layers_panel_update_opacity_controls(LayersPanel* layers_panel) {
             g_signal_handlers_block_by_func(layers_panel->spin_opacity,
                                             G_CALLBACK(on_opacity_spin_changed),
                                             layers_panel);
-            gtk_spin_button_set_value(GTK_SPIN_BUTTON(layers_panel->spin_opacity), opacity_percent);
+            vertical_spin_button_set_value(VERTICAL_SPIN_BUTTON(layers_panel->spin_opacity), opacity_percent);
             gtk_widget_set_sensitive(layers_panel->spin_opacity, TRUE);
             g_signal_handlers_unblock_by_func(layers_panel->spin_opacity,
                                               G_CALLBACK(on_opacity_spin_changed),

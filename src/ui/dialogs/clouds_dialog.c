@@ -8,6 +8,7 @@
 #include "ui/filters/filter_utils.h"
 #include "ui/ui_utils.h"
 #include "ui/widgets/filter_preview.h"
+#include "ui/widgets/vertical_spin_button.h"
 #include <cairo.h>
 #include <glib.h>
 #include <stdlib.h>
@@ -164,14 +165,14 @@ static void on_scale_changed(GtkRange* range, gpointer user_data) {
     }
 
     value = gtk_range_get_value(range);
-    gtk_spin_button_set_value(GTK_SPIN_BUTTON(dialog->scale_spin), value);
+    vertical_spin_button_set_value(VERTICAL_SPIN_BUTTON(dialog->scale_spin), value);
     update_preview(dialog);
 }
 
 /**
  * Scale spin value changed callback
  */
-static void on_scale_spin_changed(GtkSpinButton* spin, gpointer user_data) {
+static void on_scale_spin_changed(GtkWidget* spin, gpointer user_data) {
     CloudsDialog* dialog = (CloudsDialog*)user_data;
     gdouble value;
 
@@ -179,7 +180,7 @@ static void on_scale_spin_changed(GtkSpinButton* spin, gpointer user_data) {
         return;
     }
 
-    value = gtk_spin_button_get_value(spin);
+    value = vertical_spin_button_get_value(VERTICAL_SPIN_BUTTON(spin));
     gtk_range_set_value(GTK_RANGE(dialog->scale_scale), value);
 }
 
@@ -195,14 +196,14 @@ static void on_quality_changed(GtkRange* range, gpointer user_data) {
     }
 
     value = gtk_range_get_value(range);
-    gtk_spin_button_set_value(GTK_SPIN_BUTTON(dialog->quality_spin), value);
+    vertical_spin_button_set_value(VERTICAL_SPIN_BUTTON(dialog->quality_spin), value);
     update_preview(dialog);
 }
 
 /**
  * Quality spin value changed callback
  */
-static void on_quality_spin_changed(GtkSpinButton* spin, gpointer user_data) {
+static void on_quality_spin_changed(GtkWidget* spin, gpointer user_data) {
     CloudsDialog* dialog = (CloudsDialog*)user_data;
     gdouble value;
 
@@ -210,7 +211,7 @@ static void on_quality_spin_changed(GtkSpinButton* spin, gpointer user_data) {
         return;
     }
 
-    value = gtk_spin_button_get_value(spin);
+    value = vertical_spin_button_get_value(VERTICAL_SPIN_BUTTON(spin));
     gtk_range_set_value(GTK_RANGE(dialog->quality_scale), value);
 }
 
@@ -242,14 +243,14 @@ static void on_opacity_changed(GtkRange* range, gpointer user_data) {
     }
 
     value = gtk_range_get_value(range);
-    gtk_spin_button_set_value(GTK_SPIN_BUTTON(dialog->opacity_spin), value);
+    vertical_spin_button_set_value(VERTICAL_SPIN_BUTTON(dialog->opacity_spin), value);
     update_preview(dialog);
 }
 
 /**
  * Opacity spin value changed callback
  */
-static void on_opacity_spin_changed(GtkSpinButton* spin, gpointer user_data) {
+static void on_opacity_spin_changed(GtkWidget* spin, gpointer user_data) {
     CloudsDialog* dialog = (CloudsDialog*)user_data;
     gdouble value;
 
@@ -257,7 +258,7 @@ static void on_opacity_spin_changed(GtkSpinButton* spin, gpointer user_data) {
         return;
     }
 
-    value = gtk_spin_button_get_value(spin);
+    value = vertical_spin_button_get_value(VERTICAL_SPIN_BUTTON(spin));
     gtk_range_set_value(GTK_RANGE(dialog->opacity_scale), value);
 }
 
@@ -273,14 +274,14 @@ static void on_seed_changed(GtkRange* range, gpointer user_data) {
     }
 
     value = gtk_range_get_value(range);
-    gtk_spin_button_set_value(GTK_SPIN_BUTTON(dialog->seed_spin), value);
+    vertical_spin_button_set_value(VERTICAL_SPIN_BUTTON(dialog->seed_spin), value);
     update_preview(dialog);
 }
 
 /**
  * Seed spin value changed callback
  */
-static void on_seed_spin_changed(GtkSpinButton* spin, gpointer user_data) {
+static void on_seed_spin_changed(GtkWidget* spin, gpointer user_data) {
     CloudsDialog* dialog = (CloudsDialog*)user_data;
     gdouble value;
 
@@ -288,7 +289,7 @@ static void on_seed_spin_changed(GtkSpinButton* spin, gpointer user_data) {
         return;
     }
 
-    value = gtk_spin_button_get_value(spin);
+    value = vertical_spin_button_get_value(VERTICAL_SPIN_BUTTON(spin));
     gtk_range_set_value(GTK_RANGE(dialog->seed_scale), value);
 }
 
@@ -406,7 +407,9 @@ CloudsDialog* clouds_dialog_new(const gchar* title) {
     gtk_widget_set_size_request(right_vbox, 320, -1);
     gtk_widget_set_margin_start(right_vbox, 0);
     gtk_widget_set_margin_end(right_vbox, 0);
-    gtk_box_pack_start(GTK_BOX(main_hbox), right_vbox, FALSE, FALSE, 0);
+    gtk_widget_set_hexpand(right_vbox, TRUE);
+    gtk_widget_set_halign(right_vbox, GTK_ALIGN_FILL);
+    gtk_box_pack_start(GTK_BOX(main_hbox), right_vbox, TRUE, TRUE, 0);
 
     /* Create scale control */
     control_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
@@ -419,19 +422,24 @@ CloudsDialog* clouds_dialog_new(const gchar* title) {
     gtk_box_pack_start(GTK_BOX(control_vbox), label, FALSE, FALSE, 0);
 
     scale_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+    gtk_widget_set_hexpand(scale_hbox, TRUE);
+    gtk_widget_set_halign(scale_hbox, GTK_ALIGN_FILL);
     gtk_box_pack_start(GTK_BOX(control_vbox), scale_hbox, TRUE, TRUE, 0);
 
     adjustment = gtk_adjustment_new(dialog->params.scale, 1.0, 100.0, 0.1, 1.0, 0.0);
     scale = gtk_scale_new(GTK_ORIENTATION_HORIZONTAL, adjustment);
     gtk_scale_set_draw_value(GTK_SCALE(scale), FALSE);
     gtk_widget_set_hexpand(scale, TRUE);
+    gtk_widget_set_halign(scale, GTK_ALIGN_FILL);
     gtk_box_pack_start(GTK_BOX(scale_hbox), scale, TRUE, TRUE, 0);
     dialog->scale_scale = scale;
     g_signal_connect(scale, "value-changed", G_CALLBACK(on_scale_changed), dialog);
 
-    spin = gtk_spin_button_new(adjustment, 0.1, 1);
+    spin = vertical_spin_button_new(adjustment, 0.1, 1);
     gtk_widget_set_size_request(spin, 60, -1);
-    gtk_box_pack_start(GTK_BOX(scale_hbox), spin, FALSE, FALSE, 0);
+    gtk_widget_set_hexpand(spin, FALSE);
+    gtk_widget_set_halign(spin, GTK_ALIGN_END);
+    gtk_box_pack_end(GTK_BOX(scale_hbox), spin, FALSE, FALSE, 0);
     dialog->scale_spin = spin;
     g_signal_connect(spin, "value-changed", G_CALLBACK(on_scale_spin_changed), dialog);
 
@@ -446,19 +454,24 @@ CloudsDialog* clouds_dialog_new(const gchar* title) {
     gtk_box_pack_start(GTK_BOX(control_vbox), label, FALSE, FALSE, 0);
 
     scale_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+    gtk_widget_set_hexpand(scale_hbox, TRUE);
+    gtk_widget_set_halign(scale_hbox, GTK_ALIGN_FILL);
     gtk_box_pack_start(GTK_BOX(control_vbox), scale_hbox, TRUE, TRUE, 0);
 
     adjustment = gtk_adjustment_new((gdouble)dialog->params.quality, 1.0, 8.0, 1.0, 1.0, 0.0);
     scale = gtk_scale_new(GTK_ORIENTATION_HORIZONTAL, adjustment);
     gtk_scale_set_draw_value(GTK_SCALE(scale), FALSE);
     gtk_widget_set_hexpand(scale, TRUE);
+    gtk_widget_set_halign(scale, GTK_ALIGN_FILL);
     gtk_box_pack_start(GTK_BOX(scale_hbox), scale, TRUE, TRUE, 0);
     dialog->quality_scale = scale;
     g_signal_connect(scale, "value-changed", G_CALLBACK(on_quality_changed), dialog);
 
-    spin = gtk_spin_button_new(adjustment, 1.0, 0);
+    spin = vertical_spin_button_new(adjustment, 1.0, 0);
     gtk_widget_set_size_request(spin, 60, -1);
-    gtk_box_pack_start(GTK_BOX(scale_hbox), spin, FALSE, FALSE, 0);
+    gtk_widget_set_hexpand(spin, FALSE);
+    gtk_widget_set_halign(spin, GTK_ALIGN_END);
+    gtk_box_pack_end(GTK_BOX(scale_hbox), spin, FALSE, FALSE, 0);
     dialog->quality_spin = spin;
     g_signal_connect(spin, "value-changed", G_CALLBACK(on_quality_spin_changed), dialog);
 
@@ -519,19 +532,24 @@ CloudsDialog* clouds_dialog_new(const gchar* title) {
     gtk_box_pack_start(GTK_BOX(control_vbox), label, FALSE, FALSE, 0);
 
     scale_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+    gtk_widget_set_hexpand(scale_hbox, TRUE);
+    gtk_widget_set_halign(scale_hbox, GTK_ALIGN_FILL);
     gtk_box_pack_start(GTK_BOX(control_vbox), scale_hbox, TRUE, TRUE, 0);
 
     adjustment = gtk_adjustment_new(dialog->params.opacity, 0.0, 100.0, 1.0, 10.0, 0.0);
     scale = gtk_scale_new(GTK_ORIENTATION_HORIZONTAL, adjustment);
     gtk_scale_set_draw_value(GTK_SCALE(scale), FALSE);
     gtk_widget_set_hexpand(scale, TRUE);
+    gtk_widget_set_halign(scale, GTK_ALIGN_FILL);
     gtk_box_pack_start(GTK_BOX(scale_hbox), scale, TRUE, TRUE, 0);
     dialog->opacity_scale = scale;
     g_signal_connect(scale, "value-changed", G_CALLBACK(on_opacity_changed), dialog);
 
-    spin = gtk_spin_button_new(adjustment, 1.0, 0);
+    spin = vertical_spin_button_new(adjustment, 1.0, 0);
     gtk_widget_set_size_request(spin, 60, -1);
-    gtk_box_pack_start(GTK_BOX(scale_hbox), spin, FALSE, FALSE, 0);
+    gtk_widget_set_hexpand(spin, FALSE);
+    gtk_widget_set_halign(spin, GTK_ALIGN_END);
+    gtk_box_pack_end(GTK_BOX(scale_hbox), spin, FALSE, FALSE, 0);
     dialog->opacity_spin = spin;
     g_signal_connect(spin, "value-changed", G_CALLBACK(on_opacity_spin_changed), dialog);
 
@@ -546,19 +564,24 @@ CloudsDialog* clouds_dialog_new(const gchar* title) {
     gtk_box_pack_start(GTK_BOX(control_vbox), label, FALSE, FALSE, 0);
 
     scale_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+    gtk_widget_set_hexpand(scale_hbox, TRUE);
+    gtk_widget_set_halign(scale_hbox, GTK_ALIGN_FILL);
     gtk_box_pack_start(GTK_BOX(control_vbox), scale_hbox, TRUE, TRUE, 0);
 
     adjustment = gtk_adjustment_new((gdouble)dialog->params.seed, 0.0, 10000.0, 1.0, 100.0, 0.0);
     scale = gtk_scale_new(GTK_ORIENTATION_HORIZONTAL, adjustment);
     gtk_scale_set_draw_value(GTK_SCALE(scale), FALSE);
     gtk_widget_set_hexpand(scale, TRUE);
+    gtk_widget_set_halign(scale, GTK_ALIGN_FILL);
     gtk_box_pack_start(GTK_BOX(scale_hbox), scale, TRUE, TRUE, 0);
     dialog->seed_scale = scale;
     g_signal_connect(scale, "value-changed", G_CALLBACK(on_seed_changed), dialog);
 
-    spin = gtk_spin_button_new(adjustment, 1.0, 0);
+    spin = vertical_spin_button_new(adjustment, 1.0, 0);
     gtk_widget_set_size_request(spin, 60, -1);
-    gtk_box_pack_start(GTK_BOX(scale_hbox), spin, FALSE, FALSE, 0);
+    gtk_widget_set_hexpand(spin, FALSE);
+    gtk_widget_set_halign(spin, GTK_ALIGN_END);
+    gtk_box_pack_end(GTK_BOX(scale_hbox), spin, FALSE, FALSE, 0);
     dialog->seed_spin = spin;
     g_signal_connect(spin, "value-changed", G_CALLBACK(on_seed_spin_changed), dialog);
 

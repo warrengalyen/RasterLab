@@ -1,6 +1,74 @@
 #include "ui/ui_utils.h"
 #include "ui/dialogs/color_chooser_dialog.h"
+#include "ui/widgets/vertical_spin_button.h"
 #include <stdarg.h>
+
+GtkWidget* ui_utils_replace_spin_with_vertical(GtkWidget* old_spin) {
+    GtkWidget* parent;
+    GtkWidget* new_spin;
+    GtkAdjustment* adj;
+    guint digits;
+    gboolean expand;
+    gboolean fill;
+    guint padding;
+    GtkPackType pack_type;
+    gint pos = 0;
+    GList* children;
+
+    if (!old_spin || !GTK_IS_SPIN_BUTTON(old_spin)) {
+        return old_spin;
+    }
+
+    parent = gtk_widget_get_parent(old_spin);
+    if (!parent || !GTK_IS_BOX(parent)) {
+        return old_spin;
+    }
+
+    adj = gtk_spin_button_get_adjustment(GTK_SPIN_BUTTON(old_spin));
+    digits = gtk_spin_button_get_digits(GTK_SPIN_BUTTON(old_spin));
+    gtk_box_query_child_packing(GTK_BOX(parent), old_spin, &expand, &fill, &padding, &pack_type);
+
+    children = gtk_container_get_children(GTK_CONTAINER(parent));
+    pos = g_list_index(children, old_spin);
+    g_list_free(children);
+
+    new_spin = vertical_spin_button_new(adj, 1.0, digits);
+    gtk_widget_set_margin_start(new_spin, gtk_widget_get_margin_start(old_spin));
+    gtk_widget_set_margin_end(new_spin, gtk_widget_get_margin_end(old_spin));
+    gtk_widget_set_margin_top(new_spin, gtk_widget_get_margin_top(old_spin));
+    gtk_widget_set_margin_bottom(new_spin, gtk_widget_get_margin_bottom(old_spin));
+    /* Keep replacement spins compact instead of stretching full row width. */
+    gtk_widget_set_hexpand(new_spin, FALSE);
+    gtk_widget_set_halign(new_spin, GTK_ALIGN_END);
+
+    gtk_container_remove(GTK_CONTAINER(parent), old_spin);
+    if (pack_type == GTK_PACK_END) {
+        gtk_box_pack_end(GTK_BOX(parent), new_spin, expand, fill, padding);
+    } else {
+        gtk_box_pack_start(GTK_BOX(parent), new_spin, expand, fill, padding);
+    }
+    if (pos >= 0) {
+        gtk_box_reorder_child(GTK_BOX(parent), new_spin, pos);
+    }
+    gtk_widget_show(new_spin);
+
+    return new_spin;
+}
+
+GtkWidget* ui_utils_replace_builder_spin_with_vertical(GtkBuilder* builder, const gchar* spin_id) {
+    GtkWidget* old_spin;
+
+    if (!builder || !spin_id) {
+        return NULL;
+    }
+
+    old_spin = GTK_WIDGET(gtk_builder_get_object(builder, spin_id));
+    if (!old_spin || !GTK_IS_SPIN_BUTTON(old_spin)) {
+        return NULL;
+    }
+
+    return ui_utils_replace_spin_with_vertical(old_spin);
+}
 
 void update_color_button_appearance(GtkWidget* button, GdkRGBA* color) {
     if (!button || !color)
