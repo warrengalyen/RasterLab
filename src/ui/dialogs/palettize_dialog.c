@@ -697,8 +697,10 @@ PalettizeDialog* palettize_dialog_new(const gchar* title) {
     /* Create right side vertical box */
     right_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
     gtk_widget_set_size_request(right_vbox, 320, -1);
-    gtk_widget_set_margin_start(right_vbox, 0);
-    gtk_widget_set_margin_end(right_vbox, 0);
+    gtk_widget_set_margin_top(right_vbox, 10);
+    gtk_widget_set_margin_bottom(right_vbox, 10);
+    gtk_widget_set_margin_start(right_vbox, 10);
+    gtk_widget_set_margin_end(right_vbox, 10);
     gtk_widget_set_hexpand(right_vbox, TRUE);
     gtk_widget_set_halign(right_vbox, GTK_ALIGN_FILL);
     gtk_box_pack_start(GTK_BOX(main_hbox), right_vbox, TRUE, TRUE, 0);

@@ -282,8 +282,10 @@ FilterDialog* filter_dialog_new(const gchar* title,
     /* Create controls box (right side) */
     controls_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
     gtk_widget_set_size_request(controls_vbox, 320, -1);
-    gtk_widget_set_margin_start(controls_vbox, 0);
-    gtk_widget_set_margin_end(controls_vbox, 0);
+    gtk_widget_set_margin_top(controls_vbox, 10);
+    gtk_widget_set_margin_bottom(controls_vbox, 10);
+    gtk_widget_set_margin_start(controls_vbox, 10);
+    gtk_widget_set_margin_end(controls_vbox, 10);
     gtk_widget_set_hexpand(controls_vbox, TRUE);
     gtk_widget_set_halign(controls_vbox, GTK_ALIGN_FILL);
     gtk_box_pack_start(GTK_BOX(main_hbox), controls_vbox, TRUE, TRUE, 0);
