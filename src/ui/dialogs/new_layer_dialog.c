@@ -192,6 +192,7 @@ NewLayerDialog* new_layer_dialog_new(void) {
     dialog->custom_color.blue = 255.0 / 255.0;
     dialog->custom_color.alpha = 1.0;
     update_color_button_appearance(dialog->bg_custom_color, &dialog->custom_color);
+    ui_utils_widget_set_hand_cursor(dialog->bg_custom_color);
 
     /* Connect background radio button signals */
     g_signal_connect(dialog->bg_transparent_rb, "toggled", G_CALLBACK(on_bg_changed), dialog);

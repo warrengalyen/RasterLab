@@ -3525,6 +3525,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
                 if (tool_opts_panel->text_color_button) {
                     GdkRGBA init_color = {0.0, 0.0, 0.0, 1.0};
                     update_color_button_appearance(tool_opts_panel->text_color_button, &init_color);
+                    ui_utils_widget_set_hand_cursor(tool_opts_panel->text_color_button);
                     g_signal_connect(tool_opts_panel->text_color_button, "clicked",
                                      G_CALLBACK(on_text_color_clicked), tool_opts_panel);
                 }

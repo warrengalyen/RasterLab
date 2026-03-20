@@ -676,6 +676,7 @@ void settings_dialog_show(AppContext* ctx) {
         settings_get_canvas_background(ctx->settings, &r, &g, &b);
         GdkRGBA rgba = {(float)r, (float)g, (float)b, 1.0f};
         update_color_button_appearance(canvas_bg_btn, &rgba);
+        ui_utils_widget_set_hand_cursor(canvas_bg_btn);
         g_signal_connect(canvas_bg_btn, "clicked", G_CALLBACK(on_canvas_bgcolor_clicked), ctx);
     }
 

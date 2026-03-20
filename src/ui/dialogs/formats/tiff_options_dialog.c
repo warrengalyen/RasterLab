@@ -1,10 +1,10 @@
 #include "ui/dialogs/formats/tiff_options_dialog.h"
 #include "document.h"
+#include "ui/dialogs/color_chooser_dialog.h"
 #include "ui/ui_utils.h"
 #include <glib.h>
 #include <gtk/gtk.h>
 #include <string.h>
-
 
 #ifdef HAVE_LIBTIFF
 
@@ -58,6 +58,87 @@ typedef struct {
     TIFFPageFormat page_format;
     uint32_t reserved[2];
 } TIFFSaveOptions;
+
+typedef struct {
+    GdkRGBA* color;
+    GtkWidget* button;
+} TIFFColorButtonData;
+
+static void on_tiff_transparent_color_update(double r, double g, double b, gpointer user_data) {
+    TIFFColorButtonData* data = (TIFFColorButtonData*)user_data;
+    if (!data || !data->color) {
+        return;
+    }
+    data->color->red = r;
+    data->color->green = g;
+    data->color->blue = b;
+    data->color->alpha = 1.0;
+    if (data->button) {
+        update_color_button_appearance(data->button, data->color);
+    }
+}
+
+static void on_tiff_compositing_color_update(double r, double g, double b, gpointer user_data) {
+    TIFFColorButtonData* data = (TIFFColorButtonData*)user_data;
+    if (!data || !data->color) {
+        return;
+    }
+    data->color->red = r;
+    data->color->green = g;
+    data->color->blue = b;
+    data->color->alpha = 1.0;
+    if (data->button) {
+        update_color_button_appearance(data->button, data->color);
+    }
+}
+
+static void on_tiff_transparent_color_clicked(GtkButton* button, gpointer user_data) {
+    TIFFColorButtonData* data = (TIFFColorButtonData*)user_data;
+    if (!data || !data->color || !button) {
+        return;
+    }
+    GtkWindow* parent = GTK_WINDOW(gtk_widget_get_toplevel(GTK_WIDGET(button)));
+    GtkWidget* color_dialog = color_chooser_dialog_new(
+        parent,
+        "Choose Transparent Color",
+        data->color,
+        on_tiff_transparent_color_update,
+        data,
+        FALSE);
+    gtk_dialog_run(GTK_DIALOG(color_dialog));
+    double r, g, b;
+    color_chooser_dialog_get_color(color_dialog, &r, &g, &b);
+    data->color->red = r;
+    data->color->green = g;
+    data->color->blue = b;
+    data->color->alpha = 1.0;
+    update_color_button_appearance(data->button, data->color);
+    gtk_widget_destroy(color_dialog);
+}
+
+static void on_tiff_compositing_color_clicked(GtkButton* button, gpointer user_data) {
+    TIFFColorButtonData* data = (TIFFColorButtonData*)user_data;
+    if (!data || !data->color || !button) {
+        return;
+    }
+    GtkWindow* parent = GTK_WINDOW(gtk_widget_get_toplevel(GTK_WIDGET(button)));
+    GtkWidget* color_dialog = color_chooser_dialog_new(
+        parent,
+        "Choose Compositing Color",
+        data->color,
+        on_tiff_compositing_color_update,
+        data,
+        FALSE);
+    gtk_dialog_run(GTK_DIALOG(color_dialog));
+    double r, g, b;
+    color_chooser_dialog_get_color(color_dialog, &r, &g, &b);
+    data->color->red = r;
+    data->color->green = g;
+    data->color->blue = b;
+    data->color->alpha = 1.0;
+    update_color_button_appearance(data->button, data->color);
+    gtk_widget_destroy(color_dialog);
+}
 
 /* Button clicked callback to emit dialog response */
 static void on_button_clicked(GtkButton* button, gpointer user_data) {
@@ -277,7 +358,10 @@ gboolean tiff_options_dialog_show(GtkWindow* parent, SaveOptions* opts, ImageDoc
     gboolean result = FALSE;
     GtkWidget* icc_checkbox = NULL;
     TIFFSaveOptions* tiff_opts = NULL;
-    GdkRGBA rgba;
+    GdkRGBA transparent_color_rgba;
+    GdkRGBA compositing_color_rgba;
+    TIFFColorButtonData transparent_color_data;
+    TIFFColorButtonData compositing_color_data;
     GtkToggleButton* color_compression_buttons[4];
     GtkToggleButton* monochrome_compression_buttons[5];
     GtkToggleButton* page_format_buttons[2];
@@ -457,20 +541,26 @@ gboolean tiff_options_dialog_show(GtkWindow* parent, SaveOptions* opts, ImageDoc
 
         /* Set transparent color */
         if (transparent_color) {
-            rgba.red = (gdouble)tiff_opts->transparency_color_r / 255.0;
-            rgba.green = (gdouble)tiff_opts->transparency_color_g / 255.0;
-            rgba.blue = (gdouble)tiff_opts->transparency_color_b / 255.0;
-            rgba.alpha = 1.0;
-            gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(transparent_color), &rgba);
+            transparent_color_rgba.red = (gdouble)tiff_opts->transparency_color_r / 255.0;
+            transparent_color_rgba.green = (gdouble)tiff_opts->transparency_color_g / 255.0;
+            transparent_color_rgba.blue = (gdouble)tiff_opts->transparency_color_b / 255.0;
+            transparent_color_rgba.alpha = 1.0;
+            transparent_color_data.color = &transparent_color_rgba;
+            transparent_color_data.button = transparent_color;
+            update_color_button_appearance(transparent_color, &transparent_color_rgba);
+            g_signal_connect(transparent_color, "clicked", G_CALLBACK(on_tiff_transparent_color_clicked), &transparent_color_data);
         }
 
         /* Set compositing color */
         if (compositing_color) {
-            rgba.red = (gdouble)tiff_opts->compositing_color_r / 255.0;
-            rgba.green = (gdouble)tiff_opts->compositing_color_g / 255.0;
-            rgba.blue = (gdouble)tiff_opts->compositing_color_b / 255.0;
-            rgba.alpha = 1.0;
-            gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(compositing_color), &rgba);
+            compositing_color_rgba.red = (gdouble)tiff_opts->compositing_color_r / 255.0;
+            compositing_color_rgba.green = (gdouble)tiff_opts->compositing_color_g / 255.0;
+            compositing_color_rgba.blue = (gdouble)tiff_opts->compositing_color_b / 255.0;
+            compositing_color_rgba.alpha = 1.0;
+            compositing_color_data.color = &compositing_color_rgba;
+            compositing_color_data.button = compositing_color;
+            update_color_button_appearance(compositing_color, &compositing_color_rgba);
+            g_signal_connect(compositing_color, "clicked", G_CALLBACK(on_tiff_compositing_color_clicked), &compositing_color_data);
         }
 
         /* Set page format */
@@ -499,6 +589,35 @@ gboolean tiff_options_dialog_show(GtkWindow* parent, SaveOptions* opts, ImageDoc
         if (page_format_single_page_button && page_format_multipage_button) {
             set_toggle_button_group(page_format_buttons, 2, 0); /* single page (default) */
         }
+
+        if (transparent_color) {
+            transparent_color_rgba.red = 0.0;
+            transparent_color_rgba.green = 0.0;
+            transparent_color_rgba.blue = 0.0;
+            transparent_color_rgba.alpha = 1.0;
+            transparent_color_data.color = &transparent_color_rgba;
+            transparent_color_data.button = transparent_color;
+            update_color_button_appearance(transparent_color, &transparent_color_rgba);
+            g_signal_connect(transparent_color, "clicked", G_CALLBACK(on_tiff_transparent_color_clicked), &transparent_color_data);
+        }
+
+        if (compositing_color) {
+            compositing_color_rgba.red = 0.0;
+            compositing_color_rgba.green = 0.0;
+            compositing_color_rgba.blue = 0.0;
+            compositing_color_rgba.alpha = 1.0;
+            compositing_color_data.color = &compositing_color_rgba;
+            compositing_color_data.button = compositing_color;
+            update_color_button_appearance(compositing_color, &compositing_color_rgba);
+            g_signal_connect(compositing_color, "clicked", G_CALLBACK(on_tiff_compositing_color_clicked), &compositing_color_data);
+        }
+    }
+
+    if (transparent_color) {
+        ui_utils_widget_set_hand_cursor(transparent_color);
+    }
+    if (compositing_color) {
+        ui_utils_widget_set_hand_cursor(compositing_color);
     }
 
     /* Unblock signals after all values are set */
@@ -596,18 +715,16 @@ gboolean tiff_options_dialog_show(GtkWindow* parent, SaveOptions* opts, ImageDoc
 
             /* Get transparent color */
             if (transparent_color) {
-                gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(transparent_color), &rgba);
-                tiff_opts->transparency_color_r = (uint8_t)(rgba.red * 255.0 + 0.5);
-                tiff_opts->transparency_color_g = (uint8_t)(rgba.green * 255.0 + 0.5);
-                tiff_opts->transparency_color_b = (uint8_t)(rgba.blue * 255.0 + 0.5);
+                tiff_opts->transparency_color_r = (uint8_t)(transparent_color_rgba.red * 255.0 + 0.5);
+                tiff_opts->transparency_color_g = (uint8_t)(transparent_color_rgba.green * 255.0 + 0.5);
+                tiff_opts->transparency_color_b = (uint8_t)(transparent_color_rgba.blue * 255.0 + 0.5);
             }
 
             /* Get compositing color */
             if (compositing_color) {
-                gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(compositing_color), &rgba);
-                tiff_opts->compositing_color_r = (uint8_t)(rgba.red * 255.0 + 0.5);
-                tiff_opts->compositing_color_g = (uint8_t)(rgba.green * 255.0 + 0.5);
-                tiff_opts->compositing_color_b = (uint8_t)(rgba.blue * 255.0 + 0.5);
+                tiff_opts->compositing_color_r = (uint8_t)(compositing_color_rgba.red * 255.0 + 0.5);
+                tiff_opts->compositing_color_g = (uint8_t)(compositing_color_rgba.green * 255.0 + 0.5);
+                tiff_opts->compositing_color_b = (uint8_t)(compositing_color_rgba.blue * 255.0 + 0.5);
             }
 
             /* Get page format */

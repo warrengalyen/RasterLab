@@ -1,6 +1,7 @@
 #include "ui/ui_utils.h"
 #include "ui/dialogs/color_chooser_dialog.h"
 #include "ui/widgets/vertical_spin_button.h"
+#include <gdk/gdk.h>
 #include <stdarg.h>
 
 GtkWidget* ui_utils_replace_spin_with_vertical(GtkWidget* old_spin) {
@@ -70,36 +71,52 @@ GtkWidget* ui_utils_replace_builder_spin_with_vertical(GtkBuilder* builder, cons
     return ui_utils_replace_spin_with_vertical(old_spin);
 }
 
+static gboolean on_ui_utils_widget_hand_enter(GtkWidget* widget, GdkEventCrossing* event, gpointer user_data) {
+    (void)event;
+    (void)user_data;
+    GdkDisplay* display = gtk_widget_get_display(widget);
+    GdkCursor* cursor = gdk_cursor_new_for_display(display, GDK_HAND2);
+    GdkWindow* window = gtk_widget_get_window(widget);
+    if (window) {
+        gdk_window_set_cursor(window, cursor);
+    }
+    g_object_unref(cursor);
+    return FALSE;
+}
+
+static gboolean on_ui_utils_widget_hand_leave(GtkWidget* widget, GdkEventCrossing* event, gpointer user_data) {
+    (void)event;
+    (void)user_data;
+    GdkWindow* window = gtk_widget_get_window(widget);
+    if (window) {
+        gdk_window_set_cursor(window, NULL);
+    }
+    return FALSE;
+}
+
+void ui_utils_widget_set_hand_cursor(GtkWidget* widget) {
+    if (!widget) {
+        return;
+    }
+    gtk_widget_add_events(widget, GDK_ENTER_NOTIFY_MASK | GDK_LEAVE_NOTIFY_MASK);
+    g_signal_connect(widget, "enter-notify-event", G_CALLBACK(on_ui_utils_widget_hand_enter), NULL);
+    g_signal_connect(widget, "leave-notify-event", G_CALLBACK(on_ui_utils_widget_hand_leave), NULL);
+}
+
 void update_color_button_appearance(GtkWidget* button, GdkRGBA* color) {
     if (!button || !color)
         return;
 
-    // Create CSS to set button background color
-    // Need to override all button states and remove default styling
-    char css_str[512];
+    GtkStyleContext* context = gtk_widget_get_style_context(button);
+    if (!gtk_style_context_has_class(context, "color_button")) {
+        gtk_style_context_add_class(context, "color_button");
+    }
+
+    char css_str[384];
     g_snprintf(css_str, sizeof(css_str),
-               "button { "
-               "background-color: rgb(%d, %d, %d); "
-               "background-image: none; "
-               "border: 1px solid #000; "
-               "border-radius: 0; "
-               "box-shadow: none; "
-               "padding: 0; "
-               "margin: 0; "
-               "min-width: 20px; "
-               "min-height: 20px; "
-               "outline: none; "
-               "} "
-               "button:hover { "
-               "background-color: rgb(%d, %d, %d); "
-               "background-image: none; "
-               "box-shadow: none; "
-               "} "
-               "button:active, button:checked { "
-               "background-color: rgb(%d, %d, %d); "
-               "background-image: none; "
-               "box-shadow: none; "
-               "}",
+               "button.color_button { background-color: rgb(%d, %d, %d); } "
+               "button.color_button:hover { background-color: rgb(%d, %d, %d); } "
+               "button.color_button:active, button.color_button:checked { background-color: rgb(%d, %d, %d); }",
                (int)(color->red * 255),
                (int)(color->green * 255),
                (int)(color->blue * 255),
@@ -112,7 +129,6 @@ void update_color_button_appearance(GtkWidget* button, GdkRGBA* color) {
 
     GtkCssProvider* css = gtk_css_provider_new();
     gtk_css_provider_load_from_data(css, css_str, -1, NULL);
-    GtkStyleContext* context = gtk_widget_get_style_context(button);
     gtk_style_context_add_provider(context, GTK_STYLE_PROVIDER(css),
                                    GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
     g_object_unref(css);
@@ -198,6 +214,7 @@ GtkWidget* create_custom_color_button(GtkWindow* parent_window,
 
     // Set initial appearance
     update_color_button_appearance(button, &data->color);
+    ui_utils_widget_set_hand_cursor(button);
 
     // Connect clicked signal
     g_signal_connect(button, "clicked", G_CALLBACK(on_color_button_clicked), data);

@@ -206,6 +206,9 @@
                 <property name="focus-on-click">False</property>
                 <property name="receives-default">False</property>
                 <property name="tooltip-text">Text color</property>
+                <style>
+                  <class name="color_button"/>
+                </style>
               </object>
               <packing>
                 <property name="expand">False</property>

@@ -624,6 +624,16 @@ gboolean png_options_dialog_show(GtkWindow* parent, SaveOptions* opts, ImageDocu
         }
     }
 
+    if (embed_bgcolor_color) {
+        ui_utils_widget_set_hand_cursor(embed_bgcolor_color);
+    }
+    if (transparent_color) {
+        ui_utils_widget_set_hand_cursor(transparent_color);
+    }
+    if (compositing_color) {
+        ui_utils_widget_set_hand_cursor(compositing_color);
+    }
+
     /* Unblock signals and update visibility after all values are set */
     if (color_format_combo) {
         g_signal_handlers_unblock_by_func(color_format_combo, G_CALLBACK(on_color_format_changed), visibility_widgets);

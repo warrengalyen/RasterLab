@@ -143,8 +143,6 @@
                 <property name="hexpand">True</property>
                 <property name="vexpand">True</property>
                 <property name="show-border">False</property>
-
-                <!-- Page 0: Basic -->
                 <child>
                   <object class="GtkBox" id="basic_content">
                     <property name="can-focus">False</property>
@@ -425,9 +423,10 @@
                     <property name="can-focus">False</property>
                     <property name="label" translatable="yes">basic</property>
                   </object>
+                  <packing>
+                    <property name="tab-fill">False</property>
+                  </packing>
                 </child>
-
-                <!-- Page 1: Advanced -->
                 <child>
                   <object class="GtkBox" id="advanced_content">
                     <property name="can-focus">False</property>
@@ -480,7 +479,6 @@
                           <object class="GtkBox" id="color_format_depth_box">
                             <property name="can-focus">False</property>
                             <property name="orientation">vertical</property>
-                            <property name="visible">False</property>
                             <child>
                               <object class="GtkLabel" id="color_format_depth_label">
                                 <property name="visible">True</property>
@@ -526,7 +524,6 @@
                             <property name="can-focus">False</property>
                             <property name="margin-top">10</property>
                             <property name="orientation">vertical</property>
-                            <property name="visible">False</property>
                             <child>
                               <object class="GtkLabel" id="color_format_palette_size_label">
                                 <property name="visible">True</property>
@@ -756,6 +753,9 @@
                                 <property name="receives-default">True</property>
                                 <property name="title" translatable="yes">Change color</property>
                                 <property name="rgba">rgb(255,255,255)</property>
+                                <style>
+                                  <class name="color_button"/>
+                                </style>
                               </object>
                               <packing>
                                 <property name="expand">False</property>
@@ -789,8 +789,11 @@
                     <property name="can-focus">False</property>
                     <property name="label" translatable="yes">advanced</property>
                   </object>
+                  <packing>
+                    <property name="position">1</property>
+                    <property name="tab-fill">False</property>
+                  </packing>
                 </child>
-
               </object>
               <packing>
                 <property name="expand">True</property>

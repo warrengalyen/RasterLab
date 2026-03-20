@@ -481,6 +481,7 @@ GtkWidget* tools_panel_initialize_from_builder(GtkBuilder* builder, ToolRegistry
 
         /* Set initial color appearance */
         update_color_button_appearance(fg_color, &g_fg_color);
+        ui_utils_widget_set_hand_cursor(fg_color);
 
         /* Connect to clicked signal to show our custom dialog */
         g_signal_connect(fg_color, "clicked", G_CALLBACK(on_fg_color_clicked), NULL);
@@ -493,6 +494,7 @@ GtkWidget* tools_panel_initialize_from_builder(GtkBuilder* builder, ToolRegistry
 
         /* Set initial color appearance */
         update_color_button_appearance(bg_color, &g_bg_color);
+        ui_utils_widget_set_hand_cursor(bg_color);
 
         /* Connect to clicked signal to show our custom dialog */
         g_signal_connect(bg_color, "clicked", G_CALLBACK(on_bg_color_clicked), NULL);

@@ -125,6 +125,7 @@ gboolean fill_dialog_run(GtkWindow* parent, FillDialogResult* result) {
     data.custom_color.red = data.custom_color.green = data.custom_color.blue = 1.0;
     data.custom_color.alpha = 1.0;
     update_color_button_appearance(data.custom_color_button, &data.custom_color);
+    ui_utils_widget_set_hand_cursor(data.custom_color_button);
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(data.custom_color_radio), TRUE);
     gtk_spin_button_set_value(GTK_SPIN_BUTTON(data.opacity_spin), 100.0);
 

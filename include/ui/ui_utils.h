@@ -66,6 +66,12 @@ GtkWidget* ui_utils_replace_spin_with_vertical(GtkWidget* old_spin);
 GtkWidget* ui_utils_replace_builder_spin_with_vertical(GtkBuilder* builder, const gchar* spin_id);
 
 /**
+ * Show the hand pointer cursor on hover (e.g. GtkColorButton / color swatches).
+ * @param widget Widget to attach enter/leave handlers to; no-op if NULL
+ */
+void ui_utils_widget_set_hand_cursor(GtkWidget* widget);
+
+/**
  * Replace default titlebar with header bar for a dialog window
  * @param window The window to set header bar for
  * @param title The title to display in the header bar

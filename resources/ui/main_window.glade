@@ -2417,6 +2417,9 @@ Shortcut Key: T</property>
                             <property name="can-focus">True</property>
                             <property name="receives-default">True</property>
                             <property name="tooltip-text">Background Color</property>
+                            <style>
+                              <class name="color_button"/>
+                            </style>
                           </object>
                           <packing>
                             <property name="x">15</property>
@@ -2431,6 +2434,9 @@ Shortcut Key: T</property>
                             <property name="can-focus">True</property>
                             <property name="receives-default">True</property>
                             <property name="tooltip-text">Foreground Color</property>
+                            <style>
+                              <class name="color_button"/>
+                            </style>
                           </object>
                         </child>
                         <child>
