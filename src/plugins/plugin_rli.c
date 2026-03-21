@@ -9,6 +9,7 @@
 
 #include "plugins/plugin_rli.h"
 #include "plugins/rli_tile_codec.h"
+#include "color_manager/icc_utils.h"
 #include "document.h"
 #include "render/layer.h"
 #include "render/text_layer.h"
@@ -582,6 +583,287 @@ rli_save(ImageDocument* doc, const char* filename, const SaveOptions* opts) {
 wfail:
     err = PLUGIN_ERROR_FILE_WRITE_ERROR;
 fail:
+    fclose(f);
+    return err;
+}
+
+/* ======================================================================== */
+/* LAYR chunk read helper                                                   */
+/* ======================================================================== */
+
+/**
+ * Read a LAYR chunk payload into an existing ImageLayer.
+ * Sets layer_type, visibility, blend_mode, opacity, offset, dimensions, name.
+ * The layer's surface is NOT created here (done when LPIX is encountered).
+ *
+ * @return TRUE on success.
+ */
+static gboolean
+rli_layr_read(FILE* f, size_t payload_len,
+              uint16_t* out_type, uint16_t* out_flags,
+              uint32_t* out_blend, double* out_opacity,
+              int32_t* out_ox, int32_t* out_oy,
+              uint32_t* out_w, uint32_t* out_h,
+              gchar** out_name) {
+    (void)payload_len;
+
+    if (!rli_fread_u16le(f, out_type))   return FALSE;
+    if (!rli_fread_u16le(f, out_flags))  return FALSE;
+    if (!rli_fread_u32le(f, out_blend))  return FALSE;
+    if (!rli_fread_f64le(f, out_opacity)) return FALSE;
+    if (!rli_fread_i32le(f, out_ox))     return FALSE;
+    if (!rli_fread_i32le(f, out_oy))     return FALSE;
+    if (!rli_fread_u32le(f, out_w))      return FALSE;
+    if (!rli_fread_u32le(f, out_h))      return FALSE;
+
+    uint16_t name_len;
+    if (!rli_fread_u16le(f, &name_len))  return FALSE;
+
+    if (name_len > 0) {
+        *out_name = g_malloc(name_len + 1);
+        if (fread(*out_name, 1, name_len, f) != name_len) {
+            g_free(*out_name);
+            *out_name = NULL;
+            return FALSE;
+        }
+        (*out_name)[name_len] = '\0';
+    } else {
+        *out_name = g_strdup("Layer");
+    }
+    return TRUE;
+}
+
+/* ======================================================================== */
+/* Load                                                                     */
+/* ======================================================================== */
+
+static PluginError
+rli_load(ImageDocument* doc, const char* filename) {
+    if (!doc || !filename)
+        return PLUGIN_ERROR_INVALID_PARAMETERS;
+
+    FILE* f = g_fopen(filename, "rb");
+    if (!f)
+        return PLUGIN_ERROR_FILE_NOT_FOUND;
+
+    PluginError err = PLUGIN_ERROR_NONE;
+    RliChunkHeader hdr;
+
+    /* ---- Read and validate RLIB header ---- */
+    if (!rli_read_chunk_header(f, &hdr) || hdr.type != RLI_CHUNK_RLIB) {
+        err = PLUGIN_ERROR_CORRUPT_FILE;
+        goto done;
+    }
+
+    uint16_t version, flags, bit_depth, reserved;
+    uint32_t canvas_w, canvas_h, layer_count;
+
+    if (!rli_fread_u16le(f, &version))      { err = PLUGIN_ERROR_CORRUPT_FILE; goto done; }
+    if (!rli_fread_u16le(f, &flags))        { err = PLUGIN_ERROR_CORRUPT_FILE; goto done; }
+    if (!rli_fread_u32le(f, &canvas_w))     { err = PLUGIN_ERROR_CORRUPT_FILE; goto done; }
+    if (!rli_fread_u32le(f, &canvas_h))     { err = PLUGIN_ERROR_CORRUPT_FILE; goto done; }
+    if (!rli_fread_u32le(f, &layer_count))  { err = PLUGIN_ERROR_CORRUPT_FILE; goto done; }
+    if (!rli_fread_u16le(f, &bit_depth))    { err = PLUGIN_ERROR_CORRUPT_FILE; goto done; }
+    if (!rli_fread_u16le(f, &reserved))     { err = PLUGIN_ERROR_CORRUPT_FILE; goto done; }
+
+    if (version > RLI_FORMAT_VERSION) {
+        g_warning("RLI: unsupported format version %u (max supported: %u)",
+                  version, RLI_FORMAT_VERSION);
+        err = PLUGIN_ERROR_UNSUPPORTED_FORMAT;
+        goto done;
+    }
+    if (canvas_w == 0 || canvas_h == 0) {
+        err = PLUGIN_ERROR_CORRUPT_FILE;
+        goto done;
+    }
+
+    /* Set document metadata */
+    doc->width     = canvas_w;
+    doc->height    = canvas_h;
+    doc->channels  = 4;
+    doc->bit_depth = (bit_depth > 0) ? bit_depth : 8;
+    doc->has_alpha = TRUE;
+
+    /* Free any existing layers */
+    for (GList* iter = doc->layers; iter; iter = iter->next)
+        layer_free((ImageLayer*)iter->data);
+    g_list_free(doc->layers);
+    doc->layers = NULL;
+
+    /* ---- Chunk loop ---- */
+    ImageLayer* current_layer = NULL;
+
+    while (TRUE) {
+        if (!rli_read_chunk_header(f, &hdr)) {
+            err = PLUGIN_ERROR_CORRUPT_FILE;
+            goto done;
+        }
+
+        if (hdr.type == RLI_CHUNK_REND) {
+            break;
+        }
+
+        if (hdr.type == RLI_CHUNK_ICCP) {
+            /* ICC color profile */
+            if (hdr.payload_len > 0 && hdr.payload_len < (uint64_t)G_MAXSIZE) {
+                uint8_t* icc_blob = rli_read_chunk_payload(f, hdr.payload_len);
+                if (icc_blob) {
+                    /* Store raw ICC data for "preserve on re-save" */
+                    g_free(doc->original_icc_data);
+                    doc->original_icc_data = icc_blob;
+                    doc->original_icc_size = (size_t)hdr.payload_len;
+
+                    /* Create lcms profile for load-time conversion */
+                    if (rli_host && rli_host->document_set_load_icc_profile) {
+                        if (rli_host->get_use_embedded_icc &&
+                            !rli_host->get_use_embedded_icc()) {
+                            /* User disabled ICC -- don't convert */
+                        } else {
+                            cmsHPROFILE profile = icc_profile_from_memory(
+                                icc_blob, (size_t)hdr.payload_len);
+                            if (profile) {
+                                rli_host->document_set_load_icc_profile(doc, profile);
+                            }
+                        }
+                    }
+                } else {
+                    rli_skip_chunk_payload(f, hdr.payload_len);
+                }
+            } else {
+                rli_skip_chunk_payload(f, hdr.payload_len);
+            }
+
+        } else if (hdr.type == RLI_CHUNK_LAYR) {
+            /* Layer header */
+            uint16_t ltype, lflags;
+            uint32_t lblend, lw, lh;
+            double lopacity;
+            int32_t lox, loy;
+            gchar* lname = NULL;
+
+            if (!rli_layr_read(f, (size_t)hdr.payload_len,
+                               &ltype, &lflags, &lblend, &lopacity,
+                               &lox, &loy, &lw, &lh, &lname)) {
+                err = PLUGIN_ERROR_CORRUPT_FILE;
+                goto done;
+            }
+
+            /* Create layer (raster for now; text_data attached when LTXT arrives) */
+            ImageLayer* layer = layer_new(
+                lname ? lname : "Layer",
+                lw, lh, TRUE,
+                LAYER_BACKGROUND_TRANSPARENT,
+                LAYER_POSITION_ABOVE_CURRENT,
+                NULL, doc);
+            g_free(lname);
+
+            if (!layer) {
+                err = PLUGIN_ERROR_OUT_OF_MEMORY;
+                goto done;
+            }
+
+            layer->layer_type = (LayerType)ltype;
+            layer->visible    = (lflags & 0x0001) ? TRUE : FALSE;
+            layer->blend_mode = (BlendMode)lblend;
+            layer->opacity    = lopacity;
+            layer->offset_x   = lox;
+            layer->offset_y   = loy;
+
+            doc->layers = g_list_append(doc->layers, layer);
+            current_layer = layer;
+
+        } else if (hdr.type == RLI_CHUNK_LPIX) {
+            /* Raster pixel data -- decode into current layer's surface */
+            if (!current_layer || !current_layer->surface) {
+                rli_skip_chunk_payload(f, hdr.payload_len);
+                continue;
+            }
+
+            if (hdr.payload_len < 4) {
+                err = PLUGIN_ERROR_CORRUPT_FILE;
+                goto done;
+            }
+
+            /* Read the 4-byte LPIX header (pixfmt + reserved) */
+            uint8_t lpix_hdr[4];
+            if (fread(lpix_hdr, 1, 4, f) != 4) {
+                err = PLUGIN_ERROR_FILE_READ_ERROR;
+                goto done;
+            }
+
+            size_t tile_data_len = (size_t)(hdr.payload_len - 4);
+            if (tile_data_len == 0) {
+                continue;
+            }
+
+            uint8_t* tile_data = (uint8_t*)g_malloc(tile_data_len);
+            if (!tile_data) {
+                err = PLUGIN_ERROR_OUT_OF_MEMORY;
+                goto done;
+            }
+            if (fread(tile_data, 1, tile_data_len, f) != tile_data_len) {
+                g_free(tile_data);
+                err = PLUGIN_ERROR_FILE_READ_ERROR;
+                goto done;
+            }
+
+            cairo_surface_flush(current_layer->surface);
+            uint8_t* pixels = cairo_image_surface_get_data(current_layer->surface);
+            int stride = cairo_image_surface_get_stride(current_layer->surface);
+
+            if (pixels && stride > 0) {
+                if (!rli_decode_pixel_data(tile_data, tile_data_len,
+                                           pixels,
+                                           current_layer->width,
+                                           current_layer->height,
+                                           (uint32_t)stride)) {
+                    g_free(tile_data);
+                    g_warning("RLI: failed to decode pixel data for layer '%s'",
+                              current_layer->name ? current_layer->name : "?");
+                    err = PLUGIN_ERROR_CORRUPT_FILE;
+                    goto done;
+                }
+                cairo_surface_mark_dirty(current_layer->surface);
+            }
+            g_free(tile_data);
+
+        } else if (hdr.type == RLI_CHUNK_LTXT) {
+            /* Text layer data -- attach to current layer */
+            if (!current_layer) {
+                rli_skip_chunk_payload(f, hdr.payload_len);
+                continue;
+            }
+
+            TextLayer* tl = g_new0(TextLayer, 1);
+            if (!rli_text_layer_read(f, (size_t)hdr.payload_len, tl)) {
+                text_layer_free(tl);
+                err = PLUGIN_ERROR_CORRUPT_FILE;
+                goto done;
+            }
+
+            current_layer->layer_type = LAYER_TYPE_TEXT;
+            current_layer->text_data  = tl;
+
+            /* Re-render text onto the layer surface */
+            text_layer_render_to_surface(current_layer);
+
+        } else if (hdr.type == RLI_CHUNK_EXIF || hdr.type == RLI_CHUNK_XMP) {
+            /* Known metadata chunks -- skip for now (future expansion) */
+            rli_skip_chunk_payload(f, hdr.payload_len);
+
+        } else {
+            /* Unknown chunk -- skip for forward compatibility */
+            rli_skip_chunk_payload(f, hdr.payload_len);
+        }
+    }
+
+    /* Select first layer and render composite */
+    if (doc->layers) {
+        doc->selected_layer = (ImageLayer*)doc->layers->data;
+    }
+    document_render_composite(doc);
+
+done:
     fclose(f);
     return err;
 }
