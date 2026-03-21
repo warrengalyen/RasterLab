@@ -9,8 +9,11 @@
 
 #include "plugins/plugin_rli.h"
 #include "plugins/rli_tile_codec.h"
+#include "document.h"
+#include "render/layer.h"
 #include "render/text_layer.h"
 
+#include <cairo/cairo.h>
 #include <glib.h>
 #include <glib/gstdio.h>
 #include <stdbool.h>
@@ -422,4 +425,163 @@ rli_text_layer_read(FILE* f, size_t payload_len, TextLayer* tl) {
     }
 
     return TRUE;
+}
+
+/* ======================================================================== */
+/* LAYR chunk helpers                                                       */
+/* ======================================================================== */
+
+/**
+ * Compute the LAYR chunk payload size for a given layer.
+ */
+static size_t
+rli_layr_payload_size(const ImageLayer* layer) {
+    size_t name_len = layer->name ? strlen(layer->name) : 0;
+    /* u16 type + u16 flags + u32 blend + f64 opacity +
+     * i32 offset_x + i32 offset_y + u32 width + u32 height + u16 name_len */
+    return 2 + 2 + 4 + 8 + 4 + 4 + 4 + 4 + 2 + name_len;
+}
+
+/**
+ * Write the LAYR chunk payload for a layer to file.
+ */
+static gboolean
+rli_layr_write(FILE* f, const ImageLayer* layer) {
+    uint16_t layer_type = (uint16_t)layer->layer_type;
+    uint16_t flags = layer->visible ? 0x0001 : 0x0000;
+    size_t name_len = layer->name ? strlen(layer->name) : 0;
+
+    if (!rli_fwrite_u16le(f, layer_type))                  return FALSE;
+    if (!rli_fwrite_u16le(f, flags))                       return FALSE;
+    if (!rli_fwrite_u32le(f, (uint32_t)layer->blend_mode)) return FALSE;
+    if (!rli_fwrite_f64le(f, layer->opacity))              return FALSE;
+    if (!rli_fwrite_i32le(f, layer->offset_x))             return FALSE;
+    if (!rli_fwrite_i32le(f, layer->offset_y))             return FALSE;
+    if (!rli_fwrite_u32le(f, layer->width))                return FALSE;
+    if (!rli_fwrite_u32le(f, layer->height))               return FALSE;
+    if (!rli_fwrite_u16le(f, (uint16_t)name_len))          return FALSE;
+    if (name_len > 0) {
+        if (fwrite(layer->name, 1, name_len, f) != name_len)
+            return FALSE;
+    }
+    return TRUE;
+}
+
+/* ======================================================================== */
+/* Save                                                                     */
+/* ======================================================================== */
+
+static PluginError
+rli_save(ImageDocument* doc, const char* filename, const SaveOptions* opts) {
+    (void)opts;
+
+    if (!doc || !filename)
+        return PLUGIN_ERROR_INVALID_PARAMETERS;
+
+    FILE* f = g_fopen(filename, "wb");
+    if (!f)
+        return PLUGIN_ERROR_FILE_WRITE_ERROR;
+
+    PluginError err = PLUGIN_ERROR_NONE;
+    guint layer_count = g_list_length(doc->layers);
+
+    /* ---- RLIB header chunk (20-byte payload) ---- */
+    {
+        uint64_t payload = 20;
+        if (!rli_write_chunk_header(f, RLI_CHUNK_RLIB, payload))
+            { err = PLUGIN_ERROR_FILE_WRITE_ERROR; goto fail; }
+        if (!rli_fwrite_u16le(f, RLI_FORMAT_VERSION))   goto wfail;
+        if (!rli_fwrite_u16le(f, 0))                    goto wfail; /* flags */
+        if (!rli_fwrite_u32le(f, doc->width))            goto wfail;
+        if (!rli_fwrite_u32le(f, doc->height))           goto wfail;
+        if (!rli_fwrite_u32le(f, layer_count))           goto wfail;
+        if (!rli_fwrite_u16le(f, (uint16_t)doc->bit_depth)) goto wfail;
+        if (!rli_fwrite_u16le(f, 0))                    goto wfail; /* reserved */
+    }
+
+    /* ---- ICCP chunk (optional) ---- */
+    if (doc->original_icc_data && doc->original_icc_size > 0) {
+        if (!rli_write_chunk(f, RLI_CHUNK_ICCP,
+                             doc->original_icc_data,
+                             doc->original_icc_size))
+            goto wfail;
+    }
+
+    /* ---- Layers (bottom to top) ---- */
+    for (GList* iter = doc->layers; iter; iter = iter->next) {
+        ImageLayer* layer = (ImageLayer*)iter->data;
+        if (!layer)
+            continue;
+
+        /* LAYR chunk */
+        {
+            size_t plen = rli_layr_payload_size(layer);
+            if (!rli_write_chunk_header(f, RLI_CHUNK_LAYR, plen))
+                goto wfail;
+            if (!rli_layr_write(f, layer))
+                goto wfail;
+        }
+
+        /* For text layers, write LTXT then fall through to LPIX for the
+         * rasterized fallback (so non-text-aware readers can still show pixels). */
+        if (layer->layer_type == LAYER_TYPE_TEXT && layer->text_data) {
+            TextLayer* tl = (TextLayer*)layer->text_data;
+            size_t plen = rli_text_layer_payload_size(tl);
+            if (!rli_write_chunk_header(f, RLI_CHUNK_LTXT, plen))
+                goto wfail;
+            if (!rli_text_layer_write(f, tl))
+                goto wfail;
+
+            /* Ensure the rasterized surface is up to date */
+            text_layer_render_to_surface(layer);
+        }
+
+        /* LPIX chunk -- encode layer pixel data */
+        if (layer->surface && layer->width > 0 && layer->height > 0) {
+            cairo_surface_flush(layer->surface);
+            const uint8_t* pixels = cairo_image_surface_get_data(layer->surface);
+            int stride = cairo_image_surface_get_stride(layer->surface);
+
+            if (pixels && stride > 0) {
+                size_t tile_data_len = 0;
+                uint8_t* tile_data = rli_encode_pixel_data(
+                    pixels, layer->width, layer->height,
+                    (uint32_t)stride, &tile_data_len);
+
+                if (!tile_data)
+                    goto wfail;
+
+                /* LPIX payload: 1 byte pixfmt + 3 reserved + tile data */
+                uint64_t lpix_payload = 4 + tile_data_len;
+                if (!rli_write_chunk_header(f, RLI_CHUNK_LPIX, lpix_payload)) {
+                    g_free(tile_data);
+                    goto wfail;
+                }
+
+                uint8_t lpix_hdr[4] = { RLI_PIXFMT_BGRA_PREMUL, 0, 0, 0 };
+                if (fwrite(lpix_hdr, 1, 4, f) != 4) {
+                    g_free(tile_data);
+                    goto wfail;
+                }
+                if (fwrite(tile_data, 1, tile_data_len, f) != tile_data_len) {
+                    g_free(tile_data);
+                    goto wfail;
+                }
+                g_free(tile_data);
+            }
+        }
+    }
+
+    /* ---- REND chunk ---- */
+    if (!rli_write_chunk(f, RLI_CHUNK_REND, NULL, 0))
+        goto wfail;
+
+    fclose(f);
+    return PLUGIN_ERROR_NONE;
+
+wfail:
+    err = PLUGIN_ERROR_FILE_WRITE_ERROR;
+fail:
+    fclose(f);
+    return err;
 }
