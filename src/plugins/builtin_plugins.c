@@ -16,6 +16,7 @@
 #include "plugins/plugin_pcx.h"
 #include "plugins/plugin_png.h"
 #include "plugins/plugin_ras.h"
+#include "plugins/plugin_rli.h"
 #include "plugins/plugin_sgi.h"
 #include "plugins/plugin_tga.h"
 #include "plugins/plugin_tiff.h"
@@ -54,6 +55,19 @@ void builtin_plugins_register(void) {
     ImageFormatPlugin heic_plugin;
     ImageFormatPlugin avif_plugin;
     ImageFormatPlugin exr_plugin;
+    ImageFormatPlugin rli_plugin;
+
+    /* Register RLI plugin (native Rasterlab Image format) */
+    g_message("Registering built-in RLI plugin");
+    if (plugin_init_rli(host_api, &rli_plugin)) {
+        if (format_registry_register_builtin(&rli_plugin)) {
+            g_message("Successfully registered RLI plugin");
+        } else {
+            g_message("Failed to register RLI plugin with format registry");
+        }
+    } else {
+        g_message("Failed to initialize RLI plugin");
+    }
 
     /* Register PNG plugin (using libpng) */
 #ifdef HAVE_LIBPNG
