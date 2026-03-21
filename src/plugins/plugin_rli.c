@@ -867,3 +867,61 @@ done:
     fclose(f);
     return err;
 }
+
+/* ======================================================================== */
+/* Plugin callbacks                                                         */
+/* ======================================================================== */
+
+/**
+ * Check if a file is in RLI format by examining the header magic bytes.
+ * The first 4 bytes of an RLI file are "RLIB" (0x52, 0x4C, 0x49, 0x42).
+ */
+static bool
+rli_can_load(const char* filename, const uint8_t* header, size_t header_size) {
+    (void)filename;
+    if (!header || header_size < 4)
+        return false;
+    return header[0] == 0x52 && header[1] == 0x4C &&
+           header[2] == 0x49 && header[3] == 0x42;
+}
+
+/**
+ * Check if we can save to an RLI file by extension.
+ */
+static bool
+rli_can_save(const char* filename) {
+    if (!filename)
+        return false;
+    const char* ext = strrchr(filename, '.');
+    if (!ext)
+        return false;
+    return g_ascii_strcasecmp(ext + 1, "rli") == 0;
+}
+
+/* ======================================================================== */
+/* Plugin initialization                                                    */
+/* ======================================================================== */
+
+bool
+plugin_init_rli(const ImageFormatHostAPI* host, ImageFormatPlugin* out_plugin) {
+    if (!out_plugin)
+        return false;
+
+    rli_host = host;
+
+    memset(out_plugin, 0, sizeof(ImageFormatPlugin));
+
+    out_plugin->plugin_version              = 1;
+    out_plugin->format_info.name            = "RLI - Rasterlab Image";
+    out_plugin->format_info.extensions      = "rli";
+    out_plugin->format_info.supports_alpha  = true;
+    out_plugin->format_info.supports_layers = true;
+    out_plugin->format_info.priority        = 200;
+
+    out_plugin->callbacks.can_load = rli_can_load;
+    out_plugin->callbacks.load     = rli_load;
+    out_plugin->callbacks.can_save = rli_can_save;
+    out_plugin->callbacks.save     = rli_save;
+
+    return true;
+}
