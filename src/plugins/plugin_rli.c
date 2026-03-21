@@ -9,6 +9,7 @@
 
 #include "plugins/plugin_rli.h"
 #include "plugins/rli_tile_codec.h"
+#include "render/text_layer.h"
 
 #include <glib.h>
 #include <glib/gstdio.h>
@@ -212,4 +213,213 @@ rli_read_chunk_payload(FILE* f, uint64_t len) {
         return NULL;
     }
     return buf;
+}
+
+/* ======================================================================== */
+/* Text layer serialization helpers (buffer-based, little-endian)           */
+/* ======================================================================== */
+
+/*
+ * LTXT binary layout (all little-endian):
+ *
+ *   u16  text_len              + u8[text_len]  text (UTF-8)
+ *   u16  font_family_len       + u8[font_family_len]  font_family (UTF-8)
+ *   i32  font_size
+ *   i32  font_weight           (PangoWeight value)
+ *   i32  font_style            (PangoStyle value)
+ *   f64  color_r
+ *   f64  color_g
+ *   f64  color_b
+ *   f64  color_a
+ *   f64  line_spacing
+ *   f64  letter_spacing
+ *   i32  alignment
+ *   f64  rotation
+ *   f64  box_x
+ *   f64  box_y
+ *   f64  box_width
+ *   f64  box_height
+ *   u8   antialias
+ *   u8   kerning
+ *   u16  opentype_features_len + u8[opentype_features_len]  opentype_features
+ */
+
+static inline size_t
+rli_safe_strlen(const char* s) {
+    return s ? strlen(s) : 0;
+}
+
+/**
+ * Compute the serialized size of an LTXT payload for a TextLayer.
+ */
+static size_t
+rli_text_layer_payload_size(const TextLayer* tl) {
+    size_t size = 0;
+    size += 2 + rli_safe_strlen(tl->text);            /* text */
+    size += 2 + rli_safe_strlen(tl->font_family);     /* font_family */
+    size += 4;                                         /* font_size */
+    size += 4;                                         /* font_weight */
+    size += 4;                                         /* font_style */
+    size += 8 * 4;                                     /* color_r/g/b/a */
+    size += 8;                                         /* line_spacing */
+    size += 8;                                         /* letter_spacing */
+    size += 4;                                         /* alignment */
+    size += 8;                                         /* rotation */
+    size += 8 * 4;                                     /* box_x/y/width/height */
+    size += 1;                                         /* antialias */
+    size += 1;                                         /* kerning */
+    size += 2 + rli_safe_strlen(tl->opentype_features);/* opentype_features */
+    return size;
+}
+
+/**
+ * Write the LTXT payload for a TextLayer directly to file.
+ * The caller must have already written the chunk header with the
+ * correct payload length from rli_text_layer_payload_size().
+ *
+ * @return TRUE on success.
+ */
+static gboolean
+rli_text_layer_write(FILE* f, const TextLayer* tl) {
+    size_t len;
+
+    /* text */
+    len = rli_safe_strlen(tl->text);
+    if (!rli_fwrite_u16le(f, (uint16_t)len)) return FALSE;
+    if (len > 0 && fwrite(tl->text, 1, len, f) != len) return FALSE;
+
+    /* font_family */
+    len = rli_safe_strlen(tl->font_family);
+    if (!rli_fwrite_u16le(f, (uint16_t)len)) return FALSE;
+    if (len > 0 && fwrite(tl->font_family, 1, len, f) != len) return FALSE;
+
+    /* font_size, font_weight, font_style */
+    if (!rli_fwrite_i32le(f, tl->font_size))          return FALSE;
+    if (!rli_fwrite_i32le(f, (int32_t)tl->font_weight)) return FALSE;
+    if (!rli_fwrite_i32le(f, (int32_t)tl->font_style))  return FALSE;
+
+    /* color */
+    if (!rli_fwrite_f64le(f, tl->color_r)) return FALSE;
+    if (!rli_fwrite_f64le(f, tl->color_g)) return FALSE;
+    if (!rli_fwrite_f64le(f, tl->color_b)) return FALSE;
+    if (!rli_fwrite_f64le(f, tl->color_a)) return FALSE;
+
+    /* spacing */
+    if (!rli_fwrite_f64le(f, tl->line_spacing))   return FALSE;
+    if (!rli_fwrite_f64le(f, tl->letter_spacing)) return FALSE;
+
+    /* alignment */
+    if (!rli_fwrite_i32le(f, tl->alignment)) return FALSE;
+
+    /* rotation */
+    if (!rli_fwrite_f64le(f, tl->rotation)) return FALSE;
+
+    /* text box */
+    if (!rli_fwrite_f64le(f, tl->box_x))      return FALSE;
+    if (!rli_fwrite_f64le(f, tl->box_y))      return FALSE;
+    if (!rli_fwrite_f64le(f, tl->box_width))  return FALSE;
+    if (!rli_fwrite_f64le(f, tl->box_height)) return FALSE;
+
+    /* flags */
+    uint8_t aa = tl->antialias ? 1 : 0;
+    uint8_t kr = tl->kerning   ? 1 : 0;
+    if (fwrite(&aa, 1, 1, f) != 1) return FALSE;
+    if (fwrite(&kr, 1, 1, f) != 1) return FALSE;
+
+    /* opentype_features */
+    len = rli_safe_strlen(tl->opentype_features);
+    if (!rli_fwrite_u16le(f, (uint16_t)len)) return FALSE;
+    if (len > 0 && fwrite(tl->opentype_features, 1, len, f) != len) return FALSE;
+
+    return TRUE;
+}
+
+/**
+ * Read an LTXT payload from file and populate a TextLayer.
+ * All string fields are newly allocated (caller owns them).
+ *
+ * @param f           File positioned at the start of the LTXT payload.
+ * @param payload_len Expected payload length in bytes (from chunk header).
+ * @param tl          TextLayer to populate (must be zero-initialised by caller).
+ * @return TRUE on success.
+ */
+static gboolean
+rli_text_layer_read(FILE* f, size_t payload_len, TextLayer* tl) {
+    (void)payload_len;
+    uint16_t slen;
+    uint8_t byte_val;
+    int32_t ival;
+
+    /* text */
+    if (!rli_fread_u16le(f, &slen)) return FALSE;
+    if (slen > 0) {
+        tl->text = g_malloc(slen + 1);
+        if (fread(tl->text, 1, slen, f) != slen) return FALSE;
+        tl->text[slen] = '\0';
+    } else {
+        tl->text = g_strdup("");
+    }
+
+    /* font_family */
+    if (!rli_fread_u16le(f, &slen)) return FALSE;
+    if (slen > 0) {
+        tl->font_family = g_malloc(slen + 1);
+        if (fread(tl->font_family, 1, slen, f) != slen) return FALSE;
+        tl->font_family[slen] = '\0';
+    } else {
+        tl->font_family = g_strdup("Sans");
+    }
+
+    /* font_size */
+    if (!rli_fread_i32le(f, &tl->font_size)) return FALSE;
+
+    /* font_weight */
+    if (!rli_fread_i32le(f, &ival)) return FALSE;
+    tl->font_weight = (PangoWeight)ival;
+
+    /* font_style */
+    if (!rli_fread_i32le(f, &ival)) return FALSE;
+    tl->font_style = (PangoStyle)ival;
+
+    /* color */
+    if (!rli_fread_f64le(f, &tl->color_r)) return FALSE;
+    if (!rli_fread_f64le(f, &tl->color_g)) return FALSE;
+    if (!rli_fread_f64le(f, &tl->color_b)) return FALSE;
+    if (!rli_fread_f64le(f, &tl->color_a)) return FALSE;
+
+    /* spacing */
+    if (!rli_fread_f64le(f, &tl->line_spacing))   return FALSE;
+    if (!rli_fread_f64le(f, &tl->letter_spacing)) return FALSE;
+
+    /* alignment */
+    if (!rli_fread_i32le(f, &tl->alignment)) return FALSE;
+
+    /* rotation */
+    if (!rli_fread_f64le(f, &tl->rotation)) return FALSE;
+
+    /* text box */
+    if (!rli_fread_f64le(f, &tl->box_x))      return FALSE;
+    if (!rli_fread_f64le(f, &tl->box_y))      return FALSE;
+    if (!rli_fread_f64le(f, &tl->box_width))  return FALSE;
+    if (!rli_fread_f64le(f, &tl->box_height)) return FALSE;
+
+    /* antialias */
+    if (fread(&byte_val, 1, 1, f) != 1) return FALSE;
+    tl->antialias = byte_val ? TRUE : FALSE;
+
+    /* kerning */
+    if (fread(&byte_val, 1, 1, f) != 1) return FALSE;
+    tl->kerning = byte_val ? TRUE : FALSE;
+
+    /* opentype_features */
+    if (!rli_fread_u16le(f, &slen)) return FALSE;
+    if (slen > 0) {
+        tl->opentype_features = g_malloc(slen + 1);
+        if (fread(tl->opentype_features, 1, slen, f) != slen) return FALSE;
+        tl->opentype_features[slen] = '\0';
+    } else {
+        tl->opentype_features = NULL;
+    }
+
+    return TRUE;
 }
