@@ -38,10 +38,10 @@ extern "C" {
 
 /* -------- Tile Storage Formats (high byte of per-tile u32 header) -------- */
 
-#define RLI_TILE_FMT_OPS           0x00  /* Raw op-encoded bytes */
-#define RLI_TILE_FMT_LZ4_OPS      0x01  /* LZ4-compressed op-encoded bytes */
-#define RLI_TILE_FMT_LITERALS      0x02  /* Raw BGRA pixel data */
-#define RLI_TILE_FMT_LZ4_LITERALS  0x03  /* LZ4-compressed raw BGRA pixel data */
+#define RLI_TILE_FMT_LITERALS      0x00  /* Raw BGRA pixel data */
+#define RLI_TILE_FMT_OPS           0x01  /* Raw op-encoded bytes */
+#define RLI_TILE_FMT_LZ4_LITERALS  0x02  /* LZ4-compressed raw BGRA pixel data */
+#define RLI_TILE_FMT_LZ4_OPS      0x03  /* LZ4-compressed op-encoded bytes */
 
 /* -------- Op Codes -------- */
 
