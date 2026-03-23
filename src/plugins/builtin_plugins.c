@@ -1,5 +1,7 @@
+#include "app/settings.h"
 #include "image_format_plugin.h"
 #include "plugins/format_registry.h"
+#include "plugins/plugin_runtime_deps.h"
 #include "plugins/plugin_bmp.h"
 #include "plugins/plugin_cut.h"
 #include "plugins/plugin_deep.h"
@@ -33,6 +35,7 @@
  * These are compiled directly into the application
  */
 void builtin_plugins_register(void) {
+    gchar* app_dir = settings_get_executable_dir();
     ImageFormatHostAPI* host_api = plugin_host_api_get();
     ImageFormatPlugin png_plugin;
     ImageFormatPlugin jpeg_plugin;
@@ -57,7 +60,7 @@ void builtin_plugins_register(void) {
     ImageFormatPlugin exr_plugin;
     ImageFormatPlugin rli_plugin;
 
-    /* Register RLI plugin (native Rasterlab Image format) */
+    /* Register RLI plugin (native Rasterlab Image format); LZ4 is linked statically */
     g_message("Registering built-in RLI plugin");
     if (plugin_init_rli(host_api, &rli_plugin)) {
         if (format_registry_register_builtin(&rli_plugin)) {
@@ -72,7 +75,9 @@ void builtin_plugins_register(void) {
     /* Register PNG plugin (using libpng) */
 #ifdef HAVE_LIBPNG
     g_message("Registering built-in PNG plugin");
-    if (plugin_init_png(host_api, &png_plugin)) {
+    if (!plugin_runtime_deps_png_ok(app_dir)) {
+        g_message("Skipping PNG plugin: zlib and/or libpng shared libraries not found in application directory");
+    } else if (plugin_init_png(host_api, &png_plugin)) {
         if (format_registry_register_builtin(&png_plugin)) {
             g_message("Successfully registered PNG plugin");
         } else {
@@ -88,7 +93,9 @@ void builtin_plugins_register(void) {
     /* Register JPEG plugin (using libjpeg) */
 #ifdef HAVE_LIBJPEG
     g_message("Registering built-in JPEG plugin");
-    if (plugin_init_jpeg(host_api, &jpeg_plugin)) {
+    if (!plugin_runtime_deps_jpeg_ok(app_dir)) {
+        g_message("Skipping JPEG plugin: libjpeg shared library not found in application directory");
+    } else if (plugin_init_jpeg(host_api, &jpeg_plugin)) {
         if (format_registry_register_builtin(&jpeg_plugin)) {
             g_message("Successfully registered JPEG plugin");
         } else {
@@ -224,7 +231,9 @@ void builtin_plugins_register(void) {
     /* Register WebP plugin (using libwebp) */
 #ifdef HAVE_LIBWEBP
     g_message("Registering built-in WebP plugin");
-    if (plugin_init_webp(host_api, &webp_plugin)) {
+    if (!plugin_runtime_deps_webp_ok(app_dir)) {
+        g_message("Skipping WebP plugin: libwebp shared libraries not found in application directory");
+    } else if (plugin_init_webp(host_api, &webp_plugin)) {
         if (format_registry_register_builtin(&webp_plugin)) {
             g_message("Successfully registered WebP plugin");
         } else {
@@ -240,7 +249,9 @@ void builtin_plugins_register(void) {
     /* Register TIFF plugin (using libtiff) */
 #ifdef HAVE_LIBTIFF
     g_message("Registering built-in TIFF plugin");
-    if (plugin_init_tiff(host_api, &tiff_plugin)) {
+    if (!plugin_runtime_deps_tiff_ok(app_dir)) {
+        g_message("Skipping TIFF plugin: libtiff and/or dependency DLLs not found in application directory");
+    } else if (plugin_init_tiff(host_api, &tiff_plugin)) {
         if (format_registry_register_builtin(&tiff_plugin)) {
             g_message("Successfully registered TIFF plugin");
         } else {
@@ -304,7 +315,9 @@ void builtin_plugins_register(void) {
     /* Register HEIC plugin (using libheif + libde265) */
 #ifdef HAVE_LIBHEIF
     g_message("Registering built-in HEIC plugin");
-    if (plugin_init_heic(host_api, &heic_plugin)) {
+    if (!plugin_runtime_deps_heic_ok(app_dir)) {
+        g_message("Skipping HEIC plugin: libheif/libde265 shared libraries not found in application directory");
+    } else if (plugin_init_heic(host_api, &heic_plugin)) {
         if (format_registry_register_builtin(&heic_plugin)) {
             g_message("Successfully registered HEIC plugin");
         } else {
@@ -336,7 +349,9 @@ void builtin_plugins_register(void) {
     /* Register EXR plugin (OpenEXR) */
 #ifdef HAVE_OPENEXR
     g_message("Registering built-in EXR plugin");
-    if (plugin_init_exr(host_api, &exr_plugin)) {
+    if (!plugin_runtime_deps_exr_ok(app_dir)) {
+        g_message("Skipping EXR plugin: zlib and/or OpenEXR stack (OpenEXR, OpenEXRCore, Imath, IlmThread) not found in application directory");
+    } else if (plugin_init_exr(host_api, &exr_plugin)) {
         if (format_registry_register_builtin(&exr_plugin)) {
             g_message("Successfully registered EXR plugin");
         } else {
@@ -348,4 +363,6 @@ void builtin_plugins_register(void) {
 #else
     g_message("EXR plugin not available (HAVE_OPENEXR not defined)");
 #endif
+
+    g_free(app_dir);
 }

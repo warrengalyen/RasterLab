@@ -52,6 +52,7 @@ set(SOURCES
     main.c
     panels.c
     plugins/builtin_plugins.c
+    plugins/plugin_runtime_deps.c
     plugins/format_registry.c
     plugins/plugin_host_api.c
     plugins/plugin_bmp.c
