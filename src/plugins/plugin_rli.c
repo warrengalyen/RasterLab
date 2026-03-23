@@ -8,7 +8,7 @@
  */
 
 #include "plugins/plugin_rli.h"
-#include "plugins/rli_tile_codec.h"
+#include "plugins/rli_codec.h"
 #include "color_manager/icc_utils.h"
 #include "document.h"
 #include "render/layer.h"

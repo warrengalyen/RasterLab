@@ -1592,6 +1592,14 @@ endif()
 # Add subdirectories
 add_subdirectory(src)
 
+# Optional: build test suite (requires Unity submodule in lib/unity)
+option(BUILD_TESTING "Build the RLI unit test suite" OFF)
+if(BUILD_TESTING AND EXISTS "${CMAKE_SOURCE_DIR}/lib/unity/src/unity.c")
+    enable_testing()
+    add_subdirectory(tests)
+    message(STATUS "BUILD_TESTING=ON: RLI test suite enabled")
+endif()
+
 # Print configuration summary
 message(STATUS "GTK3 found: ${GTK3_LIBRARIES}")
 message(STATUS "GTK3 include dirs: ${GTK3_INCLUDE_DIRS}")

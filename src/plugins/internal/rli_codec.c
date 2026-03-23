@@ -6,7 +6,7 @@
  * rli_ naming, glib types, scalar-only SWAR arithmetic, and system LZ4.
  */
 
-#include "plugins/rli_tile_codec.h"
+#include "plugins/rli_codec.h"
 
 #include <glib.h>
 #include <lz4.h>
