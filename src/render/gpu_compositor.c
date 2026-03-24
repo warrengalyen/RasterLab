@@ -479,10 +479,17 @@ static const char* FRAGMENT_SHADER_SOURCE =
     "        src_a = src_pm.a;\n"
     "    }\n"
     "    \n"
-    "    /* For first layer or fully transparent source, just output the source */\n"
-    "    if (u_is_first_layer || src_a <= 0.0) {\n"
-    "        /* Output premultiplied alpha */\n"
+    "    /* First layer: composite only the source (nothing behind us). */\n"
+    "    if (u_is_first_layer) {\n"
     "        gl_FragColor = vec4(src_rgb * src_a, src_a);\n"
+    "        return;\n"
+    "    }\n"
+    "    /* Non-first layer, fully transparent source: keep destination unchanged.\n"
+    "     * (Treating this like the first layer would erase pixels composited below —\n"
+    "     * catastrophic for mostly-transparent layers such as text.) */\n"
+    "    if (src_a <= 0.0) {\n"
+    "        vec2 dst_uv = gl_FragCoord.xy / u_tile_size;\n"
+    "        gl_FragColor = texture2D(u_dst_texture, dst_uv);\n"
     "        return;\n"
     "    }\n"
     "    \n"
@@ -1142,7 +1149,13 @@ gboolean gpu_compositor_composite_tile(GPUCompositor* compositor,
         if (!layer || !layer->visible || layer->opacity <= 0.0 || !layer->surface) {
             continue;
         }
-        
+
+        /* Match tile_worker_composite_pixels(): vector text is drawn in the main
+         * canvas pass after tiles, not baked into tile pixels. */
+        if (layer->layer_type == LAYER_TYPE_TEXT) {
+            continue;
+        }
+
         /* Check if layer intersects tile */
         gint layer_left = layer->offset_x;
         gint layer_top = layer->offset_y;
