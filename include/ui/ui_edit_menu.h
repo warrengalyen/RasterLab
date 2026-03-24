@@ -22,4 +22,9 @@ void on_edit_clear(GtkWidget* widget, gpointer data);
  */
 void ui_edit_menu_setup(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* accel_group);
 
+/**
+ * Update Edit menu item sensitivity from document and clipboard state
+ */
+void ui_edit_menu_update_sensitivity(AppContext* ctx);
+
 #endif /* UI_EDIT_MENU_H */

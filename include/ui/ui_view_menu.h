@@ -31,4 +31,6 @@ void on_view_zoom_6_25(GtkWidget* widget, gpointer data);
  */
 void ui_view_menu_setup(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* accel_group);
 
+void ui_view_menu_update_zoom_sensitivity(AppContext* ctx);
+
 #endif /* UI_VIEW_MENU_H */

@@ -2639,6 +2639,24 @@ static int find_closest_zoom_level(double zoom_factor) {
     return closest_index;
 }
 
+gboolean document_zoom_can_zoom_in(ImageDocument* doc) {
+    int current_index;
+    if (!doc) {
+        return FALSE;
+    }
+    current_index = find_closest_zoom_level(doc->zoom_factor);
+    return current_index < num_zoom_levels - 1;
+}
+
+gboolean document_zoom_can_zoom_out(ImageDocument* doc) {
+    int current_index;
+    if (!doc) {
+        return FALSE;
+    }
+    current_index = find_closest_zoom_level(doc->zoom_factor);
+    return current_index > 0;
+}
+
 /**
  * Zoom in
  */

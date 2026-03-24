@@ -40,10 +40,68 @@ struct _AppContext {
     GtkWidget* layer_menu_visibility_hide_only;
     GtkWidget* layer_menu_visibility_show_all;
     GtkWidget* layer_menu_visibility_hide_all;
+    GtkWidget* layer_menu_order;              /* Layer > Order submenu parent */
+    GtkWidget* layer_menu_visibility;         /* Layer > Visibility submenu parent */
     GtkWidget* layer_menu_rasterize_text;     /* Layer > Rasterize Text Layer */
     GtkWidget* edit_menu_undo;            /* Edit > Undo menu item */
     GtkWidget* edit_menu_redo;            /* Edit > Redo menu item */
-    GtkWidget* file_menu_save;            /* File > Save menu item */
+    GtkWidget* edit_menu_copy;
+    GtkWidget* edit_menu_cut;
+    GtkWidget* edit_menu_paste;
+    GtkWidget* edit_menu_paste_new_image;
+    GtkWidget* edit_menu_copy_merged;
+    GtkWidget* edit_menu_cut_merged;
+    GtkWidget* edit_menu_clear;
+    GtkWidget* edit_menu_fill;
+    GtkWidget* image_menu_duplicate;
+    GtkWidget* image_menu_resize;
+    GtkWidget* image_menu_canvas_size;
+    GtkWidget* image_menu_fit_active_layer;
+    GtkWidget* image_menu_fit_all_layer;
+    GtkWidget* image_menu_crop_selection;
+    GtkWidget* image_menu_trim_borders;
+    GtkWidget* rotate_menu; /* Image > Rotate submenu parent */
+    GtkWidget* rotate_menu_90_cw;
+    GtkWidget* rotate_menu_90_ccw;
+    GtkWidget* rotate_menu_180;
+    GtkWidget* rotate_menu_arbitrary;
+    GtkWidget* image_menu_flip_horizontal;
+    GtkWidget* image_menu_flip_vertical;
+    GtkWidget* image_menu_transpose;
+    GtkWidget* image_menu_merge_visible;
+    GtkWidget* image_menu_flatten;
+    GtkWidget* file_menu_new;
+    GtkWidget* file_menu_open;
+    GtkWidget* file_menu_open_recent;
+    GtkWidget* file_menu_save;
+    GtkWidget* file_menu_save_as;
+    GtkWidget* file_menu_close;
+    GtkWidget* file_menu_close_all;
+    GtkWidget* file_menu_exit;
+    GtkWidget* select_menu_all;
+    GtkWidget* select_menu_none;
+    GtkWidget* select_menu_invert;
+    GtkWidget* select_menu_grow;
+    GtkWidget* select_menu_shrink;
+    GtkWidget* select_menu_border;
+    GtkWidget* select_menu_feather;
+    GtkWidget* select_menu_sharpen;
+    GtkWidget* view_menu_zoom_fit;
+    GtkWidget* view_menu_zoom_reset;
+    GtkWidget* view_menu_zoom_in;
+    GtkWidget* view_menu_zoom_out;
+    GtkWidget* view_menu_zoom; /* View > Zoom to (submenu parent) */
+    GtkWidget* view_menu_zoom_1600;
+    GtkWidget* view_menu_zoom_800;
+    GtkWidget* view_menu_zoom_400;
+    GtkWidget* view_menu_zoom_200;
+    GtkWidget* view_menu_zoom_100;
+    GtkWidget* view_menu_zoom_50;
+    GtkWidget* view_menu_zoom_25;
+    GtkWidget* view_menu_zoom_12_5;
+    GtkWidget* view_menu_zoom_6_25;
+    GtkWidget* adjust_menu_item;          /* Menu bar: Adjustments (top-level) */
+    GtkWidget* effects_menu_item;         /* Menu bar: Effects (top-level) */
     ToolRegistry* tool_registry;          /* Tool registry and management */
     ToolOptionsPanel* tool_options_panel; /* Tool options panel */
     Workspace* workspace;                 /* Workspace with accordion and panels */

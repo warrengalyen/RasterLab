@@ -302,6 +302,47 @@ void on_select_invert(GtkMenuItem* menu_item, gpointer user_data) {
     }
 }
 
+void ui_select_menu_update_sensitivity(AppContext* ctx) {
+    ImageDocument* doc;
+    gboolean has_mask;
+    gboolean has_nonempty;
+    gboolean can_invert;
+
+    if (!ctx || !ctx->window) {
+        return;
+    }
+
+    doc = ui_get_active_document(ctx);
+    has_mask = (doc != NULL && doc->selection_mask != NULL);
+    has_nonempty = has_mask && !selection_mask_is_empty(doc->selection_mask);
+    can_invert = has_mask && doc->selection_mask->base_mask != NULL;
+
+    if (ctx->select_menu_all && GTK_IS_WIDGET(ctx->select_menu_all)) {
+        gtk_widget_set_sensitive(ctx->select_menu_all, has_mask);
+    }
+    if (ctx->select_menu_none && GTK_IS_WIDGET(ctx->select_menu_none)) {
+        gtk_widget_set_sensitive(ctx->select_menu_none, has_nonempty);
+    }
+    if (ctx->select_menu_invert && GTK_IS_WIDGET(ctx->select_menu_invert)) {
+        gtk_widget_set_sensitive(ctx->select_menu_invert, can_invert);
+    }
+    if (ctx->select_menu_grow && GTK_IS_WIDGET(ctx->select_menu_grow)) {
+        gtk_widget_set_sensitive(ctx->select_menu_grow, has_nonempty);
+    }
+    if (ctx->select_menu_shrink && GTK_IS_WIDGET(ctx->select_menu_shrink)) {
+        gtk_widget_set_sensitive(ctx->select_menu_shrink, has_nonempty);
+    }
+    if (ctx->select_menu_border && GTK_IS_WIDGET(ctx->select_menu_border)) {
+        gtk_widget_set_sensitive(ctx->select_menu_border, has_nonempty);
+    }
+    if (ctx->select_menu_feather && GTK_IS_WIDGET(ctx->select_menu_feather)) {
+        gtk_widget_set_sensitive(ctx->select_menu_feather, has_nonempty);
+    }
+    if (ctx->select_menu_sharpen && GTK_IS_WIDGET(ctx->select_menu_sharpen)) {
+        gtk_widget_set_sensitive(ctx->select_menu_sharpen, has_nonempty);
+    }
+}
+
 /**
  * Timeout callback to pulse progress bar
  */
@@ -476,48 +517,47 @@ void ui_select_menu_setup(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* a
         gtk_menu_item_set_submenu(GTK_MENU_ITEM(select_menu_item), select_menu);
     }
 
-    /* Get menu items */
-    GtkWidget* select_menu_all = GTK_WIDGET(gtk_builder_get_object(builder, "select_menu_all"));
-    GtkWidget* select_menu_none = GTK_WIDGET(gtk_builder_get_object(builder, "select_menu_none"));
-    GtkWidget* select_menu_invert = GTK_WIDGET(gtk_builder_get_object(builder, "select_menu_invert"));
-    GtkWidget* select_menu_grow = GTK_WIDGET(gtk_builder_get_object(builder, "select_menu_grow"));
-    GtkWidget* select_menu_shrink = GTK_WIDGET(gtk_builder_get_object(builder, "select_menu_shrink"));
-    GtkWidget* select_menu_border = GTK_WIDGET(gtk_builder_get_object(builder, "select_menu_border"));
-    GtkWidget* select_menu_feather = GTK_WIDGET(gtk_builder_get_object(builder, "select_menu_feather"));
-    GtkWidget* select_menu_sharpen = GTK_WIDGET(gtk_builder_get_object(builder, "select_menu_sharpen"));
+    ctx->select_menu_all = GTK_WIDGET(gtk_builder_get_object(builder, "select_menu_all"));
+    ctx->select_menu_none = GTK_WIDGET(gtk_builder_get_object(builder, "select_menu_none"));
+    ctx->select_menu_invert = GTK_WIDGET(gtk_builder_get_object(builder, "select_menu_invert"));
+    ctx->select_menu_grow = GTK_WIDGET(gtk_builder_get_object(builder, "select_menu_grow"));
+    ctx->select_menu_shrink = GTK_WIDGET(gtk_builder_get_object(builder, "select_menu_shrink"));
+    ctx->select_menu_border = GTK_WIDGET(gtk_builder_get_object(builder, "select_menu_border"));
+    ctx->select_menu_feather = GTK_WIDGET(gtk_builder_get_object(builder, "select_menu_feather"));
+    ctx->select_menu_sharpen = GTK_WIDGET(gtk_builder_get_object(builder, "select_menu_sharpen"));
 
     /* Connect Select menu signals */
-    if (select_menu_all) {
-        g_signal_connect(select_menu_all, "activate", G_CALLBACK(on_select_all), ctx);
+    if (ctx->select_menu_all) {
+        g_signal_connect(ctx->select_menu_all, "activate", G_CALLBACK(on_select_all), ctx);
         /* Add accelerator (Ctrl+A) */
-        gtk_widget_add_accelerator(select_menu_all, "activate", accel_group,
+        gtk_widget_add_accelerator(ctx->select_menu_all, "activate", accel_group,
                                    GDK_KEY_a, GDK_CONTROL_MASK, GTK_ACCEL_VISIBLE);
     }
-    if (select_menu_none) {
-        g_signal_connect(select_menu_none, "activate", G_CALLBACK(on_select_none), ctx);
+    if (ctx->select_menu_none) {
+        g_signal_connect(ctx->select_menu_none, "activate", G_CALLBACK(on_select_none), ctx);
         /* Add accelerator (Ctrl+D) */
-        gtk_widget_add_accelerator(select_menu_none, "activate", accel_group,
+        gtk_widget_add_accelerator(ctx->select_menu_none, "activate", accel_group,
                                    GDK_KEY_d, GDK_CONTROL_MASK, GTK_ACCEL_VISIBLE);
     }
-    if (select_menu_invert) {
-        g_signal_connect(select_menu_invert, "activate", G_CALLBACK(on_select_invert), ctx);
+    if (ctx->select_menu_invert) {
+        g_signal_connect(ctx->select_menu_invert, "activate", G_CALLBACK(on_select_invert), ctx);
         /* Add accelerator (Ctrl+I) if not already set in Glade */
-        gtk_widget_add_accelerator(select_menu_invert, "activate", accel_group,
+        gtk_widget_add_accelerator(ctx->select_menu_invert, "activate", accel_group,
                                    GDK_KEY_i, GDK_CONTROL_MASK | GDK_SHIFT_MASK, GTK_ACCEL_VISIBLE);
     }
-    if (select_menu_grow) {
-        g_signal_connect(select_menu_grow, "activate", G_CALLBACK(on_select_grow), ctx);
+    if (ctx->select_menu_grow) {
+        g_signal_connect(ctx->select_menu_grow, "activate", G_CALLBACK(on_select_grow), ctx);
     }
-    if (select_menu_shrink) {
-        g_signal_connect(select_menu_shrink, "activate", G_CALLBACK(on_select_shrink), ctx);
+    if (ctx->select_menu_shrink) {
+        g_signal_connect(ctx->select_menu_shrink, "activate", G_CALLBACK(on_select_shrink), ctx);
     }
-    if (select_menu_border) {
-        g_signal_connect(select_menu_border, "activate", G_CALLBACK(on_select_border), ctx);
+    if (ctx->select_menu_border) {
+        g_signal_connect(ctx->select_menu_border, "activate", G_CALLBACK(on_select_border), ctx);
     }
-    if (select_menu_feather) {
-        g_signal_connect(select_menu_feather, "activate", G_CALLBACK(on_select_feather), ctx);
+    if (ctx->select_menu_feather) {
+        g_signal_connect(ctx->select_menu_feather, "activate", G_CALLBACK(on_select_feather), ctx);
     }
-    if (select_menu_sharpen) {
-        g_signal_connect(select_menu_sharpen, "activate", G_CALLBACK(on_select_sharpen), ctx);
+    if (ctx->select_menu_sharpen) {
+        g_signal_connect(ctx->select_menu_sharpen, "activate", G_CALLBACK(on_select_sharpen), ctx);
     }
 }

@@ -29,4 +29,6 @@ void on_image_trim_borders(GtkWidget* widget, gpointer data);
  */
 void ui_image_menu_setup(GtkBuilder* builder, AppContext* ctx);
 
+void ui_image_menu_update_sensitivity(AppContext* ctx);
+
 #endif /* UI_IMAGE_MENU_H */

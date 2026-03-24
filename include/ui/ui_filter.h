@@ -69,4 +69,10 @@ gint ui_show_filter_dialog_with_zoom_pan(AppContext* ctx,
                                          gdouble* values,
                                          gboolean allow_zoom_pan);
 
+/**
+ * Enable Adjustments and Effects top-level menus when the active document has
+ * a selected raster (pixel) layer with a surface.
+ */
+void ui_adjustments_and_effects_menu_update_sensitivity(AppContext* ctx);
+
 #endif /* UI_FILTER_H */

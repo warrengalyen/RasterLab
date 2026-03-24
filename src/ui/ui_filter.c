@@ -10,6 +10,32 @@
 /* Forward declaration */
 static gboolean pulse_progress_bar(gpointer user_data);
 
+void ui_adjustments_and_effects_menu_update_sensitivity(AppContext* ctx) {
+    ImageDocument* doc;
+    ImageLayer* layer;
+    gboolean can_use;
+
+    if (!ctx || !ctx->window) {
+        return;
+    }
+
+    can_use = FALSE;
+    doc = ui_get_active_document(ctx);
+    if (doc) {
+        layer = document_get_selected_layer(doc);
+        if (layer && layer->layer_type == LAYER_TYPE_RASTER && layer->surface) {
+            can_use = TRUE;
+        }
+    }
+
+    if (ctx->adjust_menu_item && GTK_IS_WIDGET(ctx->adjust_menu_item)) {
+        gtk_widget_set_sensitive(ctx->adjust_menu_item, can_use);
+    }
+    if (ctx->effects_menu_item && GTK_IS_WIDGET(ctx->effects_menu_item)) {
+        gtk_widget_set_sensitive(ctx->effects_menu_item, can_use);
+    }
+}
+
 /**
  * Timeout callback to pulse progress bar
  */

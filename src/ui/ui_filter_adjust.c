@@ -2361,6 +2361,10 @@ void ui_filter_adjust_setup_menu(GtkBuilder* builder, AppContext* ctx) {
     GtkWidget* adjust_menu = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu"));
     GtkWidget* adjust_menu_item = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_item"));
 
+    if (ctx) {
+        ctx->adjust_menu_item = adjust_menu_item;
+    }
+
     if (adjust_menu && adjust_menu_item) {
         gtk_menu_item_set_submenu(GTK_MENU_ITEM(adjust_menu_item), adjust_menu);
     }

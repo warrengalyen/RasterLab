@@ -2,7 +2,6 @@
 #include "app/autosave.h"
 #include "app/recent_files.h"
 #include "app/settings.h"
-#include "command.h"
 #include "document.h"
 #include "filters.h"
 #include "ocular.h"
@@ -19,8 +18,8 @@
 #include "tool_options.h"
 #include "tools/tool_crop.h"
 #include "tools/tool_ellipse_select.h"
-#include "tools/tool_polygon_select.h"
 #include "tools/tool_magic_wand_select.h"
+#include "tools/tool_polygon_select.h"
 #include "tools/tool_rect_select.h"
 #include "ui/dialogs/canvas_size_dialog.h"
 #include "ui/dialogs/new_layer_dialog.h"
@@ -52,6 +51,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+
 
 /* Log handler to suppress harmless GTK Builder menu warnings */
 static gboolean gtk_builder_menu_warning_handler(const gchar* log_domain,
@@ -356,8 +356,67 @@ AppContext* ui_create_main_window(void) {
     ctx->layer_menu_visibility_hide_only = NULL;
     ctx->layer_menu_visibility_show_all = NULL;
     ctx->layer_menu_visibility_hide_all = NULL;
+    ctx->layer_menu_order = NULL;
+    ctx->layer_menu_visibility = NULL;
     ctx->edit_menu_undo = NULL;
     ctx->edit_menu_redo = NULL;
+    ctx->edit_menu_copy = NULL;
+    ctx->edit_menu_cut = NULL;
+    ctx->edit_menu_paste = NULL;
+    ctx->edit_menu_paste_new_image = NULL;
+    ctx->edit_menu_copy_merged = NULL;
+    ctx->edit_menu_cut_merged = NULL;
+    ctx->edit_menu_clear = NULL;
+    ctx->edit_menu_fill = NULL;
+    ctx->image_menu_duplicate = NULL;
+    ctx->image_menu_resize = NULL;
+    ctx->image_menu_canvas_size = NULL;
+    ctx->image_menu_fit_active_layer = NULL;
+    ctx->image_menu_fit_all_layer = NULL;
+    ctx->image_menu_crop_selection = NULL;
+    ctx->image_menu_trim_borders = NULL;
+    ctx->rotate_menu = NULL;
+    ctx->rotate_menu_90_cw = NULL;
+    ctx->rotate_menu_90_ccw = NULL;
+    ctx->rotate_menu_180 = NULL;
+    ctx->rotate_menu_arbitrary = NULL;
+    ctx->image_menu_flip_horizontal = NULL;
+    ctx->image_menu_flip_vertical = NULL;
+    ctx->image_menu_transpose = NULL;
+    ctx->image_menu_merge_visible = NULL;
+    ctx->image_menu_flatten = NULL;
+    ctx->file_menu_new = NULL;
+    ctx->file_menu_open = NULL;
+    ctx->file_menu_open_recent = NULL;
+    ctx->file_menu_save = NULL;
+    ctx->file_menu_save_as = NULL;
+    ctx->file_menu_close = NULL;
+    ctx->file_menu_close_all = NULL;
+    ctx->file_menu_exit = NULL;
+    ctx->select_menu_all = NULL;
+    ctx->select_menu_none = NULL;
+    ctx->select_menu_invert = NULL;
+    ctx->select_menu_grow = NULL;
+    ctx->select_menu_shrink = NULL;
+    ctx->select_menu_border = NULL;
+    ctx->select_menu_feather = NULL;
+    ctx->select_menu_sharpen = NULL;
+    ctx->view_menu_zoom_fit = NULL;
+    ctx->view_menu_zoom_reset = NULL;
+    ctx->view_menu_zoom_in = NULL;
+    ctx->view_menu_zoom_out = NULL;
+    ctx->view_menu_zoom = NULL;
+    ctx->view_menu_zoom_1600 = NULL;
+    ctx->view_menu_zoom_800 = NULL;
+    ctx->view_menu_zoom_400 = NULL;
+    ctx->view_menu_zoom_200 = NULL;
+    ctx->view_menu_zoom_100 = NULL;
+    ctx->view_menu_zoom_50 = NULL;
+    ctx->view_menu_zoom_25 = NULL;
+    ctx->view_menu_zoom_12_5 = NULL;
+    ctx->view_menu_zoom_6_25 = NULL;
+    ctx->adjust_menu_item = NULL;
+    ctx->effects_menu_item = NULL;
     ctx->workspace = NULL;           /* Initialize workspace early */
     ctx->layers_panel = NULL;        /* Will be set from workspace */
     ctx->settings = NULL;            /* Will be set in main.c */
@@ -2610,142 +2669,14 @@ void ui_update_menu_and_button_states(AppContext* ctx) {
         layers_panel_update_opacity_controls(layers_panel);
     }
 
-    /* Update File menu item states (save) */
-    /* Save is enabled only if document is dirty (if no filename, Save As will be triggered) */
-    if (ctx->file_menu_save && GTK_IS_WIDGET(ctx->file_menu_save)) {
-        gboolean can_save = has_document && doc && document_is_dirty(doc);
-        gtk_widget_set_sensitive(ctx->file_menu_save, can_save);
-    }
+    ui_file_menu_update_sensitivity(ctx);
+    ui_edit_menu_update_sensitivity(ctx);
+    ui_image_menu_update_sensitivity(ctx);
+    ui_select_menu_update_sensitivity(ctx);
 
-    /* Update Edit menu item states (undo/redo) */
-    if (ctx->edit_menu_undo && GTK_IS_WIDGET(ctx->edit_menu_undo)) {
-        gboolean can_undo = has_document && document_can_undo(doc);
-        gtk_widget_set_sensitive(ctx->edit_menu_undo, can_undo);
-
-        /* Update label with command name if available */
-        if (can_undo && doc && doc->undo_stack) {
-            Command* cmd = command_stack_peek(doc->undo_stack);
-            if (cmd && cmd->name) {
-                gchar* label = g_strdup_printf("_Undo: %s", cmd->name);
-                gtk_menu_item_set_label(GTK_MENU_ITEM(ctx->edit_menu_undo), label);
-                g_free(label);
-            } else {
-                gtk_menu_item_set_label(GTK_MENU_ITEM(ctx->edit_menu_undo), "_Undo");
-            }
-        } else {
-            gtk_menu_item_set_label(GTK_MENU_ITEM(ctx->edit_menu_undo), "_Undo");
-        }
-    }
-    if (ctx->edit_menu_redo && GTK_IS_WIDGET(ctx->edit_menu_redo)) {
-        gboolean can_redo = has_document && document_can_redo(doc);
-        gtk_widget_set_sensitive(ctx->edit_menu_redo, can_redo);
-
-        /* Update label with command name if available */
-        if (can_redo && doc && doc->redo_stack) {
-            Command* cmd = command_stack_peek(doc->redo_stack);
-            if (cmd && cmd->name) {
-                gchar* label = g_strdup_printf("_Redo: %s", cmd->name);
-                gtk_menu_item_set_label(GTK_MENU_ITEM(ctx->edit_menu_redo), label);
-                g_free(label);
-            } else {
-                gtk_menu_item_set_label(GTK_MENU_ITEM(ctx->edit_menu_redo), "_Redo");
-            }
-        } else {
-            gtk_menu_item_set_label(GTK_MENU_ITEM(ctx->edit_menu_redo), "_Redo");
-        }
-    }
-
-    /* Update Layer menu item states */
-    if (ctx->layer_menu_new && GTK_IS_WIDGET(ctx->layer_menu_new)) {
-        gtk_widget_set_sensitive(ctx->layer_menu_new, has_document);
-    }
-    if (ctx->layer_menu_delete && GTK_IS_WIDGET(ctx->layer_menu_delete)) {
-        gtk_widget_set_sensitive(ctx->layer_menu_delete, has_document && has_selection);
-    }
-    if (ctx->layer_menu_duplicate && GTK_IS_WIDGET(ctx->layer_menu_duplicate)) {
-        gtk_widget_set_sensitive(ctx->layer_menu_duplicate, has_document && has_selection);
-    }
-    if (ctx->layer_menu_merge_up && GTK_IS_WIDGET(ctx->layer_menu_merge_up)) {
-        gboolean can_merge_up = has_document && has_selection && selected_layer &&
-                                document_layer_can_move_up(doc, selected_layer);
-        gtk_widget_set_sensitive(ctx->layer_menu_merge_up, can_merge_up);
-    }
-    if (ctx->layer_menu_merge_down && GTK_IS_WIDGET(ctx->layer_menu_merge_down)) {
-        gboolean can_merge_down = has_document && has_selection && selected_layer &&
-                                  document_layer_can_move_down(doc, selected_layer);
-        gtk_widget_set_sensitive(ctx->layer_menu_merge_down, can_merge_down);
-    }
-    if (ctx->layer_menu_rasterize_text && GTK_IS_WIDGET(ctx->layer_menu_rasterize_text)) {
-        gboolean can_rasterize = has_document && has_selection && selected_layer &&
-                                 selected_layer->layer_type == LAYER_TYPE_TEXT;
-        gtk_widget_set_sensitive(ctx->layer_menu_rasterize_text, can_rasterize);
-    }
-
-    /* Layer > Order submenu: select and move commands */
-    guint layer_count = has_document && doc ? document_get_layer_count(doc) : 0;
-    gboolean can_move_up = has_document && has_selection && selected_layer &&
-                           document_layer_can_move_up(doc, selected_layer);
-    gboolean can_move_down = has_document && has_selection && selected_layer &&
-                             document_layer_can_move_down(doc, selected_layer);
-    ImageLayer* top_layer = (has_document && doc && layer_count > 0) ? document_get_layer(doc, layer_count - 1) : NULL;
-    ImageLayer* bottom_layer = (has_document && doc && layer_count > 0) ? document_get_layer(doc, 0) : NULL;
-    gboolean can_select_top = has_document && layer_count > 0 && selected_layer &&
-                              selected_layer != top_layer;
-    gboolean can_select_above = can_move_up;
-    gboolean can_select_below = can_move_down;
-    gboolean can_select_bottom = has_document && layer_count > 0 && selected_layer &&
-                                 selected_layer != bottom_layer;
-
-    if (ctx->layer_menu_order_select_top && GTK_IS_WIDGET(ctx->layer_menu_order_select_top))
-        gtk_widget_set_sensitive(ctx->layer_menu_order_select_top, can_select_top);
-    if (ctx->layer_menu_order_select_above && GTK_IS_WIDGET(ctx->layer_menu_order_select_above))
-        gtk_widget_set_sensitive(ctx->layer_menu_order_select_above, can_select_above);
-    if (ctx->layer_menu_order_select_below && GTK_IS_WIDGET(ctx->layer_menu_order_select_below))
-        gtk_widget_set_sensitive(ctx->layer_menu_order_select_below, can_select_below);
-    if (ctx->layer_menu_order_select_bottom && GTK_IS_WIDGET(ctx->layer_menu_order_select_bottom))
-        gtk_widget_set_sensitive(ctx->layer_menu_order_select_bottom, can_select_bottom);
-    if (ctx->layer_menu_order_move_top && GTK_IS_WIDGET(ctx->layer_menu_order_move_top))
-        gtk_widget_set_sensitive(ctx->layer_menu_order_move_top, can_move_up);
-    if (ctx->layer_menu_order_move_up && GTK_IS_WIDGET(ctx->layer_menu_order_move_up))
-        gtk_widget_set_sensitive(ctx->layer_menu_order_move_up, can_move_up);
-    if (ctx->layer_menu_order_move_down && GTK_IS_WIDGET(ctx->layer_menu_order_move_down))
-        gtk_widget_set_sensitive(ctx->layer_menu_order_move_down, can_move_down);
-    if (ctx->layer_menu_order_move_bottom && GTK_IS_WIDGET(ctx->layer_menu_order_move_bottom))
-        gtk_widget_set_sensitive(ctx->layer_menu_order_move_bottom, can_move_down);
-
-    /* Layer > Visibility submenu */
-    gboolean can_show_all = FALSE;
-    gboolean can_hide_all = FALSE;
-    if (has_document && doc && layer_count > 0) {
-        gboolean any_hidden = FALSE;
-        gboolean any_visible = FALSE;
-        for (guint i = 0; i < layer_count; i++) {
-            ImageLayer* l = document_get_layer(doc, i);
-            if (l) {
-                if (l->visible)
-                    any_visible = TRUE;
-                else
-                    any_hidden = TRUE;
-            }
-        }
-        can_show_all = any_hidden;  /* Disable when all already visible */
-        can_hide_all = any_visible; /* Disable when all already hidden */
-    }
-    gboolean visibility_has_selection = has_document && has_selection;
-
-    if (ctx->layer_menu_visibility_show_current && GTK_IS_WIDGET(ctx->layer_menu_visibility_show_current)) {
-        gtk_widget_set_sensitive(ctx->layer_menu_visibility_show_current, visibility_has_selection);
-        if (visibility_has_selection)
-            layer_visibility_update_check_state(ctx);
-    }
-    if (ctx->layer_menu_visibility_show_only && GTK_IS_WIDGET(ctx->layer_menu_visibility_show_only))
-        gtk_widget_set_sensitive(ctx->layer_menu_visibility_show_only, visibility_has_selection);
-    if (ctx->layer_menu_visibility_hide_only && GTK_IS_WIDGET(ctx->layer_menu_visibility_hide_only))
-        gtk_widget_set_sensitive(ctx->layer_menu_visibility_hide_only, visibility_has_selection);
-    if (ctx->layer_menu_visibility_show_all && GTK_IS_WIDGET(ctx->layer_menu_visibility_show_all))
-        gtk_widget_set_sensitive(ctx->layer_menu_visibility_show_all, can_show_all);
-    if (ctx->layer_menu_visibility_hide_all && GTK_IS_WIDGET(ctx->layer_menu_visibility_hide_all))
-        gtk_widget_set_sensitive(ctx->layer_menu_visibility_hide_all, can_hide_all);
+    ui_layer_menu_update_sensitivity(ctx);
+    ui_adjustments_and_effects_menu_update_sensitivity(ctx);
+    ui_view_menu_update_zoom_sensitivity(ctx);
 }
 
 /**

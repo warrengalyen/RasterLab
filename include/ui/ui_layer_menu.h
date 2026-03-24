@@ -55,4 +55,6 @@ GtkWidget* create_layer_menu(AppContext* ctx);
  */
 void ui_layer_menu_setup(GtkBuilder* builder, AppContext* ctx);
 
+void ui_layer_menu_update_sensitivity(AppContext* ctx);
+
 #endif /* UI_LAYER_MENU_H */

@@ -30,4 +30,6 @@ void ui_update_recent_files_menu(AppContext* ctx);
  */
 void ui_file_menu_setup(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* accel_group);
 
+void ui_file_menu_update_sensitivity(AppContext* ctx);
+
 #endif /* UI_FILE_MENU_H */

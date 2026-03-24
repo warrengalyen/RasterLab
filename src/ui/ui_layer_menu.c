@@ -155,6 +155,156 @@ void ui_layer_menu_setup(GtkBuilder* builder, AppContext* ctx) {
         g_signal_connect(ctx->layer_menu_visibility_show_all, "activate", G_CALLBACK(on_layer_visibility_show_all), ctx);
     if (ctx->layer_menu_visibility_hide_all)
         g_signal_connect(ctx->layer_menu_visibility_hide_all, "activate", G_CALLBACK(on_layer_visibility_hide_all), ctx);
+
+    ctx->layer_menu_order = GTK_WIDGET(gtk_builder_get_object(builder, "layer_menu_order"));
+    ctx->layer_menu_visibility = GTK_WIDGET(gtk_builder_get_object(builder, "layer_menu_visibility"));
+}
+
+void ui_layer_menu_update_sensitivity(AppContext* ctx) {
+    ImageDocument* doc;
+    LayersPanel* layers_panel;
+    gboolean has_document;
+    gboolean has_selection;
+    ImageLayer* selected_layer;
+    guint layer_count;
+    gboolean can_move_up;
+    gboolean can_move_down;
+    ImageLayer* top_layer;
+    ImageLayer* bottom_layer;
+    gboolean can_select_top;
+    gboolean can_select_above;
+    gboolean can_select_below;
+    gboolean can_select_bottom;
+    gboolean can_show_all;
+    gboolean can_hide_all;
+    gboolean visibility_has_selection;
+    gboolean can_layer_submenus;
+
+    if (!ctx || !ctx->window) {
+        return;
+    }
+
+    doc = ui_get_active_document(ctx);
+    has_document = (doc != NULL);
+    layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window), "layers_panel");
+
+    has_selection = FALSE;
+    selected_layer = NULL;
+    if (layers_panel && doc && layers_panel->tree_view) {
+        selected_layer = layers_panel_get_selected_layer(layers_panel);
+        has_selection = (selected_layer != NULL);
+    }
+
+    if (ctx->layer_menu_new && GTK_IS_WIDGET(ctx->layer_menu_new)) {
+        gtk_widget_set_sensitive(ctx->layer_menu_new, has_document);
+    }
+    if (ctx->layer_menu_delete && GTK_IS_WIDGET(ctx->layer_menu_delete)) {
+        gtk_widget_set_sensitive(ctx->layer_menu_delete, has_document && has_selection);
+    }
+    if (ctx->layer_menu_duplicate && GTK_IS_WIDGET(ctx->layer_menu_duplicate)) {
+        gtk_widget_set_sensitive(ctx->layer_menu_duplicate, has_document && has_selection);
+    }
+    if (ctx->layer_menu_merge_up && GTK_IS_WIDGET(ctx->layer_menu_merge_up)) {
+        gboolean can_merge_up = has_document && has_selection && selected_layer &&
+                                document_layer_can_move_up(doc, selected_layer);
+        gtk_widget_set_sensitive(ctx->layer_menu_merge_up, can_merge_up);
+    }
+    if (ctx->layer_menu_merge_down && GTK_IS_WIDGET(ctx->layer_menu_merge_down)) {
+        gboolean can_merge_down = has_document && has_selection && selected_layer &&
+                                  document_layer_can_move_down(doc, selected_layer);
+        gtk_widget_set_sensitive(ctx->layer_menu_merge_down, can_merge_down);
+    }
+    if (ctx->layer_menu_rasterize_text && GTK_IS_WIDGET(ctx->layer_menu_rasterize_text)) {
+        gboolean can_rasterize = has_document && has_selection && selected_layer &&
+                                 selected_layer->layer_type == LAYER_TYPE_TEXT;
+        gtk_widget_set_sensitive(ctx->layer_menu_rasterize_text, can_rasterize);
+    }
+
+    layer_count = has_document && doc ? document_get_layer_count(doc) : 0;
+    can_move_up = has_document && has_selection && selected_layer &&
+                  document_layer_can_move_up(doc, selected_layer);
+    can_move_down = has_document && has_selection && selected_layer &&
+                    document_layer_can_move_down(doc, selected_layer);
+    top_layer = (has_document && doc && layer_count > 0) ? document_get_layer(doc, layer_count - 1) : NULL;
+    bottom_layer = (has_document && doc && layer_count > 0) ? document_get_layer(doc, 0) : NULL;
+    can_select_top = has_document && layer_count > 0 && selected_layer &&
+                     selected_layer != top_layer;
+    can_select_above = can_move_up;
+    can_select_below = can_move_down;
+    can_select_bottom = has_document && layer_count > 0 && selected_layer &&
+                        selected_layer != bottom_layer;
+
+    if (ctx->layer_menu_order_select_top && GTK_IS_WIDGET(ctx->layer_menu_order_select_top)) {
+        gtk_widget_set_sensitive(ctx->layer_menu_order_select_top, can_select_top);
+    }
+    if (ctx->layer_menu_order_select_above && GTK_IS_WIDGET(ctx->layer_menu_order_select_above)) {
+        gtk_widget_set_sensitive(ctx->layer_menu_order_select_above, can_select_above);
+    }
+    if (ctx->layer_menu_order_select_below && GTK_IS_WIDGET(ctx->layer_menu_order_select_below)) {
+        gtk_widget_set_sensitive(ctx->layer_menu_order_select_below, can_select_below);
+    }
+    if (ctx->layer_menu_order_select_bottom && GTK_IS_WIDGET(ctx->layer_menu_order_select_bottom)) {
+        gtk_widget_set_sensitive(ctx->layer_menu_order_select_bottom, can_select_bottom);
+    }
+    if (ctx->layer_menu_order_move_top && GTK_IS_WIDGET(ctx->layer_menu_order_move_top)) {
+        gtk_widget_set_sensitive(ctx->layer_menu_order_move_top, can_move_up);
+    }
+    if (ctx->layer_menu_order_move_up && GTK_IS_WIDGET(ctx->layer_menu_order_move_up)) {
+        gtk_widget_set_sensitive(ctx->layer_menu_order_move_up, can_move_up);
+    }
+    if (ctx->layer_menu_order_move_down && GTK_IS_WIDGET(ctx->layer_menu_order_move_down)) {
+        gtk_widget_set_sensitive(ctx->layer_menu_order_move_down, can_move_down);
+    }
+    if (ctx->layer_menu_order_move_bottom && GTK_IS_WIDGET(ctx->layer_menu_order_move_bottom)) {
+        gtk_widget_set_sensitive(ctx->layer_menu_order_move_bottom, can_move_down);
+    }
+
+    can_show_all = FALSE;
+    can_hide_all = FALSE;
+    if (has_document && doc && layer_count > 0) {
+        gboolean any_hidden = FALSE;
+        gboolean any_visible = FALSE;
+        for (guint i = 0; i < layer_count; i++) {
+            ImageLayer* l = document_get_layer(doc, i);
+            if (l) {
+                if (l->visible) {
+                    any_visible = TRUE;
+                } else {
+                    any_hidden = TRUE;
+                }
+            }
+        }
+        can_show_all = any_hidden;
+        can_hide_all = any_visible;
+    }
+    visibility_has_selection = has_document && has_selection;
+
+    if (ctx->layer_menu_visibility_show_current && GTK_IS_WIDGET(ctx->layer_menu_visibility_show_current)) {
+        gtk_widget_set_sensitive(ctx->layer_menu_visibility_show_current, visibility_has_selection);
+        if (visibility_has_selection) {
+            layer_visibility_update_check_state(ctx);
+        }
+    }
+    if (ctx->layer_menu_visibility_show_only && GTK_IS_WIDGET(ctx->layer_menu_visibility_show_only)) {
+        gtk_widget_set_sensitive(ctx->layer_menu_visibility_show_only, visibility_has_selection);
+    }
+    if (ctx->layer_menu_visibility_hide_only && GTK_IS_WIDGET(ctx->layer_menu_visibility_hide_only)) {
+        gtk_widget_set_sensitive(ctx->layer_menu_visibility_hide_only, visibility_has_selection);
+    }
+    if (ctx->layer_menu_visibility_show_all && GTK_IS_WIDGET(ctx->layer_menu_visibility_show_all)) {
+        gtk_widget_set_sensitive(ctx->layer_menu_visibility_show_all, can_show_all);
+    }
+    if (ctx->layer_menu_visibility_hide_all && GTK_IS_WIDGET(ctx->layer_menu_visibility_hide_all)) {
+        gtk_widget_set_sensitive(ctx->layer_menu_visibility_hide_all, can_hide_all);
+    }
+
+    can_layer_submenus = has_document && doc && layer_count > 0;
+    if (ctx->layer_menu_order && GTK_IS_WIDGET(ctx->layer_menu_order)) {
+        gtk_widget_set_sensitive(ctx->layer_menu_order, can_layer_submenus);
+    }
+    if (ctx->layer_menu_visibility && GTK_IS_WIDGET(ctx->layer_menu_visibility)) {
+        gtk_widget_set_sensitive(ctx->layer_menu_visibility, can_layer_submenus);
+    }
 }
 
 /**

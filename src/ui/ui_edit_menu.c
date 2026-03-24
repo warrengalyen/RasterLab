@@ -25,6 +25,134 @@ static cairo_surface_t* extract_pixels_for_copy(ImageDocument* doc, ImageLayer* 
 static cairo_surface_t* create_merged_surface(ImageDocument* doc);
 static cairo_surface_t* extract_merged_pixels_for_copy(ImageDocument* doc);
 
+static gboolean edit_can_copy_from_layer(ImageDocument* doc, ImageLayer* layer) {
+    if (!doc || !layer || !layer->surface || layer->width == 0 || layer->height == 0) {
+        return FALSE;
+    }
+
+    gboolean has_selection = (doc->selection_mask && !selection_mask_is_empty(doc->selection_mask));
+    if (!has_selection) {
+        return TRUE;
+    }
+
+    gint layer_x_min = layer->offset_x;
+    gint layer_y_min = layer->offset_y;
+    gint layer_x_max = layer->offset_x + (gint)layer->width;
+    gint layer_y_max = layer->offset_y + (gint)layer->height;
+
+    layer_x_min = (layer_x_min < 0) ? 0 : layer_x_min;
+    layer_y_min = (layer_y_min < 0) ? 0 : layer_y_min;
+    layer_x_max = (layer_x_max > (gint)doc->width) ? (gint)doc->width : layer_x_max;
+    layer_y_max = (layer_y_max > (gint)doc->height) ? (gint)doc->height : layer_y_max;
+
+    if (layer_x_max <= layer_x_min || layer_y_max <= layer_y_min) {
+        return FALSE;
+    }
+
+    DirtyRect layer_rect;
+    dirty_rect_set(&layer_rect, layer_x_min, layer_y_min,
+                   layer_x_max - layer_x_min, layer_y_max - layer_y_min);
+
+    DirtyRect actual_region;
+    SelectionMask* region_mask = selection_build_combined_mask(
+        doc->selection_mask, &layer_rect, FEATHER_QUALITY_NORMAL, &actual_region);
+
+    if (!region_mask || !region_mask->data || dirty_rect_is_empty(&actual_region)) {
+        if (region_mask) {
+            selection_mask_free(region_mask);
+        }
+        return FALSE;
+    }
+
+    gint sel_x_min = actual_region.x + actual_region.width;
+    gint sel_y_min = actual_region.y + actual_region.height;
+    gint sel_x_max = actual_region.x;
+    gint sel_y_max = actual_region.y;
+
+    for (gint y = 0; y < region_mask->height; y++) {
+        for (gint x = 0; x < region_mask->width; x++) {
+            uint8_t mask_alpha = region_mask->data[y * region_mask->stride + x];
+            if (mask_alpha > 0) {
+                gint doc_x = actual_region.x + x;
+                gint doc_y = actual_region.y + y;
+                if (doc_x < sel_x_min)
+                    sel_x_min = doc_x;
+                if (doc_y < sel_y_min)
+                    sel_y_min = doc_y;
+                if (doc_x > sel_x_max)
+                    sel_x_max = doc_x;
+                if (doc_y > sel_y_max)
+                    sel_y_max = doc_y;
+            }
+        }
+    }
+
+    selection_mask_free(region_mask);
+    return (sel_x_max >= sel_x_min && sel_y_max >= sel_y_min);
+}
+
+static gboolean edit_can_copy_merged(ImageDocument* doc) {
+    if (!doc || doc->width == 0 || doc->height == 0) {
+        return FALSE;
+    }
+
+    gboolean has_selection = (doc->selection_mask && !selection_mask_is_empty(doc->selection_mask));
+    if (!has_selection) {
+        return TRUE;
+    }
+
+    DirtyRect doc_rect;
+    dirty_rect_set(&doc_rect, 0, 0, doc->width, doc->height);
+
+    DirtyRect actual_region;
+    SelectionMask* region_mask = selection_build_combined_mask(
+        doc->selection_mask, &doc_rect, FEATHER_QUALITY_NORMAL, &actual_region);
+
+    if (!region_mask || !region_mask->data || dirty_rect_is_empty(&actual_region)) {
+        if (region_mask) {
+            selection_mask_free(region_mask);
+        }
+        return FALSE;
+    }
+
+    gint sel_x_min = actual_region.x + actual_region.width;
+    gint sel_y_min = actual_region.y + actual_region.height;
+    gint sel_x_max = actual_region.x;
+    gint sel_y_max = actual_region.y;
+
+    for (gint y = 0; y < region_mask->height; y++) {
+        for (gint x = 0; x < region_mask->width; x++) {
+            uint8_t mask_alpha = region_mask->data[y * region_mask->stride + x];
+            if (mask_alpha > 0) {
+                gint doc_x = actual_region.x + x;
+                gint doc_y = actual_region.y + y;
+                if (doc_x < sel_x_min)
+                    sel_x_min = doc_x;
+                if (doc_y < sel_y_min)
+                    sel_y_min = doc_y;
+                if (doc_x > sel_x_max)
+                    sel_x_max = doc_x;
+                if (doc_y > sel_y_max)
+                    sel_y_max = doc_y;
+            }
+        }
+    }
+
+    selection_mask_free(region_mask);
+    return (sel_x_max >= sel_x_min && sel_y_max >= sel_y_min);
+}
+
+static void on_clipboard_owner_change(GtkClipboard* clipboard, GdkEvent* event, gpointer data) {
+    (void)clipboard;
+    (void)event;
+    AppContext* ctx = (AppContext*)data;
+    if (ctx) {
+        ui_update_menu_and_button_states(ctx);
+    }
+}
+
+static gboolean s_edit_clipboard_owner_signal_connected;
+
 /**
  * Edit > Undo callback
  */
@@ -1563,6 +1691,90 @@ static void on_edit_fill(GtkWidget* widget, gpointer data) {
         gtk_widget_queue_draw(doc->drawing_area);
 }
 
+void ui_edit_menu_update_sensitivity(AppContext* ctx) {
+    ImageDocument* doc;
+    ImageLayer* layer;
+    gboolean has_document;
+    gboolean clipboard_has_image;
+    gboolean can_layer_copy;
+    gboolean can_merged_copy;
+    gboolean can_edit_layer;
+
+    if (!ctx || !ctx->window) {
+        return;
+    }
+
+    doc = ui_get_active_document(ctx);
+    has_document = (doc != NULL);
+    layer = has_document ? document_get_selected_layer(doc) : NULL;
+    can_edit_layer = has_document && layer && layer->surface;
+    can_layer_copy = edit_can_copy_from_layer(doc, layer);
+    can_merged_copy = has_document && edit_can_copy_merged(doc);
+
+    {
+        GtkClipboard* clip = gtk_clipboard_get(GDK_SELECTION_CLIPBOARD);
+        clipboard_has_image = clip && gtk_clipboard_wait_is_image_available(clip);
+    }
+
+    if (ctx->edit_menu_undo && GTK_IS_WIDGET(ctx->edit_menu_undo)) {
+        gboolean can_undo = has_document && document_can_undo(doc);
+        gtk_widget_set_sensitive(ctx->edit_menu_undo, can_undo);
+        if (can_undo && doc && doc->undo_stack) {
+            Command* cmd = command_stack_peek(doc->undo_stack);
+            if (cmd && cmd->name) {
+                gchar* label = g_strdup_printf("_Undo: %s", cmd->name);
+                gtk_menu_item_set_label(GTK_MENU_ITEM(ctx->edit_menu_undo), label);
+                g_free(label);
+            } else {
+                gtk_menu_item_set_label(GTK_MENU_ITEM(ctx->edit_menu_undo), "_Undo");
+            }
+        } else {
+            gtk_menu_item_set_label(GTK_MENU_ITEM(ctx->edit_menu_undo), "_Undo");
+        }
+    }
+    if (ctx->edit_menu_redo && GTK_IS_WIDGET(ctx->edit_menu_redo)) {
+        gboolean can_redo = has_document && document_can_redo(doc);
+        gtk_widget_set_sensitive(ctx->edit_menu_redo, can_redo);
+        if (can_redo && doc && doc->redo_stack) {
+            Command* cmd = command_stack_peek(doc->redo_stack);
+            if (cmd && cmd->name) {
+                gchar* label = g_strdup_printf("_Redo: %s", cmd->name);
+                gtk_menu_item_set_label(GTK_MENU_ITEM(ctx->edit_menu_redo), label);
+                g_free(label);
+            } else {
+                gtk_menu_item_set_label(GTK_MENU_ITEM(ctx->edit_menu_redo), "_Redo");
+            }
+        } else {
+            gtk_menu_item_set_label(GTK_MENU_ITEM(ctx->edit_menu_redo), "_Redo");
+        }
+    }
+
+    if (ctx->edit_menu_copy && GTK_IS_WIDGET(ctx->edit_menu_copy)) {
+        gtk_widget_set_sensitive(ctx->edit_menu_copy, can_layer_copy);
+    }
+    if (ctx->edit_menu_cut && GTK_IS_WIDGET(ctx->edit_menu_cut)) {
+        gtk_widget_set_sensitive(ctx->edit_menu_cut, can_layer_copy);
+    }
+    if (ctx->edit_menu_paste && GTK_IS_WIDGET(ctx->edit_menu_paste)) {
+        gtk_widget_set_sensitive(ctx->edit_menu_paste, has_document && clipboard_has_image);
+    }
+    if (ctx->edit_menu_paste_new_image && GTK_IS_WIDGET(ctx->edit_menu_paste_new_image)) {
+        gtk_widget_set_sensitive(ctx->edit_menu_paste_new_image, clipboard_has_image);
+    }
+    if (ctx->edit_menu_copy_merged && GTK_IS_WIDGET(ctx->edit_menu_copy_merged)) {
+        gtk_widget_set_sensitive(ctx->edit_menu_copy_merged, can_merged_copy);
+    }
+    if (ctx->edit_menu_cut_merged && GTK_IS_WIDGET(ctx->edit_menu_cut_merged)) {
+        gtk_widget_set_sensitive(ctx->edit_menu_cut_merged, can_merged_copy);
+    }
+    if (ctx->edit_menu_clear && GTK_IS_WIDGET(ctx->edit_menu_clear)) {
+        gtk_widget_set_sensitive(ctx->edit_menu_clear, can_edit_layer);
+    }
+    if (ctx->edit_menu_fill && GTK_IS_WIDGET(ctx->edit_menu_fill)) {
+        gtk_widget_set_sensitive(ctx->edit_menu_fill, can_edit_layer);
+    }
+}
+
 /**
  * Setup Edit menu from Glade builder
  */
@@ -1599,53 +1811,62 @@ void ui_edit_menu_setup(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* acc
     }
 
     /* Connect Copy, Cut, Paste menu items */
-    GtkWidget* edit_menu_copy = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu_copy"));
-    GtkWidget* edit_menu_cut = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu_cut"));
-    GtkWidget* edit_menu_paste = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu_paste"));
-    GtkWidget* edit_menu_paste_new_image = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu_paste_new_image"));
-    GtkWidget* edit_menu_copy_merged = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu_copy_merged"));
-    GtkWidget* edit_menu_cut_merged = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu_cut_merged"));
+    ctx->edit_menu_copy = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu_copy"));
+    ctx->edit_menu_cut = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu_cut"));
+    ctx->edit_menu_paste = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu_paste"));
+    ctx->edit_menu_paste_new_image = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu_paste_new_image"));
+    ctx->edit_menu_copy_merged = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu_copy_merged"));
+    ctx->edit_menu_cut_merged = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu_cut_merged"));
 
-    if (edit_menu_copy) {
-        g_signal_connect(edit_menu_copy, "activate", G_CALLBACK(on_edit_copy), ctx);
-        gtk_widget_add_accelerator(edit_menu_copy, "activate", accel_group,
+    if (ctx->edit_menu_copy) {
+        g_signal_connect(ctx->edit_menu_copy, "activate", G_CALLBACK(on_edit_copy), ctx);
+        gtk_widget_add_accelerator(ctx->edit_menu_copy, "activate", accel_group,
                                    GDK_KEY_c, GDK_CONTROL_MASK, GTK_ACCEL_VISIBLE);
     }
-    if (edit_menu_cut) {
-        g_signal_connect(edit_menu_cut, "activate", G_CALLBACK(on_edit_cut), ctx);
-        gtk_widget_add_accelerator(edit_menu_cut, "activate", accel_group,
+    if (ctx->edit_menu_cut) {
+        g_signal_connect(ctx->edit_menu_cut, "activate", G_CALLBACK(on_edit_cut), ctx);
+        gtk_widget_add_accelerator(ctx->edit_menu_cut, "activate", accel_group,
                                    GDK_KEY_x, GDK_CONTROL_MASK, GTK_ACCEL_VISIBLE);
     }
-    if (edit_menu_paste) {
-        g_signal_connect(edit_menu_paste, "activate", G_CALLBACK(on_edit_paste), ctx);
-        gtk_widget_add_accelerator(edit_menu_paste, "activate", accel_group,
+    if (ctx->edit_menu_paste) {
+        g_signal_connect(ctx->edit_menu_paste, "activate", G_CALLBACK(on_edit_paste), ctx);
+        gtk_widget_add_accelerator(ctx->edit_menu_paste, "activate", accel_group,
                                    GDK_KEY_v, GDK_CONTROL_MASK, GTK_ACCEL_VISIBLE);
     }
-    if (edit_menu_paste_new_image) {
-        g_signal_connect(edit_menu_paste_new_image, "activate", G_CALLBACK(on_edit_paste_new_image), ctx);
-        gtk_widget_add_accelerator(edit_menu_paste_new_image, "activate", accel_group,
+    if (ctx->edit_menu_paste_new_image) {
+        g_signal_connect(ctx->edit_menu_paste_new_image, "activate", G_CALLBACK(on_edit_paste_new_image), ctx);
+        gtk_widget_add_accelerator(ctx->edit_menu_paste_new_image, "activate", accel_group,
                                    GDK_KEY_v, GDK_CONTROL_MASK | GDK_SHIFT_MASK, GTK_ACCEL_VISIBLE);
     }
-    if (edit_menu_copy_merged) {
-        g_signal_connect(edit_menu_copy_merged, "activate", G_CALLBACK(on_edit_copy_merged), ctx);
-        gtk_widget_add_accelerator(edit_menu_copy_merged, "activate", accel_group,
+    if (ctx->edit_menu_copy_merged) {
+        g_signal_connect(ctx->edit_menu_copy_merged, "activate", G_CALLBACK(on_edit_copy_merged), ctx);
+        gtk_widget_add_accelerator(ctx->edit_menu_copy_merged, "activate", accel_group,
                                    GDK_KEY_c, GDK_CONTROL_MASK | GDK_SHIFT_MASK, GTK_ACCEL_VISIBLE);
     }
-    if (edit_menu_cut_merged) {
-        g_signal_connect(edit_menu_cut_merged, "activate", G_CALLBACK(on_edit_cut_merged), ctx);
+    if (ctx->edit_menu_cut_merged) {
+        g_signal_connect(ctx->edit_menu_cut_merged, "activate", G_CALLBACK(on_edit_cut_merged), ctx);
     }
 
     /* Connect Clear menu item */
-    GtkWidget* edit_menu_clear = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu_clear"));
-    if (edit_menu_clear) {
-        g_signal_connect(edit_menu_clear, "activate", G_CALLBACK(on_edit_clear), ctx);
-        gtk_widget_add_accelerator(edit_menu_clear, "activate", accel_group,
+    ctx->edit_menu_clear = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu_clear"));
+    if (ctx->edit_menu_clear) {
+        g_signal_connect(ctx->edit_menu_clear, "activate", G_CALLBACK(on_edit_clear), ctx);
+        gtk_widget_add_accelerator(ctx->edit_menu_clear, "activate", accel_group,
                                    GDK_KEY_Delete, (GdkModifierType)0, GTK_ACCEL_VISIBLE);
     }
 
     /* Connect Fill menu item */
-    GtkWidget* edit_menu_fill = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu_fill"));
-    if (edit_menu_fill) {
-        g_signal_connect(edit_menu_fill, "activate", G_CALLBACK(on_edit_fill), ctx);
+    ctx->edit_menu_fill = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu_fill"));
+    if (ctx->edit_menu_fill) {
+        g_signal_connect(ctx->edit_menu_fill, "activate", G_CALLBACK(on_edit_fill), ctx);
+    }
+
+    /* Refresh Paste when clipboard content changes */
+    if (!s_edit_clipboard_owner_signal_connected) {
+        GtkClipboard* clip = gtk_clipboard_get(GDK_SELECTION_CLIPBOARD);
+        if (clip) {
+            g_signal_connect(clip, "owner-change", G_CALLBACK(on_clipboard_owner_change), ctx);
+            s_edit_clipboard_owner_signal_connected = TRUE;
+        }
     }
 }

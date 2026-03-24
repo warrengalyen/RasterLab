@@ -11,11 +11,336 @@
 #include "ui/dialogs/resize_dialog.h"
 #include "ui/dialogs/rotate_dialog.h"
 #include "ui/layers_panel.h"
+#include "selection/selection_mask.h"
 #include <cairo/cairo.h>
 #include <glib.h>
 #include <gtk/gtk.h>
 #include <math.h>
 #include <stdbool.h>
+#include <stdint.h>
+
+static gboolean image_doc_has_layer_with_surface(ImageDocument* doc) {
+    if (!doc || !doc->layers) {
+        return FALSE;
+    }
+    for (GList* iter = doc->layers; iter; iter = iter->next) {
+        ImageLayer* layer = (ImageLayer*)iter->data;
+        if (layer && layer->surface) {
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+static gboolean image_doc_duplicate_available(ImageDocument* doc) {
+    if (!doc || !doc->layers || g_list_length(doc->layers) == 0) {
+        return FALSE;
+    }
+    for (GList* iter = doc->layers; iter; iter = iter->next) {
+        ImageLayer* layer = (ImageLayer*)iter->data;
+        if (!layer || !layer->surface) {
+            return FALSE;
+        }
+    }
+    return TRUE;
+}
+
+static gint image_menu_visible_layer_count(ImageDocument* doc) {
+    gint n = 0;
+    if (!doc || !doc->layers) {
+        return 0;
+    }
+    for (GList* iter = doc->layers; iter; iter = iter->next) {
+        ImageLayer* layer = (ImageLayer*)iter->data;
+        if (layer && layer->visible && layer->opacity > 0.0) {
+            n++;
+        }
+    }
+    return n;
+}
+
+static gboolean image_menu_get_selection_bounds_for_crop(SelectionMask* mask,
+                                                         gint* out_x, gint* out_y,
+                                                         gint* out_width, gint* out_height) {
+    if (!mask || !mask->base_mask || selection_mask_is_empty(mask)) {
+        return FALSE;
+    }
+
+    gint min_x = mask->width;
+    gint min_y = mask->height;
+    gint max_x = -1;
+    gint max_y = -1;
+
+    for (gint y = 0; y < mask->height; y++) {
+        uint8_t* row = mask->base_mask + y * mask->stride;
+        for (gint x = 0; x < mask->width; x++) {
+            if (row[x] > 0) {
+                if (x < min_x) {
+                    min_x = x;
+                }
+                if (y < min_y) {
+                    min_y = y;
+                }
+                if (x > max_x) {
+                    max_x = x;
+                }
+                if (y > max_y) {
+                    max_y = y;
+                }
+            }
+        }
+    }
+
+    if (max_x < min_x || max_y < min_y) {
+        return FALSE;
+    }
+
+    *out_x = min_x;
+    *out_y = min_y;
+    *out_width = max_x - min_x + 1;
+    *out_height = max_y - min_y + 1;
+    return TRUE;
+}
+
+static gboolean image_menu_get_content_bounds(ImageDocument* doc,
+                                              gint* out_x, gint* out_y,
+                                              gint* out_width, gint* out_height) {
+    if (!doc || !doc->layers || g_list_length(doc->layers) == 0) {
+        return FALSE;
+    }
+
+    gint min_x = (gint)doc->width;
+    gint min_y = (gint)doc->height;
+    gint max_x = -1;
+    gint max_y = -1;
+
+    for (GList* iter = doc->layers; iter; iter = iter->next) {
+        ImageLayer* layer = (ImageLayer*)iter->data;
+        if (!layer || !layer->surface || !layer->visible) {
+            continue;
+        }
+
+        cairo_surface_flush(layer->surface);
+        guchar* surface_data = cairo_image_surface_get_data(layer->surface);
+        gint stride = cairo_image_surface_get_stride(layer->surface);
+
+        if (!surface_data) {
+            continue;
+        }
+
+        for (gint y = 0; y < (gint)layer->height; y++) {
+            guint32* row = (guint32*)(surface_data + y * stride);
+            for (gint x = 0; x < (gint)layer->width; x++) {
+                guchar alpha = (guchar)((row[x] >> 24) & 0xFF);
+                if (alpha > 0) {
+                    gint doc_x = layer->offset_x + x;
+                    gint doc_y = layer->offset_y + y;
+
+                    if (doc_x >= 0 && doc_x < (gint)doc->width &&
+                        doc_y >= 0 && doc_y < (gint)doc->height) {
+                        if (doc_x < min_x) {
+                            min_x = doc_x;
+                        }
+                        if (doc_y < min_y) {
+                            min_y = doc_y;
+                        }
+                        if (doc_x > max_x) {
+                            max_x = doc_x;
+                        }
+                        if (doc_y > max_y) {
+                            max_y = doc_y;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (max_x < min_x || max_y < min_y) {
+        return FALSE;
+    }
+
+    *out_x = min_x;
+    *out_y = min_y;
+    *out_width = max_x - min_x + 1;
+    *out_height = max_y - min_y + 1;
+    return TRUE;
+}
+
+static gboolean image_menu_fit_all_layers_available(ImageDocument* doc) {
+    GList* iter;
+    ImageLayer* layer;
+    gint min_x, min_y, max_x, max_y;
+    guint old_width, old_height;
+    guint new_width, new_height;
+    gboolean has_layers = FALSE;
+
+    if (!doc || !doc->layers || g_list_length(doc->layers) == 0) {
+        return FALSE;
+    }
+
+    min_x = G_MAXINT;
+    min_y = G_MAXINT;
+    max_x = G_MININT;
+    max_y = G_MININT;
+
+    for (iter = doc->layers; iter; iter = iter->next) {
+        layer = (ImageLayer*)iter->data;
+        if (!layer || layer->width == 0 || layer->height == 0) {
+            continue;
+        }
+
+        has_layers = TRUE;
+
+        gint layer_left = layer->offset_x;
+        gint layer_top = layer->offset_y;
+        gint layer_right = layer->offset_x + (gint)layer->width;
+        gint layer_bottom = layer->offset_y + (gint)layer->height;
+
+        if (layer_left < min_x) {
+            min_x = layer_left;
+        }
+        if (layer_top < min_y) {
+            min_y = layer_top;
+        }
+        if (layer_right > max_x) {
+            max_x = layer_right;
+        }
+        if (layer_bottom > max_y) {
+            max_y = layer_bottom;
+        }
+    }
+
+    if (!has_layers) {
+        return FALSE;
+    }
+
+    new_width = (guint)(max_x - min_x);
+    new_height = (guint)(max_y - min_y);
+
+    if (new_width == 0 || new_height == 0) {
+        return FALSE;
+    }
+
+    old_width = doc->width;
+    old_height = doc->height;
+
+    if (old_width == new_width && old_height == new_height &&
+        min_x == 0 && min_y == 0) {
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+void ui_image_menu_update_sensitivity(AppContext* ctx) {
+    ImageDocument* doc;
+    gboolean has_document;
+    gboolean has_layers;
+    gboolean has_surface_layer;
+    gboolean can_dup;
+    gboolean can_rotate;
+    gboolean can_merge_vis;
+    gboolean can_flatten;
+    gboolean can_fit_active = FALSE;
+    gboolean can_fit_all;
+    gboolean can_crop = FALSE;
+    gboolean can_trim = FALSE;
+    gint cx, cy, cw, ch;
+    gint tx, ty, tw, th;
+
+    if (!ctx || !ctx->window) {
+        return;
+    }
+
+    doc = ui_get_active_document(ctx);
+    has_document = (doc != NULL);
+    has_layers = has_document && doc->layers && g_list_length(doc->layers) > 0;
+    has_surface_layer = has_document && image_doc_has_layer_with_surface(doc);
+
+    can_dup = has_document && image_doc_duplicate_available(doc);
+    can_rotate = has_document && doc->width > 0 && doc->height > 0 && has_surface_layer;
+    can_merge_vis = has_document && image_menu_visible_layer_count(doc) >= 2;
+    can_flatten = has_layers && g_list_length(doc->layers) >= 2;
+
+    if (has_document) {
+        ImageLayer* active = document_get_selected_layer(doc);
+        if (active && active->width > 0 && active->height > 0) {
+            if (!(doc->width == active->width && doc->height == active->height &&
+                  active->offset_x == 0 && active->offset_y == 0)) {
+                can_fit_active = TRUE;
+            }
+        }
+    }
+
+    can_fit_all = has_document && image_menu_fit_all_layers_available(doc);
+
+    if (has_layers && has_surface_layer && doc->selection_mask &&
+        !selection_mask_is_empty(doc->selection_mask) &&
+        image_menu_get_selection_bounds_for_crop(doc->selection_mask, &cx, &cy, &cw, &ch) &&
+        cw > 0 && ch > 0) {
+        can_crop = TRUE;
+    }
+
+    if (has_layers && image_menu_get_content_bounds(doc, &tx, &ty, &tw, &th) &&
+        tw > 0 && th > 0) {
+        if (!(tx == 0 && ty == 0 && (guint)tw == doc->width && (guint)th == doc->height)) {
+            can_trim = TRUE;
+        }
+    }
+
+    if (ctx->image_menu_duplicate && GTK_IS_WIDGET(ctx->image_menu_duplicate)) {
+        gtk_widget_set_sensitive(ctx->image_menu_duplicate, can_dup);
+    }
+    if (ctx->image_menu_resize && GTK_IS_WIDGET(ctx->image_menu_resize)) {
+        gtk_widget_set_sensitive(ctx->image_menu_resize, has_document);
+    }
+    if (ctx->image_menu_canvas_size && GTK_IS_WIDGET(ctx->image_menu_canvas_size)) {
+        gtk_widget_set_sensitive(ctx->image_menu_canvas_size, has_document);
+    }
+    if (ctx->image_menu_fit_active_layer && GTK_IS_WIDGET(ctx->image_menu_fit_active_layer)) {
+        gtk_widget_set_sensitive(ctx->image_menu_fit_active_layer, can_fit_active);
+    }
+    if (ctx->image_menu_fit_all_layer && GTK_IS_WIDGET(ctx->image_menu_fit_all_layer)) {
+        gtk_widget_set_sensitive(ctx->image_menu_fit_all_layer, can_fit_all);
+    }
+    if (ctx->image_menu_crop_selection && GTK_IS_WIDGET(ctx->image_menu_crop_selection)) {
+        gtk_widget_set_sensitive(ctx->image_menu_crop_selection, can_crop);
+    }
+    if (ctx->image_menu_trim_borders && GTK_IS_WIDGET(ctx->image_menu_trim_borders)) {
+        gtk_widget_set_sensitive(ctx->image_menu_trim_borders, can_trim);
+    }
+    if (ctx->rotate_menu && GTK_IS_WIDGET(ctx->rotate_menu)) {
+        gtk_widget_set_sensitive(ctx->rotate_menu, can_rotate);
+    }
+    if (ctx->rotate_menu_90_cw && GTK_IS_WIDGET(ctx->rotate_menu_90_cw)) {
+        gtk_widget_set_sensitive(ctx->rotate_menu_90_cw, can_rotate);
+    }
+    if (ctx->rotate_menu_90_ccw && GTK_IS_WIDGET(ctx->rotate_menu_90_ccw)) {
+        gtk_widget_set_sensitive(ctx->rotate_menu_90_ccw, can_rotate);
+    }
+    if (ctx->rotate_menu_180 && GTK_IS_WIDGET(ctx->rotate_menu_180)) {
+        gtk_widget_set_sensitive(ctx->rotate_menu_180, can_rotate);
+    }
+    if (ctx->rotate_menu_arbitrary && GTK_IS_WIDGET(ctx->rotate_menu_arbitrary)) {
+        gtk_widget_set_sensitive(ctx->rotate_menu_arbitrary, can_rotate);
+    }
+    if (ctx->image_menu_flip_horizontal && GTK_IS_WIDGET(ctx->image_menu_flip_horizontal)) {
+        gtk_widget_set_sensitive(ctx->image_menu_flip_horizontal, has_surface_layer);
+    }
+    if (ctx->image_menu_flip_vertical && GTK_IS_WIDGET(ctx->image_menu_flip_vertical)) {
+        gtk_widget_set_sensitive(ctx->image_menu_flip_vertical, has_surface_layer);
+    }
+    if (ctx->image_menu_transpose && GTK_IS_WIDGET(ctx->image_menu_transpose)) {
+        gtk_widget_set_sensitive(ctx->image_menu_transpose, has_surface_layer);
+    }
+    if (ctx->image_menu_merge_visible && GTK_IS_WIDGET(ctx->image_menu_merge_visible)) {
+        gtk_widget_set_sensitive(ctx->image_menu_merge_visible, can_merge_vis);
+    }
+    if (ctx->image_menu_flatten && GTK_IS_WIDGET(ctx->image_menu_flatten)) {
+        gtk_widget_set_sensitive(ctx->image_menu_flatten, can_flatten);
+    }
+}
 
 /**
  * Image > Resize (Image Size) callback – resample image to new dimensions
@@ -1310,84 +1635,84 @@ void ui_image_menu_setup(GtkBuilder* builder, AppContext* ctx) {
         gtk_menu_item_set_submenu(GTK_MENU_ITEM(image_menu_item), image_menu);
     }
 
-    /* Connect Image menu signals */
-    GtkWidget* image_menu_resize = GTK_WIDGET(gtk_builder_get_object(builder, "image_menu_resize"));
-    if (image_menu_resize) {
-        g_signal_connect(image_menu_resize, "activate", G_CALLBACK(on_image_resize), ctx);
+    ctx->image_menu_resize = GTK_WIDGET(gtk_builder_get_object(builder, "image_menu_resize"));
+    if (ctx->image_menu_resize) {
+        g_signal_connect(ctx->image_menu_resize, "activate", G_CALLBACK(on_image_resize), ctx);
     }
 
-    GtkWidget* image_menu_canvas_size = GTK_WIDGET(gtk_builder_get_object(builder, "image_menu_canvas_size"));
-    if (image_menu_canvas_size) {
-        g_signal_connect(image_menu_canvas_size, "activate", G_CALLBACK(on_image_canvas_size), ctx);
+    ctx->image_menu_canvas_size = GTK_WIDGET(gtk_builder_get_object(builder, "image_menu_canvas_size"));
+    if (ctx->image_menu_canvas_size) {
+        g_signal_connect(ctx->image_menu_canvas_size, "activate", G_CALLBACK(on_image_canvas_size), ctx);
     }
 
-    GtkWidget* image_menu_duplicate = GTK_WIDGET(gtk_builder_get_object(builder, "image_menu_duplicate"));
-    if (image_menu_duplicate) {
-        g_signal_connect(image_menu_duplicate, "activate", G_CALLBACK(on_image_duplicate), ctx);
+    ctx->image_menu_duplicate = GTK_WIDGET(gtk_builder_get_object(builder, "image_menu_duplicate"));
+    if (ctx->image_menu_duplicate) {
+        g_signal_connect(ctx->image_menu_duplicate, "activate", G_CALLBACK(on_image_duplicate), ctx);
     }
 
-    GtkWidget* image_menu_fit_active_layer = GTK_WIDGET(gtk_builder_get_object(builder, "image_menu_fit_active_layer"));
-    if (image_menu_fit_active_layer) {
-        g_signal_connect(image_menu_fit_active_layer, "activate", G_CALLBACK(on_image_fit_active_layer), ctx);
+    ctx->image_menu_fit_active_layer = GTK_WIDGET(gtk_builder_get_object(builder, "image_menu_fit_active_layer"));
+    if (ctx->image_menu_fit_active_layer) {
+        g_signal_connect(ctx->image_menu_fit_active_layer, "activate", G_CALLBACK(on_image_fit_active_layer), ctx);
     }
 
-    GtkWidget* image_menu_fit_all_layer = GTK_WIDGET(gtk_builder_get_object(builder, "image_menu_fit_all_layer"));
-    if (image_menu_fit_all_layer) {
-        g_signal_connect(image_menu_fit_all_layer, "activate", G_CALLBACK(on_image_fit_all_layers), ctx);
+    ctx->image_menu_fit_all_layer = GTK_WIDGET(gtk_builder_get_object(builder, "image_menu_fit_all_layer"));
+    if (ctx->image_menu_fit_all_layer) {
+        g_signal_connect(ctx->image_menu_fit_all_layer, "activate", G_CALLBACK(on_image_fit_all_layers), ctx);
     }
 
-    GtkWidget* rotate_menu_arbitrary = GTK_WIDGET(gtk_builder_get_object(builder, "rotate_menu_arbitrary"));
-    if (rotate_menu_arbitrary) {
-        g_signal_connect(rotate_menu_arbitrary, "activate", G_CALLBACK(on_image_rotate_arbitrary), ctx);
+    ctx->rotate_menu = GTK_WIDGET(gtk_builder_get_object(builder, "rotate_menu"));
+    ctx->rotate_menu_arbitrary = GTK_WIDGET(gtk_builder_get_object(builder, "rotate_menu_arbitrary"));
+    if (ctx->rotate_menu_arbitrary) {
+        g_signal_connect(ctx->rotate_menu_arbitrary, "activate", G_CALLBACK(on_image_rotate_arbitrary), ctx);
     }
 
-    GtkWidget* rotate_menu_90_cw = GTK_WIDGET(gtk_builder_get_object(builder, "rotate_menu_90_cw"));
-    if (rotate_menu_90_cw) {
-        g_signal_connect(rotate_menu_90_cw, "activate", G_CALLBACK(on_image_rotate_90_cw), ctx);
+    ctx->rotate_menu_90_cw = GTK_WIDGET(gtk_builder_get_object(builder, "rotate_menu_90_cw"));
+    if (ctx->rotate_menu_90_cw) {
+        g_signal_connect(ctx->rotate_menu_90_cw, "activate", G_CALLBACK(on_image_rotate_90_cw), ctx);
     }
 
-    GtkWidget* rotate_menu_90_ccw = GTK_WIDGET(gtk_builder_get_object(builder, "rotate_menu_90_ccw"));
-    if (rotate_menu_90_ccw) {
-        g_signal_connect(rotate_menu_90_ccw, "activate", G_CALLBACK(on_image_rotate_90_ccw), ctx);
+    ctx->rotate_menu_90_ccw = GTK_WIDGET(gtk_builder_get_object(builder, "rotate_menu_90_ccw"));
+    if (ctx->rotate_menu_90_ccw) {
+        g_signal_connect(ctx->rotate_menu_90_ccw, "activate", G_CALLBACK(on_image_rotate_90_ccw), ctx);
     }
 
-    GtkWidget* rotate_menu_180 = GTK_WIDGET(gtk_builder_get_object(builder, "rotate_menu_180"));
-    if (rotate_menu_180) {
-        g_signal_connect(rotate_menu_180, "activate", G_CALLBACK(on_image_rotate_180), ctx);
+    ctx->rotate_menu_180 = GTK_WIDGET(gtk_builder_get_object(builder, "rotate_menu_180"));
+    if (ctx->rotate_menu_180) {
+        g_signal_connect(ctx->rotate_menu_180, "activate", G_CALLBACK(on_image_rotate_180), ctx);
     }
 
-    GtkWidget* image_menu_flip_horizontal = GTK_WIDGET(gtk_builder_get_object(builder, "image_menu_flip_horizontal"));
-    if (image_menu_flip_horizontal) {
-        g_signal_connect(image_menu_flip_horizontal, "activate", G_CALLBACK(on_image_flip_horizontal), ctx);
+    ctx->image_menu_flip_horizontal = GTK_WIDGET(gtk_builder_get_object(builder, "image_menu_flip_horizontal"));
+    if (ctx->image_menu_flip_horizontal) {
+        g_signal_connect(ctx->image_menu_flip_horizontal, "activate", G_CALLBACK(on_image_flip_horizontal), ctx);
     }
 
-    GtkWidget* image_menu_flip_vertical = GTK_WIDGET(gtk_builder_get_object(builder, "image_menu_flip_vertical"));
-    if (image_menu_flip_vertical) {
-        g_signal_connect(image_menu_flip_vertical, "activate", G_CALLBACK(on_image_flip_vertical), ctx);
+    ctx->image_menu_flip_vertical = GTK_WIDGET(gtk_builder_get_object(builder, "image_menu_flip_vertical"));
+    if (ctx->image_menu_flip_vertical) {
+        g_signal_connect(ctx->image_menu_flip_vertical, "activate", G_CALLBACK(on_image_flip_vertical), ctx);
     }
 
-    GtkWidget* image_menu_tranpose = GTK_WIDGET(gtk_builder_get_object(builder, "image_menu_tranpose"));
-    if (image_menu_tranpose) {
-        g_signal_connect(image_menu_tranpose, "activate", G_CALLBACK(on_image_transpose), ctx);
+    ctx->image_menu_transpose = GTK_WIDGET(gtk_builder_get_object(builder, "image_menu_tranpose"));
+    if (ctx->image_menu_transpose) {
+        g_signal_connect(ctx->image_menu_transpose, "activate", G_CALLBACK(on_image_transpose), ctx);
     }
 
-    GtkWidget* image_menu_merge_visible = GTK_WIDGET(gtk_builder_get_object(builder, "image_menu_merge_visible"));
-    if (image_menu_merge_visible) {
-        g_signal_connect(image_menu_merge_visible, "activate", G_CALLBACK(on_image_merge_visible), ctx);
+    ctx->image_menu_merge_visible = GTK_WIDGET(gtk_builder_get_object(builder, "image_menu_merge_visible"));
+    if (ctx->image_menu_merge_visible) {
+        g_signal_connect(ctx->image_menu_merge_visible, "activate", G_CALLBACK(on_image_merge_visible), ctx);
     }
 
-    GtkWidget* image_menu_flatten = GTK_WIDGET(gtk_builder_get_object(builder, "image_menu_flatten"));
-    if (image_menu_flatten) {
-        g_signal_connect(image_menu_flatten, "activate", G_CALLBACK(on_image_flatten), ctx);
+    ctx->image_menu_flatten = GTK_WIDGET(gtk_builder_get_object(builder, "image_menu_flatten"));
+    if (ctx->image_menu_flatten) {
+        g_signal_connect(ctx->image_menu_flatten, "activate", G_CALLBACK(on_image_flatten), ctx);
     }
 
-    GtkWidget* image_menu_crop_selection = GTK_WIDGET(gtk_builder_get_object(builder, "image_menu_crop_selection"));
-    if (image_menu_crop_selection) {
-        g_signal_connect(image_menu_crop_selection, "activate", G_CALLBACK(on_image_crop_to_selection), ctx);
+    ctx->image_menu_crop_selection = GTK_WIDGET(gtk_builder_get_object(builder, "image_menu_crop_selection"));
+    if (ctx->image_menu_crop_selection) {
+        g_signal_connect(ctx->image_menu_crop_selection, "activate", G_CALLBACK(on_image_crop_to_selection), ctx);
     }
 
-    GtkWidget* image_menu_trim_borders = GTK_WIDGET(gtk_builder_get_object(builder, "image_menu_trim_borders"));
-    if (image_menu_trim_borders) {
-        g_signal_connect(image_menu_trim_borders, "activate", G_CALLBACK(on_image_trim_borders), ctx);
+    ctx->image_menu_trim_borders = GTK_WIDGET(gtk_builder_get_object(builder, "image_menu_trim_borders"));
+    if (ctx->image_menu_trim_borders) {
+        g_signal_connect(ctx->image_menu_trim_borders, "activate", G_CALLBACK(on_image_trim_borders), ctx);
     }
 }

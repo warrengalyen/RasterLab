@@ -2974,6 +2974,10 @@ void ui_filter_effects_setup_menu(GtkBuilder* builder, AppContext* ctx) {
     GtkWidget* effects_menu = GTK_WIDGET(gtk_builder_get_object(builder, "effects_menu"));
     GtkWidget* effects_menu_item = GTK_WIDGET(gtk_builder_get_object(builder, "effects_menu_item"));
 
+    if (ctx) {
+        ctx->effects_menu_item = effects_menu_item;
+    }
+
     if (effects_menu && effects_menu_item) {
         gtk_menu_item_set_submenu(GTK_MENU_ITEM(effects_menu_item), effects_menu);
     }

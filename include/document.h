@@ -581,4 +581,14 @@ void document_zoom_reset(ImageDocument* doc);
  */
 void document_zoom_to(ImageDocument* doc, gdouble zoom_percent);
 
+/**
+ * @return TRUE if document_zoom_in would change the zoom level
+ */
+gboolean document_zoom_can_zoom_in(ImageDocument* doc);
+
+/**
+ * @return TRUE if document_zoom_out would change the zoom level
+ */
+gboolean document_zoom_can_zoom_out(ImageDocument* doc);
+
 #endif /* DOCUMENT_H */

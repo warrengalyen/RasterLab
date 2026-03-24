@@ -5,6 +5,7 @@
 #include "tools/tool_text.h"
 #include "ui.h"
 #include <gtk/gtk.h>
+#include <math.h>
 
 /**
  * View > Zoom In callback
@@ -316,42 +317,43 @@ void ui_view_menu_setup(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* acc
     }
 
     /* Connect View menu signals */
-    GtkWidget* view_menu_zoom_in = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_in"));
-    GtkWidget* view_menu_zoom_out = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_out"));
-    GtkWidget* view_menu_zoom_reset = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_reset"));
-    GtkWidget* view_menu_zoom_fit = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_fit"));
+    ctx->view_menu_zoom_in = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_in"));
+    ctx->view_menu_zoom_out = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_out"));
+    ctx->view_menu_zoom_reset = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_reset"));
+    ctx->view_menu_zoom_fit = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_fit"));
+    ctx->view_menu_zoom = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom"));
     GtkWidget* view_menu_show_layer_edges = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_show_layer_edges"));
     GtkWidget* view_menu_show_statusbar = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_show_statusbar"));
     GtkWidget* view_menu_show_rulers = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_show_rulers"));
 
-    if (view_menu_zoom_in) {
-        g_signal_connect(view_menu_zoom_in, "activate", G_CALLBACK(on_view_zoom_in), ctx);
+    if (ctx->view_menu_zoom_in) {
+        g_signal_connect(ctx->view_menu_zoom_in, "activate", G_CALLBACK(on_view_zoom_in), ctx);
         if (accel_group) {
-            gtk_widget_add_accelerator(view_menu_zoom_in, "activate", accel_group,
+            gtk_widget_add_accelerator(ctx->view_menu_zoom_in, "activate", accel_group,
                                        GDK_KEY_plus, GDK_CONTROL_MASK, GTK_ACCEL_VISIBLE);
             /* Also add equals key (since + requires Shift on most keyboards) */
-            gtk_widget_add_accelerator(view_menu_zoom_in, "activate", accel_group,
+            gtk_widget_add_accelerator(ctx->view_menu_zoom_in, "activate", accel_group,
                                        GDK_KEY_equal, GDK_CONTROL_MASK, GTK_ACCEL_VISIBLE);
         }
     }
-    if (view_menu_zoom_out) {
-        g_signal_connect(view_menu_zoom_out, "activate", G_CALLBACK(on_view_zoom_out), ctx);
+    if (ctx->view_menu_zoom_out) {
+        g_signal_connect(ctx->view_menu_zoom_out, "activate", G_CALLBACK(on_view_zoom_out), ctx);
         if (accel_group) {
-            gtk_widget_add_accelerator(view_menu_zoom_out, "activate", accel_group,
+            gtk_widget_add_accelerator(ctx->view_menu_zoom_out, "activate", accel_group,
                                        GDK_KEY_minus, GDK_CONTROL_MASK, GTK_ACCEL_VISIBLE);
         }
     }
-    if (view_menu_zoom_reset) {
-        g_signal_connect(view_menu_zoom_reset, "activate", G_CALLBACK(on_view_zoom_reset), ctx);
+    if (ctx->view_menu_zoom_reset) {
+        g_signal_connect(ctx->view_menu_zoom_reset, "activate", G_CALLBACK(on_view_zoom_reset), ctx);
         if (accel_group) {
-            gtk_widget_add_accelerator(view_menu_zoom_reset, "activate", accel_group,
+            gtk_widget_add_accelerator(ctx->view_menu_zoom_reset, "activate", accel_group,
                                        GDK_KEY_0, GDK_CONTROL_MASK, GTK_ACCEL_VISIBLE);
         }
     }
-    if (view_menu_zoom_fit) {
-        g_signal_connect(view_menu_zoom_fit, "activate", G_CALLBACK(on_view_zoom_fit), ctx);
+    if (ctx->view_menu_zoom_fit) {
+        g_signal_connect(ctx->view_menu_zoom_fit, "activate", G_CALLBACK(on_view_zoom_fit), ctx);
         if (accel_group) {
-            gtk_widget_add_accelerator(view_menu_zoom_fit, "activate", accel_group,
+            gtk_widget_add_accelerator(ctx->view_menu_zoom_fit, "activate", accel_group,
                                        GDK_KEY_1, GDK_CONTROL_MASK, GTK_ACCEL_VISIBLE);
         }
     }
@@ -393,77 +395,146 @@ void ui_view_menu_setup(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* acc
     }
 
     /* Connect zoom level menu items */
-    GtkWidget* view_menu_zoom_1600 = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_1600"));
-    GtkWidget* view_menu_zoom_800 = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_800"));
-    GtkWidget* view_menu_zoom_400 = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_400"));
-    GtkWidget* view_menu_zoom_200 = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_200"));
-    GtkWidget* view_menu_zoom_100 = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_100"));
-    GtkWidget* view_menu_zoom_50 = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_50"));
-    GtkWidget* view_menu_zoom_25 = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_25"));
-    GtkWidget* view_menu_zoom_12_5 = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_12_5"));
-    GtkWidget* view_menu_zoom_6_25 = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_6_25"));
+    ctx->view_menu_zoom_1600 = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_1600"));
+    ctx->view_menu_zoom_800 = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_800"));
+    ctx->view_menu_zoom_400 = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_400"));
+    ctx->view_menu_zoom_200 = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_200"));
+    ctx->view_menu_zoom_100 = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_100"));
+    ctx->view_menu_zoom_50 = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_50"));
+    ctx->view_menu_zoom_25 = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_25"));
+    ctx->view_menu_zoom_12_5 = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_12_5"));
+    ctx->view_menu_zoom_6_25 = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_6_25"));
 
-    if (view_menu_zoom_1600) {
-        g_signal_connect(view_menu_zoom_1600, "activate", G_CALLBACK(on_view_zoom_1600), ctx);
+    if (ctx->view_menu_zoom_1600) {
+        g_signal_connect(ctx->view_menu_zoom_1600, "activate", G_CALLBACK(on_view_zoom_1600), ctx);
         if (accel_group) {
-            gtk_widget_add_accelerator(view_menu_zoom_1600, "activate", accel_group,
+            gtk_widget_add_accelerator(ctx->view_menu_zoom_1600, "activate", accel_group,
                                        GDK_KEY_5, 0, GTK_ACCEL_VISIBLE);
         }
     }
-    if (view_menu_zoom_800) {
-        g_signal_connect(view_menu_zoom_800, "activate", G_CALLBACK(on_view_zoom_800), ctx);
+    if (ctx->view_menu_zoom_800) {
+        g_signal_connect(ctx->view_menu_zoom_800, "activate", G_CALLBACK(on_view_zoom_800), ctx);
         if (accel_group) {
-            gtk_widget_add_accelerator(view_menu_zoom_800, "activate", accel_group,
+            gtk_widget_add_accelerator(ctx->view_menu_zoom_800, "activate", accel_group,
                                        GDK_KEY_4, 0, GTK_ACCEL_VISIBLE);
         }
     }
-    if (view_menu_zoom_400) {
-        g_signal_connect(view_menu_zoom_400, "activate", G_CALLBACK(on_view_zoom_400), ctx);
+    if (ctx->view_menu_zoom_400) {
+        g_signal_connect(ctx->view_menu_zoom_400, "activate", G_CALLBACK(on_view_zoom_400), ctx);
         if (accel_group) {
-            gtk_widget_add_accelerator(view_menu_zoom_400, "activate", accel_group,
+            gtk_widget_add_accelerator(ctx->view_menu_zoom_400, "activate", accel_group,
                                        GDK_KEY_3, 0, GTK_ACCEL_VISIBLE);
         }
     }
-    if (view_menu_zoom_200) {
-        g_signal_connect(view_menu_zoom_200, "activate", G_CALLBACK(on_view_zoom_200), ctx);
+    if (ctx->view_menu_zoom_200) {
+        g_signal_connect(ctx->view_menu_zoom_200, "activate", G_CALLBACK(on_view_zoom_200), ctx);
         if (accel_group) {
-            gtk_widget_add_accelerator(view_menu_zoom_200, "activate", accel_group,
+            gtk_widget_add_accelerator(ctx->view_menu_zoom_200, "activate", accel_group,
                                        GDK_KEY_2, 0, GTK_ACCEL_VISIBLE);
         }
     }
-    if (view_menu_zoom_100) {
-        g_signal_connect(view_menu_zoom_100, "activate", G_CALLBACK(on_view_zoom_100), ctx);
+    if (ctx->view_menu_zoom_100) {
+        g_signal_connect(ctx->view_menu_zoom_100, "activate", G_CALLBACK(on_view_zoom_100), ctx);
         if (accel_group) {
-            gtk_widget_add_accelerator(view_menu_zoom_100, "activate", accel_group,
+            gtk_widget_add_accelerator(ctx->view_menu_zoom_100, "activate", accel_group,
                                        GDK_KEY_1, 0, GTK_ACCEL_VISIBLE);
         }
     }
-    if (view_menu_zoom_50) {
-        g_signal_connect(view_menu_zoom_50, "activate", G_CALLBACK(on_view_zoom_50), ctx);
+    if (ctx->view_menu_zoom_50) {
+        g_signal_connect(ctx->view_menu_zoom_50, "activate", G_CALLBACK(on_view_zoom_50), ctx);
         if (accel_group) {
-            gtk_widget_add_accelerator(view_menu_zoom_50, "activate", accel_group,
+            gtk_widget_add_accelerator(ctx->view_menu_zoom_50, "activate", accel_group,
                                        GDK_KEY_KP_2, GDK_CONTROL_MASK, GTK_ACCEL_VISIBLE);
         }
     }
-    if (view_menu_zoom_25) {
-        g_signal_connect(view_menu_zoom_25, "activate", G_CALLBACK(on_view_zoom_25), ctx);
+    if (ctx->view_menu_zoom_25) {
+        g_signal_connect(ctx->view_menu_zoom_25, "activate", G_CALLBACK(on_view_zoom_25), ctx);
         if (accel_group) {
-            gtk_widget_add_accelerator(view_menu_zoom_25, "activate", accel_group,
+            gtk_widget_add_accelerator(ctx->view_menu_zoom_25, "activate", accel_group,
                                        GDK_KEY_KP_3, GDK_CONTROL_MASK, GTK_ACCEL_VISIBLE);
         }
     }
-    if (view_menu_zoom_12_5) {
-        g_signal_connect(view_menu_zoom_12_5, "activate", G_CALLBACK(on_view_zoom_12_5), ctx);
+    if (ctx->view_menu_zoom_12_5) {
+        g_signal_connect(ctx->view_menu_zoom_12_5, "activate", G_CALLBACK(on_view_zoom_12_5), ctx);
         if (accel_group) {
-            gtk_widget_add_accelerator(view_menu_zoom_12_5, "activate", accel_group,
+            gtk_widget_add_accelerator(ctx->view_menu_zoom_12_5, "activate", accel_group,
                                        GDK_KEY_KP_4, GDK_CONTROL_MASK, GTK_ACCEL_VISIBLE);
         }
     }
-    if (view_menu_zoom_6_25) {
-        g_signal_connect(view_menu_zoom_6_25, "activate", G_CALLBACK(on_view_zoom_6_25), ctx);
+    if (ctx->view_menu_zoom_6_25) {
+        g_signal_connect(ctx->view_menu_zoom_6_25, "activate", G_CALLBACK(on_view_zoom_6_25), ctx);
         if (accel_group) {
-            gtk_widget_add_accelerator(view_menu_zoom_6_25, "activate", accel_group,
+            gtk_widget_add_accelerator(ctx->view_menu_zoom_6_25, "activate", accel_group,
                                        GDK_KEY_KP_5, GDK_CONTROL_MASK, GTK_ACCEL_VISIBLE);
         }
+    }
+}
+
+static gboolean view_zoom_preset_available(ImageDocument* doc, gdouble zoom_percent) {
+    if (!doc) {
+        return FALSE;
+    }
+    if (doc->zoom_mode != 0) {
+        return TRUE;
+    }
+    return fabs(doc->zoom_factor * 100.0 - zoom_percent) >= 0.75;
+}
+
+void ui_view_menu_update_zoom_sensitivity(AppContext* ctx) {
+    ImageDocument* doc;
+    gboolean has_doc;
+    gboolean can_fit;
+
+    if (!ctx || !ctx->window) {
+        return;
+    }
+
+    doc = ui_get_active_document(ctx);
+    has_doc = (doc != NULL);
+    can_fit = has_doc && doc->width > 0 && doc->height > 0;
+
+    if (ctx->view_menu_zoom_fit && GTK_IS_WIDGET(ctx->view_menu_zoom_fit)) {
+        gtk_widget_set_sensitive(ctx->view_menu_zoom_fit, can_fit);
+    }
+    if (ctx->view_menu_zoom_reset && GTK_IS_WIDGET(ctx->view_menu_zoom_reset)) {
+        gtk_widget_set_sensitive(ctx->view_menu_zoom_reset, has_doc);
+    }
+    if (ctx->view_menu_zoom_in && GTK_IS_WIDGET(ctx->view_menu_zoom_in)) {
+        gtk_widget_set_sensitive(ctx->view_menu_zoom_in, has_doc && document_zoom_can_zoom_in(doc));
+    }
+    if (ctx->view_menu_zoom_out && GTK_IS_WIDGET(ctx->view_menu_zoom_out)) {
+        gtk_widget_set_sensitive(ctx->view_menu_zoom_out, has_doc && document_zoom_can_zoom_out(doc));
+    }
+
+    if (ctx->view_menu_zoom && GTK_IS_WIDGET(ctx->view_menu_zoom)) {
+        gtk_widget_set_sensitive(ctx->view_menu_zoom, has_doc);
+    }
+
+    if (ctx->view_menu_zoom_1600 && GTK_IS_WIDGET(ctx->view_menu_zoom_1600)) {
+        gtk_widget_set_sensitive(ctx->view_menu_zoom_1600, view_zoom_preset_available(doc, 1600.0));
+    }
+    if (ctx->view_menu_zoom_800 && GTK_IS_WIDGET(ctx->view_menu_zoom_800)) {
+        gtk_widget_set_sensitive(ctx->view_menu_zoom_800, view_zoom_preset_available(doc, 800.0));
+    }
+    if (ctx->view_menu_zoom_400 && GTK_IS_WIDGET(ctx->view_menu_zoom_400)) {
+        gtk_widget_set_sensitive(ctx->view_menu_zoom_400, view_zoom_preset_available(doc, 400.0));
+    }
+    if (ctx->view_menu_zoom_200 && GTK_IS_WIDGET(ctx->view_menu_zoom_200)) {
+        gtk_widget_set_sensitive(ctx->view_menu_zoom_200, view_zoom_preset_available(doc, 200.0));
+    }
+    if (ctx->view_menu_zoom_100 && GTK_IS_WIDGET(ctx->view_menu_zoom_100)) {
+        gtk_widget_set_sensitive(ctx->view_menu_zoom_100, view_zoom_preset_available(doc, 100.0));
+    }
+    if (ctx->view_menu_zoom_50 && GTK_IS_WIDGET(ctx->view_menu_zoom_50)) {
+        gtk_widget_set_sensitive(ctx->view_menu_zoom_50, view_zoom_preset_available(doc, 50.0));
+    }
+    if (ctx->view_menu_zoom_25 && GTK_IS_WIDGET(ctx->view_menu_zoom_25)) {
+        gtk_widget_set_sensitive(ctx->view_menu_zoom_25, view_zoom_preset_available(doc, 25.0));
+    }
+    if (ctx->view_menu_zoom_12_5 && GTK_IS_WIDGET(ctx->view_menu_zoom_12_5)) {
+        gtk_widget_set_sensitive(ctx->view_menu_zoom_12_5, view_zoom_preset_available(doc, 12.5));
+    }
+    if (ctx->view_menu_zoom_6_25 && GTK_IS_WIDGET(ctx->view_menu_zoom_6_25)) {
+        gtk_widget_set_sensitive(ctx->view_menu_zoom_6_25, view_zoom_preset_available(doc, 6.25));
     }
 }

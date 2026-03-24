@@ -21,4 +21,6 @@ void on_select_sharpen(GtkMenuItem* menu_item, gpointer user_data);
  */
 void ui_select_menu_setup(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* accel_group);
 
+void ui_select_menu_update_sensitivity(AppContext* ctx);
+
 #endif /* UI_SELECT_MENU_H */

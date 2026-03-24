@@ -209,6 +209,57 @@ void on_clear_recent_files(GtkMenuItem* menu_item, gpointer user_data) {
     ui_update_recent_files_menu(ctx);
 }
 
+void ui_file_menu_update_sensitivity(AppContext* ctx) {
+    ImageDocument* doc;
+    gboolean has_document;
+    gboolean can_save;
+    gboolean can_save_as;
+    gboolean can_close;
+    gboolean can_close_all;
+    gboolean can_open_recent;
+    const GList* recent_files;
+
+    if (!ctx || !ctx->window) {
+        return;
+    }
+
+    doc = ui_get_active_document(ctx);
+    has_document = (doc != NULL);
+
+    can_save = has_document && document_is_dirty(doc);
+    can_save_as = has_document;
+    can_close = has_document;
+    can_close_all = (ctx->documents != NULL && g_list_length(ctx->documents) > 0);
+
+    recent_files = recent_files_get();
+    can_open_recent = (recent_files != NULL && g_list_length((GList*)recent_files) > 0);
+
+    if (ctx->file_menu_new && GTK_IS_WIDGET(ctx->file_menu_new)) {
+        gtk_widget_set_sensitive(ctx->file_menu_new, TRUE);
+    }
+    if (ctx->file_menu_open && GTK_IS_WIDGET(ctx->file_menu_open)) {
+        gtk_widget_set_sensitive(ctx->file_menu_open, TRUE);
+    }
+    if (ctx->file_menu_open_recent && GTK_IS_WIDGET(ctx->file_menu_open_recent)) {
+        gtk_widget_set_sensitive(ctx->file_menu_open_recent, can_open_recent);
+    }
+    if (ctx->file_menu_save && GTK_IS_WIDGET(ctx->file_menu_save)) {
+        gtk_widget_set_sensitive(ctx->file_menu_save, can_save);
+    }
+    if (ctx->file_menu_save_as && GTK_IS_WIDGET(ctx->file_menu_save_as)) {
+        gtk_widget_set_sensitive(ctx->file_menu_save_as, can_save_as);
+    }
+    if (ctx->file_menu_close && GTK_IS_WIDGET(ctx->file_menu_close)) {
+        gtk_widget_set_sensitive(ctx->file_menu_close, can_close);
+    }
+    if (ctx->file_menu_close_all && GTK_IS_WIDGET(ctx->file_menu_close_all)) {
+        gtk_widget_set_sensitive(ctx->file_menu_close_all, can_close_all);
+    }
+    if (ctx->file_menu_exit && GTK_IS_WIDGET(ctx->file_menu_exit)) {
+        gtk_widget_set_sensitive(ctx->file_menu_exit, TRUE);
+    }
+}
+
 /**
  * Update the "Open Recent" submenu with current recent files
  */
@@ -260,7 +311,10 @@ void ui_update_recent_files_menu(AppContext* ctx) {
 
     if (!recent_files || g_list_length((GList*)recent_files) == 0) {
         /* No recent files - disable the menu item */
-        GtkWidget* file_menu_open_recent = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_open_recent"));
+        GtkWidget* file_menu_open_recent = ctx->file_menu_open_recent;
+        if (!file_menu_open_recent) {
+            file_menu_open_recent = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_open_recent"));
+        }
         if (file_menu_open_recent) {
             gtk_widget_set_sensitive(file_menu_open_recent, FALSE);
         }
@@ -268,9 +322,14 @@ void ui_update_recent_files_menu(AppContext* ctx) {
     }
 
     /* Enable the menu item */
-    GtkWidget* file_menu_open_recent = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_open_recent"));
-    if (file_menu_open_recent) {
-        gtk_widget_set_sensitive(file_menu_open_recent, TRUE);
+    {
+        GtkWidget* file_menu_open_recent = ctx->file_menu_open_recent;
+        if (!file_menu_open_recent) {
+            file_menu_open_recent = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_open_recent"));
+        }
+        if (file_menu_open_recent) {
+            gtk_widget_set_sensitive(file_menu_open_recent, TRUE);
+        }
     }
 
     /* Add menu items for each recent file */
@@ -350,60 +409,58 @@ void ui_file_menu_setup(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* acc
     }
 
     /* Connect File menu signals */
-    GtkWidget* file_menu_new = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_new"));
-    GtkWidget* file_menu_open = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_open"));
-    GtkWidget* file_menu_open_recent = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_open_recent"));
-    GtkWidget* file_menu_save = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_save"));
-    GtkWidget* file_menu_save_as = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_save_as"));
-    GtkWidget* file_menu_close = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_close"));
-    GtkWidget* file_menu_close_all = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_close_all"));
-    GtkWidget* file_menu_exit = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_exit"));
+    ctx->file_menu_new = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_new"));
+    ctx->file_menu_open = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_open"));
+    ctx->file_menu_open_recent = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_open_recent"));
+    ctx->file_menu_save = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_save"));
+    ctx->file_menu_save_as = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_save_as"));
+    ctx->file_menu_close = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_close"));
+    ctx->file_menu_close_all = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_close_all"));
+    ctx->file_menu_exit = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_exit"));
 
-    if (file_menu_new) {
-        g_signal_connect(file_menu_new, "activate", G_CALLBACK(on_file_new), ctx);
-        gtk_widget_add_accelerator(file_menu_new, "activate", accel_group,
+    if (ctx->file_menu_new) {
+        g_signal_connect(ctx->file_menu_new, "activate", G_CALLBACK(on_file_new), ctx);
+        gtk_widget_add_accelerator(ctx->file_menu_new, "activate", accel_group,
                                    GDK_KEY_n, GDK_CONTROL_MASK, GTK_ACCEL_VISIBLE);
     }
 
-    if (file_menu_open) {
-        g_signal_connect(file_menu_open, "activate", G_CALLBACK(on_file_open), ctx);
-        gtk_widget_add_accelerator(file_menu_open, "activate", accel_group,
+    if (ctx->file_menu_open) {
+        g_signal_connect(ctx->file_menu_open, "activate", G_CALLBACK(on_file_open), ctx);
+        gtk_widget_add_accelerator(ctx->file_menu_open, "activate", accel_group,
                                    GDK_KEY_o, GDK_CONTROL_MASK, GTK_ACCEL_VISIBLE);
     }
 
     /* Setup "Open Recent" submenu */
-    if (file_menu_open_recent) {
+    if (ctx->file_menu_open_recent) {
         if (!file_menu) {
             g_warning("file_menu is NULL, cannot setup Open Recent submenu");
         } else {
             GtkWidget* recent_submenu = gtk_menu_new();
-            gtk_menu_item_set_submenu(GTK_MENU_ITEM(file_menu_open_recent), recent_submenu);
+            gtk_menu_item_set_submenu(GTK_MENU_ITEM(ctx->file_menu_open_recent), recent_submenu);
             g_object_set_data(G_OBJECT(file_menu), "recent_files_submenu", recent_submenu);
             /* Don't update menu here - it will be updated after window is fully created */
         }
     }
 
-    /* Store Save menu item in context for state updates */
-    ctx->file_menu_save = file_menu_save;
-    if (file_menu_save) {
-        g_signal_connect(file_menu_save, "activate", G_CALLBACK(on_file_save), ctx);
-        gtk_widget_add_accelerator(file_menu_save, "activate", accel_group,
+    if (ctx->file_menu_save) {
+        g_signal_connect(ctx->file_menu_save, "activate", G_CALLBACK(on_file_save), ctx);
+        gtk_widget_add_accelerator(ctx->file_menu_save, "activate", accel_group,
                                    GDK_KEY_s, GDK_CONTROL_MASK, GTK_ACCEL_VISIBLE);
     }
 
-    if (file_menu_save_as) {
-        g_signal_connect(file_menu_save_as, "activate", G_CALLBACK(on_file_save_as), ctx);
-        gtk_widget_add_accelerator(file_menu_save_as, "activate", accel_group,
+    if (ctx->file_menu_save_as) {
+        g_signal_connect(ctx->file_menu_save_as, "activate", G_CALLBACK(on_file_save_as), ctx);
+        gtk_widget_add_accelerator(ctx->file_menu_save_as, "activate", accel_group,
                                    GDK_KEY_s, GDK_CONTROL_MASK | GDK_SHIFT_MASK, GTK_ACCEL_VISIBLE);
     }
-    if (file_menu_close) {
-        g_signal_connect(file_menu_close, "activate", G_CALLBACK(on_file_close), ctx);
+    if (ctx->file_menu_close) {
+        g_signal_connect(ctx->file_menu_close, "activate", G_CALLBACK(on_file_close), ctx);
     }
-    if (file_menu_close_all) {
-        g_signal_connect(file_menu_close_all, "activate", G_CALLBACK(on_file_close_all), ctx);
+    if (ctx->file_menu_close_all) {
+        g_signal_connect(ctx->file_menu_close_all, "activate", G_CALLBACK(on_file_close_all), ctx);
     }
-    if (file_menu_exit) {
-        g_signal_connect(file_menu_exit, "activate", G_CALLBACK(on_file_exit), ctx);
+    if (ctx->file_menu_exit) {
+        g_signal_connect(ctx->file_menu_exit, "activate", G_CALLBACK(on_file_exit), ctx);
     }
 }
 
