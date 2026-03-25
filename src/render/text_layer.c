@@ -255,3 +255,44 @@ void text_layer_render_to_surface(ImageLayer* layer) {
     text_layer_apply_to_cr(text, cr);
     cairo_destroy(cr);
 }
+
+gboolean text_layer_equal(const TextLayer* a, const TextLayer* b) {
+    if (!a || !b) {
+        return a == b;
+    }
+    if (g_strcmp0(a->text, b->text) != 0) {
+        return FALSE;
+    }
+    if (g_strcmp0(a->font_family, b->font_family) != 0) {
+        return FALSE;
+    }
+    if (a->font_size != b->font_size) {
+        return FALSE;
+    }
+    if (a->font_weight != b->font_weight || a->font_style != b->font_style) {
+        return FALSE;
+    }
+    if (a->color_r != b->color_r || a->color_g != b->color_g || a->color_b != b->color_b || a->color_a != b->color_a) {
+        return FALSE;
+    }
+    if (a->line_spacing != b->line_spacing || a->letter_spacing != b->letter_spacing) {
+        return FALSE;
+    }
+    if (a->alignment != b->alignment) {
+        return FALSE;
+    }
+    if (a->rotation != b->rotation) {
+        return FALSE;
+    }
+    if (a->box_x != b->box_x || a->box_y != b->box_y || a->box_width != b->box_width || a->box_height != b->box_height) {
+        return FALSE;
+    }
+    if (a->antialias != b->antialias || a->kerning != b->kerning) {
+        return FALSE;
+    }
+    if (g_strcmp0(a->opentype_features ? a->opentype_features : "",
+                   b->opentype_features ? b->opentype_features : "") != 0) {
+        return FALSE;
+    }
+    return TRUE;
+}

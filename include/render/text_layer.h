@@ -80,6 +80,11 @@ void text_layer_free(TextLayer* text);
 TextLayer* text_layer_duplicate(const TextLayer* src);
 
 /**
+ * Exact comparison of text layer properties (for revert diff / equality checks).
+ */
+gboolean text_layer_equal(const TextLayer* a, const TextLayer* b);
+
+/**
  * Render text directly into an arbitrary Cairo context.
  *
  * The caller is responsible for all canvas/zoom transforms already being

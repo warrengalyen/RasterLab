@@ -172,6 +172,98 @@ ImageLayer* layer_duplicate_deep(const ImageLayer* src, struct ImageDocument* do
     return dst;
 }
 
+static gboolean layer_surface_pixels_equal(cairo_surface_t* sa, cairo_surface_t* sb) {
+    cairo_format_t fa;
+    cairo_format_t fb;
+    int wa, ha, wb, hb;
+    int stra, strb;
+    guchar *pa, *pb;
+    int y;
+
+    if (!sa || !sb) {
+        return sa == sb;
+    }
+    fa = cairo_image_surface_get_format(sa);
+    fb = cairo_image_surface_get_format(sb);
+    if (fa != fb) {
+        return FALSE;
+    }
+    wa = cairo_image_surface_get_width(sa);
+    wb = cairo_image_surface_get_width(sb);
+    ha = cairo_image_surface_get_height(sa);
+    hb = cairo_image_surface_get_height(sb);
+    if (wa != wb || ha != hb) {
+        return FALSE;
+    }
+    stra = cairo_image_surface_get_stride(sa);
+    strb = cairo_image_surface_get_stride(sb);
+    cairo_surface_flush(sa);
+    cairo_surface_flush(sb);
+    pa = cairo_image_surface_get_data(sa);
+    pb = cairo_image_surface_get_data(sb);
+    if (!pa || !pb) {
+        return FALSE;
+    }
+
+    if (fa == CAIRO_FORMAT_ARGB32) {
+        for (y = 0; y < ha; y++) {
+            if (memcmp(pa + (size_t)y * stra, pb + (size_t)y * strb, (size_t)wa * 4u) != 0) {
+                return FALSE;
+            }
+        }
+        return TRUE;
+    }
+    if (fa == CAIRO_FORMAT_RGB24) {
+        for (y = 0; y < ha; y++) {
+            if (memcmp(pa + (size_t)y * stra, pb + (size_t)y * strb, (size_t)wa * 3u) != 0) {
+                return FALSE;
+            }
+        }
+        return TRUE;
+    }
+
+    /* Other formats: compare full stride rows */
+    for (y = 0; y < ha; y++) {
+        if (memcmp(pa + (size_t)y * stra, pb + (size_t)y * strb, (size_t)stra) != 0) {
+            return FALSE;
+        }
+    }
+    return TRUE;
+}
+
+gboolean layer_equal_content(const ImageLayer* a, const ImageLayer* b) {
+    if (!a || !b) {
+        return a == b;
+    }
+    if (g_strcmp0(a->name, b->name) != 0) {
+        return FALSE;
+    }
+    if (a->width != b->width || a->height != b->height) {
+        return FALSE;
+    }
+    if (a->opacity != b->opacity) {
+        return FALSE;
+    }
+    if (a->visible != b->visible) {
+        return FALSE;
+    }
+    if (a->blend_mode != b->blend_mode) {
+        return FALSE;
+    }
+    if (a->offset_x != b->offset_x || a->offset_y != b->offset_y) {
+        return FALSE;
+    }
+    if (a->layer_type != b->layer_type) {
+        return FALSE;
+    }
+    if (a->layer_type == LAYER_TYPE_TEXT) {
+        if (!text_layer_equal((TextLayer*)a->text_data, (TextLayer*)b->text_data)) {
+            return FALSE;
+        }
+    }
+    return layer_surface_pixels_equal(a->surface, b->surface);
+}
+
 void layer_free(ImageLayer* layer) {
     if (!layer) {
         return;

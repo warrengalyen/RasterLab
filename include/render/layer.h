@@ -38,6 +38,11 @@ void layer_free(ImageLayer* layer);
 ImageLayer* layer_duplicate_deep(const ImageLayer* src, struct ImageDocument* doc);
 
 /**
+ * Compare two layers for pixel-identical revert diff (name, props, pixels / text data).
+ */
+gboolean layer_equal_content(const ImageLayer* a, const ImageLayer* b);
+
+/**
  * Add a new empty layer to the document
  * @param doc The document
  * @param name Layer name

@@ -5,6 +5,7 @@
 #include "command.h"
 #include "commands/command_revert.h"
 #include "document.h"
+#include "document_revert_diff.h"
 #include "io/image_io.h"
 #include "plugins/format_registry.h"
 #include "ui.h"
@@ -219,8 +220,7 @@ static void on_file_revert(GtkMenuItem* menu_item, gpointer user_data) {
     AppContext* ctx = (AppContext*)user_data;
     ImageDocument* doc;
     ImageDocument* temp;
-    DocumentContentSnapshot* before;
-    DocumentContentSnapshot* after;
+    DocumentRevertDiff* diff;
     Command* cmd;
     gchar* basename;
     guint undo_levels = 10;
@@ -251,14 +251,6 @@ static void on_file_revert(GtkMenuItem* menu_item, gpointer user_data) {
         }
     }
 
-    before = document_content_snapshot_capture(doc);
-    if (!before) {
-        ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_ERROR,
-                                    "Could not capture the current document state for revert.",
-                                    NULL, GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
-        return;
-    }
-
     basename = g_path_get_basename(doc->file_path);
     if (ctx->settings) {
         undo_levels = (guint)settings_get_undo_levels(ctx->settings);
@@ -266,7 +258,6 @@ static void on_file_revert(GtkMenuItem* menu_item, gpointer user_data) {
     temp = document_new(basename ? basename : "revert", TRUE, undo_levels);
     g_free(basename);
     if (!temp) {
-        document_content_snapshot_free(before);
         ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_ERROR,
                                     "Out of memory preparing revert.", NULL,
                                     GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
@@ -280,7 +271,6 @@ static void on_file_revert(GtkMenuItem* menu_item, gpointer user_data) {
         if (!load_ok) {
             if (load_error == PLUGIN_ERROR_USER_CANCELLED) {
                 document_free(temp);
-                document_content_snapshot_free(before);
                 return;
             }
             {
@@ -291,7 +281,6 @@ static void on_file_revert(GtkMenuItem* menu_item, gpointer user_data) {
                 g_free(msg);
             }
             document_free(temp);
-            document_content_snapshot_free(before);
             return;
         }
 
@@ -300,7 +289,6 @@ static void on_file_revert(GtkMenuItem* menu_item, gpointer user_data) {
                                         "Could not initialize rendering after reload.", NULL,
                                         GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
             document_free(temp);
-            document_content_snapshot_free(before);
             return;
         }
 
@@ -313,19 +301,18 @@ static void on_file_revert(GtkMenuItem* menu_item, gpointer user_data) {
         document_invalidate_composite(temp);
     }
 
-    after = document_content_snapshot_capture(temp);
-    document_free(temp);
-    if (!after) {
-        document_content_snapshot_free(before);
+    diff = document_revert_diff_build(doc, temp);
+    if (!diff) {
+        document_free(temp);
         ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_ERROR,
-                                    "Could not capture reloaded document.", NULL,
+                                    "Could not prepare revert undo data.", NULL,
                                     GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
         return;
     }
 
     /* Drop prior undo/redo before replacing document content. If we cleared the stacks after
-     * document_content_snapshot_apply(), command destroy callbacks would see stale layer pointers
-     * (already freed by the snapshot apply) and could double-free. */
+     * applying new content, command destroy callbacks would see stale layer pointers
+     * (already freed by the apply) and could double-free. */
     if (doc->undo_stack) {
         command_stack_clear(doc->undo_stack);
     }
@@ -333,25 +320,20 @@ static void on_file_revert(GtkMenuItem* menu_item, gpointer user_data) {
         command_stack_clear(doc->redo_stack);
     }
 
-    if (!document_content_snapshot_apply(doc, after)) {
-        if (!document_content_snapshot_apply(doc, before)) {
-            g_warning("Revert: failed to restore document after apply failure");
-        }
-        document_content_snapshot_free(before);
-        document_content_snapshot_free(after);
+    if (!document_revert_apply_loaded_document(doc, temp)) {
+        document_revert_diff_free(diff);
         ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_ERROR,
                                     "Could not apply revert.", NULL,
                                     GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
         return;
     }
 
-    cmd = command_create_document_revert(doc, before, after);
+    cmd = command_create_document_revert(doc, diff, doc->file_path, ctx->settings);
     if (!cmd) {
-        if (!document_content_snapshot_apply(doc, before)) {
+        if (!document_revert_diff_apply_undo(doc, diff)) {
             g_warning("Revert: failed to restore document after command creation failure");
         }
-        document_content_snapshot_free(before);
-        document_content_snapshot_free(after);
+        document_revert_diff_free(diff);
         ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_ERROR,
                                     "Could not create revert undo step.", NULL,
                                     GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);

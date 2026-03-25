@@ -4,26 +4,27 @@
 #include <glib.h>
 
 typedef struct {
-    DocumentContentSnapshot* before_snap;
-    DocumentContentSnapshot* after_snap;
+    DocumentRevertDiff* diff;
+    gchar* reload_path;
+    Settings* settings;
 } RevertCommandData;
 
 static void revert_command_apply(Command* cmd, struct ImageDocument* doc) {
     RevertCommandData* d = (RevertCommandData*)cmd->user_data;
 
-    if (!d || !d->after_snap || !doc) {
+    if (!d || !d->reload_path || !doc) {
         return;
     }
-    document_content_snapshot_apply(doc, d->after_snap);
+    document_revert_reload_from_file(doc, d->reload_path, d->settings);
 }
 
 static void revert_command_revert(Command* cmd, struct ImageDocument* doc) {
     RevertCommandData* d = (RevertCommandData*)cmd->user_data;
 
-    if (!d || !d->before_snap || !doc) {
+    if (!d || !d->diff || !doc) {
         return;
     }
-    document_content_snapshot_apply(doc, d->before_snap);
+    document_revert_diff_apply_undo(doc, d->diff);
 }
 
 static void revert_command_destroy(Command* cmd) {
@@ -32,18 +33,19 @@ static void revert_command_destroy(Command* cmd) {
     if (!d) {
         return;
     }
-    document_content_snapshot_free(d->before_snap);
-    document_content_snapshot_free(d->after_snap);
+    document_revert_diff_free(d->diff);
+    g_free(d->reload_path);
     g_free(d);
 }
 
 Command* command_create_document_revert(struct ImageDocument* doc,
-                                        DocumentContentSnapshot* before_snap,
-                                        DocumentContentSnapshot* after_snap) {
+                                        DocumentRevertDiff* diff,
+                                        const gchar* reload_path,
+                                        Settings* settings) {
     Command* cmd;
     RevertCommandData* data;
 
-    if (!doc || !before_snap || !after_snap) {
+    if (!doc || !diff || !reload_path || reload_path[0] == '\0') {
         return NULL;
     }
 
@@ -51,12 +53,18 @@ Command* command_create_document_revert(struct ImageDocument* doc,
     if (!data) {
         return NULL;
     }
-    data->before_snap = before_snap;
-    data->after_snap = after_snap;
+    data->diff = diff;
+    data->reload_path = g_strdup(reload_path);
+    data->settings = settings;
+    if (!data->reload_path) {
+        g_free(data);
+        return NULL;
+    }
 
     cmd = command_new("Revert", COMMAND_DOCUMENT_REVERT,
                       revert_command_apply, revert_command_revert, revert_command_destroy);
     if (!cmd) {
+        g_free(data->reload_path);
         g_free(data);
         return NULL;
     }

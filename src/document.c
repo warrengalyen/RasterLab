@@ -2987,6 +2987,27 @@ gboolean document_resize_canvas(ImageDocument* doc, guint new_width, guint new_h
 
 /* --- Full document content snapshot (revert / undo integration) --- */
 
+void document_clear_content_replace_caches(ImageDocument* doc) {
+    if (!doc) {
+        return;
+    }
+
+    if (doc->gpu_compositor) {
+        gpu_compositor_clear_cache(doc->gpu_compositor);
+    }
+
+#if HAVE_LCMS2
+    if (doc->load_icc_profile) {
+        icc_destroy((cmsHPROFILE)doc->load_icc_profile);
+        doc->load_icc_profile = NULL;
+    }
+    if (doc->display_xform_cache) {
+        display_xform_cache_free((DisplayTransformCache*)doc->display_xform_cache);
+        doc->display_xform_cache = NULL;
+    }
+#endif
+}
+
 struct DocumentContentSnapshot {
     guint width, height, channels, bit_depth;
     gboolean has_alpha;
@@ -3096,20 +3117,7 @@ gboolean document_content_snapshot_apply(ImageDocument* doc, const DocumentConte
         return FALSE;
     }
 
-    if (doc->gpu_compositor) {
-        gpu_compositor_clear_cache(doc->gpu_compositor);
-    }
-
-#if HAVE_LCMS2
-    if (doc->load_icc_profile) {
-        icc_destroy((cmsHPROFILE)doc->load_icc_profile);
-        doc->load_icc_profile = NULL;
-    }
-    if (doc->display_xform_cache) {
-        display_xform_cache_free((DisplayTransformCache*)doc->display_xform_cache);
-        doc->display_xform_cache = NULL;
-    }
-#endif
+    document_clear_content_replace_caches(doc);
 
     for (iter = snap->layers; iter; iter = iter->next) {
         lyr = layer_duplicate_deep((ImageLayer*)iter->data, NULL);

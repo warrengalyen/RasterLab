@@ -48,6 +48,7 @@ set(SOURCES
     commands/command_revert.c
     commands/command_text_layer.c
     document.c
+    document_revert_diff.c
     filters/filters.c
     io/image_io.c
     main.c

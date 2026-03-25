@@ -488,6 +488,12 @@ gboolean document_undo(ImageDocument* doc);
 gboolean document_redo(ImageDocument* doc);
 
 /**
+ * Clear GPU caches and pending ICC / display-transform state before replacing
+ * document pixels (snapshot apply, revert, reload).
+ */
+void document_clear_content_replace_caches(ImageDocument* doc);
+
+/**
  * Capture a deep copy of document content (layers, pixels, selection, metadata).
  * @return New snapshot, or NULL on failure
  */
