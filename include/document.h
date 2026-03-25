@@ -41,6 +41,9 @@ typedef struct SelectionMask SelectionMask;
 /* Forward declaration for undo journal - full definition in undo/undo_disk.h */
 typedef struct _UndoJournal UndoJournal;
 
+/* Opaque full document content snapshot (layers, selection, ICC blob, metadata) */
+typedef struct DocumentContentSnapshot DocumentContentSnapshot;
+
 /**
  * Blend modes for layers (Photoshop-compatible, all 27 modes)
  * 
@@ -483,6 +486,24 @@ gboolean document_undo(ImageDocument* doc);
  * @return TRUE if redo was performed, FALSE if redo stack is empty
  */
 gboolean document_redo(ImageDocument* doc);
+
+/**
+ * Capture a deep copy of document content (layers, pixels, selection, metadata).
+ * @return New snapshot, or NULL on failure
+ */
+DocumentContentSnapshot* document_content_snapshot_capture(ImageDocument* doc);
+
+/**
+ * Free a snapshot created by document_content_snapshot_capture
+ */
+void document_content_snapshot_free(DocumentContentSnapshot* snap);
+
+/**
+ * Replace document content with a deep clone of the snapshot (same ImageDocument pointer).
+ * Invalidates rendering caches and disk-backed undo journal entries (journal stacks cleared).
+ * @return TRUE on success
+ */
+gboolean document_content_snapshot_apply(ImageDocument* doc, const DocumentContentSnapshot* snap);
 
 /**
  * Check if undo is available

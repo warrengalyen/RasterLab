@@ -3,18 +3,20 @@
 #include "app/recent_files.h"
 #include "app/settings.h"
 #include "command.h"
+#include "commands/command_revert.h"
 #include "document.h"
 #include "io/image_io.h"
 #include "plugins/format_registry.h"
 #include "ui.h"
 #include "ui/dialogs/new_image_dialog.h"
-#include "ui/ui_utils.h"
 #include "ui/dialogs/save_options_dialog.h"
 #include "ui/layers_panel.h"
 #include "ui/swatches.h"
+#include "ui/ui_utils.h"
 #include <glib.h>
 #include <glib/gstdio.h>
 #include <stdio.h>
+
 
 /* Header probe size for format detection (must be >= 132 for DICOM) */
 #define FILE_HEADER_PROBE_SIZE 256
@@ -42,7 +44,7 @@ void on_recent_file_activate(GtkMenuItem* menu_item, gpointer user_data) {
             "File not found: %s\n\nThe file has been removed from the recent files list.",
             file_path);
         ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_WARNING,
-            msg, NULL, GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
+                                    msg, NULL, GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
         g_free(msg);
 
         /* Remove from recent files */
@@ -67,7 +69,7 @@ void on_recent_file_activate(GtkMenuItem* menu_item, gpointer user_data) {
             "Unsupported file format: %s\n\nNo plugin is available to load this file type.\n\nThe file has been removed from the recent files list.",
             file_path);
         ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_ERROR,
-            msg, NULL, GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
+                                    msg, NULL, GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
         g_free(msg);
 
         /* Remove from recent files */
@@ -100,7 +102,7 @@ void on_recent_file_activate(GtkMenuItem* menu_item, gpointer user_data) {
             gchar* msg = g_strdup_printf("Failed to load image: %s\n\n%s",
                                          file_path, error_message);
             ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_ERROR,
-                msg, NULL, GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
+                                        msg, NULL, GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
             g_free(msg);
 
             /* Destroy document since load failed (it was never added to notebook) */
@@ -124,7 +126,7 @@ void on_recent_file_activate(GtkMenuItem* menu_item, gpointer user_data) {
             gchar* msg = g_strdup_printf("Failed to initialize document rendering for: %s",
                                          file_path);
             ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_ERROR,
-                msg, NULL, GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
+                                        msg, NULL, GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
             g_free(msg);
 
             /* Remove from notebook if it was added, then destroy document */
@@ -209,6 +211,176 @@ void on_clear_recent_files(GtkMenuItem* menu_item, gpointer user_data) {
     ui_update_recent_files_menu(ctx);
 }
 
+/**
+ * Reload document from disk and record as a single undo step.
+ */
+static void on_file_revert(GtkMenuItem* menu_item, gpointer user_data) {
+    (void)menu_item;
+    AppContext* ctx = (AppContext*)user_data;
+    ImageDocument* doc;
+    ImageDocument* temp;
+    DocumentContentSnapshot* before;
+    DocumentContentSnapshot* after;
+    Command* cmd;
+    gchar* basename;
+    guint undo_levels = 10;
+
+    if (!ctx) {
+        return;
+    }
+
+    doc = ui_get_active_document(ctx);
+    if (!doc || !doc->file_path || doc->file_path[0] == '\0') {
+        return;
+    }
+
+    {
+        gint confirm;
+        confirm = ui_utils_message_dialog_run(
+            GTK_WINDOW(ctx->window),
+            GTK_MESSAGE_WARNING,
+            "Revert to saved file?",
+            "The document will be reloaded from disk. Undo history for this document "
+            "will be cleared. You can undo the revert from the Edit menu.",
+            GTK_RESPONSE_CANCEL,
+            "_Cancel", GTK_RESPONSE_CANCEL,
+            "_Revert", GTK_RESPONSE_OK,
+            NULL);
+        if (confirm != GTK_RESPONSE_OK) {
+            return;
+        }
+    }
+
+    before = document_content_snapshot_capture(doc);
+    if (!before) {
+        ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_ERROR,
+                                    "Could not capture the current document state for revert.",
+                                    NULL, GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
+        return;
+    }
+
+    basename = g_path_get_basename(doc->file_path);
+    if (ctx->settings) {
+        undo_levels = (guint)settings_get_undo_levels(ctx->settings);
+    }
+    temp = document_new(basename ? basename : "revert", TRUE, undo_levels);
+    g_free(basename);
+    if (!temp) {
+        document_content_snapshot_free(before);
+        ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_ERROR,
+                                    "Out of memory preparing revert.", NULL,
+                                    GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
+        return;
+    }
+
+    {
+        PluginError load_error = PLUGIN_ERROR_NONE;
+        gboolean load_ok = image_io_load(temp, doc->file_path, &load_error, ctx->settings);
+
+        if (!load_ok) {
+            if (load_error == PLUGIN_ERROR_USER_CANCELLED) {
+                document_free(temp);
+                document_content_snapshot_free(before);
+                return;
+            }
+            {
+                const char* err_msg = image_io_get_error_message(load_error, doc->file_path);
+                gchar* msg = g_strdup_printf("Could not reload the file for revert:\n\n%s", err_msg);
+                ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_ERROR,
+                                            msg, NULL, GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
+                g_free(msg);
+            }
+            document_free(temp);
+            document_content_snapshot_free(before);
+            return;
+        }
+
+        if (!document_init_rendering_structures(temp)) {
+            ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_ERROR,
+                                        "Could not initialize rendering after reload.", NULL,
+                                        GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
+            document_free(temp);
+            document_content_snapshot_free(before);
+            return;
+        }
+
+        {
+            ImageLayer* l0 = document_get_layer(temp, 0);
+            if (l0) {
+                document_set_selected_layer(temp, l0);
+            }
+        }
+        document_invalidate_composite(temp);
+    }
+
+    after = document_content_snapshot_capture(temp);
+    document_free(temp);
+    if (!after) {
+        document_content_snapshot_free(before);
+        ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_ERROR,
+                                    "Could not capture reloaded document.", NULL,
+                                    GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
+        return;
+    }
+
+    /* Drop prior undo/redo before replacing document content. If we cleared the stacks after
+     * document_content_snapshot_apply(), command destroy callbacks would see stale layer pointers
+     * (already freed by the snapshot apply) and could double-free. */
+    if (doc->undo_stack) {
+        command_stack_clear(doc->undo_stack);
+    }
+    if (doc->redo_stack) {
+        command_stack_clear(doc->redo_stack);
+    }
+
+    if (!document_content_snapshot_apply(doc, after)) {
+        if (!document_content_snapshot_apply(doc, before)) {
+            g_warning("Revert: failed to restore document after apply failure");
+        }
+        document_content_snapshot_free(before);
+        document_content_snapshot_free(after);
+        ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_ERROR,
+                                    "Could not apply revert.", NULL,
+                                    GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
+        return;
+    }
+
+    cmd = command_create_document_revert(doc, before, after);
+    if (!cmd) {
+        if (!document_content_snapshot_apply(doc, before)) {
+            g_warning("Revert: failed to restore document after command creation failure");
+        }
+        document_content_snapshot_free(before);
+        document_content_snapshot_free(after);
+        ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_ERROR,
+                                    "Could not create revert undo step.", NULL,
+                                    GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
+        return;
+    }
+
+    if (doc->undo_stack) {
+        command_stack_push(doc->undo_stack, cmd);
+    } else {
+        command_free(cmd);
+    }
+
+    document_mark_saved(doc);
+    autosave_mark_saved(doc);
+
+    ui_update_window_title(ctx, doc);
+    ui_update_status_bar(ctx, doc);
+    ui_update_status_bar_message(ctx, "Reverted to saved file");
+
+    {
+        LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window), "layers_panel");
+        if (layers_panel) {
+            layers_panel_update(layers_panel, doc);
+        }
+    }
+    ui_update_menu_and_button_states(ctx);
+    ui_update_recent_files_menu(ctx);
+}
+
 void ui_file_menu_update_sensitivity(AppContext* ctx) {
     ImageDocument* doc;
     gboolean has_document;
@@ -248,6 +420,10 @@ void ui_file_menu_update_sensitivity(AppContext* ctx) {
     }
     if (ctx->file_menu_save_as && GTK_IS_WIDGET(ctx->file_menu_save_as)) {
         gtk_widget_set_sensitive(ctx->file_menu_save_as, can_save_as);
+    }
+    if (ctx->file_menu_revert && GTK_IS_WIDGET(ctx->file_menu_revert)) {
+        gboolean can_revert = has_document && doc->file_path && doc->file_path[0] != '\0';
+        gtk_widget_set_sensitive(ctx->file_menu_revert, can_revert);
     }
     if (ctx->file_menu_close && GTK_IS_WIDGET(ctx->file_menu_close)) {
         gtk_widget_set_sensitive(ctx->file_menu_close, can_close);
@@ -414,6 +590,7 @@ void ui_file_menu_setup(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* acc
     ctx->file_menu_open_recent = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_open_recent"));
     ctx->file_menu_save = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_save"));
     ctx->file_menu_save_as = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_save_as"));
+    ctx->file_menu_revert = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_revert"));
     ctx->file_menu_close = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_close"));
     ctx->file_menu_close_all = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_close_all"));
     ctx->file_menu_exit = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_exit"));
@@ -453,6 +630,9 @@ void ui_file_menu_setup(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* acc
         gtk_widget_add_accelerator(ctx->file_menu_save_as, "activate", accel_group,
                                    GDK_KEY_s, GDK_CONTROL_MASK | GDK_SHIFT_MASK, GTK_ACCEL_VISIBLE);
     }
+    if (ctx->file_menu_revert) {
+        g_signal_connect(ctx->file_menu_revert, "activate", G_CALLBACK(on_file_revert), ctx);
+    }
     if (ctx->file_menu_close) {
         g_signal_connect(ctx->file_menu_close, "activate", G_CALLBACK(on_file_close), ctx);
     }
@@ -489,7 +669,7 @@ void on_file_open_response(GtkNativeDialog* dialog, gint response_id, gpointer u
                 /* No plugin can handle this file format */
                 gchar* msg = g_strdup_printf("Unsupported file format: %s", file_path);
                 ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_ERROR,
-                    msg, NULL, GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
+                                            msg, NULL, GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
                 g_free(msg);
                 g_free(file_path);
                 g_object_unref(dialog);
@@ -520,7 +700,7 @@ void on_file_open_response(GtkNativeDialog* dialog, gint response_id, gpointer u
                     gchar* msg = g_strdup_printf("Failed to load image: %s\n\n%s",
                                                  file_path, error_message);
                     ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_ERROR,
-                        msg, NULL, GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
+                                                msg, NULL, GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
                     g_free(msg);
 
                     /* Destroy document since load failed (it was never added to notebook) */
@@ -546,7 +726,7 @@ void on_file_open_response(GtkNativeDialog* dialog, gint response_id, gpointer u
                     gchar* msg = g_strdup_printf("Failed to initialize document rendering for: %s",
                                                  file_path);
                     ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_ERROR,
-                        msg, NULL, GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
+                                                msg, NULL, GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
                     g_free(msg);
 
                     /* Remove from notebook if it was added, then destroy document */
@@ -796,7 +976,7 @@ void on_file_save(GtkWidget* widget, gpointer data) {
         gchar* msg = g_strdup_printf("Failed to save image: %s\n\n%s",
                                      doc->file_path, error_message);
         ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_ERROR,
-            msg, NULL, GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
+                                    msg, NULL, GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
         g_free(msg);
     }
 
@@ -886,7 +1066,7 @@ static void process_save_as_result(GtkNativeDialog* native_dialog, AppContext* c
                     gchar* msg = g_strdup_printf("Failed to save image: %s\n\n%s",
                                                  file_path, error_message);
                     ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_ERROR,
-                        msg, NULL, GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
+                                                msg, NULL, GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
                     g_free(msg);
                 }
             }
@@ -1147,7 +1327,7 @@ void on_file_new(GtkWidget* widget, gpointer data) {
                 "Invalid image dimensions: %u x %u\n\nWidth and height must be greater than 0.",
                 result->width, result->height);
             ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_ERROR,
-                msg, NULL, GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
+                                        msg, NULL, GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
             g_free(msg);
             new_image_dialog_result_free(result);
             new_image_dialog_free(dialog);
@@ -1178,8 +1358,8 @@ void on_file_new(GtkWidget* widget, gpointer data) {
         /* Initialize rendering structures */
         if (!document_init_rendering_structures(doc)) {
             ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_ERROR,
-                "Failed to initialize document rendering structures", NULL,
-                GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
+                                        "Failed to initialize document rendering structures", NULL,
+                                        GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
             document_free(doc);
             new_image_dialog_result_free(result);
             new_image_dialog_free(dialog);

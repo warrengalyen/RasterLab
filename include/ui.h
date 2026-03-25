@@ -75,6 +75,7 @@ struct _AppContext {
     GtkWidget* file_menu_open_recent;
     GtkWidget* file_menu_save;
     GtkWidget* file_menu_save_as;
+    GtkWidget* file_menu_revert;
     GtkWidget* file_menu_close;
     GtkWidget* file_menu_close_all;
     GtkWidget* file_menu_exit;

@@ -105,6 +105,13 @@ SelectionMask* selection_mask_new_bounded(int offset_x, int offset_y, int width,
 void selection_mask_free(SelectionMask* mask);
 
 /**
+ * Deep copy of a selection mask (layers, base_mask, selections list, previews).
+ * @param src Mask to duplicate
+ * @return New mask, or NULL on failure
+ */
+SelectionMask* selection_mask_duplicate(const SelectionMask* src);
+
+/**
  * Clear selection mask to all zeros (empty)
  * @param mask The mask to clear
  */

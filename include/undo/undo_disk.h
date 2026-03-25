@@ -191,6 +191,12 @@ UndoEntryIndex* undo_journal_pop_redo(UndoJournal* journal);
 void undo_journal_clear_redo(UndoJournal* journal);
 
 /**
+ * Clear all disk-backed undo and redo journal entries and truncate the journal file.
+ * Call when document pixel/layer state is replaced in a way that invalidates tile deltas.
+ */
+void undo_journal_clear_all(UndoJournal* journal);
+
+/**
  * Validate and recover journal file on startup
  * Scans journal file, validates entries, truncates at first invalid entry
  * @param journal The undo journal

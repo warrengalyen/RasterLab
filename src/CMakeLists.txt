@@ -45,6 +45,7 @@ set(SOURCES
     commands/command_layer.c
     commands/command_move.c
     commands/command_selection.c
+    commands/command_revert.c
     commands/command_text_layer.c
     document.c
     filters/filters.c

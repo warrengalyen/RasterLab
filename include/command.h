@@ -23,6 +23,7 @@ typedef enum {
     COMMAND_MOVE = 4,
     COMMAND_CANVAS_RESIZE = 5,
     COMMAND_SELECTION = 6, /* Selection mask modification */
+    COMMAND_DOCUMENT_REVERT = 7, /* Full document reload from disk (revert) */
     COMMAND_CUSTOM = 255
 } CommandType;
 

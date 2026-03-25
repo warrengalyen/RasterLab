@@ -31,6 +31,13 @@ ImageLayer* layer_new(const gchar* name, guint width, guint height, gboolean has
 void layer_free(ImageLayer* layer);
 
 /**
+ * Deep copy of a layer (new surfaces and text data); does not add to any document.
+ * @param src Layer to copy
+ * @param doc Optional document for unique layer naming (may be NULL)
+ */
+ImageLayer* layer_duplicate_deep(const ImageLayer* src, struct ImageDocument* doc);
+
+/**
  * Add a new empty layer to the document
  * @param doc The document
  * @param name Layer name

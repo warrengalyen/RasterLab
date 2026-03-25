@@ -115,6 +115,90 @@ void selection_mask_free(SelectionMask* mask) {
 }
 
 /**
+ * Deep-copy a single Selection (mask buffers sized to parent mask plane).
+ */
+static Selection* selection_duplicate_one(const Selection* src, const SelectionMask* parent) {
+    size_t plane;
+    Selection* dst;
+
+    if (!src || !parent || !parent->base_mask) {
+        return NULL;
+    }
+
+    plane = (size_t)parent->stride * (size_t)parent->height;
+    dst = selection_new(src->x, src->y, src->width, src->height,
+                          src->combine_mode, src->feather_mode, src->feather_radius);
+    if (!dst) {
+        return NULL;
+    }
+
+    if (src->mask) {
+        dst->mask = g_malloc(plane);
+        memcpy(dst->mask, src->mask, plane);
+    }
+    if (src->feathered_preview) {
+        dst->feathered_preview = g_malloc(plane);
+        memcpy(dst->feathered_preview, src->feathered_preview, plane);
+    }
+    dst->feather_dirty = src->feather_dirty;
+    return dst;
+}
+
+SelectionMask* selection_mask_duplicate(const SelectionMask* src) {
+    SelectionMask* dst;
+    GList* iter;
+    size_t plane;
+
+    if (!src || !src->base_mask) {
+        return NULL;
+    }
+
+    if (src->offset_x != 0 || src->offset_y != 0) {
+        dst = selection_mask_new_bounded(src->offset_x, src->offset_y, src->width, src->height);
+    } else {
+        dst = selection_mask_new(src->width, src->height);
+    }
+    if (!dst) {
+        return NULL;
+    }
+
+    plane = (size_t)src->stride * (size_t)src->height;
+    memcpy(dst->base_mask, src->base_mask, plane);
+    memcpy(dst->temp_data, src->temp_data, plane);
+
+    if (src->feathered_preview) {
+        dst->feathered_preview = g_malloc(plane);
+        memcpy(dst->feathered_preview, src->feathered_preview, plane);
+    }
+
+    if (src->data == src->feathered_preview && dst->feathered_preview) {
+        dst->data = dst->feathered_preview;
+    } else {
+        dst->data = dst->base_mask;
+    }
+    dst->feather_dirty = src->feather_dirty;
+    dst->dirty = TRUE;
+
+    for (iter = src->selections; iter; iter = iter->next) {
+        Selection* sel = (Selection*)iter->data;
+        Selection* dup;
+
+        if (!sel) {
+            continue;
+        }
+        dup = selection_duplicate_one(sel, src);
+        if (!dup) {
+            selection_mask_free(dst);
+            return NULL;
+        }
+        dst->selections = g_list_append(dst->selections, selection_ref(dup));
+        selection_unref(dup);
+    }
+
+    return dst;
+}
+
+/**
  * Clear selection mask to all zeros
  */
 void selection_mask_clear(SelectionMask* mask) {

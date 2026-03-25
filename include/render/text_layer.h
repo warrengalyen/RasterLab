@@ -75,6 +75,11 @@ ImageLayer* layer_create_text(const gchar* name, guint width, guint height,
 void text_layer_free(TextLayer* text);
 
 /**
+ * Deep copy of text layer properties (all owned strings duplicated).
+ */
+TextLayer* text_layer_duplicate(const TextLayer* src);
+
+/**
  * Render text directly into an arbitrary Cairo context.
  *
  * The caller is responsible for all canvas/zoom transforms already being

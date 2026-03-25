@@ -124,6 +124,54 @@ ImageLayer* layer_new(const gchar* name, guint width, guint height, gboolean has
 /**
  * Free an image layer
  */
+ImageLayer* layer_duplicate_deep(const ImageLayer* src, struct ImageDocument* doc) {
+    cairo_format_t fmt;
+    gboolean has_alpha;
+    cairo_t* cr;
+    ImageLayer* dst;
+
+    if (!src || !src->surface) {
+        return NULL;
+    }
+
+    fmt = cairo_image_surface_get_format(src->surface);
+    has_alpha = (fmt == CAIRO_FORMAT_ARGB32);
+
+    dst = layer_new(src->name, src->width, src->height, has_alpha,
+                    LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL, doc);
+    if (!dst) {
+        return NULL;
+    }
+
+    cr = cairo_create(dst->surface);
+    cairo_set_source_surface(cr, src->surface, 0, 0);
+    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+    cairo_paint(cr);
+    cairo_destroy(cr);
+    cairo_surface_flush(dst->surface);
+
+    dst->opacity = src->opacity;
+    dst->visible = src->visible;
+    dst->blend_mode = src->blend_mode;
+    dst->offset_x = src->offset_x;
+    dst->offset_y = src->offset_y;
+    dst->content_version = src->content_version;
+    dst->cache_dirty = TRUE;
+    dst->layer_type = src->layer_type;
+
+    if (src->layer_type == LAYER_TYPE_TEXT && src->text_data) {
+        TextLayer* td = text_layer_duplicate((TextLayer*)src->text_data);
+        if (td) {
+            dst->text_data = td;
+            text_layer_render_to_surface(dst);
+        } else {
+            dst->layer_type = LAYER_TYPE_RASTER;
+        }
+    }
+
+    return dst;
+}
+
 void layer_free(ImageLayer* layer) {
     if (!layer) {
         return;

@@ -1058,6 +1058,42 @@ void undo_journal_clear_redo(UndoJournal* journal) {
     }
 }
 
+void undo_journal_clear_all(UndoJournal* journal) {
+    if (!journal) {
+        return;
+    }
+
+    undo_journal_clear_redo(journal);
+
+    if (journal->undo_indices) {
+        for (GList* iter = journal->undo_indices; iter; iter = iter->next) {
+            undo_entry_index_free((UndoEntryIndex*)iter->data);
+        }
+        g_list_free(journal->undo_indices);
+        journal->undo_indices = NULL;
+    }
+
+    if (journal->journal_file) {
+        fflush(journal->journal_file);
+        fclose(journal->journal_file);
+        journal->journal_file = NULL;
+    }
+
+    if (journal->journal_path) {
+        journal->journal_file = open_binary_file(journal->journal_path, "wb+");
+        if (journal->journal_file) {
+            fclose(journal->journal_file);
+        }
+        journal->journal_file = open_binary_file(journal->journal_path, "ab+");
+        if (!journal->journal_file) {
+            g_warning("undo_journal_clear_all: failed to reopen journal %s", journal->journal_path);
+        }
+    }
+
+    journal->total_size = 0;
+    journal->next_entry_id = 1;
+}
+
 /**
  * Validate and recover journal file
  */

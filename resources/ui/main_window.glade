@@ -1020,6 +1020,14 @@
       </object>
     </child>
     <child>
+      <object class="GtkMenuItem" id="file_menu_revert">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Revert</property>
+        <property name="use-underline">True</property>
+      </object>
+    </child>
+    <child>
       <object class="GtkSeparatorMenuItem" id="file_separator1">
         <property name="visible">True</property>
         <property name="can-focus">False</property>

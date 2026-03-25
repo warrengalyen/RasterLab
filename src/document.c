@@ -3,6 +3,7 @@
 #if HAVE_LCMS2
 #include "color_manager.h"
 #include "color_manager/display_profile.h"
+#include "color_manager/icc_utils.h"
 #include <gdk/gdk.h>
 #endif
 #include "command.h"
@@ -2360,8 +2361,10 @@ gboolean document_undo(ImageDocument* doc) {
         gtk_widget_queue_draw(doc->drawing_area);
     }
 
-    /* Mark document as modified after undo */
-    doc->modified = TRUE;
+    /* Revert command sets modified from snapshot; other undos mark dirty */
+    if (cmd->type != COMMAND_DOCUMENT_REVERT) {
+        doc->modified = TRUE;
+    }
 
     return TRUE;
 }
@@ -2392,8 +2395,9 @@ gboolean document_redo(ImageDocument* doc) {
         gtk_widget_queue_draw(doc->drawing_area);
     }
 
-    /* Mark document as modified after redo */
-    doc->modified = TRUE;
+    if (cmd->type != COMMAND_DOCUMENT_REVERT) {
+        doc->modified = TRUE;
+    }
 
     return TRUE;
 }
@@ -2977,6 +2981,249 @@ gboolean document_resize_canvas(ImageDocument* doc, guint new_width, guint new_h
 
     /* Invalidate composite */
     document_invalidate_composite(doc);
+
+    return TRUE;
+}
+
+/* --- Full document content snapshot (revert / undo integration) --- */
+
+struct DocumentContentSnapshot {
+    guint width, height, channels, bit_depth;
+    gboolean has_alpha;
+    gboolean modified_flag;
+    void* original_icc_data;
+    size_t original_icc_size;
+    GList* layers;
+    guint selected_layer_index;
+    SelectionMask* selection_mask;
+};
+
+void document_content_snapshot_free(DocumentContentSnapshot* snap) {
+    GList* iter;
+
+    if (!snap) {
+        return;
+    }
+
+    for (iter = snap->layers; iter; iter = iter->next) {
+        layer_free((ImageLayer*)iter->data);
+    }
+    g_list_free(snap->layers);
+
+    if (snap->selection_mask) {
+        selection_mask_free(snap->selection_mask);
+    }
+
+    if (snap->original_icc_data) {
+        free(snap->original_icc_data);
+    }
+
+    g_free(snap);
+}
+
+DocumentContentSnapshot* document_content_snapshot_capture(ImageDocument* doc) {
+    DocumentContentSnapshot* snap;
+    GList* iter;
+
+    if (!doc || doc->width == 0 || doc->height == 0) {
+        return NULL;
+    }
+
+    snap = (DocumentContentSnapshot*)g_malloc0(sizeof(DocumentContentSnapshot));
+    if (!snap) {
+        return NULL;
+    }
+
+    snap->width = doc->width;
+    snap->height = doc->height;
+    snap->channels = doc->channels;
+    snap->bit_depth = doc->bit_depth;
+    snap->has_alpha = doc->has_alpha;
+    snap->modified_flag = doc->modified;
+
+    if (doc->original_icc_data && doc->original_icc_size > 0) {
+        snap->original_icc_data = malloc(doc->original_icc_size);
+        if (!snap->original_icc_data) {
+            g_free(snap);
+            return NULL;
+        }
+        memcpy(snap->original_icc_data, doc->original_icc_data, doc->original_icc_size);
+        snap->original_icc_size = doc->original_icc_size;
+    }
+
+    for (iter = doc->layers; iter; iter = iter->next) {
+        ImageLayer* copy = layer_duplicate_deep((ImageLayer*)iter->data, NULL);
+        if (!copy) {
+            document_content_snapshot_free(snap);
+            return NULL;
+        }
+        snap->layers = g_list_append(snap->layers, copy);
+    }
+
+    if (doc->selected_layer && doc->layers) {
+        gint pos = g_list_index(doc->layers, doc->selected_layer);
+        snap->selected_layer_index = (pos >= 0) ? (guint)pos : 0;
+    } else {
+        guint n = g_list_length(doc->layers);
+        snap->selected_layer_index = n > 0 ? n - 1 : 0;
+    }
+
+    if (doc->selection_mask) {
+        snap->selection_mask = selection_mask_duplicate(doc->selection_mask);
+        if (!snap->selection_mask) {
+            document_content_snapshot_free(snap);
+            return NULL;
+        }
+    } else {
+        snap->selection_mask = selection_mask_new((int)doc->width, (int)doc->height);
+        if (!snap->selection_mask) {
+            document_content_snapshot_free(snap);
+            return NULL;
+        }
+    }
+
+    return snap;
+}
+
+gboolean document_content_snapshot_apply(ImageDocument* doc, const DocumentContentSnapshot* snap) {
+    GList* iter;
+    GList* new_layers = NULL;
+    ImageLayer* lyr;
+    guint n_layers;
+    SelectionMask* new_sel = NULL;
+
+    if (!doc || !snap) {
+        return FALSE;
+    }
+
+    if (doc->gpu_compositor) {
+        gpu_compositor_clear_cache(doc->gpu_compositor);
+    }
+
+#if HAVE_LCMS2
+    if (doc->load_icc_profile) {
+        icc_destroy((cmsHPROFILE)doc->load_icc_profile);
+        doc->load_icc_profile = NULL;
+    }
+    if (doc->display_xform_cache) {
+        display_xform_cache_free((DisplayTransformCache*)doc->display_xform_cache);
+        doc->display_xform_cache = NULL;
+    }
+#endif
+
+    for (iter = snap->layers; iter; iter = iter->next) {
+        lyr = layer_duplicate_deep((ImageLayer*)iter->data, NULL);
+        if (!lyr) {
+            for (iter = new_layers; iter; iter = iter->next) {
+                layer_free((ImageLayer*)iter->data);
+            }
+            g_list_free(new_layers);
+            return FALSE;
+        }
+        new_layers = g_list_append(new_layers, lyr);
+    }
+
+    new_sel = selection_mask_duplicate(snap->selection_mask);
+    if (!new_sel) {
+        for (iter = new_layers; iter; iter = iter->next) {
+            layer_free((ImageLayer*)iter->data);
+        }
+        g_list_free(new_layers);
+        return FALSE;
+    }
+
+    for (iter = doc->layers; iter; iter = iter->next) {
+        lyr = (ImageLayer*)iter->data;
+        if (doc->tile_grid && lyr) {
+            tile_grid_invalidate_layer_cache(doc->tile_grid, lyr);
+        }
+    }
+
+    for (iter = doc->layers; iter; iter = iter->next) {
+        layer_free((ImageLayer*)iter->data);
+    }
+    g_list_free(doc->layers);
+    doc->layers = new_layers;
+
+    doc->width = snap->width;
+    doc->height = snap->height;
+    doc->channels = snap->channels;
+    doc->bit_depth = snap->bit_depth;
+    doc->has_alpha = snap->has_alpha;
+
+    if (doc->original_icc_data) {
+        free(doc->original_icc_data);
+        doc->original_icc_data = NULL;
+        doc->original_icc_size = 0;
+    }
+    if (snap->original_icc_data && snap->original_icc_size > 0) {
+        doc->original_icc_data = malloc(snap->original_icc_size);
+        if (doc->original_icc_data) {
+            memcpy(doc->original_icc_data, snap->original_icc_data, snap->original_icc_size);
+            doc->original_icc_size = snap->original_icc_size;
+        }
+    }
+
+    if (doc->selection_mask) {
+        selection_mask_free(doc->selection_mask);
+    }
+    doc->selection_mask = new_sel;
+
+    n_layers = g_list_length(doc->layers);
+    if (n_layers > 0 && snap->selected_layer_index < n_layers) {
+        doc->selected_layer = (ImageLayer*)g_list_nth_data(doc->layers, snap->selected_layer_index);
+    } else if (n_layers > 0) {
+        doc->selected_layer = (ImageLayer*)g_list_nth_data(doc->layers, n_layers - 1);
+    } else {
+        doc->selected_layer = NULL;
+    }
+
+    if (doc->composite_surface) {
+        cairo_surface_flush(doc->composite_surface);
+        cairo_surface_destroy(doc->composite_surface);
+        doc->composite_surface = NULL;
+    }
+    doc->composite_dirty = TRUE;
+    dirty_rect_init(&doc->dirty_region);
+    if (doc->dirty_region_list) {
+        dirty_region_list_clear(doc->dirty_region_list);
+    }
+
+    if (doc->tile_grid) {
+        tile_grid_free(doc->tile_grid);
+        doc->tile_grid = NULL;
+    }
+    doc->tile_grid = tile_grid_create(doc->width, doc->height, 128);
+    if (!doc->tile_grid) {
+        g_warning("document_content_snapshot_apply: failed to create tile grid");
+        return FALSE;
+    }
+
+    for (iter = doc->layers; iter; iter = iter->next) {
+        tile_grid_invalidate_layer_cache(doc->tile_grid, (ImageLayer*)iter->data);
+    }
+
+    if (doc->undo_journal) {
+        undo_journal_clear_all(doc->undo_journal);
+    }
+
+    doc->modified = snap->modified_flag;
+
+    document_invalidate_composite(doc);
+
+    if (doc->drawing_area) {
+        gint display_width = (gint)(doc->width * doc->zoom_factor);
+        gint display_height = (gint)(doc->height * doc->zoom_factor);
+        gtk_widget_set_size_request(doc->drawing_area, display_width, display_height);
+        gtk_widget_queue_draw(doc->drawing_area);
+    }
+
+    if (doc->ruler_h && gtk_widget_get_visible(doc->ruler_h)) {
+        gtk_widget_queue_draw(doc->ruler_h);
+    }
+    if (doc->ruler_v && gtk_widget_get_visible(doc->ruler_v)) {
+        gtk_widget_queue_draw(doc->ruler_v);
+    }
 
     return TRUE;
 }

@@ -165,6 +165,25 @@ void text_layer_free(TextLayer* text) {
     g_free(text);
 }
 
+TextLayer* text_layer_duplicate(const TextLayer* src) {
+    TextLayer* dst;
+
+    if (!src) {
+        return NULL;
+    }
+
+    dst = (TextLayer*)g_malloc(sizeof(TextLayer));
+    if (!dst) {
+        return NULL;
+    }
+
+    *dst = *src;
+    dst->text = g_strdup(src->text ? src->text : "");
+    dst->font_family = g_strdup(src->font_family ? src->font_family : "Sans");
+    dst->opentype_features = src->opentype_features ? g_strdup(src->opentype_features) : NULL;
+    return dst;
+}
+
 ImageLayer* layer_create_text(const gchar* name, guint width, guint height,
                               struct ImageDocument* doc) {
     ImageLayer* layer = layer_new(name, width, height, TRUE,
