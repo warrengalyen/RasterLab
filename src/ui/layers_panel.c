@@ -48,6 +48,30 @@ static gboolean on_treeview_button_press(GtkWidget* widget,
     ImageLayer* layer;
     AppContext* ctx;
 
+    ctx = (AppContext*)layers_panel->app_context;
+
+    if (event->button == 3 && event->type == GDK_BUTTON_PRESS) {
+        GtkWidget* menu = ctx ? ctx->layer_panel_context_menu : NULL;
+        if (!menu || !GTK_IS_MENU(menu)) {
+            return FALSE;
+        }
+        if (!gtk_tree_view_get_path_at_pos(tree_view, (gint)event->x, (gint)event->y,
+                                           &path, &column, &cell_x, &cell_y)) {
+            return FALSE;
+        }
+        gtk_tree_selection_select_path(gtk_tree_view_get_selection(tree_view), path);
+        gtk_tree_path_free(path);
+        path = NULL;
+        ui_update_menu_and_button_states(ctx);
+#if GTK_CHECK_VERSION(3, 22, 0)
+        gtk_menu_popup_at_pointer(GTK_MENU(menu), (GdkEvent*)event);
+#else
+        gtk_menu_popup(GTK_MENU(menu), NULL, NULL, NULL, NULL, 0,
+                       gtk_get_current_event_time());
+#endif
+        return TRUE;
+    }
+
     if (event->button != 1 || event->type != GDK_BUTTON_PRESS) {
         return FALSE;
     }
@@ -87,7 +111,6 @@ static gboolean on_treeview_button_press(GtkWidget* widget,
     if (!layer)
         return TRUE;
 
-    ctx = (AppContext*)layers_panel->app_context;
     layer_visibility_toggle_execute(ctx, layers_panel->current_doc, layer);
 
     return TRUE;

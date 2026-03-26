@@ -358,6 +358,17 @@ AppContext* ui_create_main_window(void) {
     ctx->layer_menu_visibility_hide_all = NULL;
     ctx->layer_menu_order = NULL;
     ctx->layer_menu_visibility = NULL;
+    ctx->layer_panel_context_menu = NULL;
+    ctx->layer_panel_context_visibility_show = NULL;
+    ctx->layer_panel_context_visibility_show_only = NULL;
+    ctx->layer_panel_context_visibility_hide_only = NULL;
+    ctx->layer_panel_context_duplicate = NULL;
+    ctx->layer_panel_context_delete = NULL;
+    ctx->layer_panel_context_rasterize_text = NULL;
+    ctx->layer_panel_context_merge_up = NULL;
+    ctx->layer_panel_context_merge_down = NULL;
+    ctx->layer_panel_context_merge_visible = NULL;
+    ctx->layer_panel_context_flatten = NULL;
     ctx->edit_menu_undo = NULL;
     ctx->edit_menu_redo = NULL;
     ctx->edit_menu_copy = NULL;

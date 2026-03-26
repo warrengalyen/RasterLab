@@ -43,6 +43,17 @@ struct _AppContext {
     GtkWidget* layer_menu_order;              /* Layer > Order submenu parent */
     GtkWidget* layer_menu_visibility;         /* Layer > Visibility submenu parent */
     GtkWidget* layer_menu_rasterize_text;     /* Layer > Rasterize Text Layer */
+    GtkWidget* layer_panel_context_menu;    /* Layers panel right-click menu */
+    GtkWidget* layer_panel_context_visibility_show;
+    GtkWidget* layer_panel_context_visibility_show_only;
+    GtkWidget* layer_panel_context_visibility_hide_only;
+    GtkWidget* layer_panel_context_duplicate;
+    GtkWidget* layer_panel_context_delete;
+    GtkWidget* layer_panel_context_rasterize_text;
+    GtkWidget* layer_panel_context_merge_up;
+    GtkWidget* layer_panel_context_merge_down;
+    GtkWidget* layer_panel_context_merge_visible; /* Image > Merge visible (same command) */
+    GtkWidget* layer_panel_context_flatten;
     GtkWidget* edit_menu_undo;            /* Edit > Undo menu item */
     GtkWidget* edit_menu_redo;            /* Edit > Redo menu item */
     GtkWidget* edit_menu_copy;

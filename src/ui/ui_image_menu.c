@@ -340,6 +340,15 @@ void ui_image_menu_update_sensitivity(AppContext* ctx) {
     if (ctx->image_menu_flatten && GTK_IS_WIDGET(ctx->image_menu_flatten)) {
         gtk_widget_set_sensitive(ctx->image_menu_flatten, can_flatten);
     }
+
+#define SYNC_IMG_CTX_PANEL(wmain, wctx) \
+    do { \
+        if ((wctx) && GTK_IS_WIDGET((wctx)) && (wmain) && GTK_IS_WIDGET((wmain))) \
+            gtk_widget_set_sensitive((wctx), gtk_widget_get_sensitive((wmain))); \
+    } while (0)
+    SYNC_IMG_CTX_PANEL(ctx->image_menu_merge_visible, ctx->layer_panel_context_merge_visible);
+    SYNC_IMG_CTX_PANEL(ctx->image_menu_flatten, ctx->layer_panel_context_flatten);
+#undef SYNC_IMG_CTX_PANEL
 }
 
 /**
@@ -1704,6 +1713,15 @@ void ui_image_menu_setup(GtkBuilder* builder, AppContext* ctx) {
     ctx->image_menu_flatten = GTK_WIDGET(gtk_builder_get_object(builder, "image_menu_flatten"));
     if (ctx->image_menu_flatten) {
         g_signal_connect(ctx->image_menu_flatten, "activate", G_CALLBACK(on_image_flatten), ctx);
+    }
+
+    ctx->layer_panel_context_merge_visible = GTK_WIDGET(gtk_builder_get_object(builder, "layer_context_menu_merge_visible"));
+    if (ctx->layer_panel_context_merge_visible) {
+        g_signal_connect(ctx->layer_panel_context_merge_visible, "activate", G_CALLBACK(on_image_merge_visible), ctx);
+    }
+    ctx->layer_panel_context_flatten = GTK_WIDGET(gtk_builder_get_object(builder, "layer_context_menu_flatten"));
+    if (ctx->layer_panel_context_flatten) {
+        g_signal_connect(ctx->layer_panel_context_flatten, "activate", G_CALLBACK(on_image_flatten), ctx);
     }
 
     ctx->image_menu_crop_selection = GTK_WIDGET(gtk_builder_get_object(builder, "image_menu_crop_selection"));

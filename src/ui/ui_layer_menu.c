@@ -158,6 +158,63 @@ void ui_layer_menu_setup(GtkBuilder* builder, AppContext* ctx) {
 
     ctx->layer_menu_order = GTK_WIDGET(gtk_builder_get_object(builder, "layer_menu_order"));
     ctx->layer_menu_visibility = GTK_WIDGET(gtk_builder_get_object(builder, "layer_menu_visibility"));
+
+    /* Layers panel context menu — same commands as Layer menu */
+    ctx->layer_panel_context_menu = GTK_WIDGET(gtk_builder_get_object(builder, "layer_panel_context_menu"));
+    ctx->layer_panel_context_visibility_show = GTK_WIDGET(gtk_builder_get_object(builder, "layer_context_menu_show"));
+    ctx->layer_panel_context_visibility_show_only = GTK_WIDGET(gtk_builder_get_object(builder, "layer_context_menu_show1"));
+    ctx->layer_panel_context_visibility_hide_only = GTK_WIDGET(gtk_builder_get_object(builder, "layer_context_menu_hide"));
+    ctx->layer_panel_context_duplicate = GTK_WIDGET(gtk_builder_get_object(builder, "layer_context_menu_duplicate"));
+    ctx->layer_panel_context_delete = GTK_WIDGET(gtk_builder_get_object(builder, "layer_context_menu_delete"));
+    ctx->layer_panel_context_rasterize_text = GTK_WIDGET(gtk_builder_get_object(builder, "layer_context_menu_rasterize"));
+    ctx->layer_panel_context_merge_up = GTK_WIDGET(gtk_builder_get_object(builder, "layer_context_menu_merge_up"));
+    ctx->layer_panel_context_merge_down = GTK_WIDGET(gtk_builder_get_object(builder, "layer_context_menu_merge_down"));
+    if (ctx->layer_panel_context_visibility_show) {
+        g_signal_connect(ctx->layer_panel_context_visibility_show, "toggled",
+                         G_CALLBACK(on_layer_visibility_show_current_toggled), ctx);
+    }
+    if (ctx->layer_panel_context_visibility_show_only) {
+        g_signal_connect(ctx->layer_panel_context_visibility_show_only, "activate",
+                         G_CALLBACK(on_layer_visibility_show_only), ctx);
+    }
+    if (ctx->layer_panel_context_visibility_hide_only) {
+        g_signal_connect(ctx->layer_panel_context_visibility_hide_only, "activate",
+                         G_CALLBACK(on_layer_visibility_hide_only), ctx);
+    }
+    if (ctx->layer_panel_context_duplicate) {
+        g_signal_connect(ctx->layer_panel_context_duplicate, "activate", G_CALLBACK(on_layer_duplicate), ctx);
+    }
+    if (ctx->layer_panel_context_delete) {
+        g_signal_connect(ctx->layer_panel_context_delete, "activate", G_CALLBACK(on_layer_delete), ctx);
+    }
+    if (ctx->layer_panel_context_rasterize_text) {
+        g_signal_connect(ctx->layer_panel_context_rasterize_text, "activate",
+                         G_CALLBACK(on_layer_rasterize_text), ctx);
+    }
+    if (ctx->layer_panel_context_merge_up) {
+        g_signal_connect(ctx->layer_panel_context_merge_up, "activate", G_CALLBACK(on_layer_merge_up), ctx);
+    }
+    if (ctx->layer_panel_context_merge_down) {
+        g_signal_connect(ctx->layer_panel_context_merge_down, "activate", G_CALLBACK(on_layer_merge_down), ctx);
+    }
+}
+
+static void sync_layer_panel_context_from_layer_menu(AppContext* ctx) {
+#define SYNC_MENU_SENS(wmain, wctx) \
+    do { \
+        if ((wctx) && GTK_IS_WIDGET((wctx)) && (wmain) && GTK_IS_WIDGET((wmain))) \
+            gtk_widget_set_sensitive((wctx), gtk_widget_get_sensitive((wmain))); \
+    } while (0)
+
+    SYNC_MENU_SENS(ctx->layer_menu_visibility_show_current, ctx->layer_panel_context_visibility_show);
+    SYNC_MENU_SENS(ctx->layer_menu_visibility_show_only, ctx->layer_panel_context_visibility_show_only);
+    SYNC_MENU_SENS(ctx->layer_menu_visibility_hide_only, ctx->layer_panel_context_visibility_hide_only);
+    SYNC_MENU_SENS(ctx->layer_menu_duplicate, ctx->layer_panel_context_duplicate);
+    SYNC_MENU_SENS(ctx->layer_menu_delete, ctx->layer_panel_context_delete);
+    SYNC_MENU_SENS(ctx->layer_menu_rasterize_text, ctx->layer_panel_context_rasterize_text);
+    SYNC_MENU_SENS(ctx->layer_menu_merge_up, ctx->layer_panel_context_merge_up);
+    SYNC_MENU_SENS(ctx->layer_menu_merge_down, ctx->layer_panel_context_merge_down);
+#undef SYNC_MENU_SENS
 }
 
 void ui_layer_menu_update_sensitivity(AppContext* ctx) {
@@ -281,9 +338,12 @@ void ui_layer_menu_update_sensitivity(AppContext* ctx) {
 
     if (ctx->layer_menu_visibility_show_current && GTK_IS_WIDGET(ctx->layer_menu_visibility_show_current)) {
         gtk_widget_set_sensitive(ctx->layer_menu_visibility_show_current, visibility_has_selection);
-        if (visibility_has_selection) {
-            layer_visibility_update_check_state(ctx);
-        }
+    }
+    if (ctx->layer_panel_context_visibility_show && GTK_IS_WIDGET(ctx->layer_panel_context_visibility_show)) {
+        gtk_widget_set_sensitive(ctx->layer_panel_context_visibility_show, visibility_has_selection);
+    }
+    if (visibility_has_selection) {
+        layer_visibility_update_check_state(ctx);
     }
     if (ctx->layer_menu_visibility_show_only && GTK_IS_WIDGET(ctx->layer_menu_visibility_show_only)) {
         gtk_widget_set_sensitive(ctx->layer_menu_visibility_show_only, visibility_has_selection);
@@ -305,6 +365,8 @@ void ui_layer_menu_update_sensitivity(AppContext* ctx) {
     if (ctx->layer_menu_visibility && GTK_IS_WIDGET(ctx->layer_menu_visibility)) {
         gtk_widget_set_sensitive(ctx->layer_menu_visibility, can_layer_submenus);
     }
+
+    sync_layer_panel_context_from_layer_menu(ctx);
 }
 
 /**
@@ -912,6 +974,22 @@ void on_layer_order_move_bottom(GtkWidget* widget, gpointer data) {
 /* Flag to skip toggle when we programmatically update check state */
 static gboolean visibility_check_updating = FALSE;
 
+static void visibility_sync_one_check(GtkWidget* widget, AppContext* ctx, gboolean visible) {
+    GtkCheckMenuItem* check_item;
+
+    if (!widget || !GTK_IS_CHECK_MENU_ITEM(widget))
+        return;
+    check_item = GTK_CHECK_MENU_ITEM(widget);
+    if (gtk_check_menu_item_get_active(check_item) == visible)
+        return;
+
+    visibility_check_updating = TRUE;
+    g_signal_handlers_block_by_func(check_item, G_CALLBACK(on_layer_visibility_show_current_toggled), ctx);
+    gtk_check_menu_item_set_active(check_item, visible);
+    g_signal_handlers_unblock_by_func(check_item, G_CALLBACK(on_layer_visibility_show_current_toggled), ctx);
+    visibility_check_updating = FALSE;
+}
+
 /**
  * Update "Show this layer" check state to match selected layer visibility.
  * Blocks toggled handler to avoid triggering toggle when we call set_active.
@@ -920,10 +998,10 @@ void layer_visibility_update_check_state(AppContext* ctx) {
     ImageDocument* doc;
     LayersPanel* layers_panel;
     ImageLayer* selected;
-    GtkCheckMenuItem* check_item;
 
-    if (!ctx || !ctx->layer_menu_visibility_show_current ||
-        !GTK_IS_CHECK_MENU_ITEM(ctx->layer_menu_visibility_show_current))
+    if (!ctx)
+        return;
+    if (!ctx->layer_menu_visibility_show_current && !ctx->layer_panel_context_visibility_show)
         return;
 
     doc = ui_get_active_document(ctx);
@@ -932,15 +1010,8 @@ void layer_visibility_update_check_state(AppContext* ctx) {
     if (!selected)
         return;
 
-    check_item = GTK_CHECK_MENU_ITEM(ctx->layer_menu_visibility_show_current);
-    if (gtk_check_menu_item_get_active(check_item) == selected->visible)
-        return; /* Already in sync */
-
-    visibility_check_updating = TRUE;
-    g_signal_handlers_block_by_func(check_item, G_CALLBACK(on_layer_visibility_show_current_toggled), ctx);
-    gtk_check_menu_item_set_active(check_item, selected->visible);
-    g_signal_handlers_unblock_by_func(check_item, G_CALLBACK(on_layer_visibility_show_current_toggled), ctx);
-    visibility_check_updating = FALSE;
+    visibility_sync_one_check(ctx->layer_menu_visibility_show_current, ctx, selected->visible);
+    visibility_sync_one_check(ctx->layer_panel_context_visibility_show, ctx, selected->visible);
 }
 
 /**

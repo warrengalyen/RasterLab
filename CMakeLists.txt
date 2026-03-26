@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.10)
 project(RasterLab C)
 
 # Option: build only the application, use system libs (skip building libjpeg, libpng, libtiff, libwebp, libheif, libde265, libaom, zlib, openexr from lib/)
-option(RASTERLAB_APP_ONLY "Only build the application; skip building libraries in lib/ (use system libjpeg, libpng, libtiff, libwebp, libheif, libde265, libaom, zlib, openexr)" ON)
+option(RASTERLAB_APP_ONLY "Only build the application; skip building libraries in lib/ (use system libjpeg, libpng, libtiff, libwebp, libheif, libde265, libaom, zlib, openexr)" OFF)
 if(RASTERLAB_APP_ONLY)
     message(STATUS "RASTERLAB_APP_ONLY=ON: skipping build of lib/ deps, using system libraries")
 endif()
@@ -1353,7 +1353,11 @@ if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/openexr/CMakeLists
         endforeach()
     endif()
 
+    # Stub dirs so INTERFACE_INCLUDE_DIRECTORIES on IMPORTED targets exists before
+    # openexr_external install populates headers (CMake 3.24+ validates these paths).
     file(MAKE_DIRECTORY "${OPENEXR_INSTALL_DIR}/include")
+    file(MAKE_DIRECTORY "${OPENEXR_INSTALL_DIR}/include/OpenEXR")
+    file(MAKE_DIRECTORY "${OPENEXR_INSTALL_DIR}/include/Imath")
 
     ExternalProject_Add(
         openexr_external
