@@ -1,5 +1,8 @@
 #include "ui/layers_panel.h"
+#include "app/settings.h"
+#include "commands/command_layer.h"
 #include "document.h"
+#include "io/image_io.h"
 #include "ocular.h"
 #include "render/compositor.h"
 #include "render/dirty.h"
@@ -17,6 +20,12 @@
 
 /* Forward declarations */
 static GdkPixbuf* create_layer_thumbnail(cairo_surface_t* layer_surface, gint thumb_size, gboolean visible);
+static void document_insert_layer_above_selection(ImageDocument* doc, ImageLayer* layer);
+static ImageLayer* layers_panel_import_file_as_layers(LayersPanel* layers_panel, ImageDocument* doc,
+                                                      const gchar* path, const Settings* settings);
+static void on_layers_tree_drag_data_received(GtkWidget* widget, GdkDragContext* context,
+                                              gint x, gint y, GtkSelectionData* sel_data,
+                                              guint info, guint time, gpointer user_data);
 static GdkPixbuf* create_text_layer_thumbnail(gint thumb_max_size, gboolean visible);
 static GdkPixbuf* get_visibility_icon(gboolean visible);
 
@@ -456,6 +465,207 @@ static gboolean on_layer_row_activated(GtkTreeView* tree_view, GtkTreePath* path
 }
 
 /**
+ * Insert an existing layer above the document's selected layer (same rules as new layer "above current").
+ */
+static void document_insert_layer_above_selection(ImageDocument* doc, ImageLayer* layer) {
+    ImageLayer* reference_layer;
+    GList* iter;
+    gint pos;
+
+    if (!doc || !layer) {
+        return;
+    }
+
+    reference_layer = document_get_selected_layer(doc);
+    if (reference_layer) {
+        iter = g_list_find(doc->layers, reference_layer);
+        if (iter && iter->next) {
+            pos = g_list_position(doc->layers, iter);
+            doc->layers = g_list_insert(doc->layers, layer, pos + 1);
+        } else if (iter) {
+            doc->layers = g_list_append(doc->layers, layer);
+        } else {
+            doc->layers = g_list_append(doc->layers, layer);
+        }
+    } else {
+        doc->layers = g_list_append(doc->layers, layer);
+    }
+    document_invalidate_composite(doc);
+}
+
+/**
+ * Load one image file into a temp document and append layer copies to @a doc.
+ * Layer names use the file basename; multi-layer files use "basename (1)", "basename (2)", ...
+ * @return The last new layer added, or NULL if nothing was imported.
+ */
+static ImageLayer* layers_panel_import_file_as_layers(LayersPanel* layers_panel, ImageDocument* doc,
+                                                     const gchar* path, const Settings* settings) {
+    ImageDocument* temp;
+    guint n;
+    gint i;
+    ImageLayer* last_new = NULL;
+    gchar* basename;
+    AppContext* ctx;
+    guint undo_levels = 10;
+
+    (void)layers_panel;
+
+    if (!doc || !path) {
+        return NULL;
+    }
+
+    if (!image_io_is_supported_file(path)) {
+        return NULL;
+    }
+
+    basename = g_path_get_basename(path);
+    if (!basename) {
+        return NULL;
+    }
+
+    ctx = (AppContext*)layers_panel->app_context;
+    if (ctx && ctx->settings) {
+        undo_levels = (guint)settings_get_undo_levels(ctx->settings);
+    }
+
+    temp = document_new(basename, TRUE, undo_levels);
+    if (!temp) {
+        g_free(basename);
+        return NULL;
+    }
+
+    if (!image_io_load(temp, path, NULL, settings)) {
+        document_free(temp);
+        g_free(basename);
+        return NULL;
+    }
+
+    n = document_get_layer_count(temp);
+    if (n == 0) {
+        document_free(temp);
+        g_free(basename);
+        return NULL;
+    }
+
+    /* Insert from file top downward so stack order matches the file (bottom layer closest to prior selection). */
+    for (i = (gint)n - 1; i >= 0; i--) {
+        ImageLayer* src = document_get_layer(temp, (guint)i);
+        gchar* layer_name;
+        ImageLayer* new_layer;
+
+        if (!src) {
+            continue;
+        }
+
+        if (n == 1) {
+            layer_name = g_strdup(basename);
+        } else {
+            layer_name = g_strdup_printf("%s (%d)", basename, i + 1);
+        }
+
+        new_layer = layer_new_from_layer_content(src, doc, layer_name);
+        g_free(layer_name);
+
+        if (!new_layer) {
+            continue;
+        }
+
+        document_insert_layer_above_selection(doc, new_layer);
+        document_set_selected_layer(doc, new_layer);
+        document_invalidate_composite(doc);
+
+        if (doc->undo_stack) {
+            Command* cmd = command_create_layer_add(doc, new_layer);
+            if (cmd) {
+                command_stack_push(doc->undo_stack, cmd);
+                if (doc->redo_stack) {
+                    command_stack_clear(doc->redo_stack);
+                }
+            }
+        }
+
+        doc->modified = TRUE;
+        last_new = new_layer;
+    }
+
+    document_free(temp);
+    g_free(basename);
+    return last_new;
+}
+
+/**
+ * Drop image files onto the layer list: add layer(s) using each file's basename as the layer name.
+ */
+static void on_layers_tree_drag_data_received(GtkWidget* widget, GdkDragContext* context,
+                                              gint x, gint y, GtkSelectionData* sel_data,
+                                              guint info, guint time, gpointer user_data) {
+    LayersPanel* layers_panel = (LayersPanel*)user_data;
+    gboolean success = FALSE;
+    gchar** uris;
+    gint u;
+    ImageLayer* last_imported = NULL;
+    AppContext* ctx;
+
+    (void)widget;
+    (void)x;
+    (void)y;
+    (void)info;
+
+    if (!layers_panel || !layers_panel->current_doc) {
+        gtk_drag_finish(context, FALSE, FALSE, time);
+        return;
+    }
+
+    if (!sel_data || gtk_selection_data_get_length(sel_data) < 0) {
+        gtk_drag_finish(context, FALSE, FALSE, time);
+        return;
+    }
+
+    uris = gtk_selection_data_get_uris(sel_data);
+    if (!uris) {
+        gtk_drag_finish(context, FALSE, FALSE, time);
+        return;
+    }
+
+    ctx = (AppContext*)layers_panel->app_context;
+
+    for (u = 0; uris[u]; u++) {
+        gchar* file_path = g_filename_from_uri(uris[u], NULL, NULL);
+        ImageLayer* added;
+
+        if (!file_path) {
+            continue;
+        }
+
+        added = layers_panel_import_file_as_layers(layers_panel, layers_panel->current_doc, file_path,
+                                                   ctx ? ctx->settings : NULL);
+        g_free(file_path);
+
+        if (added) {
+            last_imported = added;
+            success = TRUE;
+        }
+    }
+
+    g_strfreev(uris);
+
+    if (success && layers_panel->current_doc && ctx) {
+        layers_panel_update(layers_panel, layers_panel->current_doc);
+        if (last_imported) {
+            layers_panel_select_layer(layers_panel, layers_panel->current_doc, last_imported);
+        }
+        layers_panel_update_opacity_controls(layers_panel);
+        ui_update_menu_and_button_states(ctx);
+        ui_update_window_title(ctx, NULL);
+        if (layers_panel->current_doc->drawing_area) {
+            gtk_widget_queue_draw(layers_panel->current_doc->drawing_area);
+        }
+    }
+
+    gtk_drag_finish(context, success, FALSE, time);
+}
+
+/**
  * Create a thumbnail from a layer surface
  */
 static GdkPixbuf* create_layer_thumbnail(cairo_surface_t* layer_surface, gint thumb_max_size, gboolean visible) {
@@ -816,6 +1026,10 @@ LayersPanel* create_layers_panel(AppContext* ctx) {
                      G_CALLBACK(on_layer_row_activated), layers_panel);
     g_signal_connect(layers_panel->tree_view, "button-press-event",
                      G_CALLBACK(on_treeview_button_press), layers_panel);
+    gtk_drag_dest_set(GTK_WIDGET(layers_panel->tree_view), GTK_DEST_DEFAULT_ALL, NULL, 0, GDK_ACTION_COPY);
+    gtk_drag_dest_add_uri_targets(GTK_WIDGET(layers_panel->tree_view));
+    g_signal_connect(layers_panel->tree_view, "drag-data-received",
+                     G_CALLBACK(on_layers_tree_drag_data_received), layers_panel);
     gtk_container_add(GTK_CONTAINER(scroll_window), layers_panel->tree_view);
 
     /* Keep builder alive by storing it on the tree view as object data */

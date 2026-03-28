@@ -21,6 +21,11 @@ extern "C" {
 gboolean image_io_load(ImageDocument* doc, const char* filename, PluginError* error_out, const Settings* settings);
 
 /**
+ * Return TRUE if a file can be loaded by a registered format plugin (header + extension probe).
+ */
+gboolean image_io_is_supported_file(const char* filename);
+
+/**
  * Get user-friendly error message from plugin error code
  * @param error The plugin error code
  * @param filename Optional filename for context in error messages

@@ -222,6 +222,21 @@ gboolean image_io_load(ImageDocument* doc, const char* filename, PluginError* er
     return TRUE;
 }
 
+gboolean image_io_is_supported_file(const char* filename) {
+    uint8_t header[IMAGE_IO_HEADER_PROBE_SIZE];
+    size_t header_size = 0;
+
+    if (!filename) {
+        return FALSE;
+    }
+
+    if (!read_file_header(filename, header, sizeof(header), &header_size)) {
+        return FALSE;
+    }
+
+    return format_registry_find_loader(filename, header, header_size) != NULL;
+}
+
 /**
  * Save image using plugin system
  * Returns TRUE on success, FALSE on failure.

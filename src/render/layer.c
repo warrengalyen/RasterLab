@@ -8,8 +8,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* Forward declaration */
+/* Forward declarations */
 static void layer_fill_background(ImageLayer* layer, LayerBackgroundType background, const gdouble* custom_color);
+static ImageLayer* layer_copy_surface_and_metadata_to_new(const ImageLayer* src, struct ImageDocument* doc,
+                                                          const gchar* name_for_new_layer);
 
 /**
  * Create a new image layer
@@ -122,22 +124,20 @@ ImageLayer* layer_new(const gchar* name, guint width, guint height, gboolean has
 }
 
 /**
- * Free an image layer
+ * Copy pixels/text from @a src into a new layer (not attached to any document).
+ * Caller must ensure @a src has a surface and @a name_for_new_layer is non-NULL.
  */
-ImageLayer* layer_duplicate_deep(const ImageLayer* src, struct ImageDocument* doc) {
+static ImageLayer* layer_copy_surface_and_metadata_to_new(const ImageLayer* src, struct ImageDocument* doc,
+                                                        const gchar* name_for_new_layer) {
     cairo_format_t fmt;
     gboolean has_alpha;
     cairo_t* cr;
     ImageLayer* dst;
 
-    if (!src || !src->surface) {
-        return NULL;
-    }
-
     fmt = cairo_image_surface_get_format(src->surface);
     has_alpha = (fmt == CAIRO_FORMAT_ARGB32);
 
-    dst = layer_new(src->name, src->width, src->height, has_alpha,
+    dst = layer_new(name_for_new_layer, src->width, src->height, has_alpha,
                     LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL, doc);
     if (!dst) {
         return NULL;
@@ -170,6 +170,21 @@ ImageLayer* layer_duplicate_deep(const ImageLayer* src, struct ImageDocument* do
     }
 
     return dst;
+}
+
+ImageLayer* layer_duplicate_deep(const ImageLayer* src, struct ImageDocument* doc) {
+    if (!src || !src->surface) {
+        return NULL;
+    }
+    return layer_copy_surface_and_metadata_to_new(src, doc, src->name);
+}
+
+ImageLayer* layer_new_from_layer_content(const ImageLayer* src, struct ImageDocument* doc,
+                                         const gchar* layer_name) {
+    if (!src || !src->surface || !layer_name) {
+        return NULL;
+    }
+    return layer_copy_surface_and_metadata_to_new(src, doc, layer_name);
 }
 
 static gboolean layer_surface_pixels_equal(cairo_surface_t* sa, cairo_surface_t* sb) {
@@ -264,6 +279,9 @@ gboolean layer_equal_content(const ImageLayer* a, const ImageLayer* b) {
     return layer_surface_pixels_equal(a->surface, b->surface);
 }
 
+/**
+ * Free an image layer
+ */
 void layer_free(ImageLayer* layer) {
     if (!layer) {
         return;

@@ -38,6 +38,14 @@ void layer_free(ImageLayer* layer);
 ImageLayer* layer_duplicate_deep(const ImageLayer* src, struct ImageDocument* doc);
 
 /**
+ * Create a new layer from existing layer pixels/text (e.g. after decoding a file into a temp layer).
+ * Does not add the layer to any document. This is not the Layer > Duplicate Layer command.
+ * @param layer_name Name for the new layer (unique within @a doc if set)
+ */
+ImageLayer* layer_new_from_layer_content(const ImageLayer* src, struct ImageDocument* doc,
+                                         const gchar* layer_name);
+
+/**
  * Compare two layers for pixel-identical revert diff (name, props, pixels / text data).
  */
 gboolean layer_equal_content(const ImageLayer* a, const ImageLayer* b);
