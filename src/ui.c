@@ -532,6 +532,8 @@ AppContext* ui_create_main_window(void) {
     g_signal_connect(ctx->notebook, "switch-page",
                      G_CALLBACK(on_notebook_switch_page), ctx);
 
+    ui_file_menu_setup_notebook_drag_drop(ctx->notebook, ctx);
+
     /* Get menu bar and menu items from Glade */
     ctx->menu_bar = GTK_WIDGET(gtk_builder_get_object(builder, "menu_bar"));
 
@@ -790,6 +792,10 @@ ImageDocument* ui_create_document_without_tab(AppContext* ctx, const gchar* file
         gtk_css_provider_load_from_data(provider, css, -1, NULL);
         g_free(css);
         gtk_widget_queue_draw(doc->viewport);
+    }
+
+    if (doc) {
+        ui_file_menu_setup_viewport_drag_drop(doc, ctx);
     }
 
     return doc;

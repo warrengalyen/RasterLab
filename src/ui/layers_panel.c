@@ -21,8 +21,6 @@
 /* Forward declarations */
 static GdkPixbuf* create_layer_thumbnail(cairo_surface_t* layer_surface, gint thumb_size, gboolean visible);
 static void document_insert_layer_above_selection(ImageDocument* doc, ImageLayer* layer);
-static ImageLayer* layers_panel_import_file_as_layers(LayersPanel* layers_panel, ImageDocument* doc,
-                                                      const gchar* path, const Settings* settings);
 static void on_layers_tree_drag_data_received(GtkWidget* widget, GdkDragContext* context,
                                               gint x, gint y, GtkSelectionData* sel_data,
                                               guint info, guint time, gpointer user_data);
@@ -498,8 +496,8 @@ static void document_insert_layer_above_selection(ImageDocument* doc, ImageLayer
  * Layer names use the file basename; multi-layer files use "basename (1)", "basename (2)", ...
  * @return The last new layer added, or NULL if nothing was imported.
  */
-static ImageLayer* layers_panel_import_file_as_layers(LayersPanel* layers_panel, ImageDocument* doc,
-                                                     const gchar* path, const Settings* settings) {
+ImageLayer* layers_panel_import_path_into_document(LayersPanel* layers_panel, ImageDocument* doc,
+                                                   const gchar* path) {
     ImageDocument* temp;
     guint n;
     gint i;
@@ -507,8 +505,6 @@ static ImageLayer* layers_panel_import_file_as_layers(LayersPanel* layers_panel,
     gchar* basename;
     AppContext* ctx;
     guint undo_levels = 10;
-
-    (void)layers_panel;
 
     if (!doc || !path) {
         return NULL;
@@ -534,7 +530,7 @@ static ImageLayer* layers_panel_import_file_as_layers(LayersPanel* layers_panel,
         return NULL;
     }
 
-    if (!image_io_load(temp, path, NULL, settings)) {
+    if (!image_io_load(temp, path, NULL, ctx && ctx->settings ? ctx->settings : NULL)) {
         document_free(temp);
         g_free(basename);
         return NULL;
@@ -637,8 +633,7 @@ static void on_layers_tree_drag_data_received(GtkWidget* widget, GdkDragContext*
             continue;
         }
 
-        added = layers_panel_import_file_as_layers(layers_panel, layers_panel->current_doc, file_path,
-                                                   ctx ? ctx->settings : NULL);
+        added = layers_panel_import_path_into_document(layers_panel, layers_panel->current_doc, file_path);
         g_free(file_path);
 
         if (added) {

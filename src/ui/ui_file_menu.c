@@ -22,6 +22,281 @@
 /* Header probe size for format detection (must be >= 132 for DICOM) */
 #define FILE_HEADER_PROBE_SIZE 256
 
+static void on_canvas_viewport_drag_data_received(GtkWidget* widget, GdkDragContext* context,
+                                                  gint x, gint y, GtkSelectionData* sel_data,
+                                                  guint info, guint time, gpointer user_data);
+static void on_notebook_drag_data_received(GtkWidget* widget, GdkDragContext* context,
+                                           gint x, gint y, GtkSelectionData* sel_data,
+                                           guint info, guint time, gpointer user_data);
+
+gboolean ui_file_menu_open_path_as_new_document(AppContext* ctx, const gchar* file_path) {
+    gchar* basename;
+    ImageDocument* doc;
+
+    if (!ctx || !file_path) {
+        return FALSE;
+    }
+
+    if (!image_io_is_supported_file(file_path)) {
+        return FALSE;
+    }
+
+    basename = g_path_get_basename(file_path);
+    if (!basename) {
+        return FALSE;
+    }
+
+    doc = ui_create_document_without_tab(ctx, basename);
+    if (!doc) {
+        g_free(basename);
+        return FALSE;
+    }
+
+    {
+        PluginError load_error = PLUGIN_ERROR_NONE;
+        gboolean load_result = image_io_load(doc, file_path, &load_error, ctx->settings);
+
+        if (!load_result) {
+            if (load_error == PLUGIN_ERROR_USER_CANCELLED) {
+                document_free(doc);
+                g_free(basename);
+                return FALSE;
+            }
+            {
+                const char* error_message = image_io_get_error_message(load_error, file_path);
+                gchar* msg = g_strdup_printf("Failed to load image: %s\n\n%s",
+                                             file_path, error_message);
+                ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_ERROR,
+                                            msg, NULL, GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
+                g_free(msg);
+            }
+            document_free(doc);
+            g_free(basename);
+            return FALSE;
+        }
+    }
+
+    ui_add_document_to_notebook(ctx, doc);
+    autosave_register_document(doc);
+
+    if (!document_init_rendering_structures(doc)) {
+        gchar* msg = g_strdup_printf("Failed to initialize document rendering for: %s",
+                                     file_path);
+        ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_ERROR,
+                                    msg, NULL, GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
+        g_free(msg);
+
+        if (doc->scrolled_window && ctx->notebook) {
+            gint page_num = gtk_notebook_page_num(GTK_NOTEBOOK(ctx->notebook), doc->scrolled_window);
+            if (page_num >= 0) {
+                ui_close_document_tab(ctx, doc);
+            } else {
+                document_free(doc);
+            }
+        } else {
+            document_free(doc);
+        }
+        g_free(basename);
+        return FALSE;
+    }
+
+    {
+        ImageLayer* layer_0 = document_get_layer(doc, 0);
+        if (layer_0) {
+            document_set_selected_layer(doc, layer_0);
+        }
+    }
+
+    document_invalidate_composite(doc);
+
+    if (doc->drawing_area) {
+        gint display_width = (gint)(doc->width * doc->zoom_factor);
+        gint display_height = (gint)(doc->height * doc->zoom_factor);
+        gtk_widget_set_size_request(doc->drawing_area, display_width, display_height);
+        gtk_widget_queue_draw(doc->drawing_area);
+    }
+
+    ui_update_status_bar_message(ctx, "Image successfully loaded");
+    recent_files_add(file_path);
+    recent_files_save();
+    if (ctx->settings && ctx->app_dir) {
+        settings_save(ctx->settings, ctx->app_dir);
+    }
+    ui_update_status_bar(ctx, NULL);
+
+    {
+        LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window), "layers_panel");
+        if (layers_panel) {
+            layers_panel_update(layers_panel, doc);
+        }
+    }
+
+    ui_update_menu_and_button_states(ctx);
+    ui_update_recent_files_menu(ctx);
+
+    g_free(basename);
+    return TRUE;
+}
+
+void ui_file_menu_setup_viewport_drag_drop(ImageDocument* doc, AppContext* ctx) {
+    if (!doc || !ctx) {
+        return;
+    }
+
+    if (doc->viewport) {
+        g_object_set_data(G_OBJECT(doc->viewport), "image_document", doc);
+        gtk_drag_dest_set(doc->viewport, GTK_DEST_DEFAULT_ALL, NULL, 0, GDK_ACTION_COPY);
+        gtk_drag_dest_add_uri_targets(doc->viewport);
+        g_signal_connect(doc->viewport, "drag-data-received",
+                         G_CALLBACK(on_canvas_viewport_drag_data_received), ctx);
+    }
+
+    if (doc->drawing_area) {
+        g_object_set_data(G_OBJECT(doc->drawing_area), "image_document", doc);
+        gtk_drag_dest_set(doc->drawing_area, GTK_DEST_DEFAULT_ALL, NULL, 0, GDK_ACTION_COPY);
+        gtk_drag_dest_add_uri_targets(doc->drawing_area);
+        g_signal_connect(doc->drawing_area, "drag-data-received",
+                         G_CALLBACK(on_canvas_viewport_drag_data_received), ctx);
+    }
+}
+
+void ui_file_menu_setup_notebook_drag_drop(GtkWidget* notebook, AppContext* ctx) {
+    if (!notebook || !ctx) {
+        return;
+    }
+
+    gtk_drag_dest_set(notebook, GTK_DEST_DEFAULT_ALL, NULL, 0, GDK_ACTION_COPY);
+    gtk_drag_dest_add_uri_targets(notebook);
+    g_signal_connect(notebook, "drag-data-received",
+                     G_CALLBACK(on_notebook_drag_data_received), ctx);
+}
+
+static void on_canvas_viewport_drag_data_received(GtkWidget* widget, GdkDragContext* context,
+                                                  gint x, gint y, GtkSelectionData* sel_data,
+                                                  guint info, guint time, gpointer user_data) {
+    AppContext* ctx = (AppContext*)user_data;
+    ImageDocument* doc = (ImageDocument*)g_object_get_data(G_OBJECT(widget), "image_document");
+    gboolean success = FALSE;
+    gchar** uris;
+    gint u;
+    ImageLayer* last_imported = NULL;
+    LayersPanel* layers_panel;
+
+    (void)x;
+    (void)y;
+    (void)info;
+
+    if (!ctx || !doc) {
+        gtk_drag_finish(context, FALSE, FALSE, time);
+        return;
+    }
+
+    if (!sel_data || gtk_selection_data_get_length(sel_data) < 0) {
+        gtk_drag_finish(context, FALSE, FALSE, time);
+        return;
+    }
+
+    uris = gtk_selection_data_get_uris(sel_data);
+    if (!uris) {
+        gtk_drag_finish(context, FALSE, FALSE, time);
+        return;
+    }
+
+    layers_panel = ctx->layers_panel;
+    if (!layers_panel) {
+        layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window), "layers_panel");
+    }
+
+    if (!layers_panel) {
+        g_strfreev(uris);
+        gtk_drag_finish(context, FALSE, FALSE, time);
+        return;
+    }
+
+    for (u = 0; uris[u]; u++) {
+        gchar* file_path = g_filename_from_uri(uris[u], NULL, NULL);
+        ImageLayer* added;
+
+        if (!file_path) {
+            continue;
+        }
+
+        added = layers_panel_import_path_into_document(layers_panel, doc, file_path);
+        g_free(file_path);
+
+        if (added) {
+            last_imported = added;
+            success = TRUE;
+        }
+    }
+
+    g_strfreev(uris);
+
+    if (success && doc) {
+        layers_panel_update(layers_panel, doc);
+        if (last_imported) {
+            layers_panel_select_layer(layers_panel, doc, last_imported);
+        }
+        layers_panel_update_opacity_controls(layers_panel);
+        ui_update_menu_and_button_states(ctx);
+        ui_update_window_title(ctx, NULL);
+        if (doc->drawing_area) {
+            gtk_widget_queue_draw(doc->drawing_area);
+        }
+    }
+
+    gtk_drag_finish(context, success, FALSE, time);
+}
+
+static void on_notebook_drag_data_received(GtkWidget* widget, GdkDragContext* context,
+                                           gint x, gint y, GtkSelectionData* sel_data,
+                                           guint info, guint time, gpointer user_data) {
+    AppContext* ctx = (AppContext*)user_data;
+    gboolean success = FALSE;
+    gchar** uris;
+    gint u;
+
+    (void)widget;
+    (void)x;
+    (void)y;
+    (void)info;
+
+    if (!ctx || !ctx->notebook) {
+        gtk_drag_finish(context, FALSE, FALSE, time);
+        return;
+    }
+
+    if (gtk_notebook_get_n_pages(GTK_NOTEBOOK(ctx->notebook)) > 0) {
+        gtk_drag_finish(context, FALSE, FALSE, time);
+        return;
+    }
+
+    if (!sel_data || gtk_selection_data_get_length(sel_data) < 0) {
+        gtk_drag_finish(context, FALSE, FALSE, time);
+        return;
+    }
+
+    uris = gtk_selection_data_get_uris(sel_data);
+    if (!uris) {
+        gtk_drag_finish(context, FALSE, FALSE, time);
+        return;
+    }
+
+    for (u = 0; uris[u]; u++) {
+        gchar* file_path = g_filename_from_uri(uris[u], NULL, NULL);
+        if (!file_path) {
+            continue;
+        }
+        if (ui_file_menu_open_path_as_new_document(ctx, file_path)) {
+            success = TRUE;
+        }
+        g_free(file_path);
+    }
+
+    g_strfreev(uris);
+    gtk_drag_finish(context, success, FALSE, time);
+}
+
 /**
  * Callback for activating a recent file
  */
@@ -81,121 +356,7 @@ void on_recent_file_activate(GtkMenuItem* menu_item, gpointer user_data) {
         return;
     }
 
-    /* Create document WITHOUT adding to notebook - we'll add it only after successful load */
-    gchar* basename = g_path_get_basename(file_path);
-    ImageDocument* doc = ui_create_document_without_tab(ctx, basename);
-
-    if (doc) {
-        /* Load the image into the document using plugin system */
-        PluginError load_error = PLUGIN_ERROR_NONE;
-        gboolean load_result = image_io_load(doc, file_path, &load_error, ctx->settings);
-
-        if (!load_result) {
-            if (load_error == PLUGIN_ERROR_USER_CANCELLED) {
-                document_free(doc);
-                g_free(basename);
-                return;
-            }
-            /* Get user-friendly error message */
-            const char* error_message = image_io_get_error_message(load_error, file_path);
-
-            /* Show error dialog */
-            gchar* msg = g_strdup_printf("Failed to load image: %s\n\n%s",
-                                         file_path, error_message);
-            ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_ERROR,
-                                        msg, NULL, GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
-            g_free(msg);
-
-            /* Destroy document since load failed (it was never added to notebook) */
-            document_free(doc);
-            g_free(basename);
-            return;
-        }
-
-        /* Load succeeded - now add document to notebook */
-        ui_add_document_to_notebook(ctx, doc);
-
-        /* Register document for autosave */
-        autosave_register_document(doc);
-
-        /* Initialize rendering structures after image is loaded */
-        /* Note: We don't call document_load_image_from_file() here because it would
-         * call image_io_load() again, which would re-trigger the plugin and show
-         * dialogs again (e.g., HDR tone mapping dialog). Instead, we call the
-         * initialization parts directly since image_io_load() already loaded everything. */
-        if (!document_init_rendering_structures(doc)) {
-            gchar* msg = g_strdup_printf("Failed to initialize document rendering for: %s",
-                                         file_path);
-            ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_ERROR,
-                                        msg, NULL, GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
-            g_free(msg);
-
-            /* Remove from notebook if it was added, then destroy document */
-            if (doc->scrolled_window && ctx->notebook) {
-                gint page_num = gtk_notebook_page_num(GTK_NOTEBOOK(ctx->notebook), doc->scrolled_window);
-                if (page_num >= 0) {
-                    ui_close_document_tab(ctx, doc);
-                } else {
-                    document_free(doc);
-                }
-            } else {
-                document_free(doc);
-            }
-            g_free(basename);
-            return;
-        }
-
-        /* Ensure we have at least one layer selected */
-        ImageLayer* layer_0 = document_get_layer(doc, 0);
-        if (layer_0) {
-            document_set_selected_layer(doc, layer_0);
-        }
-
-        /* Mark composite as needing re-render */
-        document_invalidate_composite(doc);
-
-        /* Update drawing area size to match image dimensions */
-        if (doc->drawing_area) {
-            /* Set exact size for the drawing area based on image dimensions */
-            gint display_width = (gint)(doc->width * doc->zoom_factor);
-            gint display_height = (gint)(doc->height * doc->zoom_factor);
-            gtk_widget_set_size_request(doc->drawing_area, display_width, display_height);
-
-            /* Queue redraw to display the image */
-            gtk_widget_queue_draw(doc->drawing_area);
-        }
-
-        {
-            /* Update status bar with success message */
-            ui_update_status_bar_message(ctx, "Image successfully loaded");
-
-            /* Update recent files (move to top) */
-            recent_files_add(file_path);
-            if (ctx->settings && ctx->app_dir) {
-                /* Sync recent files to settings and save */
-                recent_files_save();
-                settings_save(ctx->settings, ctx->app_dir);
-            }
-
-            /* Update status bar after successful load */
-            ui_update_status_bar(ctx, NULL);
-
-            /* Update layers panel with loaded document */
-            LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(
-                G_OBJECT(ctx->window), "layers_panel");
-            if (layers_panel) {
-                layers_panel_update(layers_panel, doc);
-            }
-
-            /* Update menu and button states */
-            ui_update_menu_and_button_states(ctx);
-
-            /* Update recent files menu */
-            ui_update_recent_files_menu(ctx);
-        }
-    }
-
-    g_free(basename);
+    ui_file_menu_open_path_as_new_document(ctx, file_path);
 }
 
 /**
@@ -658,123 +819,7 @@ void on_file_open_response(GtkNativeDialog* dialog, gint response_id, gpointer u
                 return;
             }
 
-            /* Create document WITHOUT adding to notebook - we'll add it only after successful load */
-            gchar* basename = g_path_get_basename(file_path);
-            ImageDocument* doc = ui_create_document_without_tab(ctx, basename);
-
-            if (doc) {
-                /* Load the image into the document */
-                PluginError load_error = PLUGIN_ERROR_NONE;
-                gboolean load_result = image_io_load(doc, file_path, &load_error, ctx->settings);
-
-                if (!load_result) {
-                    if (load_error == PLUGIN_ERROR_USER_CANCELLED) {
-                        document_free(doc);
-                        g_free(basename);
-                        g_free(file_path);
-                        g_object_unref(dialog);
-                        return;
-                    }
-                    /* Get user-friendly error message */
-                    const char* error_message = image_io_get_error_message(load_error, file_path);
-
-                    /* Show error dialog */
-                    gchar* msg = g_strdup_printf("Failed to load image: %s\n\n%s",
-                                                 file_path, error_message);
-                    ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_ERROR,
-                                                msg, NULL, GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
-                    g_free(msg);
-
-                    /* Destroy document since load failed (it was never added to notebook) */
-                    document_free(doc);
-                    g_free(basename);
-                    g_free(file_path);
-                    g_object_unref(dialog);
-                    return;
-                }
-
-                /* Load succeeded - now add document to notebook */
-                ui_add_document_to_notebook(ctx, doc);
-
-                /* Register document for autosave */
-                autosave_register_document(doc);
-
-                /* Initialize rendering structures after image is loaded */
-                /* Note: We don't call document_load_image_from_file() here because it would
-                 * call image_io_load() again, which would re-trigger the plugin and show
-                 * dialogs again (e.g., HDR tone mapping dialog). Instead, we call the
-                 * initialization parts directly since image_io_load() already loaded everything. */
-                if (!document_init_rendering_structures(doc)) {
-                    gchar* msg = g_strdup_printf("Failed to initialize document rendering for: %s",
-                                                 file_path);
-                    ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_ERROR,
-                                                msg, NULL, GTK_RESPONSE_OK, "_OK", GTK_RESPONSE_OK, NULL);
-                    g_free(msg);
-
-                    /* Remove from notebook if it was added, then destroy document */
-                    if (doc->scrolled_window && ctx->notebook) {
-                        gint page_num = gtk_notebook_page_num(GTK_NOTEBOOK(ctx->notebook), doc->scrolled_window);
-                        if (page_num >= 0) {
-                            ui_close_document_tab(ctx, doc);
-                        } else {
-                            document_free(doc);
-                        }
-                    } else {
-                        document_free(doc);
-                    }
-                    g_free(basename);
-                    g_free(file_path);
-                    g_object_unref(dialog);
-                    return;
-                }
-
-                /* Ensure we have at least one layer selected */
-                ImageLayer* layer_0 = document_get_layer(doc, 0);
-                if (layer_0) {
-                    document_set_selected_layer(doc, layer_0);
-                }
-
-                /* Mark composite as needing re-render */
-                document_invalidate_composite(doc);
-
-                /* Update drawing area size to match image dimensions */
-                if (doc->drawing_area) {
-                    /* Set exact size for the drawing area based on image dimensions */
-                    gint display_width = (gint)(doc->width * doc->zoom_factor);
-                    gint display_height = (gint)(doc->height * doc->zoom_factor);
-                    gtk_widget_set_size_request(doc->drawing_area, display_width, display_height);
-
-                    /* Queue redraw to display the image */
-                    gtk_widget_queue_draw(doc->drawing_area);
-                }
-
-                {
-                    /* Update status bar with success message */
-                    ui_update_status_bar_message(ctx, "Image successfully loaded");
-
-                    /* Add to recent files after successful load */
-                    recent_files_add(file_path);
-                    recent_files_save(); /* This syncs to settings if connected */
-
-                    /* Update status bar after successful load */
-                    ui_update_status_bar(ctx, NULL);
-
-                    /* Update layers panel with loaded document */
-                    LayersPanel* layers_panel = (LayersPanel*)g_object_get_data(
-                        G_OBJECT(ctx->window), "layers_panel");
-                    if (layers_panel) {
-                        layers_panel_update(layers_panel, doc);
-                    }
-
-                    /* Update menu and button states */
-                    ui_update_menu_and_button_states(ctx);
-
-                    /* Update recent files menu */
-                    ui_update_recent_files_menu(ctx);
-                }
-            }
-
-            g_free(basename);
+            ui_file_menu_open_path_as_new_document(ctx, file_path);
             g_free(file_path);
         }
     }

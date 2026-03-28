@@ -32,4 +32,20 @@ void ui_file_menu_setup(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* acc
 
 void ui_file_menu_update_sensitivity(AppContext* ctx);
 
+/**
+ * Load an image from disk into a new tab (same pipeline as File > Open).
+ * Skips unsupported formats silently. Returns TRUE on success.
+ */
+gboolean ui_file_menu_open_path_as_new_document(AppContext* ctx, const gchar* file_path);
+
+/**
+ * Enable drag-and-drop of image files onto the canvas viewport / drawing area.
+ */
+void ui_file_menu_setup_viewport_drag_drop(ImageDocument* doc, AppContext* ctx);
+
+/**
+ * Enable drag-and-drop onto the central notebook when no tabs exist (open files as new documents).
+ */
+void ui_file_menu_setup_notebook_drag_drop(GtkWidget* notebook, AppContext* ctx);
+
 #endif /* UI_FILE_MENU_H */

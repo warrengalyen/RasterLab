@@ -123,4 +123,11 @@ GtkWidget* layers_panel_get_panel(LayersPanel* layers_panel);
  */
 void layers_panel_add_recent_color(GdkRGBA* color);
 
+/**
+ * Import one image file as new layer(s) in @a doc (same rules as layer list drop).
+ * @return The last new layer added, or NULL if nothing was imported.
+ */
+ImageLayer* layers_panel_import_path_into_document(LayersPanel* layers_panel, ImageDocument* doc,
+                                                   const gchar* path);
+
 #endif /* LAYERS_PANEL_H */
