@@ -17,7 +17,7 @@
 #include <glib.h>
 #include <glib/gstdio.h>
 #include <stdio.h>
-
+#include <string.h>
 
 /* Header probe size for format detection (must be >= 132 for DICOM) */
 #define FILE_HEADER_PROBE_SIZE 256
@@ -1109,6 +1109,23 @@ static void process_save_as_result(GtkNativeDialog* native_dialog, AppContext* c
     }
 }
 
+static gchar* format_handler_primary_extension(const FormatHandler* handler) {
+    if (!handler || !handler->format_info.extensions) {
+        return NULL;
+    }
+    gchar** exts = g_strsplit(handler->format_info.extensions, ",", -1);
+    gchar* out = NULL;
+    for (gint i = 0; exts[i]; i++) {
+        g_strstrip(exts[i]);
+        if (exts[i][0]) {
+            out = g_strdup(exts[i]);
+            break;
+        }
+    }
+    g_strfreev(exts);
+    return out;
+}
+
 /**
  * File > Save As callback
  */
@@ -1145,6 +1162,8 @@ void on_file_save_as(GtkWidget* widget, gpointer data) {
     /* Track filters for default selection */
     GtkFileFilter* first_filter = NULL;
     GtkFileFilter* png_filter = NULL;
+    FormatHandler* first_handler = NULL;
+    FormatHandler* png_handler = NULL;
 
     /* Create filters for each format */
     if (handlers) {
@@ -1187,12 +1206,14 @@ void on_file_save_as(GtkWidget* widget, gpointer data) {
             /* Track first filter */
             if (!first_filter) {
                 first_filter = filter;
+                first_handler = handler;
             }
 
             /* Track PNG filter if found (prefer as default) */
             if (!png_filter && handler->format_info.name &&
                 g_str_has_prefix(handler->format_info.name, "PNG")) {
                 png_filter = filter;
+                png_handler = handler;
             }
         }
     }
@@ -1210,21 +1231,64 @@ void on_file_save_as(GtkWidget* widget, gpointer data) {
 
     /* Determine default filter (prefer PNG, otherwise use first filter) */
     GtkFileFilter* default_filter = png_filter ? png_filter : first_filter;
+    FormatHandler* default_handler = png_handler ? png_handler : first_handler;
+    gchar* default_ext = NULL;
 
-    /* Set default filter */
+    if (default_handler) {
+        default_ext = format_handler_primary_extension(default_handler);
+        if (!default_ext) {
+            default_ext = g_strdup("png");
+        }
+    }
+
+    /* Set default filter (repeat after filename below: native dialogs often snap type to extension) */
     if (default_filter) {
         gtk_file_chooser_set_filter(GTK_FILE_CHOOSER(native_dialog), default_filter);
     }
 
-    /* Set current filename if document has a path */
+    /* Suggested name must use the same extension as the default filter, or save uses the path
+     * extension (format_registry_find_saver) and native UI shows the source format. */
     if (doc->file_path) {
-        gtk_file_chooser_set_filename(GTK_FILE_CHOOSER(native_dialog), doc->file_path);
+        if (default_ext) {
+            gchar* dir = g_path_get_dirname(doc->file_path);
+            gchar* base = g_path_get_basename(doc->file_path);
+            gchar* dot = strrchr(base, '.');
+            if (dot) {
+                *dot = '\0';
+            }
+            gchar* new_name = g_strdup_printf("%s.%s", base, default_ext);
+            gchar* full = g_build_filename(dir, new_name, NULL);
+            gtk_file_chooser_set_filename(GTK_FILE_CHOOSER(native_dialog), full);
+            g_free(dir);
+            g_free(base);
+            g_free(new_name);
+            g_free(full);
+        } else {
+            gtk_file_chooser_set_filename(GTK_FILE_CHOOSER(native_dialog), doc->file_path);
+        }
     } else if (doc->filename) {
-        /* Suggest a filename based on document name */
-        gchar* suggested = g_strdup_printf("%s.png", doc->filename);
-        gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(native_dialog), suggested);
-        g_free(suggested);
+        if (default_ext) {
+            gchar* base = g_strdup(doc->filename);
+            gchar* dot = strrchr(base, '.');
+            if (dot) {
+                *dot = '\0';
+            }
+            gchar* suggested = g_strdup_printf("%s.%s", base, default_ext);
+            gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(native_dialog), suggested);
+            g_free(base);
+            g_free(suggested);
+        } else {
+            gchar* suggested = g_strdup_printf("%s.png", doc->filename);
+            gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(native_dialog), suggested);
+            g_free(suggested);
+        }
     }
+
+    if (default_filter) {
+        gtk_file_chooser_set_filter(GTK_FILE_CHOOSER(native_dialog), default_filter);
+    }
+
+    g_free(default_ext);
 
     /* Show dialog and get response */
     response = gtk_native_dialog_run(GTK_NATIVE_DIALOG(native_dialog));
