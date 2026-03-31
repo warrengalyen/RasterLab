@@ -876,14 +876,14 @@ static PluginError save_png(ImageDocument* doc, const char* filename, const Save
         bool cms_bpc = plugin_host_api_get_cm_bpc();
         if (surface_stride == (int)(doc->width * 4)) {
             cm_convert_srgb_argb32_to_profile(surface_data, (size_t)(doc->width * doc->height),
-                                               doc->original_icc_data, doc->original_icc_size,
-                                               cms_intent, cms_bpc);
+                                              doc->original_icc_data, doc->original_icc_size,
+                                              cms_intent, cms_bpc);
         } else {
             for (guint y = 0; y < doc->height; y++) {
                 uint8_t* row = surface_data + y * surface_stride;
                 cm_convert_srgb_argb32_to_profile(row, doc->width,
-                                                   doc->original_icc_data, doc->original_icc_size,
-                                                   cms_intent, cms_bpc);
+                                                  doc->original_icc_data, doc->original_icc_size,
+                                                  cms_intent, cms_bpc);
             }
         }
     }

@@ -29,6 +29,54 @@ static void on_notebook_drag_data_received(GtkWidget* widget, GdkDragContext* co
                                            gint x, gint y, GtkSelectionData* sel_data,
                                            guint info, guint time, gpointer user_data);
 
+/**
+ * Timeout callback to pulse progress bar while saving (see ui_filter.c).
+ */
+static gboolean pulse_save_progress_bar(gpointer user_data) {
+    AppContext* ctx = (AppContext*)user_data;
+    if (ctx) {
+        ui_update_progress(ctx);
+    }
+    return G_SOURCE_CONTINUE;
+}
+
+/**
+ * Save via plugin pipeline with status-bar progress (same pattern as filters).
+ */
+static gboolean document_save_as_with_progress(AppContext* ctx, ImageDocument* doc,
+                                               const gchar* file_path, const SaveOptions* opts,
+                                               PluginError* save_error) {
+    guint pulse_timeout_id = 0;
+    gboolean success;
+
+    if (!ctx || !doc || !file_path) {
+        if (save_error) {
+            *save_error = PLUGIN_ERROR_INVALID_PARAMETERS;
+        }
+        return FALSE;
+    }
+
+    {
+        gchar* base = g_path_get_basename(file_path);
+        gchar* progress_message = g_strdup_printf("Saving %s...", base ? base : file_path);
+        g_free(base);
+        ui_show_progress(ctx, progress_message);
+        g_free(progress_message);
+    }
+
+    pulse_timeout_id = g_timeout_add(50, pulse_save_progress_bar, ctx);
+
+    success = document_save_as_with_error(doc, file_path, opts, save_error);
+
+    if (pulse_timeout_id > 0) {
+        g_source_remove(pulse_timeout_id);
+    }
+
+    ui_hide_progress(ctx);
+
+    return success;
+}
+
 gboolean ui_file_menu_open_path_as_new_document(AppContext* ctx, const gchar* file_path) {
     gchar* basename;
     ImageDocument* doc;
@@ -984,7 +1032,7 @@ void on_file_save(GtkWidget* widget, gpointer data) {
     }
 
     PluginError save_error = PLUGIN_ERROR_NONE;
-    if (document_save_as_with_error(doc, doc->file_path, &default_opts, &save_error)) {
+    if (document_save_as_with_progress(ctx, doc, doc->file_path, &default_opts, &save_error)) {
         /* Mark document as saved */
         document_mark_saved(doc);
 
@@ -1056,7 +1104,7 @@ static void process_save_as_result(GtkNativeDialog* native_dialog, AppContext* c
             if (dialog_result) {
                 /* User clicked OK, proceed with save */
                 PluginError save_error = PLUGIN_ERROR_NONE;
-                if (document_save_as_with_error(doc, file_path, &opts, &save_error)) {
+                if (document_save_as_with_progress(ctx, doc, file_path, &opts, &save_error)) {
                     /* Update document filename and path */
                     if (doc->file_path) {
                         g_free(doc->file_path);
