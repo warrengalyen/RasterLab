@@ -1,4 +1,5 @@
 #include "ui/ui_filter_adjust.h"
+#include "i18n.h"
 #include "command.h"
 #include "document.h"
 #include "filters.h"
@@ -157,7 +158,7 @@ static void on_adjust_grayscale(GtkWidget* widget, gpointer data) {
     (void)widget; /* Unused */
 
     AppContext* ctx = (AppContext*)data;
-    ui_apply_layer_filter(ctx, filter_grayscale_apply, "Grayscale");
+    ui_apply_layer_filter(ctx, filter_grayscale_apply, _("Grayscale"));
 }
 
 /**
@@ -179,7 +180,7 @@ static void on_adjust_whitebalance(GtkWidget* widget, gpointer data) {
 
     /* Define white balance control parameters */
     controls[0].type = FILTER_CONTROL_DOUBLE;
-    controls[0].label = "Temperature (K):";
+    controls[0].label = _("Temperature (K):");
     controls[0].min_value = 4000.0;
     controls[0].max_value = 7500.0;
     controls[0].default_value = 5000.0;
@@ -189,7 +190,7 @@ static void on_adjust_whitebalance(GtkWidget* widget, gpointer data) {
     controls[0].filter_max = 7500;
 
     controls[1].type = FILTER_CONTROL_DOUBLE;
-    controls[1].label = "Tint";
+    controls[1].label = _("Tint");
     controls[1].min_value = -200.0;
     controls[1].max_value = 200.0;
     controls[1].default_value = 0.0;
@@ -199,7 +200,7 @@ static void on_adjust_whitebalance(GtkWidget* widget, gpointer data) {
     controls[1].filter_max = 200.0;
 
     /* Show filter dialog */
-    response = ui_show_filter_dialog(ctx, "White Balance", controls, 2,
+    response = ui_show_filter_dialog(ctx, _("White Balance"), controls, 2,
                                      on_whitebalance_preview_update, values);
 
     if (response == GTK_RESPONSE_OK) {
@@ -207,7 +208,7 @@ static void on_adjust_whitebalance(GtkWidget* widget, gpointer data) {
         gfloat filter_values[2];
         if (ui_filter_utils_scale_values(values, filter_values, controls, 2)) {
             ui_apply_layer_filter_with_value(ctx, filter_whitebalance_apply,
-                                             "White Balance", filter_values, 2);
+                                             _("White Balance"), filter_values, 2);
         }
     }
 }
@@ -230,7 +231,7 @@ static void on_adjust_vibrance(GtkWidget* widget, gpointer data) {
 
     /* Define vibrance control parameter */
     controls[0].type = FILTER_CONTROL_DOUBLE;
-    controls[0].label = "vibrance";
+    controls[0].label = _("vibrance");
     controls[0].min_value = -100.0; /* UI range: -100 to 100 */
     controls[0].max_value = 100.0;
     controls[0].default_value = 0.0;
@@ -240,7 +241,7 @@ static void on_adjust_vibrance(GtkWidget* widget, gpointer data) {
     controls[0].filter_max = 1.0;
 
     /* Show filter dialog */
-    response = ui_show_filter_dialog(ctx, "Vibrance", controls, 1,
+    response = ui_show_filter_dialog(ctx, _("Vibrance"), controls, 1,
                                      on_vibrance_preview_update, values);
 
     if (response == GTK_RESPONSE_OK) {
@@ -248,7 +249,7 @@ static void on_adjust_vibrance(GtkWidget* widget, gpointer data) {
         gfloat filter_values[1];
         if (ui_filter_utils_scale_values(values, filter_values, controls, 1)) {
             ui_apply_layer_filter_with_value(ctx, filter_vibrance_apply,
-                                             "Vibrance", filter_values, 1);
+                                             _("Vibrance"), filter_values, 1);
         }
     }
 }
@@ -260,7 +261,7 @@ static void on_histogram_equalize(GtkWidget* widget, gpointer data) {
     (void)widget; /* Unused */
 
     AppContext* ctx = (AppContext*)data;
-    ui_apply_layer_filter(ctx, filter_equalize_apply, "Equalize");
+    ui_apply_layer_filter(ctx, filter_equalize_apply, _("Equalize"));
 }
 
 /**
@@ -270,7 +271,7 @@ static void on_histogram_stretch(GtkWidget* widget, gpointer data) {
     (void)widget; /* Unused */
 
     AppContext* ctx = (AppContext*)data;
-    ui_apply_layer_filter(ctx, filter_stretch_apply, "Histogram Stretch");
+    ui_apply_layer_filter(ctx, filter_stretch_apply, _("Histogram Stretch"));
 }
 
 /**
@@ -361,7 +362,7 @@ static void on_adjust_sepia(GtkWidget* widget, gpointer data) {
 
     /* Define sepia control parameter */
     controls[0].type = FILTER_CONTROL_DOUBLE;
-    controls[0].label = "Intensity";
+    controls[0].label = _("Intensity");
     controls[0].min_value = 0.0; /* UI range: 0 to 100 */
     controls[0].max_value = 100.0;
     controls[0].default_value = 100.0;
@@ -371,7 +372,7 @@ static void on_adjust_sepia(GtkWidget* widget, gpointer data) {
     controls[0].filter_max = 100.0;
 
     /* Show filter dialog */
-    response = ui_show_filter_dialog(ctx, "Sepia", controls, 1,
+    response = ui_show_filter_dialog(ctx, _("Sepia"), controls, 1,
                                      on_sepia_preview_update, values);
 
     if (response == GTK_RESPONSE_OK) {
@@ -379,7 +380,7 @@ static void on_adjust_sepia(GtkWidget* widget, gpointer data) {
         gfloat filter_values[1];
         if (ui_filter_utils_scale_values(values, filter_values, controls, 1)) {
             ui_apply_layer_filter_with_value(ctx, filter_sepia_apply,
-                                             "Sepia", filter_values, 1);
+                                             _("Sepia"), filter_values, 1);
         }
     }
 }
@@ -402,7 +403,7 @@ static void on_adjust_glass_tiles(GtkWidget* widget, gpointer data) {
 
     /* Angle (-45 to 45, default 0) */
     controls[0].type = FILTER_CONTROL_DOUBLE;
-    controls[0].label = "Angle";
+    controls[0].label = _("Angle");
     controls[0].min_value = -45.0;
     controls[0].max_value = 45.0;
     controls[0].default_value = 0.0;
@@ -413,7 +414,7 @@ static void on_adjust_glass_tiles(GtkWidget* widget, gpointer data) {
 
     /* Size (1 to 100, default 20) */
     controls[1].type = FILTER_CONTROL_DOUBLE;
-    controls[1].label = "Size";
+    controls[1].label = _("Size");
     controls[1].min_value = 1.0;
     controls[1].max_value = 100.0;
     controls[1].default_value = 20.0;
@@ -424,7 +425,7 @@ static void on_adjust_glass_tiles(GtkWidget* widget, gpointer data) {
 
     /* Curvature (-20 to 20, default 8) */
     controls[2].type = FILTER_CONTROL_DOUBLE;
-    controls[2].label = "Curvature";
+    controls[2].label = _("Curvature");
     controls[2].min_value = -20.0;
     controls[2].max_value = 20.0;
     controls[2].default_value = 8.0;
@@ -435,7 +436,7 @@ static void on_adjust_glass_tiles(GtkWidget* widget, gpointer data) {
 
     /* Quality (1 to 5, default 2) */
     controls[3].type = FILTER_CONTROL_DOUBLE;
-    controls[3].label = "Quality";
+    controls[3].label = _("Quality");
     controls[3].min_value = 1.0;
     controls[3].max_value = 5.0;
     controls[3].default_value = 2.0;
@@ -446,19 +447,19 @@ static void on_adjust_glass_tiles(GtkWidget* widget, gpointer data) {
 
     /* Edge mode (clamp, reflect, wrap, erase, ignore; default reflect = index 1) */
     controls[4].type = FILTER_CONTROL_ENUM;
-    controls[4].label = "If pixels lie outside the image";
+    controls[4].label = _("If pixels lie outside the image");
     controls[4].enum_labels = edge_labels;
     controls[4].enum_n_labels = 5;
     controls[4].default_enum_index = 1;
 
-    response = ui_show_filter_dialog(ctx, "Glass Tiles", controls, 5,
+    response = ui_show_filter_dialog(ctx, _("Glass Tiles"), controls, 5,
                                      on_glass_tiles_preview_update, values);
 
     if (response == GTK_RESPONSE_OK) {
         gfloat filter_values[5];
         if (ui_filter_utils_scale_values(values, filter_values, controls, 5)) {
             ui_apply_layer_filter_with_value(ctx, filter_glass_tiles_apply,
-                                             "Glass Tiles", filter_values, 5);
+                                             _("Glass Tiles"), filter_values, 5);
         }
     }
 }
@@ -481,7 +482,7 @@ static void on_adjust_marble(GtkWidget* widget, gpointer data) {
 
     /* Scale (0 to 100, default 10) */
     controls[0].type = FILTER_CONTROL_DOUBLE;
-    controls[0].label = "Scale";
+    controls[0].label = _("Scale");
     controls[0].min_value = 0.0;
     controls[0].max_value = 100.0;
     controls[0].default_value = 10.0;
@@ -492,7 +493,7 @@ static void on_adjust_marble(GtkWidget* widget, gpointer data) {
 
     /* Turbulence (0 to 1, default 0.5) */
     controls[1].type = FILTER_CONTROL_DOUBLE;
-    controls[1].label = "Turbulence";
+    controls[1].label = _("Turbulence");
     controls[1].min_value = 0.0;
     controls[1].max_value = 1.0;
     controls[1].default_value = 0.5;
@@ -503,7 +504,7 @@ static void on_adjust_marble(GtkWidget* widget, gpointer data) {
 
     /* Quality (1 to 5, default 2) */
     controls[2].type = FILTER_CONTROL_DOUBLE;
-    controls[2].label = "Quality";
+    controls[2].label = _("Quality");
     controls[2].min_value = 1.0;
     controls[2].max_value = 5.0;
     controls[2].default_value = 2.0;
@@ -514,14 +515,14 @@ static void on_adjust_marble(GtkWidget* widget, gpointer data) {
 
     /* Edge mode (clamp, reflect, wrap, erase, ignore; default reflect = index 1) */
     controls[3].type = FILTER_CONTROL_ENUM;
-    controls[3].label = "If pixels lie outside the image";
+    controls[3].label = _("If pixels lie outside the image");
     controls[3].enum_labels = edge_labels;
     controls[3].enum_n_labels = 5;
     controls[3].default_enum_index = 1;
 
     /* Random seed (0 to 2^32-1, default 0) */
     controls[4].type = FILTER_CONTROL_DOUBLE;
-    controls[4].label = "Random seed";
+    controls[4].label = _("Random seed");
     controls[4].min_value = 0.0;
     controls[4].max_value = 4294967295.0;
     controls[4].default_value = 0.0;
@@ -530,14 +531,14 @@ static void on_adjust_marble(GtkWidget* widget, gpointer data) {
     controls[4].filter_min = 0.0;
     controls[4].filter_max = 4294967295.0;
 
-    response = ui_show_filter_dialog(ctx, "Marble", controls, 5,
+    response = ui_show_filter_dialog(ctx, _("Marble"), controls, 5,
                                      on_marble_preview_update, values);
 
     if (response == GTK_RESPONSE_OK) {
         gfloat filter_values[5];
         if (ui_filter_utils_scale_values(values, filter_values, controls, 5)) {
             ui_apply_layer_filter_with_value(ctx, filter_marble_apply,
-                                             "Marble", filter_values, 5);
+                                             _("Marble"), filter_values, 5);
         }
     }
 }
@@ -549,7 +550,7 @@ static void on_adjust_backlight(GtkWidget* widget, gpointer data) {
     (void)widget; /* Unused */
 
     AppContext* ctx = (AppContext*)data;
-    ui_apply_layer_filter(ctx, filter_backlight_apply, "Backlight Repair");
+    ui_apply_layer_filter(ctx, filter_backlight_apply, _("Backlight Repair"));
 }
 
 /**
@@ -559,7 +560,7 @@ static void on_adjust_auto_whitebalance(GtkWidget* widget, gpointer data) {
     (void)widget; /* Unused */
 
     AppContext* ctx = (AppContext*)data;
-    ui_apply_layer_filter(ctx, filter_auto_whitebalance_apply, "Auto White Balance");
+    ui_apply_layer_filter(ctx, filter_auto_whitebalance_apply, _("Auto White Balance"));
 }
 
 /**
@@ -569,7 +570,7 @@ static void on_adjust_auto_contrast(GtkWidget* widget, gpointer data) {
     (void)widget; /* Unused */
 
     AppContext* ctx = (AppContext*)data;
-    ui_apply_layer_filter(ctx, filter_auto_contrast_apply, "Auto Contrast");
+    ui_apply_layer_filter(ctx, filter_auto_contrast_apply, _("Auto Contrast"));
 }
 
 /**
@@ -579,7 +580,7 @@ static void on_adjust_auto_gamma(GtkWidget* widget, gpointer data) {
     (void)widget; /* Unused */
 
     AppContext* ctx = (AppContext*)data;
-    ui_apply_layer_filter(ctx, filter_auto_gamma_apply, "Auto Gamma");
+    ui_apply_layer_filter(ctx, filter_auto_gamma_apply, _("Auto Gamma"));
 }
 
 /**
@@ -589,7 +590,7 @@ static void on_adjust_auto_level(GtkWidget* widget, gpointer data) {
     (void)widget; /* Unused */
 
     AppContext* ctx = (AppContext*)data;
-    ui_apply_layer_filter(ctx, filter_auto_level_apply, "Auto Level");
+    ui_apply_layer_filter(ctx, filter_auto_level_apply, _("Auto Level"));
 }
 
 /**
@@ -599,7 +600,7 @@ static void on_adjust_auto_threshold(GtkWidget* widget, gpointer data) {
     (void)widget; /* Unused */
 
     AppContext* ctx = (AppContext*)data;
-    ui_apply_layer_filter(ctx, filter_auto_threshold_apply, "Auto Threshold");
+    ui_apply_layer_filter(ctx, filter_auto_threshold_apply, _("Auto Threshold"));
 }
 
 /**
@@ -726,7 +727,7 @@ static void on_adjust_gamma(GtkWidget* widget, gpointer data) {
     if (response == GTK_RESPONSE_OK) {
         /* Apply gamma filter */
         ui_apply_layer_filter_with_value(ctx, filter_gamma_apply,
-                                         "Gamma Correction", gamma_values, 3);
+                                         _("Gamma Correction"), gamma_values, 3);
     }
 
     /* Clean up */
@@ -1027,7 +1028,7 @@ static void on_adjust_colorbalance(GtkWidget* widget, gpointer data) {
 
         /* Apply color balance filter */
         ui_apply_layer_filter_with_value(ctx, filter_colorbalance_apply_values,
-                                         "Color Balance", filter_values, 5);
+                                         _("Color Balance"), filter_values, 5);
     }
 
     /* Clean up */
@@ -1135,7 +1136,7 @@ static void on_adjust_channel_mixer(GtkWidget* widget, gpointer data) {
         filter_values[16] = (gfloat)monochrome;
         filter_values[17] = (gfloat)preserve_luminance;
         ui_apply_layer_filter_with_value(ctx, filter_channel_mixer_apply_values,
-                                         "Channel Mixer", filter_values, 18);
+                                         _("Channel Mixer"), filter_values, 18);
     }
 
     g_object_set_data(G_OBJECT(channel_mixer_dialog_get_window(dialog)), "original_layer", NULL);
@@ -1161,7 +1162,7 @@ static void on_adjust_exposure(GtkWidget* widget, gpointer data) {
 
     /* Define exposure control parameter */
     controls[0].type = FILTER_CONTROL_DOUBLE;
-    controls[0].label = "exposure";
+    controls[0].label = _("exposure");
     controls[0].min_value = -5.0;
     controls[0].max_value = 5.0;
     controls[0].default_value = 0.0;
@@ -1171,7 +1172,7 @@ static void on_adjust_exposure(GtkWidget* widget, gpointer data) {
     controls[0].filter_max = 5.0;
 
     /* Show filter dialog */
-    response = ui_show_filter_dialog(ctx, "Exposure", controls, 1,
+    response = ui_show_filter_dialog(ctx, _("Exposure"), controls, 1,
                                      on_exposure_preview_update, values);
 
     if (response == GTK_RESPONSE_OK) {
@@ -1179,7 +1180,7 @@ static void on_adjust_exposure(GtkWidget* widget, gpointer data) {
         gfloat filter_values[1];
         if (ui_filter_utils_scale_values(values, filter_values, controls, 1)) {
             ui_apply_layer_filter_with_value(ctx, filter_exposure_apply,
-                                             "Exposure", filter_values, 1);
+                                             _("Exposure"), filter_values, 1);
         }
     }
 }
@@ -1202,7 +1203,7 @@ static void on_adjust_hsl(GtkWidget* widget, gpointer data) {
 
     /* Define HSL control parameters */
     controls[0].type = FILTER_CONTROL_DOUBLE;
-    controls[0].label = "hue";
+    controls[0].label = _("hue");
     controls[0].min_value = -180.0;
     controls[0].max_value = 180.0;
     controls[0].default_value = 0.0;
@@ -1212,7 +1213,7 @@ static void on_adjust_hsl(GtkWidget* widget, gpointer data) {
     controls[0].filter_max = 1.0;
 
     controls[1].type = FILTER_CONTROL_DOUBLE;
-    controls[1].label = "saturation";
+    controls[1].label = _("saturation");
     controls[1].min_value = -100.0;
     controls[1].max_value = 100.0;
     controls[1].default_value = 0.0;
@@ -1222,7 +1223,7 @@ static void on_adjust_hsl(GtkWidget* widget, gpointer data) {
     controls[1].filter_max = 1.0;
 
     controls[2].type = FILTER_CONTROL_DOUBLE;
-    controls[2].label = "lightness";
+    controls[2].label = _("lightness");
     controls[2].min_value = -100.0;
     controls[2].max_value = 100.0;
     controls[2].default_value = 0.0;
@@ -1232,7 +1233,7 @@ static void on_adjust_hsl(GtkWidget* widget, gpointer data) {
     controls[2].filter_max = 1.0;
 
     /* Show filter dialog */
-    response = ui_show_filter_dialog(ctx, "HSL", controls, 3,
+    response = ui_show_filter_dialog(ctx, _("HSL"), controls, 3,
                                      on_hsl_preview_update, values);
 
     if (response == GTK_RESPONSE_OK) {
@@ -1240,7 +1241,7 @@ static void on_adjust_hsl(GtkWidget* widget, gpointer data) {
         gfloat filter_values[3];
         if (ui_filter_utils_scale_values(values, filter_values, controls, 3)) {
             ui_apply_layer_filter_with_value(ctx, filter_hsl_apply,
-                                             "HSL", filter_values, 3);
+                                             _("HSL"), filter_values, 3);
         }
     }
 }
@@ -1263,7 +1264,7 @@ static void on_adjust_brightness_contrast(GtkWidget* widget, gpointer data) {
 
     /* Define brightness/contrast control parameters */
     controls[0].type = FILTER_CONTROL_DOUBLE;
-    controls[0].label = "brightness";
+    controls[0].label = _("brightness");
     controls[0].min_value = -255.0; /* UI range: -255 to 255 */
     controls[0].max_value = 255.0;
     controls[0].default_value = 0.0;
@@ -1273,7 +1274,7 @@ static void on_adjust_brightness_contrast(GtkWidget* widget, gpointer data) {
     controls[0].filter_max = 1.0;
 
     controls[1].type = FILTER_CONTROL_DOUBLE;
-    controls[1].label = "contrast";
+    controls[1].label = _("contrast");
     controls[1].min_value = -100.0; /* UI range: -100 to 100 */
     controls[1].max_value = 100.0;
     controls[1].default_value = 0.0;
@@ -1283,7 +1284,7 @@ static void on_adjust_brightness_contrast(GtkWidget* widget, gpointer data) {
     controls[1].filter_max = 1.0;
 
     /* Show filter dialog */
-    response = ui_show_filter_dialog(ctx, "Brightness and Contrast", controls, 2,
+    response = ui_show_filter_dialog(ctx, _("Brightness and Contrast"), controls, 2,
                                      on_brightness_contrast_preview_update, values);
 
     if (response == GTK_RESPONSE_OK) {
@@ -1291,7 +1292,7 @@ static void on_adjust_brightness_contrast(GtkWidget* widget, gpointer data) {
         gfloat filter_values[2];
         if (ui_filter_utils_scale_values(values, filter_values, controls, 2)) {
             ui_apply_layer_filter_with_value(ctx, filter_brightness_contrast_apply,
-                                             "Brightness And Contrast", filter_values, 2);
+                                             _("Brightness And Contrast"), filter_values, 2);
         }
     }
 }
@@ -1314,7 +1315,7 @@ static void on_adjust_shadow_highlights(GtkWidget* widget, gpointer data) {
 
     /* Define shadow/highlights control parameters */
     controls[0].type = FILTER_CONTROL_DOUBLE;
-    controls[0].label = "shadows";
+    controls[0].label = _("shadows");
     controls[0].min_value = -100.0; /* UI range: -100 to 100 */
     controls[0].max_value = 100.0;
     controls[0].default_value = 0.0;
@@ -1324,7 +1325,7 @@ static void on_adjust_shadow_highlights(GtkWidget* widget, gpointer data) {
     controls[0].filter_max = 1.0;
 
     controls[1].type = FILTER_CONTROL_DOUBLE;
-    controls[1].label = "midtone contrast";
+    controls[1].label = _("midtone contrast");
     controls[1].min_value = -100.0; /* UI range: -100 to 100 */
     controls[1].max_value = 100.0;
     controls[1].default_value = 0.0;
@@ -1334,7 +1335,7 @@ static void on_adjust_shadow_highlights(GtkWidget* widget, gpointer data) {
     controls[1].filter_max = 1.0;
 
     controls[2].type = FILTER_CONTROL_DOUBLE;
-    controls[2].label = "highlights";
+    controls[2].label = _("highlights");
     controls[2].min_value = -100.0; /* UI range: -100 to 100 */
     controls[2].max_value = 100.0;
     controls[2].default_value = 0.0;
@@ -1344,7 +1345,7 @@ static void on_adjust_shadow_highlights(GtkWidget* widget, gpointer data) {
     controls[2].filter_max = 1.0;
 
     /* Show filter dialog */
-    response = ui_show_filter_dialog(ctx, "Shadows and Highlights", controls, 3,
+    response = ui_show_filter_dialog(ctx, _("Shadows and Highlights"), controls, 3,
                                      on_shadow_highlights_preview_update, values);
 
     if (response == GTK_RESPONSE_OK) {
@@ -1352,7 +1353,7 @@ static void on_adjust_shadow_highlights(GtkWidget* widget, gpointer data) {
         gfloat filter_values[3];
         if (ui_filter_utils_scale_values(values, filter_values, controls, 3)) {
             ui_apply_layer_filter_with_value(ctx, filter_shadow_highlights_apply,
-                                             "Shadows And Highlights", filter_values, 3);
+                                             _("Shadows And Highlights"), filter_values, 3);
         }
     }
 }
@@ -1375,7 +1376,7 @@ static void on_adjust_temperature(GtkWidget* widget, gpointer data) {
 
     /* Define color temperature control parameters */
     controls[0].type = FILTER_CONTROL_DOUBLE;
-    controls[0].label = "temperature (K)";
+    controls[0].label = _("temperature (K)");
     controls[0].min_value = 1000.0; /* UI range: 2000 to 15000 K */
     controls[0].max_value = 15000.0;
     controls[0].default_value = 6500.0; /* Daylight */
@@ -1385,7 +1386,7 @@ static void on_adjust_temperature(GtkWidget* widget, gpointer data) {
     controls[0].filter_max = 15000.0;
 
     controls[1].type = FILTER_CONTROL_DOUBLE;
-    controls[1].label = "strength";
+    controls[1].label = _("strength");
     controls[1].min_value = 1.0;
     controls[1].max_value = 100.0;
     controls[1].default_value = 50.0;
@@ -1395,7 +1396,7 @@ static void on_adjust_temperature(GtkWidget* widget, gpointer data) {
     controls[1].filter_max = 100.0;
 
     /* Show filter dialog */
-    response = ui_show_filter_dialog(ctx, "Color Temperature", controls, 2,
+    response = ui_show_filter_dialog(ctx, _("Color Temperature"), controls, 2,
                                      on_temperature_preview_update, values);
 
     if (response == GTK_RESPONSE_OK) {
@@ -1403,7 +1404,7 @@ static void on_adjust_temperature(GtkWidget* widget, gpointer data) {
         gfloat filter_values[2];
         if (ui_filter_utils_scale_values(values, filter_values, controls, 2)) {
             ui_apply_layer_filter_with_value(ctx, filter_temperature_apply,
-                                             "Color Temperature", filter_values, 2);
+                                             _("Color Temperature"), filter_values, 2);
         }
     }
 }
@@ -1440,7 +1441,7 @@ static void on_adjust_dehaze(GtkWidget* widget, gpointer data) {
 
     /* Define dehaze control parameters */
     controls[0].type = FILTER_CONTROL_DOUBLE;
-    controls[0].label = "radius";
+    controls[0].label = _("radius");
     controls[0].min_value = 1.0;
     controls[0].max_value = 50.0;
     controls[0].default_value = 15.0;
@@ -1450,7 +1451,7 @@ static void on_adjust_dehaze(GtkWidget* widget, gpointer data) {
     controls[0].filter_max = 50.0;
 
     controls[1].type = FILTER_CONTROL_DOUBLE;
-    controls[1].label = "edge preservation radius";
+    controls[1].label = _("edge preservation radius");
     controls[1].min_value = 10.0;
     controls[1].max_value = 120.0;
     controls[1].default_value = 60.0;
@@ -1460,7 +1461,7 @@ static void on_adjust_dehaze(GtkWidget* widget, gpointer data) {
     controls[1].filter_max = 120.0;
 
     controls[2].type = FILTER_CONTROL_DOUBLE;
-    controls[2].label = "sky brightness";
+    controls[2].label = _("sky brightness");
     controls[2].min_value = 0.1;
     controls[2].max_value = 1.0;
     controls[2].default_value = 0.75;
@@ -1470,7 +1471,7 @@ static void on_adjust_dehaze(GtkWidget* widget, gpointer data) {
     controls[2].filter_max = 1.0;
 
     controls[3].type = FILTER_CONTROL_DOUBLE;
-    controls[3].label = "intensity";
+    controls[3].label = _("intensity");
     controls[3].min_value = 0.1;
     controls[3].max_value = 1.0;
     controls[3].default_value = 0.95;
@@ -1480,7 +1481,7 @@ static void on_adjust_dehaze(GtkWidget* widget, gpointer data) {
     controls[3].filter_max = 1.0;
 
     controls[4].type = FILTER_CONTROL_DOUBLE;
-    controls[4].label = "edge sensitivity";
+    controls[4].label = _("edge sensitivity");
     controls[4].min_value = 0.0001;
     controls[4].max_value = 0.1;
     controls[4].default_value = 0.001;
@@ -1490,7 +1491,7 @@ static void on_adjust_dehaze(GtkWidget* widget, gpointer data) {
     controls[4].filter_max = 0.1;
 
     controls[5].type = FILTER_CONTROL_DOUBLE;
-    controls[5].label = "minimum transmission";
+    controls[5].label = _("minimum transmission");
     controls[5].min_value = 0.1;
     controls[5].max_value = 0.3;
     controls[5].default_value = 0.1;
@@ -1500,7 +1501,7 @@ static void on_adjust_dehaze(GtkWidget* widget, gpointer data) {
     controls[5].filter_max = 0.3;
 
     /* Show filter dialog */
-    response = ui_show_filter_dialog(ctx, "Dehaze", controls, 6,
+    response = ui_show_filter_dialog(ctx, _("Dehaze"), controls, 6,
                                      on_dehaze_preview_update, values);
 
     if (response == GTK_RESPONSE_OK) {
@@ -1508,7 +1509,7 @@ static void on_adjust_dehaze(GtkWidget* widget, gpointer data) {
         gfloat filter_values[6];
         if (ui_filter_utils_scale_values(values, filter_values, controls, 6)) {
             ui_apply_layer_filter_with_value(ctx, filter_dehaze_apply,
-                                             "Dehaze", filter_values, 6);
+                                             _("Dehaze"), filter_values, 6);
         }
     }
 }
@@ -1534,7 +1535,7 @@ static gboolean on_invert_preview_update(FilterDialog* dialog,
 static void on_adjust_invert(GtkWidget* widget, gpointer data) {
     (void)widget;
     AppContext* ctx = (AppContext*)data;
-    ui_apply_layer_filter(ctx, filter_color_invert_apply, "Invert");
+    ui_apply_layer_filter(ctx, filter_color_invert_apply, _("Invert"));
 }
 
 /**
@@ -1580,14 +1581,14 @@ static void on_adjust_monochrome(GtkWidget* widget, gpointer data) {
 
     /* Control 0: Color (RGB) */
     controls[0].type = FILTER_CONTROL_RGB;
-    controls[0].label = "Color";
+    controls[0].label = _("Color");
     controls[0].default_r = 0.5; /* Default to gray */
     controls[0].default_g = 0.5;
     controls[0].default_b = 0.5;
 
     /* Control 1: Intensity (double) */
     controls[1].type = FILTER_CONTROL_DOUBLE;
-    controls[1].label = "Intensity";
+    controls[1].label = _("Intensity");
     controls[1].min_value = 0.0;
     controls[1].max_value = 100.0;
     controls[1].default_value = 100.0;
@@ -1596,7 +1597,7 @@ static void on_adjust_monochrome(GtkWidget* widget, gpointer data) {
     controls[1].filter_min = 0.0;
     controls[1].filter_max = 1.0;
 
-    response = ui_show_filter_dialog(ctx, "Monochrome", controls, 2,
+    response = ui_show_filter_dialog(ctx, _("Monochrome"), controls, 2,
                                      on_monochrome_preview_update, values);
 
     if (response == GTK_RESPONSE_OK) {
@@ -1607,7 +1608,7 @@ static void on_adjust_monochrome(GtkWidget* widget, gpointer data) {
         filter_values[3] = (gfloat)values[3]; /* intensity */
 
         ui_apply_layer_filter_with_value(ctx, filter_monochrome_apply,
-                                         "Monochrome", filter_values, 4);
+                                         _("Monochrome"), filter_values, 4);
     }
 }
 
@@ -1663,14 +1664,14 @@ static void on_adjust_chroma_key(GtkWidget* widget, gpointer data) {
 
     /* Control 0: Color to replace (RGB) */
     controls[0].type = FILTER_CONTROL_RGB;
-    controls[0].label = "Color to Remove";
+    controls[0].label = _("Color to Remove");
     controls[0].default_r = 0.0; /* Default to green */
     controls[0].default_g = 1.0;
     controls[0].default_b = 0.0;
 
     /* Control 1: Threshold (double) */
     controls[1].type = FILTER_CONTROL_DOUBLE;
-    controls[1].label = "Threshold";
+    controls[1].label = _("Threshold");
     controls[1].min_value = 0.0;
     controls[1].max_value = 100.0;
     controls[1].default_value = 15.0;
@@ -1681,7 +1682,7 @@ static void on_adjust_chroma_key(GtkWidget* widget, gpointer data) {
 
     /* Control 2: Smoothing (double) */
     controls[2].type = FILTER_CONTROL_DOUBLE;
-    controls[2].label = "Smoothing";
+    controls[2].label = _("Smoothing");
     controls[2].min_value = 0.0;
     controls[2].max_value = 100.0;
     controls[2].default_value = 15.0;
@@ -1690,7 +1691,7 @@ static void on_adjust_chroma_key(GtkWidget* widget, gpointer data) {
     controls[2].filter_min = 0.0;
     controls[2].filter_max = 1.0;
 
-    response = ui_show_filter_dialog(ctx, "Chroma Key", controls, 3,
+    response = ui_show_filter_dialog(ctx, _("Chroma Key"), controls, 3,
                                      on_chroma_key_preview_update, values);
 
     if (response == GTK_RESPONSE_OK) {
@@ -1710,7 +1711,7 @@ static void on_adjust_chroma_key(GtkWidget* widget, gpointer data) {
         filter_values[4] = (gfloat)scaled_smoothing; /* smoothing (0.0-1.0) */
 
         ui_apply_layer_filter_with_value(ctx, filter_chroma_key_apply,
-                                         "Chroma Key", filter_values, 5);
+                                         _("Chroma Key"), filter_values, 5);
     }
 }
 
@@ -1753,7 +1754,7 @@ static void on_adjust_posterize(GtkWidget* widget, gpointer data) {
 
     /* Control 0: Levels (double) */
     controls[0].type = FILTER_CONTROL_DOUBLE;
-    controls[0].label = "Levels";
+    controls[0].label = _("Levels");
     controls[0].min_value = 2.0;
     controls[0].max_value = 255.0;
     controls[0].default_value = 8.0;
@@ -1762,14 +1763,14 @@ static void on_adjust_posterize(GtkWidget* widget, gpointer data) {
     controls[0].filter_min = 2.0;
     controls[0].filter_max = 255.0;
 
-    response = ui_show_filter_dialog(ctx, "Posterize", controls, 1,
+    response = ui_show_filter_dialog(ctx, _("Posterize"), controls, 1,
                                      on_posterize_preview_update, values);
 
     if (response == GTK_RESPONSE_OK) {
         filter_values[0] = (gfloat)values[0]; /* levels */
 
         ui_apply_layer_filter_with_value(ctx, filter_posterize_apply,
-                                         "Posterize", filter_values, 1);
+                                         _("Posterize"), filter_values, 1);
     }
 }
 
@@ -1812,7 +1813,7 @@ static void on_adjust_threshold(GtkWidget* widget, gpointer data) {
 
     /* Control 0: Threshold (double) */
     controls[0].type = FILTER_CONTROL_DOUBLE;
-    controls[0].label = "Threshold";
+    controls[0].label = _("Threshold");
     controls[0].min_value = 0.0;
     controls[0].max_value = 255.0;
     controls[0].default_value = 50.0;
@@ -1821,7 +1822,7 @@ static void on_adjust_threshold(GtkWidget* widget, gpointer data) {
     controls[0].filter_min = 0.0;
     controls[0].filter_max = 255.0;
 
-    response = ui_show_filter_dialog(ctx, "Threshold", controls, 1,
+    response = ui_show_filter_dialog(ctx, _("Threshold"), controls, 1,
                                      on_threshold_preview_update, values);
 
     if (response == GTK_RESPONSE_OK) {
@@ -1833,7 +1834,7 @@ static void on_adjust_threshold(GtkWidget* widget, gpointer data) {
         filter_values[0] = (gfloat)scaled_threshold;
 
         ui_apply_layer_filter_with_value(ctx, filter_luminance_threshold_apply,
-                                         "Threshold", filter_values, 1);
+                                         _("Threshold"), filter_values, 1);
     }
 }
 
@@ -1884,21 +1885,21 @@ static void on_adjust_shadows_highlights_tint(GtkWidget* widget, gpointer data) 
 
     /* Control 0: Shadow Tint Color (RGB) */
     controls[0].type = FILTER_CONTROL_RGB;
-    controls[0].label = "Shadow Tint";
+    controls[0].label = _("Shadow Tint");
     controls[0].default_r = 0.0;
     controls[0].default_g = 0.0;
     controls[0].default_b = 0.0;
 
     /* Control 1: Highlight Tint Color (RGB) */
     controls[1].type = FILTER_CONTROL_RGB;
-    controls[1].label = "Highlight Tint";
+    controls[1].label = _("Highlight Tint");
     controls[1].default_r = 1.0;
     controls[1].default_g = 1.0;
     controls[1].default_b = 1.0;
 
     /* Control 2: Shadow Intensity (double) */
     controls[2].type = FILTER_CONTROL_DOUBLE;
-    controls[2].label = "Shadow Intensity";
+    controls[2].label = _("Shadow Intensity");
     controls[2].min_value = 0.0;
     controls[2].max_value = 100.0;
     controls[2].default_value = 0.0;
@@ -1909,7 +1910,7 @@ static void on_adjust_shadows_highlights_tint(GtkWidget* widget, gpointer data) 
 
     /* Control 3: Highlight Intensity (double) */
     controls[3].type = FILTER_CONTROL_DOUBLE;
-    controls[3].label = "Highlight Intensity";
+    controls[3].label = _("Highlight Intensity");
     controls[3].min_value = 0.0;
     controls[3].max_value = 100.0;
     controls[3].default_value = 0.0;
@@ -1918,7 +1919,7 @@ static void on_adjust_shadows_highlights_tint(GtkWidget* widget, gpointer data) 
     controls[3].filter_min = 0.0;
     controls[3].filter_max = 1.0;
 
-    response = ui_show_filter_dialog(ctx, "Shadows/Highlights Tint", controls, 4,
+    response = ui_show_filter_dialog(ctx, _("Shadows/Highlights Tint"), controls, 4,
                                      on_shadows_highlights_tint_preview_update, values);
 
     if (response == GTK_RESPONSE_OK) {
@@ -1943,7 +1944,7 @@ static void on_adjust_shadows_highlights_tint(GtkWidget* widget, gpointer data) 
         filter_values[7] = (gfloat)scaled_highlight_intensity;
 
         ui_apply_layer_filter_with_value(ctx, filter_highlight_shadow_tint_apply,
-                                         "Shadows/Highlights Tint", filter_values, 8);
+                                         _("Shadows/Highlights Tint"), filter_values, 8);
     }
 }
 
@@ -1994,14 +1995,14 @@ static void on_adjust_split_toning(GtkWidget* widget, gpointer data) {
 
     /* Control 0: Highlight Color (RGB) */
     controls[0].type = FILTER_CONTROL_RGB;
-    controls[0].label = "Highlight Color";
+    controls[0].label = _("Highlight Color");
     controls[0].default_r = 255.0 / 255.0; /* 255/255 = 1.0 */
     controls[0].default_g = 200.0 / 255.0; /* 200/255 */
     controls[0].default_b = 150.0 / 255.0; /* 150/255 */
 
     /* Control 1: Balance (double) */
     controls[1].type = FILTER_CONTROL_DOUBLE;
-    controls[1].label = "Balance";
+    controls[1].label = _("Balance");
     controls[1].min_value = -100.0;
     controls[1].max_value = 100.0;
     controls[1].default_value = 0.0;
@@ -2012,14 +2013,14 @@ static void on_adjust_split_toning(GtkWidget* widget, gpointer data) {
 
     /* Control 2: Shadow Color (RGB) */
     controls[2].type = FILTER_CONTROL_RGB;
-    controls[2].label = "Shadow Color";
+    controls[2].label = _("Shadow Color");
     controls[2].default_r = 150.0 / 255.0; /* 150/255 */
     controls[2].default_g = 200.0 / 255.0; /* 200/255 */
     controls[2].default_b = 255.0 / 255.0; /* 255/255 = 1.0 */
 
     /* Control 3: Toning Strength (double) */
     controls[3].type = FILTER_CONTROL_DOUBLE;
-    controls[3].label = "Toning Strength";
+    controls[3].label = _("Toning Strength");
     controls[3].min_value = 0.0;
     controls[3].max_value = 100.0;
     controls[3].default_value = 50.0;
@@ -2028,7 +2029,7 @@ static void on_adjust_split_toning(GtkWidget* widget, gpointer data) {
     controls[3].filter_min = 0.0;
     controls[3].filter_max = 100.0;
 
-    response = ui_show_filter_dialog(ctx, "Split Toning", controls, 4,
+    response = ui_show_filter_dialog(ctx, _("Split Toning"), controls, 4,
                                      on_split_toning_preview_update, values);
 
     if (response == GTK_RESPONSE_OK) {
@@ -2042,7 +2043,7 @@ static void on_adjust_split_toning(GtkWidget* widget, gpointer data) {
         filter_values[7] = (gfloat)values[7]; /* strength */
 
         ui_apply_layer_filter_with_value(ctx, filter_split_toning_apply,
-                                         "Split Toning", filter_values, 8);
+                                         _("Split Toning"), filter_values, 8);
     }
 }
 

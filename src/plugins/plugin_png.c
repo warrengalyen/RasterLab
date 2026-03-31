@@ -1,4 +1,5 @@
 #include "document.h"
+#include "i18n.h"
 #include "image_format_plugin.h"
 #include "plugins/plugin_host_api.h"
 #include "render/compositor.h"
@@ -326,7 +327,7 @@ static PluginError load_png(ImageDocument* doc, const char* filename) {
     }
 
     /* Create base layer */
-    base_layer = layer_new("Background", doc->width, doc->height, TRUE,
+    base_layer = layer_new(_("Background"), doc->width, doc->height, TRUE,
                            LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL, doc);
     if (!base_layer) {
         g_warning("PNG plugin: layer_new returned NULL for %ux%u layer", doc->width, doc->height);

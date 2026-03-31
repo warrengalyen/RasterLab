@@ -1,4 +1,5 @@
 #include "document.h"
+#include "i18n.h"
 #include "app/settings.h"
 #if HAVE_LCMS2
 #include "color_manager.h"
@@ -2254,14 +2255,14 @@ guint document_get_height(ImageDocument* doc) {
  */
 gchar* document_get_image_info(ImageDocument* doc) {
     if (!doc || doc->width == 0) {
-        return g_strdup("No image loaded");
+        return g_strdup(_("No image loaded"));
     }
 
-    return g_strdup_printf("%ux%u, %d-bit %s%s (zoom: %.0f%%)",
+    return g_strdup_printf(_("%ux%u, %d-bit %s%s (zoom: %.0f%%)"),
                            doc->width, doc->height,
                            doc->bit_depth,
-                           doc->channels == 3 ? "RGB" : "RGBA",
-                           doc->has_alpha ? " (with alpha)" : "",
+                           doc->channels == 3 ? _("RGB") : _("RGBA"),
+                           doc->has_alpha ? _(" (with alpha)") : "",
                            doc->zoom_factor * 100.0);
 }
 

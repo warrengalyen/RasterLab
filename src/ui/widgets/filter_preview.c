@@ -6,6 +6,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#include "i18n.h"
 
 /**
  * Private structure for FilterPreview widget

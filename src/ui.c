@@ -43,6 +43,7 @@
 #include "ui/ui_view_menu.h"
 #include "ui/workspace.h"
 #include "undo/undo_disk.h"
+#include "i18n.h"
 #include <glib.h>
 #include <limits.h>
 #include <math.h>
@@ -822,7 +823,7 @@ void ui_add_document_to_notebook(AppContext* ctx, ImageDocument* doc) {
     tab_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
     gtk_container_set_border_width(GTK_CONTAINER(tab_hbox), 0);
 
-    tab_label = gtk_label_new(doc->filename ? doc->filename : "Untitled");
+    tab_label = gtk_label_new(doc->filename ? doc->filename : _("Untitled"));
     gtk_box_pack_start(GTK_BOX(tab_hbox), tab_label, FALSE, FALSE, 0);
 
     close_button = gtk_button_new();
@@ -984,18 +985,18 @@ void ui_close_document_tab(AppContext* ctx, ImageDocument* doc) {
         gchar* primary_text;
         const gchar* filename = document_get_filename(doc);
 
-        primary_text = g_strdup_printf("Save changes to \"%s\" before closing?",
-                                       filename ? filename : "Untitled");
+        primary_text = g_strdup_printf(_("Save changes to \"%s\" before closing?"),
+                                       filename ? filename : _("Untitled"));
 
         response = ui_utils_message_dialog_run(
             GTK_WINDOW(ctx->window),
             GTK_MESSAGE_WARNING,
             primary_text,
-            "If you don't save, changes will be lost.",
+            _("If you don't save, changes will be lost."),
             GTK_RESPONSE_ACCEPT,
-            "_Discard", GTK_RESPONSE_REJECT,
-            "_Cancel", GTK_RESPONSE_CANCEL,
-            "_Save", GTK_RESPONSE_ACCEPT,
+            _("_Discard"), GTK_RESPONSE_REJECT,
+            _("_Cancel"), GTK_RESPONSE_CANCEL,
+            _("_Save"), GTK_RESPONSE_ACCEPT,
             NULL);
 
         g_free(primary_text);
@@ -1098,7 +1099,7 @@ void ui_update_document_tab_label(AppContext* ctx, ImageDocument* doc) {
 
         if (tab_label && GTK_IS_LABEL(tab_label)) {
             /* Update the label text */
-            const gchar* filename = doc->filename ? doc->filename : "Untitled";
+            const gchar* filename = doc->filename ? doc->filename : _("Untitled");
             gtk_label_set_text(GTK_LABEL(tab_label), filename);
         }
 
@@ -1123,9 +1124,10 @@ void ui_update_window_title(AppContext* ctx, ImageDocument* doc) {
     if (active_doc) {
         const gchar* filename = document_get_filename(active_doc);
         const gchar* modified = active_doc->modified ? "*" : "";
-        title = g_strdup_printf("RasterLab - %s%s", filename, modified);
+        title = g_strdup_printf(_("RasterLab - %s%s"),
+                                filename ? filename : _("Untitled"), modified);
     } else {
-        title = g_strdup("RasterLab");
+        title = g_strdup(_("RasterLab"));
     }
 
     gtk_window_set_title(GTK_WINDOW(ctx->window), title);
@@ -2002,11 +2004,11 @@ static void on_statusbar_zoom_changed(GtkComboBox* combo, gpointer data) {
     }
 
     /* Handle special zoom modes */
-    if (g_strcmp0(text, "Fit image") == 0) {
+    if (g_strcmp0(text, _("Fit image")) == 0) {
         document_zoom_fit(doc);
-    } else if (g_strcmp0(text, "Fit width") == 0) {
+    } else if (g_strcmp0(text, _("Fit width")) == 0) {
         document_zoom_fit_width(doc);
-    } else if (g_strcmp0(text, "Fit height") == 0) {
+    } else if (g_strcmp0(text, _("Fit height")) == 0) {
         document_zoom_fit_height(doc);
     } else {
         /* Parse zoom percentage */
@@ -2122,7 +2124,7 @@ void ui_update_status_bar(AppContext* ctx, ImageDocument* doc) {
             }
         }
 
-        size_text = g_strdup("—");
+        size_text = g_strdup(_("—"));
     } else {
         /* Show statusbar widgets when document exists */
         if (zoom_box) {
@@ -2146,7 +2148,7 @@ void ui_update_status_bar(AppContext* ctx, ImageDocument* doc) {
         /* Format dimensions with appropriate precision */
         gchar* width_str = format_dimension(width_converted, ctx->size_unit);
         gchar* height_str = format_dimension(height_converted, ctx->size_unit);
-        size_text = g_strdup_printf("%s × %s", width_str, height_str);
+        size_text = g_strdup_printf(_("%s × %s"), width_str, height_str);
         g_free(width_str);
         g_free(height_str);
 
@@ -2164,11 +2166,11 @@ void ui_update_status_bar(AppContext* ctx, ImageDocument* doc) {
 
         /* Determine what to search for based on zoom mode */
         if (doc->zoom_mode == 1) {
-            search_text = g_strdup("Fit image");
+            search_text = g_strdup(_("Fit image"));
         } else if (doc->zoom_mode == 2) {
-            search_text = g_strdup("Fit width");
+            search_text = g_strdup(_("Fit width"));
         } else if (doc->zoom_mode == 3) {
-            search_text = g_strdup("Fit height");
+            search_text = g_strdup(_("Fit height"));
         } else {
             /* Manual zoom - search for percentage */
             int zoom_percent = (int)(doc->zoom_factor * 100.0 + 0.5);
@@ -2334,7 +2336,7 @@ void ui_update_status_bar_select_size(AppContext* ctx, ImageDocument* doc) {
         gdouble h_converted = convert_dimension((guint)show_h, ctx->size_unit, zoom, dpi);
         width_str = format_dimension(w_converted, ctx->size_unit);
         height_str = format_dimension(h_converted, ctx->size_unit);
-        size_text = g_strdup_printf("%s × %s", width_str, height_str);
+        size_text = g_strdup_printf(_("%s × %s"), width_str, height_str);
         gtk_label_set_text(GTK_LABEL(select_size_label), size_text);
         gtk_widget_show(select_size_box);
         g_free(width_str);
@@ -2373,11 +2375,11 @@ void ui_update_status_bar_time(AppContext* ctx, gdouble time_seconds) {
 
     /* Format time: show seconds with appropriate precision */
     if (time_seconds < 0.001) {
-        time_text = g_strdup_printf("Time taken: %.3f ms", time_seconds * 1000.0);
+        time_text = g_strdup_printf(_("Time taken: %.3f ms"), time_seconds * 1000.0);
     } else if (time_seconds < 1.0) {
-        time_text = g_strdup_printf("Time taken: %.3f s", time_seconds);
+        time_text = g_strdup_printf(_("Time taken: %.3f s"), time_seconds);
     } else {
-        time_text = g_strdup_printf("Time taken: %.2f s", time_seconds);
+        time_text = g_strdup_printf(_("Time taken: %.2f s"), time_seconds);
     }
 
     /* Update label */
@@ -2443,40 +2445,40 @@ void ui_update_cursor_position(AppContext* ctx, ImageDocument* doc, gint image_x
     /* Convert image coordinates to selected unit */
     if (g_strcmp0(ctx->size_unit, "px") == 0) {
         /* Pixels - show as integers */
-        position_text = g_strdup_printf("(%d, %d)", image_x, image_y);
+        position_text = g_strdup_printf(_("(%d, %d)"), image_x, image_y);
     } else if (g_strcmp0(ctx->size_unit, "%") == 0) {
         /* Percentage of image dimensions */
         x_value = ((gdouble)image_x / (gdouble)doc->width) * 100.0;
         y_value = ((gdouble)image_y / (gdouble)doc->height) * 100.0;
-        position_text = g_strdup_printf("(%.1f, %.1f)", x_value, y_value);
+        position_text = g_strdup_printf(_("(%.1f, %.1f)"), x_value, y_value);
     } else if (g_strcmp0(ctx->size_unit, "in") == 0) {
         /* Inches */
         x_value = (gdouble)image_x / dpi;
         y_value = (gdouble)image_y / dpi;
-        position_text = g_strdup_printf("(%.3f, %.3f)", x_value, y_value);
+        position_text = g_strdup_printf(_("(%.3f, %.3f)"), x_value, y_value);
     } else if (g_strcmp0(ctx->size_unit, "cm") == 0) {
         /* Centimeters */
         x_value = ((gdouble)image_x / dpi) * 2.54;
         y_value = ((gdouble)image_y / dpi) * 2.54;
-        position_text = g_strdup_printf("(%.2f, %.2f)", x_value, y_value);
+        position_text = g_strdup_printf(_("(%.2f, %.2f)"), x_value, y_value);
     } else if (g_strcmp0(ctx->size_unit, "mm") == 0) {
         /* Millimeters */
         x_value = ((gdouble)image_x / dpi) * 25.4;
         y_value = ((gdouble)image_y / dpi) * 25.4;
-        position_text = g_strdup_printf("(%.1f, %.1f)", x_value, y_value);
+        position_text = g_strdup_printf(_("(%.1f, %.1f)"), x_value, y_value);
     } else if (g_strcmp0(ctx->size_unit, "pt") == 0) {
         /* Points - show as integers */
         x_value = ((gdouble)image_x / dpi) * 72.0;
         y_value = ((gdouble)image_y / dpi) * 72.0;
-        position_text = g_strdup_printf("(%d, %d)", (gint)x_value, (gint)y_value);
+        position_text = g_strdup_printf(_("(%d, %d)"), (gint)x_value, (gint)y_value);
     } else if (g_strcmp0(ctx->size_unit, "pc") == 0) {
         /* Picas */
         x_value = ((gdouble)image_x / dpi) * 6.0;
         y_value = ((gdouble)image_y / dpi) * 6.0;
-        position_text = g_strdup_printf("(%.2f, %.2f)", x_value, y_value);
+        position_text = g_strdup_printf(_("(%.2f, %.2f)"), x_value, y_value);
     } else {
         /* Default to pixels */
-        position_text = g_strdup_printf("(%d, %d)", image_x, image_y);
+        position_text = g_strdup_printf(_("(%d, %d)"), image_x, image_y);
     }
 
     gtk_label_set_text(GTK_LABEL(position_label), position_text);

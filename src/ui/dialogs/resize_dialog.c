@@ -11,6 +11,7 @@
 #include <gtk/gtk.h>
 #include <math.h>
 #include <string.h>
+#include "i18n.h"
 
 struct _ResizeDialog {
     GtkWidget* dialog;
@@ -484,19 +485,19 @@ ResizeDialog* resize_dialog_new(ImageDocument* doc) {
     /* Unit combo boxes */
     width_store = gtk_list_store_new(1, G_TYPE_STRING);
     gtk_list_store_append(width_store, &iter);
-    gtk_list_store_set(width_store, &iter, 0, "percent", -1);
+    gtk_list_store_set(width_store, &iter, 0, _("percent"), -1);
     gtk_list_store_append(width_store, &iter);
-    gtk_list_store_set(width_store, &iter, 0, "pixels", -1);
+    gtk_list_store_set(width_store, &iter, 0, _("pixels"), -1);
     gtk_list_store_append(width_store, &iter);
-    gtk_list_store_set(width_store, &iter, 0, "inches", -1);
+    gtk_list_store_set(width_store, &iter, 0, _("inches"), -1);
     gtk_list_store_append(width_store, &iter);
-    gtk_list_store_set(width_store, &iter, 0, "centimeters", -1);
+    gtk_list_store_set(width_store, &iter, 0, _("centimeters"), -1);
     gtk_list_store_append(width_store, &iter);
-    gtk_list_store_set(width_store, &iter, 0, "millimeters", -1);
+    gtk_list_store_set(width_store, &iter, 0, _("millimeters"), -1);
     gtk_list_store_append(width_store, &iter);
-    gtk_list_store_set(width_store, &iter, 0, "points", -1);
+    gtk_list_store_set(width_store, &iter, 0, _("points"), -1);
     gtk_list_store_append(width_store, &iter);
-    gtk_list_store_set(width_store, &iter, 0, "picas", -1);
+    gtk_list_store_set(width_store, &iter, 0, _("picas"), -1);
 
     height_store = gtk_list_store_new(1, G_TYPE_STRING);
     GtkTreeIter wi;
@@ -529,9 +530,9 @@ ResizeDialog* resize_dialog_new(ImageDocument* doc) {
 
     resolution_store = gtk_list_store_new(1, G_TYPE_STRING);
     gtk_list_store_append(resolution_store, &iter);
-    gtk_list_store_set(resolution_store, &iter, 0, "pixels / inch (PPI)", -1);
+    gtk_list_store_set(resolution_store, &iter, 0, _("pixels / inch (PPI)"), -1);
     gtk_list_store_append(resolution_store, &iter);
-    gtk_list_store_set(resolution_store, &iter, 0, "pixels / centimeter (PPCM)", -1);
+    gtk_list_store_set(resolution_store, &iter, 0, _("pixels / centimeter (PPCM)"), -1);
     gtk_combo_box_set_model(GTK_COMBO_BOX(dialog->resolution_units_combo), GTK_TREE_MODEL(resolution_store));
     g_object_unref(resolution_store);
     cell = gtk_cell_renderer_text_new();
@@ -542,13 +543,13 @@ ResizeDialog* resize_dialog_new(ImageDocument* doc) {
     /* Resampling (interpolation) combo: OcInterpolationMode order */
     GtkListStore* resample_store = gtk_list_store_new(1, G_TYPE_STRING);
     gtk_list_store_append(resample_store, &iter);
-    gtk_list_store_set(resample_store, &iter, 0, "Nearest neighbor", -1);
+    gtk_list_store_set(resample_store, &iter, 0, _("Nearest neighbor"), -1);
     gtk_list_store_append(resample_store, &iter);
-    gtk_list_store_set(resample_store, &iter, 0, "Bilinear", -1);
+    gtk_list_store_set(resample_store, &iter, 0, _("Bilinear"), -1);
     gtk_list_store_append(resample_store, &iter);
-    gtk_list_store_set(resample_store, &iter, 0, "Bicubic", -1);
+    gtk_list_store_set(resample_store, &iter, 0, _("Bicubic"), -1);
     gtk_list_store_append(resample_store, &iter);
-    gtk_list_store_set(resample_store, &iter, 0, "Lanczos", -1);
+    gtk_list_store_set(resample_store, &iter, 0, _("Lanczos"), -1);
     gtk_combo_box_set_model(GTK_COMBO_BOX(dialog->resampling_combo), GTK_TREE_MODEL(resample_store));
     g_object_unref(resample_store);
     cell = gtk_cell_renderer_text_new();

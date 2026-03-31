@@ -19,6 +19,7 @@
 #include "ui/ui_utils.h"
 #include "ui/widgets/vertical_spin_button.h"
 #include <pango/pango.h>
+#include "i18n.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -2886,9 +2887,9 @@ ToolOptionsPanel* create_tool_options_panel(void) {
             }
 
             if (rect_select_smooth) {
-                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(rect_select_smooth), "None");
-                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(rect_select_smooth), "Antialiased");
-                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(rect_select_smooth), "Feathered");
+                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(rect_select_smooth), _("None"));
+                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(rect_select_smooth), _("Antialiased"));
+                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(rect_select_smooth), _("Feathered"));
                 gtk_combo_box_set_active(GTK_COMBO_BOX(rect_select_smooth), 1);
                 g_object_set_data(G_OBJECT(tool_opts_panel->rect_select_panel), "smooth_combo", rect_select_smooth);
                 tool_opts_panel->rect_smooth_combo = rect_select_smooth;
@@ -2978,9 +2979,9 @@ ToolOptionsPanel* create_tool_options_panel(void) {
             }
 
             if (ellipse_select_smooth) {
-                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(ellipse_select_smooth), "None");
-                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(ellipse_select_smooth), "Antialiased");
-                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(ellipse_select_smooth), "Feathered");
+                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(ellipse_select_smooth), _("None"));
+                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(ellipse_select_smooth), _("Antialiased"));
+                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(ellipse_select_smooth), _("Feathered"));
                 gtk_combo_box_set_active(GTK_COMBO_BOX(ellipse_select_smooth), 1);
                 g_object_set_data(G_OBJECT(tool_opts_panel->ellipse_select_panel), "smooth_combo", ellipse_select_smooth);
                 tool_opts_panel->ellipse_smooth_combo = ellipse_select_smooth;
@@ -3053,9 +3054,9 @@ ToolOptionsPanel* create_tool_options_panel(void) {
                 g_signal_connect(tool_opts_panel->polygon_combine_intersect_button, "toggled", G_CALLBACK(on_polygon_select_combine_button_toggled), tool_opts_panel);
 
             if (tool_opts_panel->polygon_smooth_combo) {
-                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(tool_opts_panel->polygon_smooth_combo), "None");
-                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(tool_opts_panel->polygon_smooth_combo), "Antialiased");
-                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(tool_opts_panel->polygon_smooth_combo), "Feathered");
+                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(tool_opts_panel->polygon_smooth_combo), _("None"));
+                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(tool_opts_panel->polygon_smooth_combo), _("Antialiased"));
+                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(tool_opts_panel->polygon_smooth_combo), _("Feathered"));
                 gtk_combo_box_set_active(GTK_COMBO_BOX(tool_opts_panel->polygon_smooth_combo), 1);
                 g_signal_connect(tool_opts_panel->polygon_smooth_combo, "changed", G_CALLBACK(on_polygon_select_smooth_changed), tool_opts_panel);
             }
@@ -3066,9 +3067,9 @@ ToolOptionsPanel* create_tool_options_panel(void) {
             if (tool_opts_panel->polygon_curvature_scale)
                 g_signal_connect(tool_opts_panel->polygon_curvature_scale, "value-changed", G_CALLBACK(on_polygon_select_curvature_changed), tool_opts_panel);
             if (tool_opts_panel->polygon_area_combo) {
-                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(tool_opts_panel->polygon_area_combo), "Interior");
-                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(tool_opts_panel->polygon_area_combo), "Exterior");
-                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(tool_opts_panel->polygon_area_combo), "Border");
+                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(tool_opts_panel->polygon_area_combo), _("Interior"));
+                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(tool_opts_panel->polygon_area_combo), _("Exterior"));
+                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(tool_opts_panel->polygon_area_combo), _("Border"));
                 gtk_combo_box_set_active(GTK_COMBO_BOX(tool_opts_panel->polygon_area_combo), 0);
                 g_signal_connect(tool_opts_panel->polygon_area_combo, "changed", G_CALLBACK(on_polygon_select_area_changed), tool_opts_panel);
             }
@@ -3118,9 +3119,9 @@ ToolOptionsPanel* create_tool_options_panel(void) {
                 g_signal_connect(tool_opts_panel->lasso_combine_intersect_button, "toggled", G_CALLBACK(on_lasso_select_combine_button_toggled), tool_opts_panel);
 
             if (tool_opts_panel->lasso_smooth_combo) {
-                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(tool_opts_panel->lasso_smooth_combo), "None");
-                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(tool_opts_panel->lasso_smooth_combo), "Antialiased");
-                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(tool_opts_panel->lasso_smooth_combo), "Feathered");
+                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(tool_opts_panel->lasso_smooth_combo), _("None"));
+                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(tool_opts_panel->lasso_smooth_combo), _("Antialiased"));
+                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(tool_opts_panel->lasso_smooth_combo), _("Feathered"));
                 gtk_combo_box_set_active(GTK_COMBO_BOX(tool_opts_panel->lasso_smooth_combo), 1);
                 g_signal_connect(tool_opts_panel->lasso_smooth_combo, "changed", G_CALLBACK(on_lasso_select_smooth_changed), tool_opts_panel);
             }
@@ -3129,9 +3130,9 @@ ToolOptionsPanel* create_tool_options_panel(void) {
             if (tool_opts_panel->lasso_animate_checkbox)
                 g_signal_connect(tool_opts_panel->lasso_animate_checkbox, "toggled", G_CALLBACK(on_lasso_select_animate_toggled), tool_opts_panel);
             if (tool_opts_panel->lasso_area_combo) {
-                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(tool_opts_panel->lasso_area_combo), "Interior");
-                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(tool_opts_panel->lasso_area_combo), "Exterior");
-                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(tool_opts_panel->lasso_area_combo), "Border");
+                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(tool_opts_panel->lasso_area_combo), _("Interior"));
+                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(tool_opts_panel->lasso_area_combo), _("Exterior"));
+                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(tool_opts_panel->lasso_area_combo), _("Border"));
                 gtk_combo_box_set_active(GTK_COMBO_BOX(tool_opts_panel->lasso_area_combo), 0);
                 g_signal_connect(tool_opts_panel->lasso_area_combo, "changed", G_CALLBACK(on_lasso_select_area_changed), tool_opts_panel);
             }
@@ -3183,9 +3184,9 @@ ToolOptionsPanel* create_tool_options_panel(void) {
                 g_signal_connect(tool_opts_panel->magicwand_combine_intersect_button, "toggled", G_CALLBACK(on_magicwand_combine_button_toggled), tool_opts_panel);
 
             if (tool_opts_panel->magicwand_smooth_combo) {
-                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(tool_opts_panel->magicwand_smooth_combo), "None");
-                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(tool_opts_panel->magicwand_smooth_combo), "Antialiased");
-                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(tool_opts_panel->magicwand_smooth_combo), "Feathered");
+                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(tool_opts_panel->magicwand_smooth_combo), _("None"));
+                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(tool_opts_panel->magicwand_smooth_combo), _("Antialiased"));
+                gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(tool_opts_panel->magicwand_smooth_combo), _("Feathered"));
                 gtk_combo_box_set_active(GTK_COMBO_BOX(tool_opts_panel->magicwand_smooth_combo),
                                          magicwand_opts ? (gint)magicwand_opts->magicwand_smooth : 1);
                 g_signal_connect(tool_opts_panel->magicwand_smooth_combo, "changed",

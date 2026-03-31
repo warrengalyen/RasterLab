@@ -4,6 +4,7 @@
 #include <glib.h>
 #include <gtk/gtk.h>
 #include <string.h>
+#include "i18n.h"
 
 #ifdef HAVE_LIBPNG
 

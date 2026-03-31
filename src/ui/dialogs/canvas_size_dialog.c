@@ -7,6 +7,7 @@
 #include <gtk/gtk.h>
 #include <math.h>
 #include <string.h>
+#include "i18n.h"
 
 /**
  * Canvas size dialog structure
@@ -802,19 +803,19 @@ CanvasSizeDialog* canvas_size_dialog_new(ImageDocument* doc) {
     height_store = gtk_list_store_new(1, G_TYPE_STRING);
 
     gtk_list_store_append(width_store, &iter);
-    gtk_list_store_set(width_store, &iter, 0, "percent", -1);
+    gtk_list_store_set(width_store, &iter, 0, _("percent"), -1);
     gtk_list_store_append(width_store, &iter);
-    gtk_list_store_set(width_store, &iter, 0, "pixels", -1);
+    gtk_list_store_set(width_store, &iter, 0, _("pixels"), -1);
     gtk_list_store_append(width_store, &iter);
-    gtk_list_store_set(width_store, &iter, 0, "inches", -1);
+    gtk_list_store_set(width_store, &iter, 0, _("inches"), -1);
     gtk_list_store_append(width_store, &iter);
-    gtk_list_store_set(width_store, &iter, 0, "centimeters", -1);
+    gtk_list_store_set(width_store, &iter, 0, _("centimeters"), -1);
     gtk_list_store_append(width_store, &iter);
-    gtk_list_store_set(width_store, &iter, 0, "millimeters", -1);
+    gtk_list_store_set(width_store, &iter, 0, _("millimeters"), -1);
     gtk_list_store_append(width_store, &iter);
-    gtk_list_store_set(width_store, &iter, 0, "points", -1);
+    gtk_list_store_set(width_store, &iter, 0, _("points"), -1);
     gtk_list_store_append(width_store, &iter);
-    gtk_list_store_set(width_store, &iter, 0, "picas", -1);
+    gtk_list_store_set(width_store, &iter, 0, _("picas"), -1);
 
     /* Copy to height store - iterate through width_store properly */
     GtkTreeIter width_iter;
@@ -851,9 +852,9 @@ CanvasSizeDialog* canvas_size_dialog_new(ImageDocument* doc) {
     /* Populate resolution unit combo box */
     resolution_store = gtk_list_store_new(1, G_TYPE_STRING);
     gtk_list_store_append(resolution_store, &iter);
-    gtk_list_store_set(resolution_store, &iter, 0, "pixels / inch (PPI)", -1);
+    gtk_list_store_set(resolution_store, &iter, 0, _("pixels / inch (PPI)"), -1);
     gtk_list_store_append(resolution_store, &iter);
-    gtk_list_store_set(resolution_store, &iter, 0, "pixels / centimeter (PPCM)", -1);
+    gtk_list_store_set(resolution_store, &iter, 0, _("pixels / centimeter (PPCM)"), -1);
 
     gtk_combo_box_set_model(GTK_COMBO_BOX(dialog->resolution_units_combo), GTK_TREE_MODEL(resolution_store));
     g_object_unref(resolution_store);

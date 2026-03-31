@@ -12,6 +12,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#include "i18n.h"
 
 
 /**
@@ -224,7 +225,7 @@ static GtkWidget* create_channel_selector(CurvesDialog* dialog) {
     gtk_widget_set_margin_bottom(hbox, 10);
 
     /* Add label */
-    label = gtk_label_new("channel");
+    label = gtk_label_new(_("channel"));
     gtk_widget_set_halign(label, GTK_ALIGN_START);
     gtk_widget_set_margin_end(label, 10);
     gtk_box_pack_start(GTK_BOX(hbox), label, FALSE, FALSE, 0);
@@ -232,7 +233,7 @@ static GtkWidget* create_channel_selector(CurvesDialog* dialog) {
     /* Create RGB button */
     button = gtk_toggle_button_new();
     GtkWidget* rgb_icon = gtk_image_new_from_resource("/icons/channel-rgb.png");
-    GtkWidget* rgb_label = gtk_label_new("RGB");
+    GtkWidget* rgb_label = gtk_label_new(_("RGB"));
     gtk_widget_set_margin_start(rgb_label, 5);
     GtkWidget* rgb_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
     gtk_container_add(GTK_CONTAINER(rgb_hbox), rgb_icon);
@@ -246,7 +247,7 @@ static GtkWidget* create_channel_selector(CurvesDialog* dialog) {
     /* Create Red button */
     button = gtk_toggle_button_new();
     GtkWidget* red_icon = gtk_image_new_from_resource("/icons/channel-red.png");
-    GtkWidget* red_label = gtk_label_new("red");
+    GtkWidget* red_label = gtk_label_new(_("red"));
     gtk_widget_set_margin_start(red_label, 5);
     GtkWidget* red_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
     gtk_container_add(GTK_CONTAINER(red_hbox), red_icon);
@@ -259,7 +260,7 @@ static GtkWidget* create_channel_selector(CurvesDialog* dialog) {
     /* Create Green button */
     button = gtk_toggle_button_new();
     GtkWidget* green_icon = gtk_image_new_from_resource("/icons/channel-green.png");
-    GtkWidget* green_label = gtk_label_new("green");
+    GtkWidget* green_label = gtk_label_new(_("green"));
     gtk_widget_set_margin_start(green_label, 5);
     GtkWidget* green_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
     gtk_container_add(GTK_CONTAINER(green_hbox), green_icon);
@@ -272,7 +273,7 @@ static GtkWidget* create_channel_selector(CurvesDialog* dialog) {
     /* Create Blue button */
     button = gtk_toggle_button_new();
     GtkWidget* blue_icon = gtk_image_new_from_resource("/icons/channel-blue.png");
-    GtkWidget* blue_label = gtk_label_new("blue");
+    GtkWidget* blue_label = gtk_label_new(_("blue"));
     gtk_widget_set_margin_start(blue_label, 5);
     GtkWidget* blue_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
     gtk_container_add(GTK_CONTAINER(blue_hbox), blue_icon);
@@ -299,12 +300,12 @@ static GtkWidget* create_options_page(CurvesDialog* dialog) {
 
     /* Histogram overlay toggle */
     hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
-    label = gtk_label_new("histogram overlay");
+    label = gtk_label_new(_("histogram overlay"));
     gtk_widget_set_halign(label, GTK_ALIGN_START);
     gtk_box_pack_start(GTK_BOX(hbox), label, TRUE, TRUE, 0);
 
     toggle = gtk_toggle_button_new();
-    GtkWidget* enable_label = gtk_label_new("show");
+    GtkWidget* enable_label = gtk_label_new(_("show"));
     gtk_container_add(GTK_CONTAINER(toggle), enable_label);
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toggle), TRUE);
     g_signal_connect(toggle, "toggled", G_CALLBACK(on_histogram_toggled), dialog);
@@ -314,12 +315,12 @@ static GtkWidget* create_options_page(CurvesDialog* dialog) {
 
     /* Grid toggle */
     hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
-    label = gtk_label_new("grid");
+    label = gtk_label_new(_("grid"));
     gtk_widget_set_halign(label, GTK_ALIGN_START);
     gtk_box_pack_start(GTK_BOX(hbox), label, TRUE, TRUE, 0);
 
     toggle = gtk_toggle_button_new();
-    enable_label = gtk_label_new("show");
+    enable_label = gtk_label_new(_("show"));
     gtk_container_add(GTK_CONTAINER(toggle), enable_label);
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toggle), TRUE);
     g_signal_connect(toggle, "toggled", G_CALLBACK(on_grid_toggled), dialog);
@@ -329,12 +330,12 @@ static GtkWidget* create_options_page(CurvesDialog* dialog) {
 
     /* Original curve (diagonal line) toggle */
     hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
-    label = gtk_label_new("original curve (diagonal line)");
+    label = gtk_label_new(_("original curve (diagonal line)"));
     gtk_widget_set_halign(label, GTK_ALIGN_START);
     gtk_box_pack_start(GTK_BOX(hbox), label, TRUE, TRUE, 0);
 
     toggle = gtk_toggle_button_new();
-    enable_label = gtk_label_new("show");
+    enable_label = gtk_label_new(_("show"));
     gtk_container_add(GTK_CONTAINER(toggle), enable_label);
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toggle), TRUE);
     g_signal_connect(toggle, "toggled", G_CALLBACK(on_diagonal_toggled), dialog);
@@ -543,7 +544,7 @@ CurvesDialog* curves_dialog_new(const gchar* title) {
 
     /* Add tool page to notebook with expanding tab */
     GtkWidget* tool_tab_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-    GtkWidget* tool_tab_label = gtk_label_new("tool");
+    GtkWidget* tool_tab_label = gtk_label_new(_("tool"));
     gtk_label_set_xalign(GTK_LABEL(tool_tab_label), 0.5);                     /* Center horizontally */
     gtk_box_pack_start(GTK_BOX(tool_tab_box), tool_tab_label, TRUE, TRUE, 0); /* Expand to fill */
     gtk_widget_set_hexpand(tool_tab_box, TRUE);
@@ -566,7 +567,7 @@ CurvesDialog* curves_dialog_new(const gchar* title) {
     g_object_unref(options_page_css);
 
     GtkWidget* options_tab_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-    GtkWidget* options_tab_label = gtk_label_new("options");
+    GtkWidget* options_tab_label = gtk_label_new(_("options"));
     gtk_label_set_xalign(GTK_LABEL(options_tab_label), 0.5);                        /* Center horizontally */
     gtk_box_pack_start(GTK_BOX(options_tab_box), options_tab_label, TRUE, TRUE, 0); /* Expand to fill */
     gtk_widget_set_hexpand(options_tab_box, TRUE);

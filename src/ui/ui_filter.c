@@ -1,4 +1,5 @@
 #include "ui/ui_filter.h"
+#include "i18n.h"
 #include "command.h"
 #include "filters.h"
 #include "render/layer.h"
@@ -103,7 +104,8 @@ gboolean ui_apply_layer_filter(AppContext* ctx,
     }
 
     /* Show progress bar with message */
-    gchar* progress_message = g_strdup_printf("Applying %s...", filter_name ? filter_name : "filter");
+    gchar* progress_message = g_strdup_printf(_("Applying %s..."),
+                                              filter_name ? filter_name : _("filter"));
     ui_show_progress(ctx, progress_message);
     g_free(progress_message);
 
@@ -233,7 +235,8 @@ gboolean ui_apply_layer_filter_with_value(AppContext* ctx,
     }
 
     /* Show progress bar with message */
-    gchar* progress_message = g_strdup_printf("Applying %s...", filter_name ? filter_name : "filter");
+    gchar* progress_message = g_strdup_printf(_("Applying %s..."),
+                                              filter_name ? filter_name : _("filter"));
     ui_show_progress(ctx, progress_message);
     g_free(progress_message);
 

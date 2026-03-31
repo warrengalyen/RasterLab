@@ -5,6 +5,7 @@
 
 #include "plugins/plugin_xbm.h"
 #include "document.h"
+#include "i18n.h"
 #include "image_format_plugin.h"
 #include "plugins/plugin_host_api.h"
 #include "render/compositor.h"
@@ -385,7 +386,7 @@ static PluginError load_xbm(ImageDocument* doc, const char* filename) {
     g_list_free(doc->layers);
     doc->layers = NULL;
 
-    base_layer = layer_new("Background", doc->width, doc->height, TRUE,
+    base_layer = layer_new(_("Background"), doc->width, doc->height, TRUE,
                            LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL, doc);
     if (!base_layer) {
         g_free(bits);

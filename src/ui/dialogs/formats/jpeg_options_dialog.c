@@ -6,6 +6,7 @@
 
 #ifdef HAVE_LIBJPEG
 #include <jpeglib.h>
+#include "i18n.h"
 
 /* Forward declare JPEG types from plugin_jpeg.c */
 

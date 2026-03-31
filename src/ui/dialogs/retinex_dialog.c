@@ -11,6 +11,7 @@
 #include <glib.h>
 #include <stdlib.h>
 #include <string.h>
+#include "i18n.h"
 
 
 /**
@@ -279,15 +280,15 @@ RetinexDialog* retinex_dialog_new(const gchar* title) {
     gtk_widget_set_margin_bottom(combo_vbox, 10);
     gtk_box_pack_start(GTK_BOX(right_vbox), combo_vbox, FALSE, FALSE, 0);
 
-    combo_label = gtk_label_new("scale distribution");
+    combo_label = gtk_label_new(_("scale distribution"));
     gtk_widget_set_halign(combo_label, GTK_ALIGN_START);
     gtk_widget_set_margin_bottom(combo_label, 3);
     gtk_box_pack_start(GTK_BOX(combo_vbox), combo_label, FALSE, FALSE, 0);
 
     combo = gtk_combo_box_text_new();
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), "Uniform");
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), "Low");
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), "High");
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("Uniform"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("Low"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("High"));
     gtk_combo_box_set_active(GTK_COMBO_BOX(combo), 0);
     gtk_widget_set_hexpand(combo, TRUE);
     gtk_box_pack_start(GTK_BOX(combo_vbox), combo, FALSE, FALSE, 0);
@@ -299,7 +300,7 @@ RetinexDialog* retinex_dialog_new(const gchar* title) {
     gtk_widget_set_margin_bottom(control_vbox, 10);
     gtk_box_pack_start(GTK_BOX(right_vbox), control_vbox, FALSE, FALSE, 0);
 
-    label = gtk_label_new("scale");
+    label = gtk_label_new(_("scale"));
     gtk_widget_set_halign(label, GTK_ALIGN_START);
     gtk_widget_set_margin_bottom(label, 3);
     gtk_box_pack_start(GTK_BOX(control_vbox), label, FALSE, FALSE, 0);
@@ -331,7 +332,7 @@ RetinexDialog* retinex_dialog_new(const gchar* title) {
     gtk_widget_set_margin_bottom(control_vbox, 10);
     gtk_box_pack_start(GTK_BOX(right_vbox), control_vbox, FALSE, FALSE, 0);
 
-    label = gtk_label_new("number of scales");
+    label = gtk_label_new(_("number of scales"));
     gtk_widget_set_halign(label, GTK_ALIGN_START);
     gtk_widget_set_margin_bottom(label, 3);
     gtk_box_pack_start(GTK_BOX(control_vbox), label, FALSE, FALSE, 0);
@@ -363,7 +364,7 @@ RetinexDialog* retinex_dialog_new(const gchar* title) {
     gtk_widget_set_margin_bottom(control_vbox, 10);
     gtk_box_pack_start(GTK_BOX(right_vbox), control_vbox, FALSE, FALSE, 0);
 
-    label = gtk_label_new("dynamic range");
+    label = gtk_label_new(_("dynamic range"));
     gtk_widget_set_halign(label, GTK_ALIGN_START);
     gtk_widget_set_margin_bottom(label, 3);
     gtk_box_pack_start(GTK_BOX(control_vbox), label, FALSE, FALSE, 0);

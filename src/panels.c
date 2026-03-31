@@ -1,4 +1,5 @@
 #include "panels.h"
+#include "i18n.h"
 #include <stdio.h>
 
 /**

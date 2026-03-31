@@ -4,6 +4,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#include "i18n.h"
 
 /**
  * Vertical spin button structure
@@ -288,7 +289,7 @@ static void vertical_spin_button_init(VerticalSpinButton* spin) {
     up_button = gtk_button_new();
 
     /* Use small text label for arrow - more reliable sizing */
-    up_arrow = gtk_label_new("▲");
+    up_arrow = gtk_label_new(_("▲"));
     gtk_widget_set_name(up_arrow, "spin-up-arrow");
     {
         GtkCssProvider* font_css = gtk_css_provider_new();
@@ -327,7 +328,7 @@ static void vertical_spin_button_init(VerticalSpinButton* spin) {
     down_button = gtk_button_new();
 
     /* Use small text label for arrow - more reliable sizing */
-    down_arrow = gtk_label_new("▼");
+    down_arrow = gtk_label_new(_("▼"));
     gtk_widget_set_name(down_arrow, "spin-down-arrow");
     {
         GtkCssProvider* font_css = gtk_css_provider_new();

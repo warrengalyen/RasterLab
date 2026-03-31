@@ -1,4 +1,5 @@
 #include "ui/ui_layer_menu.h"
+#include "i18n.h"
 #include "commands/command_layer.h"
 #include "commands/command_text_layer.h"
 #include "document.h"
@@ -48,13 +49,13 @@ GtkWidget* create_layer_menu(AppContext* ctx) {
     GtkWidget* menu_item;
 
     /* Layer > New Layer */
-    menu_item = gtk_menu_item_new_with_mnemonic("_New Layer");
+    menu_item = gtk_menu_item_new_with_mnemonic(_("_New Layer"));
     g_signal_connect(menu_item, "activate", G_CALLBACK(on_layer_new), ctx);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item);
     ctx->layer_menu_new = menu_item;
 
     /* Layer > Duplicate Layer */
-    menu_item = gtk_menu_item_new_with_mnemonic("_Duplicate Layer");
+    menu_item = gtk_menu_item_new_with_mnemonic(_("_Duplicate Layer"));
     g_signal_connect(menu_item, "activate", G_CALLBACK(on_layer_duplicate), ctx);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item);
     ctx->layer_menu_duplicate = menu_item;
@@ -63,7 +64,7 @@ GtkWidget* create_layer_menu(AppContext* ctx) {
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
 
     /* Layer > Delete Layer */
-    menu_item = gtk_menu_item_new_with_mnemonic("_Delete Layer");
+    menu_item = gtk_menu_item_new_with_mnemonic(_("_Delete Layer"));
     g_signal_connect(menu_item, "activate", G_CALLBACK(on_layer_delete), ctx);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item);
     ctx->layer_menu_delete = menu_item;

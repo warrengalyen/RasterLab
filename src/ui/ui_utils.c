@@ -1,4 +1,5 @@
 #include "ui/ui_utils.h"
+#include "i18n.h"
 #include "ui/dialogs/color_chooser_dialog.h"
 #include "ui/widgets/vertical_spin_button.h"
 #include <gdk/gdk.h>
@@ -167,7 +168,7 @@ static void on_color_button_clicked(GtkButton* button, gpointer user_data) {
     // This prevents excessive filter preview updates
     GtkWidget* dialog = color_chooser_dialog_new(
         data->parent_window,
-        "Choose Color",
+        _("Choose Color"),
         &data->color,
         on_color_update_internal,
         data,

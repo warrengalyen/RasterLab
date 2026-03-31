@@ -7,6 +7,7 @@
 #include <gtk/gtk.h>
 #include <math.h>
 #include <string.h>
+#include "i18n.h"
 
 /* Forward declarations */
 static void on_operator_toggled(GtkToggleButton* button, gpointer user_data);

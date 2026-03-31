@@ -1,4 +1,5 @@
 #include "ui/ui_image_menu.h"
+#include "i18n.h"
 #include "command.h"
 #include "commands/command_image.h"
 #include "document.h"
@@ -619,7 +620,7 @@ void on_image_duplicate(GtkWidget* widget, gpointer data) {
     if (source_doc->filename) {
         duplicate_filename = g_strdup_printf("%s copy", source_doc->filename);
     } else {
-        duplicate_filename = g_strdup("Untitled copy");
+        duplicate_filename = g_strdup(_("Untitled copy"));
     }
 
     /* Create new document tab */
@@ -1312,19 +1313,19 @@ void on_image_rotate_90_cw(GtkWidget* widget, gpointer data) {
     (void)widget;
     AppContext* ctx = (AppContext*)data;
     /* Clockwise is negative angle in standard mathematical convention */
-    apply_fixed_rotation(ctx, "Rotate 90° clockwise", -90.0);
+    apply_fixed_rotation(ctx, _("Rotate 90° clockwise"), -90.0);
 }
 
 void on_image_rotate_90_ccw(GtkWidget* widget, gpointer data) {
     (void)widget;
     AppContext* ctx = (AppContext*)data;
-    apply_fixed_rotation(ctx, "Rotate 90° counter-clockwise", 90.0);
+    apply_fixed_rotation(ctx, _("Rotate 90° counter-clockwise"), 90.0);
 }
 
 void on_image_rotate_180(GtkWidget* widget, gpointer data) {
     (void)widget;
     AppContext* ctx = (AppContext*)data;
-    apply_fixed_rotation(ctx, "Rotate 180°", 180.0);
+    apply_fixed_rotation(ctx, _("Rotate 180°"), 180.0);
 }
 
 /**
@@ -1351,7 +1352,7 @@ void on_image_rotate_arbitrary(GtkWidget* widget, gpointer data) {
         return;
     }
 
-    RotateDialog* dialog = rotate_dialog_new("Rotate image");
+    RotateDialog* dialog = rotate_dialog_new(_("Rotate image"));
     if (!dialog) {
         cairo_surface_destroy(before_surface);
         return;
@@ -1381,7 +1382,7 @@ void on_image_rotate_arbitrary(GtkWidget* widget, gpointer data) {
         guchar fill_g = (guchar)CLAMP((gint)(fill_color.green * 255.0 + 0.5), 0, 255);
         guchar fill_b = (guchar)CLAMP((gint)(fill_color.blue * 255.0 + 0.5), 0, 255);
 
-        Command* cmd = command_create_rotate_arbitrary_named("Rotate image",
+        Command* cmd = command_create_rotate_arbitrary_named(_("Rotate image"),
                                                              doc,
                                                              (gfloat)angle_degrees,
                                                              preserve_size,

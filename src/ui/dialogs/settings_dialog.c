@@ -18,6 +18,7 @@
 
 #if HAVE_LCMS2
 #include "color_manager/icc_utils.h"
+#include "i18n.h"
 #endif
 
 enum {
@@ -455,11 +456,11 @@ static void on_temp_location_browse_clicked(GtkButton* button, gpointer user_dat
         return;
     }
 
-    GtkFileChooserNative* chooser = gtk_file_chooser_native_new("Select Temporary File Location",
+    GtkFileChooserNative* chooser = gtk_file_chooser_native_new(_("Select Temporary File Location"),
                                                                 GTK_WINDOW(parent),
                                                                 GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER,
-                                                                "Select",
-                                                                "Cancel");
+                                                                _("Select"),
+                                                                _("Cancel"));
     /* Avoid set_current_folder - it triggers GFileInfo bugs in GLib 2.84+ on Windows */
 
     if (gtk_native_dialog_run(GTK_NATIVE_DIALOG(chooser)) == GTK_RESPONSE_ACCEPT) {
@@ -486,13 +487,13 @@ static void on_cms_profile_browse_clicked(GtkButton* button, gpointer user_data)
     if (!parent || !GTK_IS_WINDOW(parent)) {
         return;
     }
-    GtkFileChooserNative* chooser = gtk_file_chooser_native_new("Select a color profile",
+    GtkFileChooserNative* chooser = gtk_file_chooser_native_new(_("Select a color profile"),
                                                                 GTK_WINDOW(parent),
                                                                 GTK_FILE_CHOOSER_ACTION_OPEN,
-                                                                "Select",
-                                                                "Cancel");
+                                                                _("Select"),
+                                                                _("Cancel"));
     GtkFileFilter* filter = gtk_file_filter_new();
-    gtk_file_filter_set_name(filter, "ICC profile (.icc, .icm)");
+    gtk_file_filter_set_name(filter, _("ICC profile (.icc, .icm)"));
     gtk_file_filter_add_pattern(filter, "*.icc");
     gtk_file_filter_add_pattern(filter, "*.icm");
     gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(chooser), filter);

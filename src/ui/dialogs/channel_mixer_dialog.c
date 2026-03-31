@@ -6,6 +6,7 @@
 #include <glib.h>
 #include <stdlib.h>
 #include <string.h>
+#include "i18n.h"
 
 #define MIXER_ROWS 4
 #define MIXER_COLS 4
@@ -184,7 +185,7 @@ static void set_default_mixer(ChannelMixerDialog* dialog) {
 
 static GtkWidget* create_output_channel_group(ChannelMixerDialog* dialog) {
     GtkWidget* vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
-    GtkWidget* label = gtk_label_new("output channel");
+    GtkWidget* label = gtk_label_new(_("output channel"));
     gtk_widget_set_halign(label, GTK_ALIGN_START);
     gtk_box_pack_start(GTK_BOX(vbox), label, FALSE, FALSE, 0);
 
@@ -199,7 +200,7 @@ static GtkWidget* create_output_channel_group(ChannelMixerDialog* dialog) {
 
     btn = gtk_toggle_button_new();
     icon = gtk_image_new_from_resource("/icons/channel-red.png");
-    lbl = gtk_label_new("red");
+    lbl = gtk_label_new(_("red"));
     gtk_widget_set_margin_start(lbl, 5);
     inner = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
     gtk_container_add(GTK_CONTAINER(inner), icon);
@@ -213,7 +214,7 @@ static GtkWidget* create_output_channel_group(ChannelMixerDialog* dialog) {
 
     btn = gtk_toggle_button_new();
     icon = gtk_image_new_from_resource("/icons/channel-green.png");
-    lbl = gtk_label_new("green");
+    lbl = gtk_label_new(_("green"));
     gtk_widget_set_margin_start(lbl, 5);
     inner = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
     gtk_container_add(GTK_CONTAINER(inner), icon);
@@ -227,7 +228,7 @@ static GtkWidget* create_output_channel_group(ChannelMixerDialog* dialog) {
 
     btn = gtk_toggle_button_new();
     icon = gtk_image_new_from_resource("/icons/channel-blue.png");
-    lbl = gtk_label_new("blue");
+    lbl = gtk_label_new(_("blue"));
     gtk_widget_set_margin_start(lbl, 5);
     inner = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
     gtk_container_add(GTK_CONTAINER(inner), icon);
@@ -289,7 +290,7 @@ static GtkWidget* create_input_slider_row(ChannelMixerDialog* dialog, int idx,
 
 static GtkWidget* create_input_channels_section(ChannelMixerDialog* dialog) {
     GtkWidget* vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
-    GtkWidget* label = gtk_label_new("input channel(s)");
+    GtkWidget* label = gtk_label_new(_("input channel(s)"));
     gtk_widget_set_halign(label, GTK_ALIGN_START);
     gtk_box_pack_start(GTK_BOX(vbox), label, FALSE, FALSE, 0);
 
@@ -372,7 +373,7 @@ ChannelMixerDialog* channel_mixer_dialog_new(const gchar* title) {
     gtk_box_pack_start(GTK_BOX(right_vbox), create_input_channels_section(dialog), FALSE, FALSE, 0);
 
     options_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
-    options_label = gtk_label_new("options for all channels");
+    options_label = gtk_label_new(_("options for all channels"));
     gtk_widget_set_halign(options_label, GTK_ALIGN_START);
     gtk_box_pack_start(GTK_BOX(options_vbox), options_label, FALSE, FALSE, 0);
 

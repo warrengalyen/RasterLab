@@ -3,6 +3,7 @@
 #include <glib.h>
 #include <gtk/gtk.h>
 #include <string.h>
+#include "i18n.h"
 
 /* Forward declare BMP types from plugin_bmp.c */
 typedef enum {

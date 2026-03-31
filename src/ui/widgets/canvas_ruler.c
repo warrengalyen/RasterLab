@@ -5,6 +5,7 @@
 #include <gdk/gdk.h>
 #include <glib.h>
 #include <math.h>
+#include "i18n.h"
 
 #define RULER_SIZE_PX 24
 /** Unit label text size in points */

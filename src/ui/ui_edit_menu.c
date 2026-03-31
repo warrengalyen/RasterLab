@@ -1,4 +1,5 @@
 #include "ui/ui_edit_menu.h"
+#include "i18n.h"
 #include "command.h"
 #include "commands/command_layer.h"
 #include "document.h"
@@ -752,7 +753,7 @@ void on_edit_cut(GtkWidget* widget, gpointer data) {
 
     /* Now create undo command and clear pixels */
     /* Create a draw command to track the cut operation */
-    cmd = command_create_draw(layer, "Cut");
+    cmd = command_create_draw(layer, _("Cut"));
     if (!cmd) {
         return;
     }
@@ -893,7 +894,7 @@ void on_edit_clear(GtkWidget* widget, gpointer data) {
     }
 
     /* Create a draw command to track the clear operation */
-    cmd = command_create_draw(layer, "Clear");
+    cmd = command_create_draw(layer, _("Clear"));
     if (!cmd) {
         return;
     }
@@ -1041,8 +1042,8 @@ void on_edit_paste(GtkWidget* widget, gpointer data) {
     if (!pixbuf) {
         /* No valid image in clipboard - notify user */
         ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_INFO,
-                                    "No valid image found in clipboard.", NULL, GTK_RESPONSE_OK,
-                                    "_OK", GTK_RESPONSE_OK, NULL);
+                                    _("No valid image found in clipboard."), NULL, GTK_RESPONSE_OK,
+                                    _("_OK"), GTK_RESPONSE_OK, NULL);
         return;
     }
 
@@ -1062,7 +1063,7 @@ void on_edit_paste(GtkWidget* widget, gpointer data) {
     gint width = cairo_image_surface_get_width(surface);
     gint height = cairo_image_surface_get_height(surface);
 
-    new_layer = layer_new("Clipboard Image", width, height, TRUE,
+    new_layer = layer_new(_("Clipboard Image"), width, height, TRUE,
                           LAYER_BACKGROUND_TRANSPARENT,
                           LAYER_POSITION_ABOVE_CURRENT, NULL, doc);
     if (!new_layer) {
@@ -1178,8 +1179,8 @@ void on_edit_paste_new_image(GtkWidget* widget, gpointer data) {
     if (!pixbuf) {
         /* No valid image in clipboard - notify user */
         ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_INFO,
-                                    "No valid image found in clipboard.", NULL, GTK_RESPONSE_OK,
-                                    "_OK", GTK_RESPONSE_OK, NULL);
+                                    _("No valid image found in clipboard."), NULL, GTK_RESPONSE_OK,
+                                    _("_OK"), GTK_RESPONSE_OK, NULL);
         return;
     }
 
@@ -1193,7 +1194,7 @@ void on_edit_paste_new_image(GtkWidget* widget, gpointer data) {
     }
 
     /* Create new document tab */
-    new_doc = ui_create_document_tab(ctx, "Clipboard Image");
+    new_doc = ui_create_document_tab(ctx, _("Clipboard Image"));
     if (!new_doc) {
         g_object_unref(pixbuf);
         return;
@@ -1240,7 +1241,7 @@ void on_edit_paste_new_image(GtkWidget* widget, gpointer data) {
     cairo_surface_flush(surface);
 
     /* Create new layer from clipboard image */
-    new_layer = layer_new("Clipboard Image", width, height, TRUE,
+    new_layer = layer_new(_("Clipboard Image"), width, height, TRUE,
                           LAYER_BACKGROUND_TRANSPARENT,
                           LAYER_POSITION_ABOVE_CURRENT, NULL, new_doc);
     if (!new_layer) {
@@ -1431,7 +1432,7 @@ void on_edit_cut_merged(GtkWidget* widget, gpointer data) {
         }
 
         /* Create a draw command to track the cut merged operation for this layer */
-        Command* layer_cmd = command_create_draw(current_layer, "Cut Merged");
+        Command* layer_cmd = command_create_draw(current_layer, _("Cut Merged"));
         if (!layer_cmd) {
             continue;
         }
@@ -1591,7 +1592,7 @@ static void on_edit_fill(GtkWidget* widget, gpointer data) {
     if (opacity_byte > 255)
         opacity_byte = 255;
 
-    cmd = command_create_draw(layer, "Fill");
+    cmd = command_create_draw(layer, _("Fill"));
     if (!cmd)
         return;
 
@@ -1722,14 +1723,14 @@ void ui_edit_menu_update_sensitivity(AppContext* ctx) {
         if (can_undo && doc && doc->undo_stack) {
             Command* cmd = command_stack_peek(doc->undo_stack);
             if (cmd && cmd->name) {
-                gchar* label = g_strdup_printf("_Undo: %s", cmd->name);
+                gchar* label = g_strdup_printf(_("_Undo: %s"), cmd->name);
                 gtk_menu_item_set_label(GTK_MENU_ITEM(ctx->edit_menu_undo), label);
                 g_free(label);
             } else {
-                gtk_menu_item_set_label(GTK_MENU_ITEM(ctx->edit_menu_undo), "_Undo");
+                gtk_menu_item_set_label(GTK_MENU_ITEM(ctx->edit_menu_undo), _("_Undo"));
             }
         } else {
-            gtk_menu_item_set_label(GTK_MENU_ITEM(ctx->edit_menu_undo), "_Undo");
+            gtk_menu_item_set_label(GTK_MENU_ITEM(ctx->edit_menu_undo), _("_Undo"));
         }
     }
     if (ctx->edit_menu_redo && GTK_IS_WIDGET(ctx->edit_menu_redo)) {
@@ -1738,14 +1739,14 @@ void ui_edit_menu_update_sensitivity(AppContext* ctx) {
         if (can_redo && doc && doc->redo_stack) {
             Command* cmd = command_stack_peek(doc->redo_stack);
             if (cmd && cmd->name) {
-                gchar* label = g_strdup_printf("_Redo: %s", cmd->name);
+                gchar* label = g_strdup_printf(_("_Redo: %s"), cmd->name);
                 gtk_menu_item_set_label(GTK_MENU_ITEM(ctx->edit_menu_redo), label);
                 g_free(label);
             } else {
-                gtk_menu_item_set_label(GTK_MENU_ITEM(ctx->edit_menu_redo), "_Redo");
+                gtk_menu_item_set_label(GTK_MENU_ITEM(ctx->edit_menu_redo), _("_Redo"));
             }
         } else {
-            gtk_menu_item_set_label(GTK_MENU_ITEM(ctx->edit_menu_redo), "_Redo");
+            gtk_menu_item_set_label(GTK_MENU_ITEM(ctx->edit_menu_redo), _("_Redo"));
         }
     }
 

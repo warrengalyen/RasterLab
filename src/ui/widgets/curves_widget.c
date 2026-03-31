@@ -2,6 +2,7 @@
 #include <cairo.h>
 #include <math.h>
 #include <string.h>
+#include "i18n.h"
 
 #define NODE_RADIUS 8.0
 #define GRID_DIVISIONS 4

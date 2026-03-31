@@ -1,4 +1,5 @@
 #include "ui/ui_select_menu.h"
+#include "i18n.h"
 #include "command.h"
 #include "document.h"
 #include "selection/selection_mask.h"
@@ -414,7 +415,8 @@ static void execute_select_radius_operation(AppContext* ctx,
                                                        doc->selection_mask->height);
 
             /* Show progress bar with message */
-            gchar* progress_message = g_strdup_printf("Processing %s...", operation_name ? operation_name : "selection");
+            gchar* progress_message = g_strdup_printf(_("Processing %s..."),
+                                                      operation_name ? operation_name : _("selection"));
             ui_show_progress(ctx, progress_message);
             g_free(progress_message);
 
@@ -471,7 +473,7 @@ static void execute_select_radius_operation(AppContext* ctx,
  */
 void on_select_grow(GtkMenuItem* menu_item, gpointer user_data) {
     (void)menu_item; /* Unused parameter */
-    execute_select_radius_operation((AppContext*)user_data, "Grow Selection", selection_mask_grow);
+    execute_select_radius_operation((AppContext*)user_data, _("Grow Selection"), selection_mask_grow);
 }
 
 /**
@@ -479,7 +481,7 @@ void on_select_grow(GtkMenuItem* menu_item, gpointer user_data) {
  */
 void on_select_shrink(GtkMenuItem* menu_item, gpointer user_data) {
     (void)menu_item; /* Unused parameter */
-    execute_select_radius_operation((AppContext*)user_data, "Shrink Selection", selection_mask_shrink);
+    execute_select_radius_operation((AppContext*)user_data, _("Shrink Selection"), selection_mask_shrink);
 }
 
 /**
@@ -487,7 +489,7 @@ void on_select_shrink(GtkMenuItem* menu_item, gpointer user_data) {
  */
 void on_select_border(GtkMenuItem* menu_item, gpointer user_data) {
     (void)menu_item; /* Unused parameter */
-    execute_select_radius_operation((AppContext*)user_data, "Border Selection", selection_mask_border);
+    execute_select_radius_operation((AppContext*)user_data, _("Border Selection"), selection_mask_border);
 }
 
 /**
@@ -495,7 +497,7 @@ void on_select_border(GtkMenuItem* menu_item, gpointer user_data) {
  */
 void on_select_feather(GtkMenuItem* menu_item, gpointer user_data) {
     (void)menu_item; /* Unused parameter */
-    execute_select_radius_operation((AppContext*)user_data, "Feather Selection", selection_mask_feather);
+    execute_select_radius_operation((AppContext*)user_data, _("Feather Selection"), selection_mask_feather);
 }
 
 /**
@@ -503,7 +505,7 @@ void on_select_feather(GtkMenuItem* menu_item, gpointer user_data) {
  */
 void on_select_sharpen(GtkMenuItem* menu_item, gpointer user_data) {
     (void)menu_item; /* Unused parameter */
-    execute_select_radius_operation((AppContext*)user_data, "Sharpen Selection", selection_mask_sharpen);
+    execute_select_radius_operation((AppContext*)user_data, _("Sharpen Selection"), selection_mask_sharpen);
 }
 
 /**

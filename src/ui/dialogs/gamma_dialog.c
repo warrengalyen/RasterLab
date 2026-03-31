@@ -9,6 +9,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#include "i18n.h"
 
 
 /**
@@ -385,7 +386,7 @@ GammaDialog* gamma_dialog_new(const gchar* title) {
     gtk_box_pack_start(GTK_BOX(main_hbox), right_vbox, FALSE, FALSE, 0);
 
     /* Create gamma curve preview area */
-    curve_label = gtk_label_new("new gamma curve:");
+    curve_label = gtk_label_new(_("new gamma curve:"));
     gtk_widget_set_halign(curve_label, GTK_ALIGN_START);
     gtk_widget_set_margin_bottom(curve_label, 3);
     gtk_box_pack_start(GTK_BOX(right_vbox), curve_label, FALSE, FALSE, 0);
@@ -401,7 +402,7 @@ GammaDialog* gamma_dialog_new(const gchar* title) {
     gtk_widget_set_margin_bottom(control_vbox, 10);
     gtk_box_pack_start(GTK_BOX(right_vbox), control_vbox, FALSE, FALSE, 0);
 
-    label = gtk_label_new("red");
+    label = gtk_label_new(_("red"));
     gtk_widget_set_halign(label, GTK_ALIGN_START);
     gtk_widget_set_margin_bottom(label, 3);
     gtk_box_pack_start(GTK_BOX(control_vbox), label, FALSE, FALSE, 0);
@@ -427,7 +428,7 @@ GammaDialog* gamma_dialog_new(const gchar* title) {
     gtk_widget_set_margin_bottom(control_vbox, 10);
     gtk_box_pack_start(GTK_BOX(right_vbox), control_vbox, FALSE, FALSE, 0);
 
-    label = gtk_label_new("green");
+    label = gtk_label_new(_("green"));
     gtk_widget_set_halign(label, GTK_ALIGN_START);
     gtk_widget_set_margin_bottom(label, 3);
     gtk_box_pack_start(GTK_BOX(control_vbox), label, FALSE, FALSE, 0);
@@ -453,7 +454,7 @@ GammaDialog* gamma_dialog_new(const gchar* title) {
     gtk_widget_set_margin_bottom(control_vbox, 10);
     gtk_box_pack_start(GTK_BOX(right_vbox), control_vbox, FALSE, FALSE, 0);
 
-    label = gtk_label_new("blue");
+    label = gtk_label_new(_("blue"));
     gtk_widget_set_halign(label, GTK_ALIGN_START);
     gtk_widget_set_margin_bottom(label, 3);
     gtk_box_pack_start(GTK_BOX(control_vbox), label, FALSE, FALSE, 0);
@@ -482,7 +483,7 @@ GammaDialog* gamma_dialog_new(const gchar* title) {
     gtk_box_pack_start(GTK_BOX(sync_hbox), dialog->sync_checkbox, FALSE, FALSE, 0);
     g_signal_connect(dialog->sync_checkbox, "toggled", G_CALLBACK(on_sync_toggled), dialog);
 
-    sync_label = gtk_label_new("keep all colors in sync");
+    sync_label = gtk_label_new(_("keep all colors in sync"));
     gtk_box_pack_start(GTK_BOX(sync_hbox), sync_label, FALSE, FALSE, 0);
 
 /* Get button box from dialog (for OK/Cancel) */

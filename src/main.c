@@ -7,6 +7,7 @@
 #include "plugins/plugin_loader.h"
 #include "render/layer.h"
 #include "render/render_utils.h"
+#include "i18n.h"
 #include "test_widgets.h"
 #include "ui.h"
 #include "ui/swatches.h"
@@ -73,6 +74,12 @@ int main(int argc, char* argv[]) {
 
     /* Initialize GTK */
     gtk_init(&argc, &argv);
+
+#ifdef HAVE_GETTEXT
+    setlocale(LC_ALL, "");
+    bindtextdomain(GETTEXT_PACKAGE, LOCALEDIR);
+    textdomain(GETTEXT_PACKAGE);
+#endif
 
     load_global_css();
 

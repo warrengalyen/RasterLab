@@ -6,6 +6,7 @@
 
 #include "plugins/plugin_avif.h"
 #include "document.h"
+#include "i18n.h"
 #include "image_format_plugin.h"
 #include "plugins/plugin_host_api.h"
 #include "render/compositor.h"
@@ -321,9 +322,9 @@ static PluginError load_avif(ImageDocument* doc, const char* filename) {
         }
 #endif
 
-        const char* name = (n > 1) ? (loaded_count == 0 ? "Frame 1" : NULL) : "Background";
+        const char* name = (n > 1) ? (loaded_count == 0 ? _("Frame 1") : NULL) : _("Background");
         if (name == NULL)
-            g_snprintf(layer_name, sizeof(layer_name), "Frame %d", loaded_count + 1);
+            g_snprintf(layer_name, sizeof(layer_name), _("Frame %d"), loaded_count + 1);
         else
             g_snprintf(layer_name, sizeof(layer_name), "%s", name);
 

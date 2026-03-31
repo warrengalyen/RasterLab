@@ -5,6 +5,7 @@
  */
 
 #include "document.h"
+#include "i18n.h"
 #include "image_format_plugin.h"
 #include "plugins/plugin_host_api.h"
 #include "plugins/plugin_sgi.h"
@@ -373,7 +374,7 @@ static PluginError load_sgi(ImageDocument* doc, const char* filename) {
     g_list_free(doc->layers);
     doc->layers = NULL;
 
-    base_layer = layer_new("Background", doc->width, doc->height, TRUE,
+    base_layer = layer_new(_("Background"), doc->width, doc->height, TRUE,
                            LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL, doc);
     if (!base_layer) {
         for (uint32_t c = 0; c < channels; c++) g_free(channel_rows[c]);

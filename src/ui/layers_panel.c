@@ -1,4 +1,5 @@
 #include "ui/layers_panel.h"
+#include "i18n.h"
 #include "app/settings.h"
 #include "commands/command_layer.h"
 #include "document.h"
@@ -556,7 +557,7 @@ ImageLayer* layers_panel_import_path_into_document(LayersPanel* layers_panel, Im
         if (n == 1) {
             layer_name = g_strdup(basename);
         } else {
-            layer_name = g_strdup_printf("%s (%d)", basename, i + 1);
+            layer_name = g_strdup_printf(_("%s (%d)"), basename, i + 1);
         }
 
         new_layer = layer_new_from_layer_content(src, doc, layer_name);

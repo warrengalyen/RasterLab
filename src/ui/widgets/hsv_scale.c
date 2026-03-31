@@ -1,6 +1,7 @@
 #include "ui/widgets/hsv_scale.h"
 #include <gtk/gtk.h>
 #include <math.h>
+#include "i18n.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846

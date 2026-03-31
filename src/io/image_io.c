@@ -6,6 +6,7 @@
 #include "color_manager/icc_utils.h"
 #endif
 #include "app/settings.h"
+#include "i18n.h"
 #include <glib.h>
 #include <glib/gstdio.h>
 #include <stdio.h>
@@ -41,34 +42,34 @@ const char* image_io_get_error_message(PluginError error, const char* filename) 
 
     switch (error) {
         case PLUGIN_ERROR_NONE:
-            return "File loaded successfully";
+            return _("File loaded successfully");
         case PLUGIN_ERROR_INVALID_PARAMETERS:
-            return "Invalid parameters provided";
+            return _("Invalid parameters provided");
         case PLUGIN_ERROR_FILE_NOT_FOUND:
             if (filename) {
-                g_snprintf(error_buffer, sizeof(error_buffer), "File not found: %s", filename);
+                g_snprintf(error_buffer, sizeof(error_buffer), _("File not found: %s"), filename);
                 return error_buffer;
             }
-            return "File not found";
+            return _("File not found");
         case PLUGIN_ERROR_FILE_READ_ERROR:
-            return "Failed to read file. The file may be locked or inaccessible.";
+            return _("Failed to read file. The file may be locked or inaccessible.");
         case PLUGIN_ERROR_FILE_WRITE_ERROR:
-            return "Failed to write file. The file may be locked or the disk may be full.";
+            return _("Failed to write file. The file may be locked or the disk may be full.");
         case PLUGIN_ERROR_UNSUPPORTED_FORMAT:
-            return "Unsupported file format. The file format is not recognized or not supported.";
+            return _("Unsupported file format. The file format is not recognized or not supported.");
         case PLUGIN_ERROR_CORRUPT_FILE:
-            return "File is corrupted or incomplete. The file may be damaged.";
+            return _("File is corrupted or incomplete. The file may be damaged.");
         case PLUGIN_ERROR_OUT_OF_MEMORY:
-            return "Out of memory. The file is too large to load.";
+            return _("Out of memory. The file is too large to load.");
         case PLUGIN_ERROR_UNSUPPORTED_FEATURE:
-            return "Unsupported feature. The file uses features that are not supported.";
+            return _("Unsupported feature. The file uses features that are not supported.");
         case PLUGIN_ERROR_USER_CANCELLED:
-            return "Load cancelled.";
+            return _("Load cancelled.");
         case PLUGIN_ERROR_UNSUPPORTED_COMPRESSION:
-            return "JPEG compression is not supported.";
+            return _("JPEG compression is not supported.");
         case PLUGIN_ERROR_UNKNOWN:
         default:
-            return "An unknown error occurred while loading the file.";
+            return _("An unknown error occurred while loading the file.");
     }
 }
 

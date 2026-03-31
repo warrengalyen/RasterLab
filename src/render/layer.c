@@ -1,4 +1,5 @@
 #include "render/layer.h"
+#include "i18n.h"
 #include "render/text_layer.h"
 #include "document.h"
 #include "render/compositor.h"
@@ -46,7 +47,7 @@ static gchar* layer_generate_unique_name(struct ImageDocument* doc, const gchar*
     gchar* unique_name = NULL;
     do {
         g_free(unique_name);
-        unique_name = g_strdup_printf("%s (%d)", base_name, count);
+        unique_name = g_strdup_printf(_("%s (%d)"), base_name, count);
         name_exists = FALSE;
 
         /* Check if this name exists */

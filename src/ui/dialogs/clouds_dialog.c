@@ -13,6 +13,7 @@
 #include <glib.h>
 #include <stdlib.h>
 #include <string.h>
+#include "i18n.h"
 
 /**
  * Clouds dialog structure
@@ -418,7 +419,7 @@ CloudsDialog* clouds_dialog_new(const gchar* title) {
     gtk_widget_set_margin_bottom(control_vbox, 10);
     gtk_box_pack_start(GTK_BOX(right_vbox), control_vbox, FALSE, FALSE, 0);
 
-    label = gtk_label_new("scale");
+    label = gtk_label_new(_("scale"));
     gtk_widget_set_halign(label, GTK_ALIGN_START);
     gtk_widget_set_margin_bottom(label, 3);
     gtk_box_pack_start(GTK_BOX(control_vbox), label, FALSE, FALSE, 0);
@@ -450,7 +451,7 @@ CloudsDialog* clouds_dialog_new(const gchar* title) {
     gtk_widget_set_margin_bottom(control_vbox, 10);
     gtk_box_pack_start(GTK_BOX(right_vbox), control_vbox, FALSE, FALSE, 0);
 
-    label = gtk_label_new("quality");
+    label = gtk_label_new(_("quality"));
     gtk_widget_set_halign(label, GTK_ALIGN_START);
     gtk_widget_set_margin_bottom(label, 3);
     gtk_box_pack_start(GTK_BOX(control_vbox), label, FALSE, FALSE, 0);
@@ -482,7 +483,7 @@ CloudsDialog* clouds_dialog_new(const gchar* title) {
     gtk_widget_set_margin_bottom(color_vbox, 10);
     gtk_box_pack_start(GTK_BOX(right_vbox), color_vbox, FALSE, FALSE, 0);
 
-    color_label = gtk_label_new("shadow color");
+    color_label = gtk_label_new(_("shadow color"));
     gtk_widget_set_halign(color_label, GTK_ALIGN_START);
     gtk_widget_set_margin_bottom(color_label, 3);
     gtk_box_pack_start(GTK_BOX(color_vbox), color_label, FALSE, FALSE, 0);
@@ -505,7 +506,7 @@ CloudsDialog* clouds_dialog_new(const gchar* title) {
     gtk_widget_set_margin_bottom(color_vbox, 10);
     gtk_box_pack_start(GTK_BOX(right_vbox), color_vbox, FALSE, FALSE, 0);
 
-    color_label = gtk_label_new("highlight color");
+    color_label = gtk_label_new(_("highlight color"));
     gtk_widget_set_halign(color_label, GTK_ALIGN_START);
     gtk_widget_set_margin_bottom(color_label, 3);
     gtk_box_pack_start(GTK_BOX(color_vbox), color_label, FALSE, FALSE, 0);
@@ -528,7 +529,7 @@ CloudsDialog* clouds_dialog_new(const gchar* title) {
     gtk_widget_set_margin_bottom(control_vbox, 10);
     gtk_box_pack_start(GTK_BOX(right_vbox), control_vbox, FALSE, FALSE, 0);
 
-    label = gtk_label_new("opacity");
+    label = gtk_label_new(_("opacity"));
     gtk_widget_set_halign(label, GTK_ALIGN_START);
     gtk_widget_set_margin_bottom(label, 3);
     gtk_box_pack_start(GTK_BOX(control_vbox), label, FALSE, FALSE, 0);
@@ -560,7 +561,7 @@ CloudsDialog* clouds_dialog_new(const gchar* title) {
     gtk_widget_set_margin_bottom(control_vbox, 10);
     gtk_box_pack_start(GTK_BOX(right_vbox), control_vbox, FALSE, FALSE, 0);
 
-    label = gtk_label_new("seed");
+    label = gtk_label_new(_("seed"));
     gtk_widget_set_halign(label, GTK_ALIGN_START);
     gtk_widget_set_margin_bottom(label, 3);
     gtk_box_pack_start(GTK_BOX(control_vbox), label, FALSE, FALSE, 0);
@@ -592,14 +593,14 @@ CloudsDialog* clouds_dialog_new(const gchar* title) {
     gtk_widget_set_margin_bottom(combo_vbox, 10);
     gtk_box_pack_start(GTK_BOX(right_vbox), combo_vbox, FALSE, FALSE, 0);
 
-    combo_label = gtk_label_new("generator");
+    combo_label = gtk_label_new(_("generator"));
     gtk_widget_set_halign(combo_label, GTK_ALIGN_START);
     gtk_widget_set_margin_bottom(combo_label, 3);
     gtk_box_pack_start(GTK_BOX(combo_vbox), combo_label, FALSE, FALSE, 0);
 
     combo = gtk_combo_box_text_new();
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), "Perlin");
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), "Simplex");
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("Perlin"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("Simplex"));
     gtk_combo_box_set_active(GTK_COMBO_BOX(combo), (dialog->params.generator == OC_NOISE_PERLIN) ? 0 : 1);
     gtk_widget_set_hexpand(combo, TRUE);
     gtk_box_pack_start(GTK_BOX(combo_vbox), combo, FALSE, FALSE, 0);

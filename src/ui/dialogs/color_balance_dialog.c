@@ -9,6 +9,7 @@
 #include <glib.h>
 #include <stdlib.h>
 #include <string.h>
+#include "i18n.h"
 
 /**
  * Color balance dialog structure
@@ -302,7 +303,7 @@ ColorBalanceDialog* color_balance_dialog_new(const gchar* title) {
     gtk_widget_set_margin_bottom(control_vbox, 10);
     gtk_box_pack_start(GTK_BOX(right_vbox), control_vbox, FALSE, FALSE, 0);
 
-    label = gtk_label_new("red");
+    label = gtk_label_new(_("red"));
     gtk_widget_set_halign(label, GTK_ALIGN_START);
     gtk_widget_set_margin_bottom(label, 3);
     gtk_box_pack_start(GTK_BOX(control_vbox), label, FALSE, FALSE, 0);
@@ -334,7 +335,7 @@ ColorBalanceDialog* color_balance_dialog_new(const gchar* title) {
     gtk_widget_set_margin_bottom(control_vbox, 10);
     gtk_box_pack_start(GTK_BOX(right_vbox), control_vbox, FALSE, FALSE, 0);
 
-    label = gtk_label_new("green");
+    label = gtk_label_new(_("green"));
     gtk_widget_set_halign(label, GTK_ALIGN_START);
     gtk_widget_set_margin_bottom(label, 3);
     gtk_box_pack_start(GTK_BOX(control_vbox), label, FALSE, FALSE, 0);
@@ -366,7 +367,7 @@ ColorBalanceDialog* color_balance_dialog_new(const gchar* title) {
     gtk_widget_set_margin_bottom(control_vbox, 10);
     gtk_box_pack_start(GTK_BOX(right_vbox), control_vbox, FALSE, FALSE, 0);
 
-    label = gtk_label_new("blue");
+    label = gtk_label_new(_("blue"));
     gtk_widget_set_halign(label, GTK_ALIGN_START);
     gtk_widget_set_margin_bottom(label, 3);
     gtk_box_pack_start(GTK_BOX(control_vbox), label, FALSE, FALSE, 0);
@@ -398,7 +399,7 @@ ColorBalanceDialog* color_balance_dialog_new(const gchar* title) {
     gtk_widget_set_margin_bottom(tone_vbox, 10);
     gtk_box_pack_start(GTK_BOX(right_vbox), tone_vbox, FALSE, FALSE, 0);
 
-    tone_label = gtk_label_new("tone balance:");
+    tone_label = gtk_label_new(_("tone balance:"));
     gtk_widget_set_halign(tone_label, GTK_ALIGN_START);
     gtk_widget_set_margin_bottom(tone_label, 3);
     gtk_box_pack_start(GTK_BOX(tone_vbox), tone_label, FALSE, FALSE, 0);
@@ -425,7 +426,7 @@ ColorBalanceDialog* color_balance_dialog_new(const gchar* title) {
     gtk_box_pack_start(GTK_BOX(preserve_hbox), dialog->preserve_luminosity_checkbox, FALSE, FALSE, 0);
     g_signal_connect(dialog->preserve_luminosity_checkbox, "toggled", G_CALLBACK(on_preserve_luminosity_toggled), dialog);
 
-    preserve_label = gtk_label_new("preserve luminosity");
+    preserve_label = gtk_label_new(_("preserve luminosity"));
     gtk_box_pack_start(GTK_BOX(preserve_hbox), preserve_label, FALSE, FALSE, 0);
 
 /* Get button box from dialog (for OK/Cancel) */

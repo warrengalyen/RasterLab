@@ -3,6 +3,7 @@
 #include "ui/widgets/vertical_spin_button.h"
 #include <stdlib.h>
 #include <string.h>
+#include "i18n.h"
 
 /**
  * Selection radius dialog structure
@@ -99,7 +100,7 @@ SelectionRadiusDialog* selection_radius_dialog_new(const gchar* title) {
     control_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
     gtk_box_pack_start(GTK_BOX(main_vbox), control_vbox, FALSE, FALSE, 0);
 
-    label = gtk_label_new("Radius:");
+    label = gtk_label_new(_("Radius:"));
     gtk_widget_set_halign(label, GTK_ALIGN_START);
     gtk_widget_set_margin_bottom(label, 3);
     gtk_box_pack_start(GTK_BOX(control_vbox), label, FALSE, FALSE, 0);

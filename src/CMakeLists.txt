@@ -1,3 +1,5 @@
+include(GNUInstallDirs)
+
 # Find glib-compile-resources for gresources compilation
 find_program(GLIB_COMPILE_RESOURCES glib-compile-resources REQUIRED)
 
@@ -278,6 +280,16 @@ endif()
 
 # Create the executable
 add_executable(rasterlab ${SOURCES})
+
+target_compile_definitions(rasterlab PRIVATE GETTEXT_PACKAGE="rasterlab")
+target_compile_definitions(rasterlab PRIVATE "LOCALEDIR=\"${CMAKE_INSTALL_FULL_LOCALEDIR}\"")
+
+pkg_check_modules(GETTEXT gettext)
+if(GETTEXT_FOUND)
+    target_link_libraries(rasterlab ${GETTEXT_LIBRARIES})
+    target_compile_options(rasterlab PRIVATE ${GETTEXT_CFLAGS_OTHER})
+    target_compile_definitions(rasterlab PRIVATE HAVE_GETTEXT=1)
+endif()
 
 # Link GTK3 libraries
 target_link_libraries(rasterlab ${GTK3_LIBRARIES})

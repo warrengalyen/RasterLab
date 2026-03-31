@@ -7,6 +7,7 @@
 #include <gtk/gtk.h>
 #include <math.h>
 #include <string.h>
+#include "i18n.h"
 
 /**
  * New image dialog structure
@@ -847,38 +848,38 @@ NewImageDialog* new_image_dialog_new(void) {
     /* Populate width/height units combo boxes */
     width_store = gtk_list_store_new(1, G_TYPE_STRING);
     gtk_list_store_append(width_store, &iter);
-    gtk_list_store_set(width_store, &iter, 0, "px", -1);
+    gtk_list_store_set(width_store, &iter, 0, _("px"), -1);
     gtk_list_store_append(width_store, &iter);
-    gtk_list_store_set(width_store, &iter, 0, "in", -1);
+    gtk_list_store_set(width_store, &iter, 0, _("in"), -1);
     gtk_list_store_append(width_store, &iter);
-    gtk_list_store_set(width_store, &iter, 0, "cm", -1);
+    gtk_list_store_set(width_store, &iter, 0, _("cm"), -1);
     gtk_list_store_append(width_store, &iter);
-    gtk_list_store_set(width_store, &iter, 0, "mm", -1);
+    gtk_list_store_set(width_store, &iter, 0, _("mm"), -1);
     gtk_list_store_append(width_store, &iter);
-    gtk_list_store_set(width_store, &iter, 0, "pt", -1);
+    gtk_list_store_set(width_store, &iter, 0, _("pt"), -1);
     gtk_list_store_append(width_store, &iter);
-    gtk_list_store_set(width_store, &iter, 0, "pc", -1);
+    gtk_list_store_set(width_store, &iter, 0, _("pc"), -1);
 
     height_store = gtk_list_store_new(1, G_TYPE_STRING);
     gtk_list_store_append(height_store, &iter);
-    gtk_list_store_set(height_store, &iter, 0, "px", -1);
+    gtk_list_store_set(height_store, &iter, 0, _("px"), -1);
     gtk_list_store_append(height_store, &iter);
-    gtk_list_store_set(height_store, &iter, 0, "in", -1);
+    gtk_list_store_set(height_store, &iter, 0, _("in"), -1);
     gtk_list_store_append(height_store, &iter);
-    gtk_list_store_set(height_store, &iter, 0, "cm", -1);
+    gtk_list_store_set(height_store, &iter, 0, _("cm"), -1);
     gtk_list_store_append(height_store, &iter);
-    gtk_list_store_set(height_store, &iter, 0, "mm", -1);
+    gtk_list_store_set(height_store, &iter, 0, _("mm"), -1);
     gtk_list_store_append(height_store, &iter);
-    gtk_list_store_set(height_store, &iter, 0, "pt", -1);
+    gtk_list_store_set(height_store, &iter, 0, _("pt"), -1);
     gtk_list_store_append(height_store, &iter);
-    gtk_list_store_set(height_store, &iter, 0, "pc", -1);
+    gtk_list_store_set(height_store, &iter, 0, _("pc"), -1);
 
     /* Populate resolution units combo box */
     resolution_store = gtk_list_store_new(1, G_TYPE_STRING);
     gtk_list_store_append(resolution_store, &iter);
-    gtk_list_store_set(resolution_store, &iter, 0, "PPI", -1);
+    gtk_list_store_set(resolution_store, &iter, 0, _("PPI"), -1);
     gtk_list_store_append(resolution_store, &iter);
-    gtk_list_store_set(resolution_store, &iter, 0, "PPCM", -1);
+    gtk_list_store_set(resolution_store, &iter, 0, _("PPCM"), -1);
 
     /* Set models */
     gtk_combo_box_set_model(GTK_COMBO_BOX(dialog->width_units_combo), GTK_TREE_MODEL(width_store));

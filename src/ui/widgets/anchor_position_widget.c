@@ -2,6 +2,7 @@
 #include <glib.h>
 #include <gtk/gtk.h>
 #include <stdlib.h>
+#include "i18n.h"
 
 /**
  * Anchor position widget structure

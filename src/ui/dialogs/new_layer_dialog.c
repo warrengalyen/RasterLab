@@ -5,6 +5,7 @@
 #include <glib.h>
 #include <gtk/gtk.h>
 #include <string.h>
+#include "i18n.h"
 
 
 /**
@@ -204,7 +205,7 @@ NewLayerDialog* new_layer_dialog_new(void) {
     g_signal_connect(dialog->bg_custom_color, "clicked", G_CALLBACK(on_custom_color_clicked), dialog);
 
     /* Set default layer name */
-    default_name = g_strdup_printf("Layer %d", layer_count++);
+    default_name = g_strdup_printf(_("Layer %d"), layer_count++);
     gtk_entry_set_text(GTK_ENTRY(dialog->name_entry), default_name);
     g_free(default_name);
 
@@ -213,16 +214,16 @@ NewLayerDialog* new_layer_dialog_new(void) {
     GtkTreeIter iter;
 
     gtk_list_store_append(position_store, &iter);
-    gtk_list_store_set(position_store, &iter, 0, "Above current layer", -1);
+    gtk_list_store_set(position_store, &iter, 0, _("Above current layer"), -1);
 
     gtk_list_store_append(position_store, &iter);
-    gtk_list_store_set(position_store, &iter, 0, "Below current layer", -1);
+    gtk_list_store_set(position_store, &iter, 0, _("Below current layer"), -1);
 
     gtk_list_store_append(position_store, &iter);
-    gtk_list_store_set(position_store, &iter, 0, "Top of layer stack", -1);
+    gtk_list_store_set(position_store, &iter, 0, _("Top of layer stack"), -1);
 
     gtk_list_store_append(position_store, &iter);
-    gtk_list_store_set(position_store, &iter, 0, "Bottom of layer stack", -1);
+    gtk_list_store_set(position_store, &iter, 0, _("Bottom of layer stack"), -1);
 
     /* Set the model */
     gtk_combo_box_set_model(GTK_COMBO_BOX(dialog->position_combo), GTK_TREE_MODEL(position_store));

@@ -6,6 +6,7 @@
 
 #ifdef HAVE_LIBWEBP
 #include <webp/encode.h>
+#include "i18n.h"
 
 /* Forward declare WebP types from plugin_webp.c */
 typedef enum {

@@ -7,6 +7,7 @@
 #include "ui/widgets/vertical_spin_button.h"
 #include <stdlib.h>
 #include <string.h>
+#include "i18n.h"
 
 /**
  * Filter dialog structure

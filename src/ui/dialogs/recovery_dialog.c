@@ -8,6 +8,7 @@
 #include <gtk/gtk.h>
 #include <string.h>
 #include <time.h>
+#include "i18n.h"
 
 
 /* Forward declarations */

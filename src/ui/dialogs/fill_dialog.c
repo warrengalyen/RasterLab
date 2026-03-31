@@ -5,6 +5,7 @@
 #include "ui/ui_utils.h"
 #include <glib.h>
 #include <gtk/gtk.h>
+#include "i18n.h"
 
 /* Blend mode names matching BlendMode enum (document.h) */
 static const char* const blend_mode_names[] = {

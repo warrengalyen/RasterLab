@@ -12,6 +12,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#include "i18n.h"
 
 #define MATRIX_SIZE 5
 #define MATRIX_ELEMENTS (MATRIX_SIZE * MATRIX_SIZE)
@@ -333,7 +334,7 @@ ConvolutionDialog* convolution_dialog_new(const gchar* title) {
     gtk_widget_set_margin_bottom(matrix_vbox, 10);
     gtk_box_pack_start(GTK_BOX(right_vbox), matrix_vbox, FALSE, FALSE, 0);
 
-    label = gtk_label_new("convolution matrix");
+    label = gtk_label_new(_("convolution matrix"));
     gtk_widget_set_halign(label, GTK_ALIGN_START);
     gtk_widget_set_margin_bottom(label, 3);
     gtk_box_pack_start(GTK_BOX(matrix_vbox), label, FALSE, FALSE, 0);
@@ -394,7 +395,7 @@ ConvolutionDialog* convolution_dialog_new(const gchar* title) {
     control_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
     gtk_box_pack_start(GTK_BOX(params_hbox), control_vbox, TRUE, TRUE, 0);
 
-    label = gtk_label_new("divisor");
+    label = gtk_label_new(_("divisor"));
     gtk_widget_set_halign(label, GTK_ALIGN_START);
     gtk_widget_set_margin_bottom(label, 3);
     gtk_box_pack_start(GTK_BOX(control_vbox), label, FALSE, FALSE, 0);
@@ -425,7 +426,7 @@ ConvolutionDialog* convolution_dialog_new(const gchar* title) {
     control_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
     gtk_box_pack_start(GTK_BOX(params_hbox), control_vbox, TRUE, TRUE, 0);
 
-    label = gtk_label_new("offset");
+    label = gtk_label_new(_("offset"));
     gtk_widget_set_halign(label, GTK_ALIGN_START);
     gtk_widget_set_margin_bottom(label, 3);
     gtk_box_pack_start(GTK_BOX(control_vbox), label, FALSE, FALSE, 0);

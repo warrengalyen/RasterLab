@@ -3,6 +3,7 @@
 #include "ui/ui_utils.h"
 #include <glib.h>
 #include <gtk/gtk.h>
+#include "i18n.h"
 
 #if HAVE_LIBHEIF && HAVE_LIBAOM
 

@@ -11,6 +11,7 @@
 #include <glib.h>
 #include <stdlib.h>
 #include <string.h>
+#include "i18n.h"
 
 
 /**
@@ -425,14 +426,14 @@ static GtkWidget* create_optimal_tab(PalettizeDialog* dialog) {
     gtk_widget_set_margin_bottom(control_vbox, 10);
     gtk_box_pack_start(GTK_BOX(vbox), control_vbox, FALSE, FALSE, 0);
 
-    label = gtk_label_new("Quantize Method");
+    label = gtk_label_new(_("Quantize Method"));
     gtk_widget_set_halign(label, GTK_ALIGN_START);
     gtk_widget_set_margin_bottom(label, 3);
     gtk_box_pack_start(GTK_BOX(control_vbox), label, FALSE, FALSE, 0);
 
     combo = gtk_combo_box_text_new();
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), "Median Cut");
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), "Octree");
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("Median Cut"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("Octree"));
     gtk_combo_box_set_active(GTK_COMBO_BOX(combo), 1);
     gtk_box_pack_start(GTK_BOX(control_vbox), combo, FALSE, FALSE, 0);
     dialog->quantize_method_combo = combo;
@@ -443,7 +444,7 @@ static GtkWidget* create_optimal_tab(PalettizeDialog* dialog) {
     gtk_widget_set_margin_bottom(control_vbox, 10);
     gtk_box_pack_start(GTK_BOX(vbox), control_vbox, FALSE, FALSE, 0);
 
-    label = gtk_label_new("Palette Size");
+    label = gtk_label_new(_("Palette Size"));
     gtk_widget_set_halign(label, GTK_ALIGN_START);
     gtk_widget_set_margin_bottom(label, 3);
     gtk_box_pack_start(GTK_BOX(control_vbox), label, FALSE, FALSE, 0);
@@ -460,24 +461,24 @@ static GtkWidget* create_optimal_tab(PalettizeDialog* dialog) {
     gtk_widget_set_margin_bottom(control_vbox, 10);
     gtk_box_pack_start(GTK_BOX(vbox), control_vbox, FALSE, FALSE, 0);
 
-    label = gtk_label_new("Dither Method");
+    label = gtk_label_new(_("Dither Method"));
     gtk_widget_set_halign(label, GTK_ALIGN_START);
     gtk_widget_set_margin_bottom(label, 3);
     gtk_box_pack_start(GTK_BOX(control_vbox), label, FALSE, FALSE, 0);
 
     combo = gtk_combo_box_text_new();
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), "None");
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), "Burkes");
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), "Floyd-Steinberg");
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), "Stucki");
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), "Atkinson");
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), "Sierra");
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), "Sierra Two Row");
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), "Sierra Lite");
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), "JJN");
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), "Single Neighbor");
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), "Bayer 4x4");
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), "Bayer 8x8");
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("None"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("Burkes"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("Floyd-Steinberg"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("Stucki"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("Atkinson"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("Sierra"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("Sierra Two Row"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("Sierra Lite"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("JJN"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("Single Neighbor"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("Bayer 4x4"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("Bayer 8x8"));
     gtk_combo_box_set_active(GTK_COMBO_BOX(combo), 0);
     gtk_box_pack_start(GTK_BOX(control_vbox), combo, FALSE, FALSE, 0);
     dialog->dither_method_combo = combo;
@@ -488,7 +489,7 @@ static GtkWidget* create_optimal_tab(PalettizeDialog* dialog) {
     gtk_widget_set_margin_bottom(control_vbox, 10);
     gtk_box_pack_start(GTK_BOX(vbox), control_vbox, FALSE, FALSE, 0);
 
-    label = gtk_label_new("Dither Amount");
+    label = gtk_label_new(_("Dither Amount"));
     gtk_widget_set_halign(label, GTK_ALIGN_START);
     gtk_widget_set_margin_bottom(label, 3);
     gtk_box_pack_start(GTK_BOX(control_vbox), label, FALSE, FALSE, 0);
@@ -540,7 +541,7 @@ static GtkWidget* create_from_file_tab(PalettizeDialog* dialog) {
     gtk_widget_set_margin_bottom(control_vbox, 10);
     gtk_box_pack_start(GTK_BOX(vbox), control_vbox, FALSE, FALSE, 0);
 
-    label = gtk_label_new("Palette File");
+    label = gtk_label_new(_("Palette File"));
     gtk_widget_set_halign(label, GTK_ALIGN_START);
     gtk_widget_set_margin_bottom(label, 3);
     gtk_box_pack_start(GTK_BOX(control_vbox), label, FALSE, FALSE, 0);
@@ -548,12 +549,12 @@ static GtkWidget* create_from_file_tab(PalettizeDialog* dialog) {
     button_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
     gtk_box_pack_start(GTK_BOX(control_vbox), button_hbox, FALSE, FALSE, 0);
 
-    GtkWidget* button = gtk_button_new_with_label("Select File...");
+    GtkWidget* button = gtk_button_new_with_label(_("Select File..."));
     gtk_box_pack_start(GTK_BOX(button_hbox), button, FALSE, FALSE, 0);
     dialog->palette_file_button = button;
     g_signal_connect(button, "clicked", G_CALLBACK(on_palette_file_clicked), dialog);
 
-    dialog->palette_file_label = gtk_label_new("No file selected");
+    dialog->palette_file_label = gtk_label_new(_("No file selected"));
     gtk_widget_set_halign(dialog->palette_file_label, GTK_ALIGN_START);
     gtk_box_pack_start(GTK_BOX(button_hbox), dialog->palette_file_label, TRUE, TRUE, 0);
 
@@ -562,24 +563,24 @@ static GtkWidget* create_from_file_tab(PalettizeDialog* dialog) {
     gtk_widget_set_margin_bottom(control_vbox, 10);
     gtk_box_pack_start(GTK_BOX(vbox), control_vbox, FALSE, FALSE, 0);
 
-    label = gtk_label_new("Dither Method");
+    label = gtk_label_new(_("Dither Method"));
     gtk_widget_set_halign(label, GTK_ALIGN_START);
     gtk_widget_set_margin_bottom(label, 3);
     gtk_box_pack_start(GTK_BOX(control_vbox), label, FALSE, FALSE, 0);
 
     combo = gtk_combo_box_text_new();
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), "None");
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), "Burkes");
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), "Floyd-Steinberg");
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), "Stucki");
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), "Atkinson");
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), "Sierra");
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), "Sierra Two Row");
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), "Sierra Lite");
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), "JJN");
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), "Single Neighbor");
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), "Bayer 4x4");
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), "Bayer 8x8");
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("None"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("Burkes"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("Floyd-Steinberg"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("Stucki"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("Atkinson"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("Sierra"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("Sierra Two Row"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("Sierra Lite"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("JJN"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("Single Neighbor"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("Bayer 4x4"));
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), _("Bayer 8x8"));
     gtk_combo_box_set_active(GTK_COMBO_BOX(combo), 0);
     gtk_box_pack_start(GTK_BOX(control_vbox), combo, FALSE, FALSE, 0);
     dialog->file_dither_method_combo = combo;
@@ -590,7 +591,7 @@ static GtkWidget* create_from_file_tab(PalettizeDialog* dialog) {
     gtk_widget_set_margin_bottom(control_vbox, 10);
     gtk_box_pack_start(GTK_BOX(vbox), control_vbox, FALSE, FALSE, 0);
 
-    label = gtk_label_new("Dither Amount");
+    label = gtk_label_new(_("Dither Amount"));
     gtk_widget_set_halign(label, GTK_ALIGN_START);
     gtk_widget_set_margin_bottom(label, 3);
     gtk_box_pack_start(GTK_BOX(control_vbox), label, FALSE, FALSE, 0);
@@ -713,11 +714,11 @@ PalettizeDialog* palettize_dialog_new(const gchar* title) {
 
     /* Create optimal tab */
     optimal_tab = create_optimal_tab(dialog);
-    gtk_notebook_append_page(GTK_NOTEBOOK(notebook), optimal_tab, gtk_label_new("Optimal"));
+    gtk_notebook_append_page(GTK_NOTEBOOK(notebook), optimal_tab, gtk_label_new(_("Optimal")));
 
     /* Create from file tab */
     from_file_tab = create_from_file_tab(dialog);
-    gtk_notebook_append_page(GTK_NOTEBOOK(notebook), from_file_tab, gtk_label_new("From File"));
+    gtk_notebook_append_page(GTK_NOTEBOOK(notebook), from_file_tab, gtk_label_new(_("From File")));
 
     /* Get button box from dialog (for OK/Cancel) */
 #ifdef __GNUC__

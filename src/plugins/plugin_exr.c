@@ -4,6 +4,7 @@
 #include "app/settings.h"
 #include "color_manager.h"
 #include "document.h"
+#include "i18n.h"
 #include "image_format_plugin.h"
 #include "plugins/plugin_host_api.h"
 #include "render/compositor.h"
@@ -949,7 +950,7 @@ static PluginError load_exr(ImageDocument* doc, const char* filename) {
     doc->layers = NULL;
 
     /* Always request ARGB32 so we can write 4 bytes per pixel (B,G,R,A); RGB24 would mismatch our write loop */
-    ImageLayer* base_layer = layer_new("Background", doc->width, doc->height, TRUE,
+    ImageLayer* base_layer = layer_new(_("Background"), doc->width, doc->height, TRUE,
                                        LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL, doc);
     if (!base_layer) {
         g_free(rgbe_data);

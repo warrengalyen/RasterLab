@@ -1,5 +1,6 @@
 #include "plugins/plugin_pcd.h"
 #include "document.h"
+#include "i18n.h"
 #include "image_format_plugin.h"
 #include "plugins/plugin_host_api.h"
 #include "render/compositor.h"
@@ -1329,7 +1330,7 @@ static PCDResolutionLevel show_resolution_dialog(GtkWindow* parent, bool* availa
     gtk_container_set_border_width(GTK_CONTAINER(vbox), 10);
     gtk_container_add(GTK_CONTAINER(content), vbox);
 
-    GtkWidget* label = gtk_label_new("Choose resolution to load:");
+    GtkWidget* label = gtk_label_new(_("Choose resolution to load:"));
     gtk_box_pack_start(GTK_BOX(vbox), label, FALSE, FALSE, 0);
 
     GSList* group = NULL;
@@ -1480,7 +1481,7 @@ static PluginError load_pcd(ImageDocument* doc, const char* filename) {
     doc->has_alpha = false;
 
     ImageLayer* layer =
-        layer_new("Background", final_width, final_height, TRUE,
+        layer_new(_("Background"), final_width, final_height, TRUE,
                   LAYER_BACKGROUND_TRANSPARENT,
                   LAYER_POSITION_ABOVE_CURRENT, NULL, doc);
     if (!layer) {

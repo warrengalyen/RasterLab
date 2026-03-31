@@ -2,6 +2,7 @@
 #include "ui/ui_utils.h"
 #include "ui/widgets/vertical_spin_button.h"
 #include <glib.h>
+#include "i18n.h"
 
 struct _RotateDialog {
     GtkWidget* dialog;
@@ -209,7 +210,7 @@ RotateDialog* rotate_dialog_new(const gchar* title) {
         gtk_widget_set_margin_bottom(control_vbox, 10);
         gtk_box_pack_start(GTK_BOX(right_vbox), control_vbox, FALSE, FALSE, 0);
 
-        GtkWidget* label = gtk_label_new("angle");
+        GtkWidget* label = gtk_label_new(_("angle"));
         gtk_widget_set_halign(label, GTK_ALIGN_START);
         gtk_widget_set_margin_bottom(label, 3);
         gtk_box_pack_start(GTK_BOX(control_vbox), label, FALSE, FALSE, 0);
@@ -256,7 +257,7 @@ RotateDialog* rotate_dialog_new(const gchar* title) {
         gtk_widget_set_margin_bottom(control_vbox, 10);
         gtk_box_pack_start(GTK_BOX(right_vbox), control_vbox, FALSE, FALSE, 0);
 
-        GtkWidget* label = gtk_label_new("size");
+        GtkWidget* label = gtk_label_new(_("size"));
         gtk_widget_set_halign(label, GTK_ALIGN_START);
         gtk_widget_set_margin_bottom(label, 3);
         gtk_box_pack_start(GTK_BOX(control_vbox), label, FALSE, FALSE, 0);
@@ -275,7 +276,7 @@ RotateDialog* rotate_dialog_new(const gchar* title) {
         gtk_widget_set_margin_bottom(control_vbox, 10);
         gtk_box_pack_start(GTK_BOX(right_vbox), control_vbox, FALSE, FALSE, 0);
 
-        GtkWidget* label = gtk_label_new("quality");
+        GtkWidget* label = gtk_label_new(_("quality"));
         gtk_widget_set_halign(label, GTK_ALIGN_START);
         gtk_widget_set_margin_bottom(label, 3);
         gtk_box_pack_start(GTK_BOX(control_vbox), label, FALSE, FALSE, 0);
@@ -297,7 +298,7 @@ RotateDialog* rotate_dialog_new(const gchar* title) {
         gtk_widget_set_margin_bottom(control_vbox, 10);
         gtk_box_pack_start(GTK_BOX(right_vbox), control_vbox, FALSE, FALSE, 0);
 
-        GtkWidget* label = gtk_label_new("border regions");
+        GtkWidget* label = gtk_label_new(_("border regions"));
         gtk_widget_set_halign(label, GTK_ALIGN_START);
         gtk_widget_set_margin_bottom(label, 3);
         gtk_box_pack_start(GTK_BOX(control_vbox), label, FALSE, FALSE, 0);

@@ -1,4 +1,5 @@
 #include "document.h"
+#include "i18n.h"
 #include "image_format_plugin.h"
 #include "plugins/plugin_host_api.h"
 #include "render/compositor.h"
@@ -216,7 +217,7 @@ static PluginError load_tga(ImageDocument* doc, const char* filename) {
     doc->layers = NULL;
 
     /* Create base layer */
-    base_layer = layer_new("Background", doc->width, doc->height, TRUE,
+    base_layer = layer_new(_("Background"), doc->width, doc->height, TRUE,
                            LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL, doc);
     if (!base_layer) {
         if (color_map) {

@@ -1,4 +1,5 @@
 #include "ui/tools_panel.h"
+#include "i18n.h"
 #include "tool_manager.h"
 #include "tool_options.h"
 #include "tools/tool_crop.h"
@@ -159,7 +160,7 @@ static void on_bg_color_clicked(GtkButton* button, gpointer user_data) {
     // Create and show color chooser dialog with real-time updates
     GtkWidget* dialog = color_chooser_dialog_new(
         g_main_window,
-        "Choose Background Color",
+        _("Choose Background Color"),
         &g_bg_color,
         on_bg_color_update,
         NULL,

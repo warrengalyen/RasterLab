@@ -5,6 +5,7 @@
 #include "ui/widgets/rgb_scale.h"
 #include "ui/widgets/vertical_spin_button.h"
 #include <math.h>
+#include "i18n.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -635,7 +636,7 @@ GtkWidget* color_chooser_dialog_new(GtkWindow* parent,
 
     // Hue scale (0-360)
     GtkWidget* hue_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-    GtkWidget* hue_label = gtk_label_new("Hue");
+    GtkWidget* hue_label = gtk_label_new(_("Hue"));
     gtk_widget_set_size_request(hue_label, 50, -1);
     gtk_label_set_xalign(GTK_LABEL(hue_label), 0.0);
     gtk_box_pack_start(GTK_BOX(hue_hbox), hue_label, FALSE, FALSE, 0);
@@ -658,7 +659,7 @@ GtkWidget* color_chooser_dialog_new(GtkWindow* parent,
 
     // Saturation scale (0-1)
     GtkWidget* saturation_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-    GtkWidget* saturation_label = gtk_label_new("Saturation");
+    GtkWidget* saturation_label = gtk_label_new(_("Saturation"));
     gtk_widget_set_size_request(saturation_label, 50, -1);
     gtk_label_set_xalign(GTK_LABEL(saturation_label), 0.0);
     gtk_box_pack_start(GTK_BOX(saturation_hbox), saturation_label, FALSE, FALSE, 0);
@@ -681,7 +682,7 @@ GtkWidget* color_chooser_dialog_new(GtkWindow* parent,
 
     // Value scale (0-1)
     GtkWidget* value_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-    GtkWidget* value_label = gtk_label_new("Value");
+    GtkWidget* value_label = gtk_label_new(_("Value"));
     gtk_widget_set_size_request(value_label, 50, -1);
     gtk_label_set_xalign(GTK_LABEL(value_label), 0.0);
     gtk_box_pack_start(GTK_BOX(value_hbox), value_label, FALSE, FALSE, 0);
@@ -708,7 +709,7 @@ GtkWidget* color_chooser_dialog_new(GtkWindow* parent,
 
     // Red scale
     GtkWidget* red_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-    GtkWidget* red_label = gtk_label_new("Red");
+    GtkWidget* red_label = gtk_label_new(_("Red"));
     gtk_widget_set_size_request(red_label, 50, -1);
     gtk_label_set_xalign(GTK_LABEL(red_label), 0.0);
     gtk_box_pack_start(GTK_BOX(red_hbox), red_label, FALSE, FALSE, 0);
@@ -731,7 +732,7 @@ GtkWidget* color_chooser_dialog_new(GtkWindow* parent,
 
     // Green scale
     GtkWidget* green_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-    GtkWidget* green_label = gtk_label_new("Green");
+    GtkWidget* green_label = gtk_label_new(_("Green"));
     gtk_widget_set_size_request(green_label, 50, -1);
     gtk_label_set_xalign(GTK_LABEL(green_label), 0.0);
     gtk_box_pack_start(GTK_BOX(green_hbox), green_label, FALSE, FALSE, 0);
@@ -754,7 +755,7 @@ GtkWidget* color_chooser_dialog_new(GtkWindow* parent,
 
     // Blue scale
     GtkWidget* blue_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-    GtkWidget* blue_label = gtk_label_new("Blue");
+    GtkWidget* blue_label = gtk_label_new(_("Blue"));
     gtk_widget_set_size_request(blue_label, 50, -1);
     gtk_label_set_xalign(GTK_LABEL(blue_label), 0.0);
     gtk_box_pack_start(GTK_BOX(blue_hbox), blue_label, FALSE, FALSE, 0);
@@ -779,7 +780,7 @@ GtkWidget* color_chooser_dialog_new(GtkWindow* parent,
     GtkWidget* html_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
     gtk_widget_set_hexpand(html_hbox, FALSE);
     gtk_widget_set_halign(html_hbox, GTK_ALIGN_START);
-    GtkWidget* html_label = gtk_label_new("HTML");
+    GtkWidget* html_label = gtk_label_new(_("HTML"));
     gtk_widget_set_size_request(html_label, 50, -1);
     gtk_label_set_xalign(GTK_LABEL(html_label), 0.0);
     gtk_widget_set_hexpand(html_label, FALSE);

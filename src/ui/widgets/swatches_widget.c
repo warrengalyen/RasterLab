@@ -4,6 +4,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#include "i18n.h"
 
 /* Default values */
 #define DEFAULT_MIN_SWATCH_SIZE 20.0
