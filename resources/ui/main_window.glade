@@ -1661,25 +1661,25 @@
     </columns>
     <data>
       <row>
-        <col id="0" translatable="no">%</col>
+        <col id="0">%</col>
       </row>
       <row>
-        <col id="0" translatable="no">px</col>
+        <col id="0">px</col>
       </row>
       <row>
-        <col id="0" translatable="no">in</col>
+        <col id="0">in</col>
       </row>
       <row>
-        <col id="0" translatable="no">cm</col>
+        <col id="0">cm</col>
       </row>
       <row>
-        <col id="0" translatable="no">mm</col>
+        <col id="0">mm</col>
       </row>
       <row>
-        <col id="0" translatable="no">pt</col>
+        <col id="0">pt</col>
       </row>
       <row>
-        <col id="0" translatable="no">pc</col>
+        <col id="0">pc</col>
       </row>
     </data>
   </object>
@@ -1701,11 +1701,40 @@
       </object>
     </child>
     <child>
+      <object class="GtkSeparatorMenuItem" id="tools_menu_separator1">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+      </object>
+    </child>
+    <child>
       <object class="GtkMenuItem" id="tools_menu_settings">
         <property name="visible">True</property>
         <property name="can-focus">False</property>
         <property name="label" translatable="yes">Settings...</property>
         <property name="use-underline">True</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="tools_menu_developer">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Developer</property>
+        <property name="use-underline">True</property>
+        <child type="submenu">
+          <object class="GtkMenu">
+            <property name="visible">True</property>
+            <property name="can-focus">False</property>
+            <child>
+              <object class="GtkCheckMenuItem" id="tools_menu_gpu_debug">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">Show GPU debug overlay</property>
+                <property name="use-underline">True</property>
+                <property name="active">False</property>
+              </object>
+            </child>
+          </object>
+        </child>
       </object>
     </child>
   </object>

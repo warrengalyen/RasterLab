@@ -3,6 +3,7 @@
  */
 #include "ui/ui_tools_menu.h"
 #include "app/settings.h"
+#include "document.h"
 #include "i18n.h"
 #include "ui.h"
 #include "ui/dialogs/settings_dialog.h"
@@ -16,6 +17,26 @@ static void on_tools_menu_settings_activate(GtkMenuItem* item, gpointer user_dat
     AppContext* ctx = (AppContext*)user_data;
     if (ctx) {
         settings_dialog_show(ctx);
+    }
+}
+
+static void on_tools_menu_gpu_debug_toggled(GtkCheckMenuItem* check_menu_item, gpointer user_data) {
+    AppContext* ctx = (AppContext*)user_data;
+
+    if (!ctx || !ctx->settings) {
+        return;
+    }
+
+    gboolean active = gtk_check_menu_item_get_active(check_menu_item);
+    settings_set_show_gpu_stats(ctx->settings, active);
+
+    if (ctx->documents) {
+        for (GList* iter = ctx->documents; iter; iter = iter->next) {
+            ImageDocument* doc = (ImageDocument*)iter->data;
+            if (doc && doc->viewport) {
+                gtk_widget_queue_draw(doc->viewport);
+            }
+        }
     }
 }
 
@@ -191,5 +212,14 @@ void ui_tools_menu_setup(GtkBuilder* builder, AppContext* ctx) {
     GtkWidget* tools_menu_settings = GTK_WIDGET(gtk_builder_get_object(builder, "tools_menu_settings"));
     if (tools_menu_settings) {
         g_signal_connect(tools_menu_settings, "activate", G_CALLBACK(on_tools_menu_settings_activate), ctx);
+    }
+
+    GtkWidget* tools_menu_gpu_debug = GTK_WIDGET(gtk_builder_get_object(builder, "tools_menu_gpu_debug"));
+    if (tools_menu_gpu_debug) {
+        g_signal_connect(tools_menu_gpu_debug, "toggled", G_CALLBACK(on_tools_menu_gpu_debug_toggled), ctx);
+        if (ctx->settings) {
+            gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(tools_menu_gpu_debug),
+                                           settings_get_show_gpu_stats(ctx->settings));
+        }
     }
 }
