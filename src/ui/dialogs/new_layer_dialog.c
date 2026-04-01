@@ -1,12 +1,11 @@
 #include "ui/dialogs/new_layer_dialog.h"
 #include "document.h"
+#include "i18n.h"
 #include "ui/dialogs/color_chooser_dialog.h"
 #include "ui/ui_utils.h"
 #include <glib.h>
 #include <gtk/gtk.h>
 #include <string.h>
-#include "i18n.h"
-
 
 /**
  * New layer dialog structure
@@ -58,7 +57,7 @@ static void on_custom_color_clicked(GtkButton* button, gpointer user_data) {
     /* Create and show color chooser dialog */
     GtkWidget* color_dialog = color_chooser_dialog_new(
         parent,
-        "Choose Background Color",
+        _("Choose Background Color"),
         &dialog->custom_color,
         on_custom_color_update,
         dialog,

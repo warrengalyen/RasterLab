@@ -1482,7 +1482,6 @@
         <property name="can-focus">False</property>
         <property name="label" translatable="yes">Show this layer</property>
         <property name="use-underline">True</property>
-        <property name="active">False</property>
       </object>
     </child>
     <child>
@@ -1662,25 +1661,25 @@
     </columns>
     <data>
       <row>
-        <col id="0" translatable="yes">%</col>
+        <col id="0" translatable="no">%</col>
       </row>
       <row>
-        <col id="0" translatable="yes">px</col>
+        <col id="0" translatable="no">px</col>
       </row>
       <row>
-        <col id="0" translatable="yes">in</col>
+        <col id="0" translatable="no">in</col>
       </row>
       <row>
-        <col id="0" translatable="yes">cm</col>
+        <col id="0" translatable="no">cm</col>
       </row>
       <row>
-        <col id="0" translatable="yes">mm</col>
+        <col id="0" translatable="no">mm</col>
       </row>
       <row>
-        <col id="0" translatable="yes">pt</col>
+        <col id="0" translatable="no">pt</col>
       </row>
       <row>
-        <col id="0" translatable="yes">pc</col>
+        <col id="0" translatable="no">pc</col>
       </row>
     </data>
   </object>
@@ -1696,6 +1695,7 @@
         <child type="submenu">
           <object class="GtkMenu" id="tools_menu_language_submenu">
             <property name="visible">True</property>
+            <property name="can-focus">False</property>
           </object>
         </child>
       </object>
@@ -2540,7 +2540,7 @@ Shortcut Key: T</property>
                             <property name="visible">True</property>
                             <property name="can-focus">True</property>
                             <property name="receives-default">True</property>
-                            <property name="tooltip-text">Background Color</property>
+                            <property name="tooltip-text" translatable="yes">Background Color</property>
                             <style>
                               <class name="color_button"/>
                             </style>
@@ -2557,7 +2557,7 @@ Shortcut Key: T</property>
                             <property name="visible">True</property>
                             <property name="can-focus">True</property>
                             <property name="receives-default">True</property>
-                            <property name="tooltip-text">Foreground Color</property>
+                            <property name="tooltip-text" translatable="yes">Foreground Color</property>
                             <style>
                               <class name="color_button"/>
                             </style>

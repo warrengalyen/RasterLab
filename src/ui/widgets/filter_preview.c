@@ -1,12 +1,12 @@
 #include "ui/widgets/filter_preview.h"
 #include "document.h"
+#include "i18n.h"
 #include "render/layer.h"
 #include "render/render_utils.h"
 #include "selection/selection_render.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
-#include "i18n.h"
 
 /**
  * Private structure for FilterPreview widget
@@ -1637,7 +1637,7 @@ static void filter_preview_init(FilterPreview* preview) {
                        0);
 
     /* Create before button (toggle button in view group) */
-    preview->before_button = gtk_toggle_button_new_with_label("before");
+    preview->before_button = gtk_toggle_button_new_with_label(_("before"));
     gtk_widget_set_margin_start(preview->before_button, 5);
     gtk_widget_set_margin_end(preview->before_button, 5);
     g_signal_connect(preview->before_button, "clicked",
@@ -1646,7 +1646,7 @@ static void filter_preview_init(FilterPreview* preview) {
                        0);
 
     /* Create after button (toggle button in view group) */
-    preview->after_button = gtk_toggle_button_new_with_label("after");
+    preview->after_button = gtk_toggle_button_new_with_label(_("after"));
     gtk_widget_set_margin_start(preview->after_button, 5);
     gtk_widget_set_margin_end(preview->after_button, 5);
     g_signal_connect(preview->after_button, "clicked",
@@ -1664,7 +1664,7 @@ static void filter_preview_init(FilterPreview* preview) {
                        FALSE, 0);
 
     /* Create fit button (toggle button in mode group) */
-    preview->fit_button = gtk_toggle_button_new_with_label("fit");
+    preview->fit_button = gtk_toggle_button_new_with_label(_("fit"));
     gtk_widget_set_margin_start(preview->fit_button, 5);
     gtk_widget_set_margin_end(preview->fit_button, 5);
     g_signal_connect(preview->fit_button, "clicked", G_CALLBACK(on_fit_clicked),

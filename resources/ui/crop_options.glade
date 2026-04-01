@@ -83,7 +83,7 @@
         <child>
           <object class="GtkLabel">
             <property name="can-focus">False</property>
-            <property name="label">mode</property>
+            <property name="label" translatable="yes">mode</property>
             <property name="xalign">0</property>
           </object>
           <packing>
@@ -115,7 +115,7 @@
               </object>
               <packing>
                 <property name="name">free</property>
-                <property name="title">Unconstrained</property>
+                <property name="title" translatable="yes">Unconstrained</property>
               </packing>
             </child>
             <child>
@@ -172,7 +172,7 @@
               </object>
               <packing>
                 <property name="name">ratio</property>
-                <property name="title">Ratio</property>
+                <property name="title" translatable="yes">Ratio</property>
                 <property name="position">1</property>
               </packing>
             </child>
@@ -240,7 +240,7 @@
               </object>
               <packing>
                 <property name="name">size</property>
-                <property name="title">Fixed Size</property>
+                <property name="title" translatable="yes">Fixed Size</property>
                 <property name="position">2</property>
               </packing>
             </child>
@@ -267,7 +267,7 @@
         <child>
           <object class="GtkLabel">
             <property name="can-focus">False</property>
-            <property name="label">guide overlay</property>
+            <property name="label" translatable="yes">guide overlay</property>
             <property name="xalign">0</property>
           </object>
           <packing>
@@ -308,7 +308,7 @@
         <property name="spacing">3</property>
         <child>
           <object class="GtkCheckButton" id="crop_delete_pixels_checkbox">
-            <property name="label">delete cropped pixels</property>
+            <property name="label" translatable="yes">delete cropped pixels</property>
             <property name="can-focus">True</property>
             <property name="receives-default">False</property>
             <property name="active">True</property>
@@ -322,7 +322,7 @@
         </child>
         <child>
           <object class="GtkCheckButton" id="crop_grow_canvas_checkbox">
-            <property name="label">grow canvas</property>
+            <property name="label" translatable="yes">grow canvas</property>
             <property name="can-focus">True</property>
             <property name="receives-default">False</property>
             <property name="draw-indicator">True</property>
@@ -335,7 +335,7 @@
         </child>
         <child>
           <object class="GtkCheckButton" id="crop_darken_checkbox">
-            <property name="label">highlight crop area</property>
+            <property name="label" translatable="yes">highlight crop area</property>
             <property name="can-focus">False</property>
             <property name="receives-default">False</property>
             <property name="active">True</property>

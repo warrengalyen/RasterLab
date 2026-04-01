@@ -1,3 +1,4 @@
+#include "i18n.h"
 #include "tools/tool_text.h"
 #include "commands/command_layer.h"
 #include "commands/command_text_layer.h"
@@ -279,9 +280,9 @@ static void text_tool_enter_editing(TextToolState* state, ImageDocument* doc) {
     if (state->is_editing)
         return;
 
-    state->is_editing     = TRUE;
+    state->is_editing = TRUE;
     state->cursor_visible = TRUE;
-    state->blink_doc      = doc;
+    state->blink_doc = doc;
 
     /* Place cursor at end of existing text */
     if (state->layer && state->layer->text_data) {
@@ -333,7 +334,7 @@ static void text_tool_exit_editing(TextToolState* state) {
             /* Text changed: push the TEXT_PROP_TEXT op and commit. */
             TextLayerPropValue before_val, after_val;
             before_val.string_val = state->pre_edit_text;
-            after_val.string_val  = (char *)current_text;
+            after_val.string_val = (char*)current_text;
             text_layer_push_property_change(doc, state->layer,
                                             TEXT_PROP_TEXT,
                                             &before_val, &after_val);
@@ -348,7 +349,7 @@ static void text_tool_exit_editing(TextToolState* state) {
     g_free(state->pre_edit_text);
     state->pre_edit_text = NULL;
 
-    state->is_editing     = FALSE;
+    state->is_editing = FALSE;
     state->cursor_visible = FALSE;
 
     if (state->cursor_blink_tag) {
@@ -432,21 +433,21 @@ static void text_tool_mouse_down(Tool* tool, struct ImageDocument* doc,
                 state->layer->layer_type == LAYER_TYPE_TEXT &&
                 state->layer->text_data) {
                 TextLayer* tl = (TextLayer*)state->layer->text_data;
-                state->has_pre_drag       = TRUE;
-                state->pre_drag_mode      = handle;
-                state->pre_drag_box_x     = tl->box_x;
-                state->pre_drag_box_y     = tl->box_y;
-                state->pre_drag_box_w     = tl->box_width;
-                state->pre_drag_box_h     = tl->box_height;
-                state->pre_drag_rotation  = tl->rotation;
+                state->has_pre_drag = TRUE;
+                state->pre_drag_mode = handle;
+                state->pre_drag_box_x = tl->box_x;
+                state->pre_drag_box_y = tl->box_y;
+                state->pre_drag_box_w = tl->box_width;
+                state->pre_drag_box_h = tl->box_height;
+                state->pre_drag_rotation = tl->rotation;
                 const char* tx_name = (handle >= 4) ? "Rotate Text"
-                                                     : "Resize Text Box";
+                                                    : "Resize Text Box";
                 undo_begin_transaction(doc, tx_name);
             }
-            state->drag_mode   = handle;
+            state->drag_mode = handle;
             state->is_dragging = TRUE;
-            state->start_x     = event->x;
-            state->start_y     = event->y;
+            state->start_x = event->x;
+            state->start_y = event->y;
             text_tool_queue_overlay(doc);
             return;
         }
@@ -501,19 +502,19 @@ static void text_tool_mouse_down(Tool* tool, struct ImageDocument* doc,
                     state->layer->layer_type == LAYER_TYPE_TEXT &&
                     state->layer->text_data) {
                     TextLayer* tl = (TextLayer*)state->layer->text_data;
-                    state->has_pre_drag      = TRUE;
-                    state->pre_drag_mode     = -1;
-                    state->pre_drag_box_x    = tl->box_x;
-                    state->pre_drag_box_y    = tl->box_y;
-                    state->pre_drag_box_w    = tl->box_width;
-                    state->pre_drag_box_h    = tl->box_height;
+                    state->has_pre_drag = TRUE;
+                    state->pre_drag_mode = -1;
+                    state->pre_drag_box_x = tl->box_x;
+                    state->pre_drag_box_y = tl->box_y;
+                    state->pre_drag_box_w = tl->box_width;
+                    state->pre_drag_box_h = tl->box_height;
                     state->pre_drag_rotation = tl->rotation;
                     undo_begin_transaction(doc, "Move Text");
                 }
-                state->drag_mode   = -1;
+                state->drag_mode = -1;
                 state->is_dragging = TRUE;
-                state->start_x     = event->x;
-                state->start_y     = event->y;
+                state->start_x = event->x;
+                state->start_y = event->y;
                 text_tool_queue_overlay(doc);
             }
             return;
@@ -555,18 +556,18 @@ static void text_tool_mouse_down(Tool* tool, struct ImageDocument* doc,
             } else {
                 /* Single-click: start move drag; capture before-state for undo */
                 TextLayer* tl_found = (TextLayer*)found->text_data;
-                state->has_pre_drag      = TRUE;
-                state->pre_drag_mode     = -1;
-                state->pre_drag_box_x    = tl_found->box_x;
-                state->pre_drag_box_y    = tl_found->box_y;
-                state->pre_drag_box_w    = tl_found->box_width;
-                state->pre_drag_box_h    = tl_found->box_height;
+                state->has_pre_drag = TRUE;
+                state->pre_drag_mode = -1;
+                state->pre_drag_box_x = tl_found->box_x;
+                state->pre_drag_box_y = tl_found->box_y;
+                state->pre_drag_box_w = tl_found->box_width;
+                state->pre_drag_box_h = tl_found->box_height;
                 state->pre_drag_rotation = tl_found->rotation;
                 undo_begin_transaction(doc, "Move Text");
-                state->drag_mode   = -1;
+                state->drag_mode = -1;
                 state->is_dragging = TRUE;
-                state->start_x     = event->x;
-                state->start_y     = event->y;
+                state->start_x = event->x;
+                state->start_y = event->y;
                 text_tool_queue_overlay(doc);
             }
             return;
@@ -807,7 +808,7 @@ static void text_tool_mouse_up(Tool* tool, struct ImageDocument* doc,
 
         /* Create the text layer on release */
         if (doc->width > 0 && doc->height > 0) {
-            ImageLayer* layer = layer_create_text("Text Layer",
+            ImageLayer* layer = layer_create_text(_("Text Layer"),
                                                   doc->width, doc->height, doc);
             if (layer) {
                 TextLayer* tl = (TextLayer*)layer->text_data;
@@ -866,7 +867,7 @@ static void text_tool_mouse_up(Tool* tool, struct ImageDocument* doc,
                 if (tl->rotation != state->pre_drag_rotation) {
                     TextLayerPropValue before_v, after_v;
                     before_v.double_val = state->pre_drag_rotation;
-                    after_v.double_val  = tl->rotation;
+                    after_v.double_val = tl->rotation;
                     text_layer_push_property_change(doc, state->layer,
                                                     TEXT_PROP_ROTATION,
                                                     &before_v, &after_v);
@@ -876,7 +877,7 @@ static void text_tool_mouse_up(Tool* tool, struct ImageDocument* doc,
                 /* Move or resize drag — compare box geometry */
                 if (tl->box_x != state->pre_drag_box_x ||
                     tl->box_y != state->pre_drag_box_y ||
-                    tl->box_width  != state->pre_drag_box_w ||
+                    tl->box_width != state->pre_drag_box_w ||
                     tl->box_height != state->pre_drag_box_h) {
 
                     TextLayerPropValue before_v, after_v;
@@ -884,10 +885,10 @@ static void text_tool_mouse_up(Tool* tool, struct ImageDocument* doc,
                     before_v.box.y = state->pre_drag_box_y;
                     before_v.box.w = state->pre_drag_box_w;
                     before_v.box.h = state->pre_drag_box_h;
-                    after_v.box.x  = tl->box_x;
-                    after_v.box.y  = tl->box_y;
-                    after_v.box.w  = tl->box_width;
-                    after_v.box.h  = tl->box_height;
+                    after_v.box.x = tl->box_x;
+                    after_v.box.y = tl->box_y;
+                    after_v.box.w = tl->box_width;
+                    after_v.box.h = tl->box_height;
                     text_layer_push_property_change(doc, state->layer,
                                                     TEXT_PROP_BOX_GEOMETRY,
                                                     &before_v, &after_v);
@@ -905,7 +906,7 @@ static void text_tool_mouse_up(Tool* tool, struct ImageDocument* doc,
         state->has_pre_drag = FALSE;
     }
 
-    state->drag_mode      = -1;
+    state->drag_mode = -1;
     state->hovered_handle = -2;
     text_tool_queue_full(doc);
 }
@@ -1096,7 +1097,7 @@ void tool_text_draw_preview(ImageDocument* doc, cairo_t* cr, gdouble zoom) {
             state->has_pre_drag = FALSE;
         }
         state->has_box = FALSE;
-        state->layer   = NULL;
+        state->layer = NULL;
     }
 
     /* Sync overlay box geometry from the layer whenever the tool is idle.
@@ -1364,11 +1365,11 @@ void tool_text_reset(Tool* tool) {
         state->pre_edit_text = NULL;
     }
 
-    state->has_box        = FALSE;
-    state->is_dragging    = FALSE;
-    state->drag_mode      = -2;
+    state->has_box = FALSE;
+    state->is_dragging = FALSE;
+    state->drag_mode = -2;
     state->hovered_handle = -2;
-    state->layer          = NULL;
+    state->layer = NULL;
 }
 
 gboolean tool_text_is_editing(Tool* tool) {

@@ -63,8 +63,7 @@
           <object class="GtkLabel" id="sample_radius_size_label">
             <property name="visible">True</property>
             <property name="can-focus">False</property>
-            <property name="tooltip-text">Sample radius in pixels</property>
-            <property name="label">sample radius</property>
+            <property name="label" translatable="yes">sample radius</property>
             <property name="xalign">0</property>
           </object>
           <packing>
@@ -119,8 +118,7 @@
           <object class="GtkLabel" id="sample_from_label">
             <property name="visible">True</property>
             <property name="can-focus">False</property>
-            <property name="tooltip-text">Sample from current layer or flattened image</property>
-            <property name="label">sample from</property>
+            <property name="label" translatable="yes">sample from</property>
             <property name="xalign">0</property>
           </object>
           <packing>

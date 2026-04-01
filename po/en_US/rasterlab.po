@@ -8,8 +8,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: \n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-03-31 14:33-0700\n"
-"PO-Revision-Date: 2026-03-31 18:09-0700\n"
+"POT-Creation-Date: 2026-04-01 09:56-0700\n"
+"PO-Revision-Date: 2026-04-01 09:57-0700\n"
 "Last-Translator: \n"
 "Language-Team: \n"
 "Language: en\n"
@@ -39,7 +39,7 @@ msgstr ""
 msgid " (with alpha)"
 msgstr ""
 
-#: src/i18n.c:232 src/ui/ui_tools_menu.c:140
+#: src/i18n.c:321
 msgid "System default"
 msgstr ""
 
@@ -131,6 +131,10 @@ msgstr ""
 #: src/render/layer.c:50 src/ui/layers_panel.c:560
 #, c-format
 msgid "%s (%d)"
+msgstr ""
+
+#: src/tools/tool_text.c:810
+msgid "Text Layer"
 msgstr ""
 
 #: src/ui/dialogs/beeps_dialog.c:230
@@ -243,7 +247,8 @@ msgstr ""
 msgid "highlight color"
 msgstr ""
 
-#: src/ui/dialogs/clouds_dialog.c:532
+#: src/ui/dialogs/clouds_dialog.c:532 resources/ui/brush_options.glade:136
+#: resources/ui/eraser_options.glade:136 resources/ui/pencil_options.glade:116
 msgid "opacity"
 msgstr ""
 
@@ -271,11 +276,13 @@ msgstr ""
 msgid "preserve luminosity"
 msgstr ""
 
-#: src/ui/dialogs/color_chooser_dialog.c:639
+#: src/ui/dialogs/color_chooser_dialog.c:639 src/ui/dialogs/fill_dialog.c:16
+#: src/ui/layers_panel.c:1183
 msgid "Hue"
 msgstr ""
 
-#: src/ui/dialogs/color_chooser_dialog.c:662
+#: src/ui/dialogs/color_chooser_dialog.c:662 src/ui/dialogs/fill_dialog.c:16
+#: src/ui/layers_panel.c:1184
 msgid "Saturation"
 msgstr ""
 
@@ -340,6 +347,127 @@ msgstr ""
 msgid "options"
 msgstr ""
 
+#: src/ui/dialogs/fill_dialog.c:12 src/ui/layers_panel.c:1154
+msgid "Normal"
+msgstr ""
+
+#: src/ui/dialogs/fill_dialog.c:12 src/ui/layers_panel.c:1155
+msgid "Dissolve"
+msgstr ""
+
+#: src/ui/dialogs/fill_dialog.c:12 src/ui/layers_panel.c:1157
+msgid "Darken"
+msgstr ""
+
+#: src/ui/dialogs/fill_dialog.c:12 src/ui/layers_panel.c:1158
+msgid "Multiply"
+msgstr ""
+
+#: src/ui/dialogs/fill_dialog.c:12 src/ui/layers_panel.c:1159
+msgid "Color Burn"
+msgstr ""
+
+#: src/ui/dialogs/fill_dialog.c:12 src/ui/layers_panel.c:1160
+msgid "Linear Burn"
+msgstr ""
+
+#: src/ui/dialogs/fill_dialog.c:12 src/ui/layers_panel.c:1161
+msgid "Darker Color"
+msgstr ""
+
+#: src/ui/dialogs/fill_dialog.c:13 src/ui/layers_panel.c:1163
+msgid "Lighten"
+msgstr ""
+
+#: src/ui/dialogs/fill_dialog.c:13 src/ui/layers_panel.c:1164
+msgid "Screen"
+msgstr ""
+
+#: src/ui/dialogs/fill_dialog.c:13 src/ui/layers_panel.c:1165
+msgid "Color Dodge"
+msgstr ""
+
+#: src/ui/dialogs/fill_dialog.c:13 src/ui/layers_panel.c:1166
+msgid "Linear Dodge"
+msgstr ""
+
+#: src/ui/dialogs/fill_dialog.c:13 src/ui/layers_panel.c:1167
+msgid "Lighter Color"
+msgstr ""
+
+#: src/ui/dialogs/fill_dialog.c:14 src/ui/layers_panel.c:1169
+msgid "Overlay"
+msgstr ""
+
+#: src/ui/dialogs/fill_dialog.c:14 src/ui/layers_panel.c:1170
+msgid "Soft Light"
+msgstr ""
+
+#: src/ui/dialogs/fill_dialog.c:14 src/ui/layers_panel.c:1171
+msgid "Hard Light"
+msgstr ""
+
+#: src/ui/dialogs/fill_dialog.c:14 src/ui/layers_panel.c:1172
+msgid "Vivid Light"
+msgstr ""
+
+#: src/ui/dialogs/fill_dialog.c:14 src/ui/layers_panel.c:1173
+msgid "Linear Light"
+msgstr ""
+
+#: src/ui/dialogs/fill_dialog.c:14 src/ui/layers_panel.c:1174
+msgid "Pin Light"
+msgstr ""
+
+#: src/ui/dialogs/fill_dialog.c:14 src/ui/layers_panel.c:1175
+msgid "Hard Mix"
+msgstr ""
+
+#: src/ui/dialogs/fill_dialog.c:15 src/ui/layers_panel.c:1177
+msgid "Difference"
+msgstr ""
+
+#: src/ui/dialogs/fill_dialog.c:15 src/ui/layers_panel.c:1178
+msgid "Exclusion"
+msgstr ""
+
+#: src/ui/dialogs/fill_dialog.c:15 src/ui/layers_panel.c:1180
+msgid "Subtract"
+msgstr ""
+
+#: src/ui/dialogs/fill_dialog.c:15 src/ui/layers_panel.c:1181
+msgid "Divide"
+msgstr ""
+
+#: src/ui/dialogs/fill_dialog.c:16 src/ui/layers_panel.c:1185
+#: src/ui/ui_filter_adjust.c:1584 resources/ui/main_window.glade:58
+msgid "Color"
+msgstr ""
+
+#: src/ui/dialogs/fill_dialog.c:16 src/ui/layers_panel.c:1186
+msgid "Luminosity"
+msgstr ""
+
+#: src/ui/dialogs/fill_dialog.c:53
+msgid "Choose Fill Color"
+msgstr ""
+
+#: src/ui/dialogs/formats/png_options_dialog.c:127
+#: src/ui/dialogs/formats/tiff_options_dialog.c:104
+msgid "Choose Transparent Color"
+msgstr ""
+
+#: src/ui/dialogs/formats/png_options_dialog.c:163
+#: src/ui/dialogs/formats/tiff_options_dialog.c:128
+msgid "Choose Compositing Color"
+msgstr ""
+
+#: src/ui/dialogs/formats/png_options_dialog.c:199
+#: src/ui/dialogs/new_image_dialog.c:342 src/ui/dialogs/new_layer_dialog.c:60
+#: src/ui/tools_panel.c:163
+msgid "Choose Background Color"
+msgstr ""
+
 #: src/ui/dialogs/gamma_dialog.c:389
 msgid "new gamma curve:"
 msgstr ""
@@ -349,32 +477,26 @@ msgid "keep all colors in sync"
 msgstr ""
 
 #: src/ui/dialogs/new_image_dialog.c:852 src/ui/dialogs/new_image_dialog.c:866
-#: resources/ui/main_window.glade:1668
 msgid "px"
 msgstr ""
 
 #: src/ui/dialogs/new_image_dialog.c:854 src/ui/dialogs/new_image_dialog.c:868
-#: resources/ui/main_window.glade:1671
 msgid "in"
 msgstr ""
 
 #: src/ui/dialogs/new_image_dialog.c:856 src/ui/dialogs/new_image_dialog.c:870
-#: resources/ui/main_window.glade:1674
 msgid "cm"
 msgstr ""
 
 #: src/ui/dialogs/new_image_dialog.c:858 src/ui/dialogs/new_image_dialog.c:872
-#: resources/ui/main_window.glade:1677
 msgid "mm"
 msgstr ""
 
 #: src/ui/dialogs/new_image_dialog.c:860 src/ui/dialogs/new_image_dialog.c:874
-#: resources/ui/main_window.glade:1680
 msgid "pt"
 msgstr ""
 
 #: src/ui/dialogs/new_image_dialog.c:862 src/ui/dialogs/new_image_dialog.c:876
-#: resources/ui/main_window.glade:1683
 msgid "pc"
 msgstr ""
 
@@ -386,24 +508,28 @@ msgstr ""
 msgid "PPCM"
 msgstr ""
 
-#: src/ui/dialogs/new_layer_dialog.c:209
+#: src/ui/dialogs/new_image_dialog.c:954
+msgid "New Image"
+msgstr ""
+
+#: src/ui/dialogs/new_layer_dialog.c:208
 #, c-format
 msgid "Layer %d"
 msgstr ""
 
-#: src/ui/dialogs/new_layer_dialog.c:218
+#: src/ui/dialogs/new_layer_dialog.c:217
 msgid "Above current layer"
 msgstr ""
 
-#: src/ui/dialogs/new_layer_dialog.c:221
+#: src/ui/dialogs/new_layer_dialog.c:220
 msgid "Below current layer"
 msgstr ""
 
-#: src/ui/dialogs/new_layer_dialog.c:224
+#: src/ui/dialogs/new_layer_dialog.c:223
 msgid "Top of layer stack"
 msgstr ""
 
-#: src/ui/dialogs/new_layer_dialog.c:227
+#: src/ui/dialogs/new_layer_dialog.c:226
 msgid "Bottom of layer stack"
 msgstr ""
 
@@ -431,7 +557,7 @@ msgstr ""
 #: src/ui/tool_options_panel.c:2895 src/ui/tool_options_panel.c:2988
 #: src/ui/tool_options_panel.c:3064 src/ui/tool_options_panel.c:3130
 #: src/ui/tool_options_panel.c:3196 resources/ui/crop_options.glade:283
-#: resources/ui/main_window.glade:1595
+#: resources/ui/main_window.glade:1594
 msgid "None"
 msgstr ""
 
@@ -548,7 +674,8 @@ msgstr ""
 msgid "angle"
 msgstr ""
 
-#: src/ui/dialogs/rotate_dialog.c:260
+#: src/ui/dialogs/rotate_dialog.c:260 resources/ui/brush_options.glade:82
+#: resources/ui/eraser_options.glade:82 resources/ui/pencil_options.glade:62
 msgid "size"
 msgstr ""
 
@@ -578,6 +705,34 @@ msgstr ""
 
 #: src/ui/dialogs/settings_dialog.c:496
 msgid "ICC profile (.icc, .icm)"
+msgstr ""
+
+#: src/ui/dialogs/settings_dialog.c:573
+msgid "Canvas Background Color"
+msgstr ""
+
+#: src/ui/dialogs/settings_dialog.c:713
+msgid "Small"
+msgstr ""
+
+#: src/ui/dialogs/settings_dialog.c:713
+msgid "Medium"
+msgstr ""
+
+#: src/ui/dialogs/settings_dialog.c:713
+msgid "Large"
+msgstr ""
+
+#: src/ui/dialogs/settings_dialog.c:735
+msgid "Highlights"
+msgstr ""
+
+#: src/ui/dialogs/settings_dialog.c:735
+msgid "Midtones"
+msgstr ""
+
+#: src/ui/dialogs/settings_dialog.c:735
+msgid "Shadows"
 msgstr ""
 
 #: src/ui/swatches_panel.c:160
@@ -659,8 +814,12 @@ msgstr ""
 msgid "RasterLab Swatches"
 msgstr ""
 
-#: src/ui/tools_panel.c:163
-msgid "Choose Background Color"
+#: src/ui/tools_panel.c:105
+msgid "Choose Foreground Color"
+msgstr ""
+
+#: src/ui/tool_options_panel.c:2214
+msgid "Choose Text Color"
 msgstr ""
 
 #: src/ui/tool_options_panel.c:2896 src/ui/tool_options_panel.c:2989
@@ -684,7 +843,7 @@ msgid "Exterior"
 msgstr ""
 
 #: src/ui/tool_options_panel.c:3079 src/ui/tool_options_panel.c:3143
-#: resources/ui/main_window.glade:1637
+#: resources/ui/main_window.glade:1636
 msgid "Border"
 msgstr ""
 
@@ -1115,12 +1274,8 @@ msgid "Dehaze"
 msgstr ""
 
 #: src/ui/ui_filter_adjust.c:1538 resources/ui/main_window.glade:315
-#: resources/ui/main_window.glade:1604
+#: resources/ui/main_window.glade:1603
 msgid "Invert"
-msgstr ""
-
-#: src/ui/ui_filter_adjust.c:1584 resources/ui/main_window.glade:58
-msgid "Color"
 msgstr ""
 
 #: src/ui/ui_filter_adjust.c:1600 src/ui/ui_filter_adjust.c:1611
@@ -1243,6 +1398,8 @@ msgid "Ripple"
 msgstr ""
 
 #: src/ui/ui_filter_effects.c:411 src/ui/ui_filter_effects.c:445
+#: resources/ui/crop_options.glade:86
+#: resources/ui/magic_wand_select_options.glade:425
 msgid "mode"
 msgstr ""
 
@@ -1364,7 +1521,7 @@ msgid "Zoom Blur"
 msgstr ""
 
 #: src/ui/ui_filter_effects.c:1262 src/ui/ui_filter_effects.c:1269
-#: resources/ui/main_window.glade:928 resources/ui/main_window.glade:1653
+#: resources/ui/main_window.glade:928 resources/ui/main_window.glade:1652
 msgid "Sharpen"
 msgstr ""
 
@@ -1540,12 +1697,17 @@ msgid "Color Halftone"
 msgstr ""
 
 #: src/ui/ui_filter_effects.c:2452 resources/ui/fill_dialog.glade:134
+#: resources/ui/main_window.glade:2543
 msgid "Background Color"
 msgstr ""
 
 #: src/ui/ui_filter_effects.c:2457 src/ui/ui_filter_effects.c:2468
 #: resources/ui/main_window.glade:894
 msgid "Pointillize"
+msgstr ""
+
+#: src/ui/ui_filter_effects.c:2872
+msgid "Custom filter"
 msgstr ""
 
 #: src/ui/ui_image_menu.c:623
@@ -1573,12 +1735,12 @@ msgid "_New Layer"
 msgstr ""
 
 #: src/ui/ui_layer_menu.c:58 resources/ui/main_window.glade:1274
-#: resources/ui/main_window.glade:1514
+#: resources/ui/main_window.glade:1513
 msgid "_Duplicate Layer"
 msgstr ""
 
 #: src/ui/ui_layer_menu.c:67 resources/ui/main_window.glade:1266
-#: resources/ui/main_window.glade:1522
+#: resources/ui/main_window.glade:1521
 msgid "_Delete Layer"
 msgstr ""
 
@@ -1611,7 +1773,7 @@ msgstr ""
 msgid "Sharpen Selection"
 msgstr ""
 
-#: src/ui/ui_tools_menu.c:57
+#: src/ui/ui_tools_menu.c:55
 msgid "Restart the application for all interface text to use the new language."
 msgstr ""
 
@@ -1623,8 +1785,32 @@ msgstr ""
 msgid "▼"
 msgstr ""
 
+#: src/ui/widgets/filter_preview.c:1640
+msgid "before"
+msgstr ""
+
+#: src/ui/widgets/filter_preview.c:1649
+msgid "after"
+msgstr ""
+
+#: src/ui/widgets/filter_preview.c:1667
+msgid "fit"
+msgstr ""
+
 #: src/ui/widgets/vertical_spin_button.c:292
 msgid "▲"
+msgstr ""
+
+#: src/ui/workspace.c:62
+msgid "Overview"
+msgstr ""
+
+#: src/ui/workspace.c:65
+msgid "Swatches"
+msgstr ""
+
+#: src/ui/workspace.c:67
+msgid "Layers"
 msgstr ""
 
 #: src/ui.c:996
@@ -1795,6 +1981,19 @@ msgstr ""
 msgid "unique colors"
 msgstr ""
 
+#: resources/ui/brush_options.glade:191 resources/ui/eraser_options.glade:191
+msgid "hardness"
+msgstr ""
+
+#: resources/ui/brush_options.glade:246 resources/ui/eraser_options.glade:246
+msgid "flow"
+msgstr ""
+
+#: resources/ui/brush_options.glade:302 resources/ui/eraser_options.glade:302
+#: resources/ui/text_options.glade:376
+msgid "spacing"
+msgstr ""
+
 #: resources/ui/canvas_size_dialog.glade:8
 msgid "Canvas Size"
 msgstr ""
@@ -1843,12 +2042,36 @@ msgstr ""
 msgid "anchor position"
 msgstr ""
 
-#: resources/ui/color_picker_options.glade:141
+#: resources/ui/color_picker_options.glade:66
+msgid "sample radius"
+msgstr ""
+
+#: resources/ui/color_picker_options.glade:121
+msgid "sample from"
+msgstr ""
+
+#: resources/ui/color_picker_options.glade:139
 msgid "layer"
 msgstr ""
 
-#: resources/ui/color_picker_options.glade:155
+#: resources/ui/color_picker_options.glade:153
 msgid "image"
+msgstr ""
+
+#: resources/ui/crop_options.glade:118
+msgid "Unconstrained"
+msgstr ""
+
+#: resources/ui/crop_options.glade:175
+msgid "Ratio"
+msgstr ""
+
+#: resources/ui/crop_options.glade:243
+msgid "Fixed Size"
+msgstr ""
+
+#: resources/ui/crop_options.glade:270
+msgid "guide overlay"
 msgstr ""
 
 #: resources/ui/crop_options.glade:284
@@ -1867,11 +2090,99 @@ msgstr ""
 msgid "Center Lines"
 msgstr ""
 
+#: resources/ui/crop_options.glade:311
+msgid "delete cropped pixels"
+msgstr ""
+
+#: resources/ui/crop_options.glade:325
+msgid "grow canvas"
+msgstr ""
+
+#: resources/ui/crop_options.glade:338
+msgid "highlight crop area"
+msgstr ""
+
+#: resources/ui/elliptical_select_options.glade:68
+#: resources/ui/lasso_select_options.glade:79
+#: resources/ui/magic_wand_select_options.glade:80
+#: resources/ui/polygon_select_options.glade:79
+#: resources/ui/rect_select_options.glade:66
+msgid "animate"
+msgstr ""
+
+#: resources/ui/elliptical_select_options.glade:94
+#: resources/ui/lasso_select_options.glade:105
+#: resources/ui/magic_wand_select_options.glade:106
+#: resources/ui/polygon_select_options.glade:105
+#: resources/ui/rect_select_options.glade:92
+msgid "combine mode"
+msgstr ""
+
+#: resources/ui/elliptical_select_options.glade:112
+#: resources/ui/lasso_select_options.glade:123
+#: resources/ui/magic_wand_select_options.glade:124
+#: resources/ui/polygon_select_options.glade:123
+#: resources/ui/rect_select_options.glade:110
+msgid "New selection"
+msgstr ""
+
+#: resources/ui/elliptical_select_options.glade:133
+#: resources/ui/lasso_select_options.glade:144
+#: resources/ui/magic_wand_select_options.glade:145
+#: resources/ui/polygon_select_options.glade:144
+#: resources/ui/rect_select_options.glade:131
+msgid ""
+"Add to selection\n"
+"Shortcut key: Shift"
+msgstr ""
+
+#: resources/ui/elliptical_select_options.glade:154
+#: resources/ui/lasso_select_options.glade:165
+#: resources/ui/magic_wand_select_options.glade:166
+#: resources/ui/polygon_select_options.glade:165
+#: resources/ui/rect_select_options.glade:152
+msgid ""
+"Subtract from selection\n"
+"Shortcut key: Alt"
+msgstr ""
+
+#: resources/ui/elliptical_select_options.glade:175
+#: resources/ui/lasso_select_options.glade:186
+#: resources/ui/magic_wand_select_options.glade:187
+#: resources/ui/polygon_select_options.glade:186
+#: resources/ui/rect_select_options.glade:173
+msgid ""
+"Intersect with selection\n"
+"Shortcut key: Shift+Alt"
+msgstr ""
+
+#: resources/ui/elliptical_select_options.glade:216
+#: resources/ui/lasso_select_options.glade:227
+#: resources/ui/magic_wand_select_options.glade:228
+#: resources/ui/polygon_select_options.glade:227
+#: resources/ui/rect_select_options.glade:214
+msgid "smoothing mode"
+msgstr ""
+
+#: resources/ui/elliptical_select_options.glade:228
+#: resources/ui/lasso_select_options.glade:239
+#: resources/ui/magic_wand_select_options.glade:240
+msgid "Selection edge smoothing mode"
+msgstr ""
+
+#: resources/ui/elliptical_select_options.glade:255
+#: resources/ui/lasso_select_options.glade:267
+#: resources/ui/magic_wand_select_options.glade:268
+#: resources/ui/polygon_select_options.glade:266
+#: resources/ui/rect_select_options.glade:252
+msgid "feather radius"
+msgstr ""
+
 #: resources/ui/fill_dialog.glade:89
 msgid "Custom Color"
 msgstr ""
 
-#: resources/ui/fill_dialog.glade:119
+#: resources/ui/fill_dialog.glade:119 resources/ui/main_window.glade:2560
 msgid "Foreground Color"
 msgstr ""
 
@@ -2064,8 +2375,25 @@ msgstr ""
 msgid "embed thumbnail image"
 msgstr ""
 
-#: resources/ui/lasso_select_options.glade:384
-#: resources/ui/polygon_select_options.glade:443
+#: resources/ui/lasso_select_options.glade:322
+#: resources/ui/polygon_select_options.glade:377
+msgid "area"
+msgstr ""
+
+#: resources/ui/lasso_select_options.glade:334
+#: resources/ui/polygon_select_options.glade:389
+msgid ""
+"Selections normal select the area inside their boundaries.\n"
+"Modify the behavior of area that is selected."
+msgstr ""
+
+#: resources/ui/lasso_select_options.glade:362
+#: resources/ui/polygon_select_options.glade:417
+msgid "border width"
+msgstr ""
+
+#: resources/ui/lasso_select_options.glade:382
+#: resources/ui/polygon_select_options.glade:437
 msgid "Adjust the width of the selection border"
 msgstr ""
 
@@ -2097,45 +2425,65 @@ msgstr ""
 msgid "<b>Duplicate layer</b>"
 msgstr ""
 
-#: resources/ui/magic_wand_select_options.glade:345
+#: resources/ui/magic_wand_select_options.glade:323
+#: resources/ui/paintbucket_options.glade:43
+msgid "tolerance"
+msgstr ""
+
+#: resources/ui/magic_wand_select_options.glade:343
 msgid "Color matching tolerance (0=exact match, 100=all colors)"
 msgstr ""
 
-#: resources/ui/magic_wand_select_options.glade:395
-#: resources/ui/paintbucket_options.glade:113
+#: resources/ui/magic_wand_select_options.glade:379
+#: resources/ui/paintbucket_options.glade:97
+msgid "compare pixels by"
+msgstr ""
+
+#: resources/ui/magic_wand_select_options.glade:392
+#: resources/ui/paintbucket_options.glade:111
 #: resources/ui/png_options_dialog.glade:15
 #: resources/ui/tiff_options_dialog.glade:15
 msgid "color"
 msgstr ""
 
-#: resources/ui/magic_wand_select_options.glade:396
-#: resources/ui/paintbucket_options.glade:114
+#: resources/ui/magic_wand_select_options.glade:393
+#: resources/ui/paintbucket_options.glade:112
 msgid "color and opacity"
 msgstr ""
 
-#: resources/ui/magic_wand_select_options.glade:397
-#: resources/ui/paintbucket_options.glade:115
+#: resources/ui/magic_wand_select_options.glade:394
+#: resources/ui/paintbucket_options.glade:113
 msgid "luminance"
 msgstr ""
 
-#: resources/ui/magic_wand_select_options.glade:398
-#: resources/ui/paintbucket_options.glade:116
+#: resources/ui/magic_wand_select_options.glade:395
+#: resources/ui/paintbucket_options.glade:114
 msgid "red only"
 msgstr ""
 
-#: resources/ui/magic_wand_select_options.glade:399
-#: resources/ui/paintbucket_options.glade:117
+#: resources/ui/magic_wand_select_options.glade:396
+#: resources/ui/paintbucket_options.glade:115
 msgid "green only"
 msgstr ""
 
-#: resources/ui/magic_wand_select_options.glade:400
-#: resources/ui/paintbucket_options.glade:118
+#: resources/ui/magic_wand_select_options.glade:397
+#: resources/ui/paintbucket_options.glade:116
 msgid "blue only"
 msgstr ""
 
-#: resources/ui/magic_wand_select_options.glade:401
-#: resources/ui/paintbucket_options.glade:119
+#: resources/ui/magic_wand_select_options.glade:398
+#: resources/ui/paintbucket_options.glade:117
 msgid "alpha only"
+msgstr ""
+
+#: resources/ui/magic_wand_select_options.glade:440
+#: resources/ui/paintbucket_options.glade:159
+msgid "Contiguous"
+msgstr ""
+
+#: resources/ui/magic_wand_select_options.glade:455
+#: resources/ui/paintbucket_options.glade:174
+msgid "Global"
 msgstr ""
 
 #: resources/ui/main_window.glade:20
@@ -2382,7 +2730,7 @@ msgstr ""
 msgid "Transpose"
 msgstr ""
 
-#: resources/ui/main_window.glade:1237 resources/ui/main_window.glade:1566
+#: resources/ui/main_window.glade:1237 resources/ui/main_window.glade:1565
 msgid "Merge visible layers"
 msgstr ""
 
@@ -2390,15 +2738,15 @@ msgstr ""
 msgid "Flatten image..."
 msgstr ""
 
-#: resources/ui/main_window.glade:1288 resources/ui/main_window.glade:1536
+#: resources/ui/main_window.glade:1288 resources/ui/main_window.glade:1535
 msgid "Rasterize Text Layer"
 msgstr ""
 
-#: resources/ui/main_window.glade:1302 resources/ui/main_window.glade:1550
+#: resources/ui/main_window.glade:1302 resources/ui/main_window.glade:1549
 msgid "Merge up"
 msgstr ""
 
-#: resources/ui/main_window.glade:1310 resources/ui/main_window.glade:1558
+#: resources/ui/main_window.glade:1310 resources/ui/main_window.glade:1557
 msgid "Merge down"
 msgstr ""
 
@@ -2446,11 +2794,11 @@ msgstr ""
 msgid "Show this layer"
 msgstr ""
 
-#: resources/ui/main_window.glade:1437 resources/ui/main_window.glade:1492
+#: resources/ui/main_window.glade:1437 resources/ui/main_window.glade:1491
 msgid "Show only this layer"
 msgstr ""
 
-#: resources/ui/main_window.glade:1445 resources/ui/main_window.glade:1500
+#: resources/ui/main_window.glade:1445 resources/ui/main_window.glade:1499
 msgid "Hide only this layer"
 msgstr ""
 
@@ -2462,31 +2810,27 @@ msgstr ""
 msgid "Hide all layers"
 msgstr ""
 
-#: resources/ui/main_window.glade:1574
+#: resources/ui/main_window.glade:1573
 msgid "Flatten image"
 msgstr ""
 
-#: resources/ui/main_window.glade:1586
+#: resources/ui/main_window.glade:1585
 msgid "All"
 msgstr ""
 
-#: resources/ui/main_window.glade:1619
+#: resources/ui/main_window.glade:1618
 msgid "Grow"
 msgstr ""
 
-#: resources/ui/main_window.glade:1628
+#: resources/ui/main_window.glade:1627
 msgid "Shrink"
 msgstr ""
 
-#: resources/ui/main_window.glade:1645
+#: resources/ui/main_window.glade:1644
 msgid "Feather"
 msgstr ""
 
-#: resources/ui/main_window.glade:1665
-msgid "%"
-msgstr ""
-
-#: resources/ui/main_window.glade:1694
+#: resources/ui/main_window.glade:1693
 msgid "Language"
 msgstr ""
 
@@ -2700,6 +3044,10 @@ msgstr ""
 msgid "auto select layer"
 msgstr ""
 
+#: resources/ui/move_options.glade:51
+msgid "Automatically select layer under cursor based on pixel visibility"
+msgstr ""
+
 #: resources/ui/new_image_dialog.glade:8
 msgid "New image"
 msgstr ""
@@ -2733,6 +3081,10 @@ msgstr ""
 msgid "Add New Layer"
 msgstr ""
 
+#: resources/ui/new_layer_dialog.glade:88
+msgid "name"
+msgstr ""
+
 #: resources/ui/new_layer_dialog.glade:231
 msgid "position"
 msgstr ""
@@ -2741,11 +3093,16 @@ msgstr ""
 msgid "make the new layer the active"
 msgstr ""
 
-#: resources/ui/pencil_options.glade:170 resources/ui/text_options.glade:481
+#: resources/ui/paintbucket_options.glade:144
+msgid "fill area"
+msgstr ""
+
+#: resources/ui/paintbucket_options.glade:223
+#: resources/ui/pencil_options.glade:168 resources/ui/text_options.glade:481
 msgid "antialiased"
 msgstr ""
 
-#: resources/ui/pencil_options.glade:184
+#: resources/ui/pencil_options.glade:182
 msgid "align to pixel grid"
 msgstr ""
 
@@ -2857,7 +3214,11 @@ msgstr ""
 msgid "compositing color"
 msgstr ""
 
-#: resources/ui/polygon_select_options.glade:346
+#: resources/ui/polygon_select_options.glade:321
+msgid "curvature"
+msgstr ""
+
+#: resources/ui/polygon_select_options.glade:341
 msgid "Adjust the curvature of a polygon selection's sides"
 msgstr ""
 
@@ -3002,6 +3363,66 @@ msgstr ""
 
 #: resources/ui/settings_dialog.glade:1025
 msgid "Advanced"
+msgstr ""
+
+#: resources/ui/text_options.glade:69
+msgid "font"
+msgstr ""
+
+#: resources/ui/text_options.glade:89
+msgid "Font family"
+msgstr ""
+
+#: resources/ui/text_options.glade:134
+msgid "style"
+msgstr ""
+
+#: resources/ui/text_options.glade:156
+msgid "Bold"
+msgstr ""
+
+#: resources/ui/text_options.glade:182
+msgid "Italic"
+msgstr ""
+
+#: resources/ui/text_options.glade:208
+msgid "Text color"
+msgstr ""
+
+#: resources/ui/text_options.glade:256
+msgid "align"
+msgstr ""
+
+#: resources/ui/text_options.glade:278
+msgid "Align left"
+msgstr ""
+
+#: resources/ui/text_options.glade:296
+msgid "Align center"
+msgstr ""
+
+#: resources/ui/text_options.glade:313
+msgid "Align right"
+msgstr ""
+
+#: resources/ui/text_options.glade:330
+msgid "Justify"
+msgstr ""
+
+#: resources/ui/text_options.glade:404
+msgid "line"
+msgstr ""
+
+#: resources/ui/text_options.glade:432
+msgid "letter"
+msgstr ""
+
+#: resources/ui/text_options.glade:485
+msgid "Enable antialiasing for smoother text edges"
+msgstr ""
+
+#: resources/ui/text_options.glade:507
+msgid "rotation"
 msgstr ""
 
 #: resources/ui/tiff_options_dialog.glade:78

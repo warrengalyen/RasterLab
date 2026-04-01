@@ -51,7 +51,6 @@
             <property name="visible">True</property>
             <property name="can-focus">True</property>
             <property name="receives-default">False</property>
-            <property name="tooltip-text">Enable animated marching ants for selection outline</property>
             <property name="active">True</property>
             <property name="draw-indicator">True</property>
           </object>
@@ -65,9 +64,8 @@
           <object class="GtkLabel" id="elliptical_select_animate_label">
             <property name="visible">True</property>
             <property name="can-focus">False</property>
-            <property name="tooltip-text">Enable animated marching ants for selection outline</property>
             <property name="halign">start</property>
-            <property name="label">animate</property>
+            <property name="label" translatable="yes">animate</property>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -93,7 +91,7 @@
             <property name="visible">True</property>
             <property name="can-focus">False</property>
             <property name="halign">start</property>
-            <property name="label">combine mode</property>
+            <property name="label" translatable="yes">combine mode</property>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -111,7 +109,7 @@
                 <property name="visible">True</property>
                 <property name="can-focus">True</property>
                 <property name="receives-default">False</property>
-                <property name="tooltip-text">New selection</property>
+                <property name="tooltip-text" translatable="yes">New selection</property>
                 <property name="active">True</property>
                 <child>
                   <object class="GtkImage" id="elliptical_select_combine_new_image">
@@ -132,7 +130,8 @@
                 <property name="visible">True</property>
                 <property name="can-focus">True</property>
                 <property name="receives-default">False</property>
-                <property name="tooltip-text">Add to selection\nShortcut key: Shift</property>
+                <property name="tooltip-text" translatable="yes">Add to selection
+Shortcut key: Shift</property>
                 <child>
                   <object class="GtkImage" id="elliptical_select_combine_add_image">
                     <property name="visible">True</property>
@@ -152,7 +151,8 @@
                 <property name="visible">True</property>
                 <property name="can-focus">True</property>
                 <property name="receives-default">False</property>
-                <property name="tooltip-text">Subtract from selection\nShortcut key: Alt</property>
+                <property name="tooltip-text" translatable="yes">Subtract from selection
+Shortcut key: Alt</property>
                 <child>
                   <object class="GtkImage" id="elliptical_select_combine_subtract_image">
                     <property name="visible">True</property>
@@ -172,7 +172,8 @@
                 <property name="visible">True</property>
                 <property name="can-focus">True</property>
                 <property name="receives-default">False</property>
-                <property name="tooltip-text">Intersect with selection\nShortcut key: Shift+Alt</property>
+                <property name="tooltip-text" translatable="yes">Intersect with selection
+Shortcut key: Shift+Alt</property>
                 <child>
                   <object class="GtkImage" id="elliptical_select_combine_intersect_image">
                     <property name="visible">True</property>
@@ -211,9 +212,8 @@
           <object class="GtkLabel" id="elliptical_select_smooth_label">
             <property name="visible">True</property>
             <property name="can-focus">False</property>
-            <property name="tooltip-text">Selection edge smoothing mode</property>
             <property name="halign">start</property>
-            <property name="label">smoothing mode</property>
+            <property name="label" translatable="yes">smoothing mode</property>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -225,7 +225,7 @@
           <object class="GtkComboBoxText" id="elliptical_select_smooth_combo">
             <property name="visible">True</property>
             <property name="can-focus">False</property>
-            <property name="tooltip-text">Selection edge smoothing mode</property>
+            <property name="tooltip-text" translatable="yes">Selection edge smoothing mode</property>
             <property name="active">1</property>
           </object>
           <packing>
@@ -251,9 +251,8 @@
           <object class="GtkLabel" id="elliptical_select_feather_label">
             <property name="visible">True</property>
             <property name="can-focus">False</property>
-            <property name="tooltip-text">Feather radius for feathered selection edges</property>
             <property name="halign">start</property>
-            <property name="label">feather radius</property>
+            <property name="label" translatable="yes">feather radius</property>
           </object>
           <packing>
             <property name="expand">False</property>

@@ -1,11 +1,11 @@
 #include "ui/dialogs/formats/tiff_options_dialog.h"
 #include "document.h"
+#include "i18n.h"
 #include "ui/dialogs/color_chooser_dialog.h"
 #include "ui/ui_utils.h"
 #include <glib.h>
 #include <gtk/gtk.h>
 #include <string.h>
-#include "i18n.h"
 
 #ifdef HAVE_LIBTIFF
 
@@ -101,7 +101,7 @@ static void on_tiff_transparent_color_clicked(GtkButton* button, gpointer user_d
     GtkWindow* parent = GTK_WINDOW(gtk_widget_get_toplevel(GTK_WIDGET(button)));
     GtkWidget* color_dialog = color_chooser_dialog_new(
         parent,
-        "Choose Transparent Color",
+        _("Choose Transparent Color"),
         data->color,
         on_tiff_transparent_color_update,
         data,
@@ -125,7 +125,7 @@ static void on_tiff_compositing_color_clicked(GtkButton* button, gpointer user_d
     GtkWindow* parent = GTK_WINDOW(gtk_widget_get_toplevel(GTK_WIDGET(button)));
     GtkWidget* color_dialog = color_chooser_dialog_new(
         parent,
-        "Choose Compositing Color",
+        _("Choose Compositing Color"),
         data->color,
         on_tiff_compositing_color_update,
         data,

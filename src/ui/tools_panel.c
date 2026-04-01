@@ -102,7 +102,7 @@ static void on_fg_color_clicked(GtkButton* button, gpointer user_data) {
     // Create and show color chooser dialog with real-time updates
     GtkWidget* dialog = color_chooser_dialog_new(
         g_main_window,
-        "Choose Foreground Color",
+        _("Choose Foreground Color"),
         &g_fg_color,
         on_fg_color_update,
         NULL,
@@ -592,7 +592,7 @@ gboolean tools_panel_on_window_key_press(GtkWidget* widget, GdkEventKey* event, 
         if (tool_text_is_editing(at)) {
             GdkModifierType mods = event->state & gtk_accelerator_get_default_mod_mask();
             gboolean has_ctrl = (mods & GDK_CONTROL_MASK) != 0;
-            gboolean has_alt  = (mods & GDK_MOD1_MASK)    != 0;
+            gboolean has_alt = (mods & GDK_MOD1_MASK) != 0;
 
             if (!has_ctrl && !has_alt) {
                 /* Forward to the text tool and consume the event so the
@@ -686,30 +686,30 @@ gboolean tools_panel_on_window_key_press(GtkWidget* widget, GdkEventKey* event, 
                         return FALSE; /* Let the widget handle Enter */
                     }
                 }
-        Tool* active_tool = tool_manager_get_active(ctx->tool_registry);
-        gint x, y, w, h;
-        if (active_tool && active_tool->type == TOOL_CROP &&
-            tool_crop_get_rect(active_tool, &x, &y, &w, &h)) {
-            if (crop_apply_if_active(ctx)) {
-                return TRUE;
-            }
-        }
+                Tool* active_tool = tool_manager_get_active(ctx->tool_registry);
+                gint x, y, w, h;
+                if (active_tool && active_tool->type == TOOL_CROP &&
+                    tool_crop_get_rect(active_tool, &x, &y, &w, &h)) {
+                    if (crop_apply_if_active(ctx)) {
+                        return TRUE;
+                    }
+                }
 
-        /* Enter finalizes the magic wand selection regardless of keyboard focus */
-        if (active_tool && active_tool->type == TOOL_MAGIC_WAND &&
-            active_tool->user_data && ctx->tool_registry->current_doc) {
-            MagicWandSelectToolState* mw_state =
-                (MagicWandSelectToolState*)active_tool->user_data;
-            if (mw_state->has_start_point && mw_state->preview_mask &&
-                !mw_state->has_been_finalized) {
-                ImageDocument* wand_doc = ctx->tool_registry->current_doc;
-                tool_magic_wand_select_finalize(active_tool, wand_doc);
-                gtk_widget_queue_draw(wand_doc->drawing_area);
-                return TRUE;
+                /* Enter finalizes the magic wand selection regardless of keyboard focus */
+                if (active_tool && active_tool->type == TOOL_MAGIC_WAND &&
+                    active_tool->user_data && ctx->tool_registry->current_doc) {
+                    MagicWandSelectToolState* mw_state =
+                        (MagicWandSelectToolState*)active_tool->user_data;
+                    if (mw_state->has_start_point && mw_state->preview_mask &&
+                        !mw_state->has_been_finalized) {
+                        ImageDocument* wand_doc = ctx->tool_registry->current_doc;
+                        tool_magic_wand_select_finalize(active_tool, wand_doc);
+                        gtk_widget_queue_draw(wand_doc->drawing_area);
+                        return TRUE;
+                    }
+                }
             }
-        }
-    }
-    return FALSE;
+            return FALSE;
         default:
             return FALSE; /* Not a tool hotkey */
     }

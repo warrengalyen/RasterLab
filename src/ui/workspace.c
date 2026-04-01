@@ -1,3 +1,4 @@
+#include "i18n.h"
 #include "ui/workspace.h"
 #include "ui/layers_panel.h"
 #include "ui/overview_panel.h"
@@ -59,12 +60,12 @@ Workspace* workspace_create(AppContext* ctx) {
 
     /* Add overview section first, then swatches section, then layers section */
     if (workspace->overview_widget) {
-        accordion_add_section(workspace->accordion, "Overview", workspace->overview_widget);
+        accordion_add_section(workspace->accordion, _("Overview"), workspace->overview_widget);
     }
     if (workspace->swatches_panel) {
-        accordion_add_section(workspace->accordion, "Swatches", workspace->swatches_panel);
+        accordion_add_section(workspace->accordion, _("Swatches"), workspace->swatches_panel);
     }
-    accordion_add_section(workspace->accordion, "Layers", layers_panel_widget);
+    accordion_add_section(workspace->accordion, _("Layers"), layers_panel_widget);
 
     /* Make accordion expand to fill available vertical space */
     GtkWidget* panel = accordion_get_widget(workspace->accordion);

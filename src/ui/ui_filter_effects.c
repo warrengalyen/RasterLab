@@ -1,8 +1,8 @@
 #include "ui/ui_filter_effects.h"
-#include "i18n.h"
 #include "command.h"
 #include "document.h"
 #include "filters.h"
+#include "i18n.h"
 #include "render/layer.h"
 #include "selection.h"
 #include "ui.h"
@@ -2869,7 +2869,7 @@ static void on_effects_custom(GtkWidget* widget, gpointer data) {
     }
 
     /* Create convolution dialog */
-    dialog = convolution_dialog_new("Custom filter");
+    dialog = convolution_dialog_new(_("Custom filter"));
     if (!dialog) {
         g_warning("Failed to create convolution dialog");
         return;

@@ -1,19 +1,19 @@
 #include "ui/dialogs/fill_dialog.h"
+#include "i18n.h"
 #include "ui.h"
 #include "ui/dialogs/color_chooser_dialog.h"
 #include "ui/tools_panel.h"
 #include "ui/ui_utils.h"
 #include <glib.h>
 #include <gtk/gtk.h>
-#include "i18n.h"
 
 /* Blend mode names matching BlendMode enum (document.h) */
 static const char* const blend_mode_names[] = {
-    "Normal", "Dissolve", "Darken", "Multiply", "Color Burn", "Linear Burn", "Darker Color",
-    "Lighten", "Screen", "Color Dodge", "Linear Dodge", "Lighter Color",
-    "Overlay", "Soft Light", "Hard Light", "Vivid Light", "Linear Light", "Pin Light", "Hard Mix",
-    "Difference", "Exclusion", "Subtract", "Divide",
-    "Hue", "Saturation", "Color", "Luminosity"};
+    N_("Normal"), N_("Dissolve"), N_("Darken"), N_("Multiply"), N_("Color Burn"), N_("Linear Burn"), N_("Darker Color"),
+    N_("Lighten"), N_("Screen"), N_("Color Dodge"), N_("Linear Dodge"), N_("Lighter Color"),
+    N_("Overlay"), N_("Soft Light"), N_("Hard Light"), N_("Vivid Light"), N_("Linear Light"), N_("Pin Light"), N_("Hard Mix"),
+    N_("Difference"), N_("Exclusion"), N_("Subtract"), N_("Divide"),
+    N_("Hue"), N_("Saturation"), N_("Color"), N_("Luminosity")};
 
 typedef struct {
     GtkWidget* dialog;
@@ -50,7 +50,7 @@ static void on_custom_color_clicked(GtkButton* button, gpointer user_data) {
 
     GtkWidget* color_dialog = color_chooser_dialog_new(
         parent,
-        "Choose Fill Color",
+        _("Choose Fill Color"),
         &data->custom_color,
         on_custom_color_update,
         data,
@@ -141,7 +141,7 @@ gboolean fill_dialog_run(GtkWindow* parent, FillDialogResult* result) {
     GtkTreeIter iter;
     for (int i = 0; i < BLEND_MODE_COUNT; i++) {
         gtk_list_store_append(blend_store, &iter);
-        gtk_list_store_set(blend_store, &iter, 0, blend_mode_names[i], -1);
+        gtk_list_store_set(blend_store, &iter, 0, _(blend_mode_names[i]), -1);
     }
     gtk_combo_box_set_model(GTK_COMBO_BOX(data.blend_mode_combo), GTK_TREE_MODEL(blend_store));
     g_object_unref(blend_store);

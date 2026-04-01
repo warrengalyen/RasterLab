@@ -58,9 +58,8 @@
           <object class="GtkLabel" id="pencil_size_label">
             <property name="visible">True</property>
             <property name="can-focus">False</property>
-            <property name="tooltip-text">Pencil size in pixels</property>
             <property name="halign">start</property>
-            <property name="label">size</property>
+            <property name="label" translatable="yes">size</property>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -113,9 +112,8 @@
           <object class="GtkLabel" id="pencil_opacity_label">
             <property name="visible">True</property>
             <property name="can-focus">False</property>
-            <property name="tooltip-text">Tool opacity (0-100%)</property>
             <property name="halign">start</property>
-            <property name="label">opacity</property>
+            <property name="label" translatable="yes">opacity</property>
           </object>
           <packing>
             <property name="expand">False</property>

@@ -44,7 +44,6 @@ typedef enum {
 } CmsProfileValidationResult;
 static CmsProfileValidationResult cms_icc_path_validate(const gchar* path);
 
-
 /* Set a notebook tab to show icon (from resource) before the existing label. */
 static void set_tab_icon_label(GtkNotebook* notebook, GtkWidget* page_child, GtkWidget* tab_label,
                                const gchar* icon_resource) {
@@ -229,8 +228,8 @@ static gboolean settings_dialog_apply_and_save(GtkDialog* dialog, AppContext* ct
             if (r != CMS_PROFILE_VALID) {
                 GtkWidget* parent = gtk_widget_get_toplevel(GTK_WIDGET(dialog));
                 const gchar* msg = (r == CMS_PROFILE_INVALID_NON_RGB)
-                    ? "The color profile is not an RGB profile.\nDisplay profiles must be RGB (e.g. sRGB, Adobe RGB)."
-                    : "The color profile path is invalid or the file is not a valid ICC/ICM profile.\nPlease choose a valid profile or clear the field.";
+                                       ? "The color profile is not an RGB profile.\nDisplay profiles must be RGB (e.g. sRGB, Adobe RGB)."
+                                       : "The color profile path is invalid or the file is not a valid ICC/ICM profile.\nPlease choose a valid profile or clear the field.";
                 GtkWidget* err_dlg = gtk_message_dialog_new(GTK_WINDOW(parent),
                                                             GTK_DIALOG_MODAL,
                                                             GTK_MESSAGE_ERROR,
@@ -407,7 +406,8 @@ static CmsProfileValidationResult cms_icc_path_validate(const gchar* path) {
     {
         const gchar* ext = strrchr(path, '.');
         return (ext && (g_ascii_strcasecmp(ext, ".icc") == 0 || g_ascii_strcasecmp(ext, ".icm") == 0))
-            ? CMS_PROFILE_VALID : CMS_PROFILE_INVALID_FILE;
+                   ? CMS_PROFILE_VALID
+                   : CMS_PROFILE_INVALID_FILE;
     }
 #endif
 }
@@ -570,7 +570,7 @@ static void on_canvas_bgcolor_clicked(GtkButton* button, gpointer user_data) {
 
     GtkWidget* color_dialog = color_chooser_dialog_new(
         GTK_WINDOW(settings_dialog),
-        "Canvas Background Color",
+        _("Canvas Background Color"),
         &initial,
         NULL,
         NULL,
@@ -710,7 +710,7 @@ void settings_dialog_show(AppContext* ctx) {
     GtkWidget* grid_size_combo = GTK_WIDGET(gtk_builder_get_object(builder, "transparency_grid_size_combo"));
     if (grid_size_combo) {
         GtkListStore* store = gtk_list_store_new(1, G_TYPE_STRING);
-        const gchar* size_labels[] = {"Small", "Medium", "Large", NULL};
+        const gchar* size_labels[] = {_("Small"), _("Medium"), _("Large"), NULL};
         for (int i = 0; size_labels[i] != NULL; i++) {
             GtkTreeIter iter;
             gtk_list_store_append(store, &iter);
@@ -732,7 +732,7 @@ void settings_dialog_show(AppContext* ctx) {
     GtkWidget* grid_colors_combo = GTK_WIDGET(gtk_builder_get_object(builder, "transparency_grid_colors_combo"));
     if (grid_colors_combo) {
         GtkListStore* store = gtk_list_store_new(1, G_TYPE_STRING);
-        const gchar* color_labels[] = {"Highlights", "Midtones", "Shadows", NULL};
+        const gchar* color_labels[] = {_("Highlights"), _("Midtones"), _("Shadows"), NULL};
         for (int i = 0; color_labels[i] != NULL; i++) {
             GtkTreeIter iter;
             gtk_list_store_append(store, &iter);
@@ -898,10 +898,10 @@ void settings_dialog_show(AppContext* ctx) {
                 const gchar* model = gdk_monitor_get_model(mon);
                 gchar* base_name = (model && model[0] != '\0') ? g_strdup(model) : g_strdup_printf("Monitor %d", i + 1);
                 gchar* label = g_strdup_printf("%s%s (%d x %d)",
-                    (primary && mon == primary) ? "Primary display: " : "",
-                    base_name,
-                    geom.width,
-                    geom.height);
+                                               (primary && mon == primary) ? "Primary display: " : "",
+                                               base_name,
+                                               geom.width,
+                                               geom.height);
                 g_free(base_name);
                 GtkTreeIter iter;
                 gtk_list_store_append(store, &iter);
@@ -946,9 +946,9 @@ void settings_dialog_show(AppContext* ctx) {
         GtkRadioButton* cms_none_radio = GTK_RADIO_BUTTON(gtk_builder_get_object(builder, "cms_mode_none_radio"));
         if (cms_system_radio && cms_custom_radio && cms_none_radio) {
             gint mode = settings_get_cm_mode(ctx->settings);
-            GtkToggleButton* active_radio = (mode == 2) ? GTK_TOGGLE_BUTTON(cms_none_radio)
-                                    : (mode == 1) ? GTK_TOGGLE_BUTTON(cms_custom_radio)
-                                    : GTK_TOGGLE_BUTTON(cms_system_radio);
+            GtkToggleButton* active_radio = (mode == 2)   ? GTK_TOGGLE_BUTTON(cms_none_radio)
+                                            : (mode == 1) ? GTK_TOGGLE_BUTTON(cms_custom_radio)
+                                                          : GTK_TOGGLE_BUTTON(cms_system_radio);
             gtk_toggle_button_set_active(active_radio, TRUE);
         }
         if (cms_custom_box && cms_custom_radio) {

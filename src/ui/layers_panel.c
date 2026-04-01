@@ -1,8 +1,8 @@
 #include "ui/layers_panel.h"
-#include "i18n.h"
 #include "app/settings.h"
 #include "commands/command_layer.h"
 #include "document.h"
+#include "i18n.h"
 #include "io/image_io.h"
 #include "ocular.h"
 #include "render/compositor.h"
@@ -1151,39 +1151,39 @@ LayersPanel* create_layers_panel(AppContext* ctx) {
          * Order matches BlendMode enum in document.h */
         const char* blend_modes[] = {
             /* Normal modes */
-            "Normal",   /* 0  - BLEND_MODE_NORMAL */
-            "Dissolve", /* 1  - BLEND_MODE_DISSOLVE */
+            _("Normal"),   /* 0  - BLEND_MODE_NORMAL */
+            _("Dissolve"), /* 1  - BLEND_MODE_DISSOLVE */
             /* Darken modes */
-            "Darken",       /* 2  - BLEND_MODE_DARKEN */
-            "Multiply",     /* 3  - BLEND_MODE_MULTIPLY */
-            "Color Burn",   /* 4  - BLEND_MODE_COLOR_BURN */
-            "Linear Burn",  /* 5  - BLEND_MODE_LINEAR_BURN */
-            "Darker Color", /* 6  - BLEND_MODE_DARKER_COLOR */
+            _("Darken"),       /* 2  - BLEND_MODE_DARKEN */
+            _("Multiply"),     /* 3  - BLEND_MODE_MULTIPLY */
+            _("Color Burn"),   /* 4  - BLEND_MODE_COLOR_BURN */
+            _("Linear Burn"),  /* 5  - BLEND_MODE_LINEAR_BURN */
+            _("Darker Color"), /* 6  - BLEND_MODE_DARKER_COLOR */
             /* Lighten modes */
-            "Lighten",       /* 7  - BLEND_MODE_LIGHTEN */
-            "Screen",        /* 8  - BLEND_MODE_SCREEN */
-            "Color Dodge",   /* 9  - BLEND_MODE_COLOR_DODGE */
-            "Linear Dodge",  /* 10 - BLEND_MODE_LINEAR_DODGE (Add) */
-            "Lighter Color", /* 11 - BLEND_MODE_LIGHTER_COLOR */
+            _("Lighten"),       /* 7  - BLEND_MODE_LIGHTEN */
+            _("Screen"),        /* 8  - BLEND_MODE_SCREEN */
+            _("Color Dodge"),   /* 9  - BLEND_MODE_COLOR_DODGE */
+            _("Linear Dodge"),  /* 10 - BLEND_MODE_LINEAR_DODGE (Add) */
+            _("Lighter Color"), /* 11 - BLEND_MODE_LIGHTER_COLOR */
             /* Contrast modes */
-            "Overlay",      /* 12 - BLEND_MODE_OVERLAY */
-            "Soft Light",   /* 13 - BLEND_MODE_SOFT_LIGHT */
-            "Hard Light",   /* 14 - BLEND_MODE_HARD_LIGHT */
-            "Vivid Light",  /* 15 - BLEND_MODE_VIVID_LIGHT */
-            "Linear Light", /* 16 - BLEND_MODE_LINEAR_LIGHT */
-            "Pin Light",    /* 17 - BLEND_MODE_PIN_LIGHT */
-            "Hard Mix",     /* 18 - BLEND_MODE_HARD_MIX */
+            _("Overlay"),      /* 12 - BLEND_MODE_OVERLAY */
+            _("Soft Light"),   /* 13 - BLEND_MODE_SOFT_LIGHT */
+            _("Hard Light"),   /* 14 - BLEND_MODE_HARD_LIGHT */
+            _("Vivid Light"),  /* 15 - BLEND_MODE_VIVID_LIGHT */
+            _("Linear Light"), /* 16 - BLEND_MODE_LINEAR_LIGHT */
+            _("Pin Light"),    /* 17 - BLEND_MODE_PIN_LIGHT */
+            _("Hard Mix"),     /* 18 - BLEND_MODE_HARD_MIX */
             /* Inversion modes */
-            "Difference", /* 19 - BLEND_MODE_DIFFERENCE */
-            "Exclusion",  /* 20 - BLEND_MODE_EXCLUSION */
+            _("Difference"), /* 19 - BLEND_MODE_DIFFERENCE */
+            _("Exclusion"),  /* 20 - BLEND_MODE_EXCLUSION */
             /* Cancellation modes */
-            "Subtract", /* 21 - BLEND_MODE_SUBTRACT */
-            "Divide",   /* 22 - BLEND_MODE_DIVIDE */
+            _("Subtract"), /* 21 - BLEND_MODE_SUBTRACT */
+            _("Divide"),   /* 22 - BLEND_MODE_DIVIDE */
             /* Component (HSL) modes */
-            "Hue",        /* 23 - BLEND_MODE_HUE */
-            "Saturation", /* 24 - BLEND_MODE_SATURATION */
-            "Color",      /* 25 - BLEND_MODE_COLOR */
-            "Luminosity"  /* 26 - BLEND_MODE_LUMINOSITY */
+            _("Hue"),        /* 23 - BLEND_MODE_HUE */
+            _("Saturation"), /* 24 - BLEND_MODE_SATURATION */
+            _("Color"),      /* 25 - BLEND_MODE_COLOR */
+            _("Luminosity")  /* 26 - BLEND_MODE_LUMINOSITY */
         };
 
         for (int i = 0; i < BLEND_MODE_COUNT; i++) {

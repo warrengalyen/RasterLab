@@ -39,9 +39,8 @@
           <object class="GtkLabel" id="paintbucket_tolerance_label">
             <property name="visible">True</property>
             <property name="can-focus">False</property>
-            <property name="tooltip-text">Color matching tolerance (0=exact match, 100=all colors)</property>
             <property name="halign">start</property>
-            <property name="label">tolerance</property>
+            <property name="label" translatable="yes">tolerance</property>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -94,9 +93,8 @@
           <object class="GtkLabel" id="paintbucket_compare_label">
             <property name="visible">True</property>
             <property name="can-focus">False</property>
-            <property name="tooltip-text">Color matching tolerance (0=exact match, 100=all colors)</property>
             <property name="halign">start</property>
-            <property name="label">compare pixels by</property>
+            <property name="label" translatable="yes">compare pixels by</property>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -142,9 +140,8 @@
           <object class="GtkLabel" id="paintbucket_fill_area_label">
             <property name="visible">True</property>
             <property name="can-focus">False</property>
-            <property name="tooltip-text">Fill area: Contiguous fills connected area, Global fills all matching pixels</property>
             <property name="halign">start</property>
-            <property name="label">fill area</property>
+            <property name="label" translatable="yes">fill area</property>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -159,7 +156,7 @@
             <property name="spacing">10</property>
             <child>
               <object class="GtkRadioButton" id="paintbucket_contiguous_radio">
-                <property name="label">Contiguous</property>
+                <property name="label" translatable="yes">Contiguous</property>
                 <property name="visible">True</property>
                 <property name="can-focus">True</property>
                 <property name="receives-default">False</property>
@@ -174,7 +171,7 @@
             </child>
             <child>
               <object class="GtkRadioButton" id="paintbucket_global_radio">
-                <property name="label">Global</property>
+                <property name="label" translatable="yes">Global</property>
                 <property name="visible">True</property>
                 <property name="can-focus">True</property>
                 <property name="receives-default">False</property>
@@ -210,7 +207,6 @@
             <property name="visible">True</property>
             <property name="can-focus">True</property>
             <property name="receives-default">False</property>
-            <property name="tooltip-text">Enable antialiasing for smooth fill edges</property>
             <property name="draw-indicator">True</property>
           </object>
           <packing>
@@ -223,9 +219,8 @@
           <object class="GtkLabel" id="paintbucket_antialiased_label">
             <property name="visible">True</property>
             <property name="can-focus">False</property>
-            <property name="tooltip-text">Enable antialiasing for smooth fill edges</property>
             <property name="halign">start</property>
-            <property name="label">antialiased</property>
+            <property name="label" translatable="yes">antialiased</property>
           </object>
           <packing>
             <property name="expand">False</property>

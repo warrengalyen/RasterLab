@@ -10,11 +10,9 @@
     <property name="page-increment">10</property>
   </object>
   <object class="GtkAdjustment" id="polygon_select_curvature_adjustment">
-    <property name="lower">0</property>
     <property name="upper">1</property>
-    <property name="value">0</property>
     <property name="step-increment">0.01</property>
-    <property name="page-increment">0.1</property>
+    <property name="page-increment">0.10</property>
   </object>
   <object class="GtkAdjustment" id="polygon_select_feather_adjustment">
     <property name="upper">200</property>
@@ -64,7 +62,6 @@
             <property name="visible">True</property>
             <property name="can-focus">True</property>
             <property name="receives-default">False</property>
-            <property name="tooltip-text">Enable animated marching ants for selection outline</property>
             <property name="active">True</property>
             <property name="draw-indicator">True</property>
           </object>
@@ -78,9 +75,8 @@
           <object class="GtkLabel" id="polygon_select_animate_label">
             <property name="visible">True</property>
             <property name="can-focus">False</property>
-            <property name="tooltip-text">Enable animated marching ants for selection outline</property>
             <property name="halign">start</property>
-            <property name="label">animate</property>
+            <property name="label" translatable="yes">animate</property>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -106,7 +102,7 @@
             <property name="visible">True</property>
             <property name="can-focus">False</property>
             <property name="halign">start</property>
-            <property name="label">combine mode</property>
+            <property name="label" translatable="yes">combine mode</property>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -124,7 +120,7 @@
                 <property name="visible">True</property>
                 <property name="can-focus">True</property>
                 <property name="receives-default">False</property>
-                <property name="tooltip-text">New selection</property>
+                <property name="tooltip-text" translatable="yes">New selection</property>
                 <property name="active">True</property>
                 <child>
                   <object class="GtkImage" id="polygon_select_combine_new_image">
@@ -145,7 +141,8 @@
                 <property name="visible">True</property>
                 <property name="can-focus">True</property>
                 <property name="receives-default">False</property>
-                <property name="tooltip-text">Add to selection\nShortcut key: Shift</property>
+                <property name="tooltip-text" translatable="yes">Add to selection
+Shortcut key: Shift</property>
                 <child>
                   <object class="GtkImage" id="polygon_select_combine_add_image">
                     <property name="visible">True</property>
@@ -165,7 +162,8 @@
                 <property name="visible">True</property>
                 <property name="can-focus">True</property>
                 <property name="receives-default">False</property>
-                <property name="tooltip-text">Subtract from selection\nShortcut key: Alt</property>
+                <property name="tooltip-text" translatable="yes">Subtract from selection
+Shortcut key: Alt</property>
                 <child>
                   <object class="GtkImage" id="polygon_select_combine_subtract_image">
                     <property name="visible">True</property>
@@ -185,7 +183,8 @@
                 <property name="visible">True</property>
                 <property name="can-focus">True</property>
                 <property name="receives-default">False</property>
-                <property name="tooltip-text">Intersect with selection\nShortcut key: Shift+Alt</property>
+                <property name="tooltip-text" translatable="yes">Intersect with selection
+Shortcut key: Shift+Alt</property>
                 <child>
                   <object class="GtkImage" id="polygon_select_combine_intersect_image">
                     <property name="visible">True</property>
@@ -224,9 +223,8 @@
           <object class="GtkLabel" id="polygon_select_smooth_label">
             <property name="visible">True</property>
             <property name="can-focus">False</property>
-            <property name="tooltip-text">Selection edge smoothing mode</property>
             <property name="halign">start</property>
-            <property name="label">smoothing mode</property>
+            <property name="label" translatable="yes">smoothing mode</property>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -238,7 +236,6 @@
           <object class="GtkComboBoxText" id="polygon_select_smooth_combo">
             <property name="visible">True</property>
             <property name="can-focus">False</property>
-            <property name="tooltip-text">Selection edge smoothing mode</property>
             <property name="active">1</property>
           </object>
           <packing>
@@ -265,9 +262,8 @@
           <object class="GtkLabel" id="polygon_select_feather_label">
             <property name="visible">True</property>
             <property name="can-focus">False</property>
-            <property name="tooltip-text">Feather radius for feathered selection edges</property>
             <property name="halign">start</property>
-            <property name="label">feather radius</property>
+            <property name="label" translatable="yes">feather radius</property>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -321,9 +317,8 @@
           <object class="GtkLabel" id="polygon_select_curvature_label">
             <property name="visible">True</property>
             <property name="can-focus">False</property>
-            <property name="tooltip-text">Feather radius for feathered selection edges</property>
             <property name="halign">start</property>
-            <property name="label">curvature</property>
+            <property name="label" translatable="yes">curvature</property>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -378,9 +373,8 @@
           <object class="GtkLabel" id="polygon_select_area_label">
             <property name="visible">True</property>
             <property name="can-focus">False</property>
-            <property name="tooltip-text">Selection area mode</property>
             <property name="halign">start</property>
-            <property name="label">area</property>
+            <property name="label" translatable="yes">area</property>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -392,7 +386,7 @@
           <object class="GtkComboBoxText" id="polygon_select_area_combo">
             <property name="visible">True</property>
             <property name="can-focus">False</property>
-            <property name="tooltip-text">Selections normal select the area inside their boundaries.
+            <property name="tooltip-text" translatable="yes">Selections normal select the area inside their boundaries.
 Modify the behavior of area that is selected.</property>
             <property name="active">1</property>
           </object>
@@ -420,7 +414,7 @@ Modify the behavior of area that is selected.</property>
             <property name="visible">True</property>
             <property name="can-focus">False</property>
             <property name="halign">start</property>
-            <property name="label">border width</property>
+            <property name="label" translatable="yes">border width</property>
           </object>
           <packing>
             <property name="expand">False</property>

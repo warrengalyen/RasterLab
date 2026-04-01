@@ -48,7 +48,7 @@
             <property name="visible">True</property>
             <property name="can-focus">True</property>
             <property name="receives-default">False</property>
-            <property name="tooltip-text">Automatically select layer under cursor based on pixel visibility</property>
+            <property name="tooltip-text" translatable="yes">Automatically select layer under cursor based on pixel visibility</property>
             <property name="active">True</property>
             <property name="draw-indicator">True</property>
           </object>

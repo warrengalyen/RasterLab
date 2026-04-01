@@ -3,6 +3,7 @@
 #include "commands/command_image.h"
 #include "commands/command_text_layer.h"
 #include "document.h"
+#include "i18n.h"
 #include "render/layer.h"
 #include "render/render_utils.h"
 #include "render/text_layer.h"
@@ -19,7 +20,6 @@
 #include "ui/ui_utils.h"
 #include "ui/widgets/vertical_spin_button.h"
 #include <pango/pango.h>
-#include "i18n.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -2211,7 +2211,7 @@ static void on_text_color_clicked(GtkButton* btn, gpointer user_data) {
 
     GtkWidget* color_dialog = color_chooser_dialog_new(
         parent,
-        "Choose Text Color",
+        _("Choose Text Color"),
         &initial,
         NULL,
         NULL,
