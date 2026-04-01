@@ -51,6 +51,7 @@ set(SOURCES
     commands/command_text_layer.c
     document.c
     document_revert_diff.c
+    i18n.c
     filters/filters.c
     io/image_io.c
     main.c
@@ -284,11 +285,44 @@ add_executable(rasterlab ${SOURCES})
 target_compile_definitions(rasterlab PRIVATE GETTEXT_PACKAGE="rasterlab")
 target_compile_definitions(rasterlab PRIVATE "LOCALEDIR=\"${CMAKE_INSTALL_FULL_LOCALEDIR}\"")
 
+# GNU gettext (libintl). On MSYS2/MinGW, pkg-config often does not expose "gettext";
+# without HAVE_GETTEXT, i18n is a no-op and the UI stays English.
 pkg_check_modules(GETTEXT gettext)
 if(GETTEXT_FOUND)
     target_link_libraries(rasterlab ${GETTEXT_LIBRARIES})
     target_compile_options(rasterlab PRIVATE ${GETTEXT_CFLAGS_OTHER})
+    if(GETTEXT_INCLUDE_DIRS)
+        target_include_directories(rasterlab PRIVATE ${GETTEXT_INCLUDE_DIRS})
+    endif()
     target_compile_definitions(rasterlab PRIVATE HAVE_GETTEXT=1)
+    message(STATUS "gettext: HAVE_GETTEXT enabled (pkg-config)")
+else()
+    if(DEFINED ENV{MINGW_PREFIX})
+        list(APPEND CMAKE_PREFIX_PATH "$ENV{MINGW_PREFIX}")
+    endif()
+    # Same tree as MinGW gcc (intl ships with mingw-w64-gettext; GTK already links -lintl).
+    set(_intl_lib_hints "")
+    set(_intl_inc_hints "")
+    if(CMAKE_C_COMPILER)
+        get_filename_component(_intl_cc_dir "${CMAKE_C_COMPILER}" DIRECTORY)
+        get_filename_component(_intl_mingw_root "${_intl_cc_dir}/.." ABSOLUTE)
+        list(APPEND _intl_lib_hints "${_intl_mingw_root}/lib")
+        list(APPEND _intl_inc_hints "${_intl_mingw_root}/include")
+    endif()
+    find_path(RASTERLAB_INTL_INCLUDE NAMES libintl.h
+        HINTS ${_intl_inc_hints}
+        PATHS "$ENV{MINGW_PREFIX}/include" "C:/msys64/mingw64/include" "C:/msys64/ucrt64/include")
+    find_library(RASTERLAB_INTL_LIB NAMES intl libintl-8 intl-8
+        HINTS ${_intl_lib_hints}
+        PATHS "$ENV{MINGW_PREFIX}/lib" "C:/msys64/mingw64/lib" "C:/msys64/ucrt64/lib")
+    if(RASTERLAB_INTL_INCLUDE AND RASTERLAB_INTL_LIB)
+        target_include_directories(rasterlab PRIVATE ${RASTERLAB_INTL_INCLUDE})
+        target_link_libraries(rasterlab ${RASTERLAB_INTL_LIB})
+        target_compile_definitions(rasterlab PRIVATE HAVE_GETTEXT=1)
+        message(STATUS "gettext: HAVE_GETTEXT enabled (libintl: ${RASTERLAB_INTL_LIB})")
+    else()
+        message(WARNING "gettext/libintl not found — rebuild after: pacman -S mingw-w64-x86_64-gettext (or install gettext dev libs). UI will not translate.")
+    endif()
 endif()
 
 # Link GTK3 libraries

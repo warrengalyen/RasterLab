@@ -1,0 +1,3171 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-03-31 14:33-0700\n"
+"PO-Revision-Date: 2026-03-31 14:42-0700\n"
+"Last-Translator: DeepL API <https://www.deepl.com/>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: es-ES\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: src/document.c:2258
+msgid "No image loaded"
+msgstr "Ninguna imagen cargada"
+
+#: src/document.c:2261
+#, c-format
+msgid "%ux%u, %d-bit %s%s (zoom: %.0f%%)"
+msgstr "%ux%u, %d-bit %s%s (zoom: %.0f%%)"
+
+#: src/document.c:2264 src/ui/dialogs/curves_dialog.c:236
+msgid "RGB"
+msgstr "RGB"
+
+#: src/document.c:2264
+msgid "RGBA"
+msgstr "RGBA"
+
+#: src/document.c:2265
+msgid " (with alpha)"
+msgstr " (con alfa)"
+
+#: src/i18n.c:232 src/ui/ui_tools_menu.c:140
+msgid "System default"
+msgstr "Sistema por defecto"
+
+#: src/io/image_io.c:45
+msgid "File loaded successfully"
+msgstr "Archivo cargado correctamente"
+
+#: src/io/image_io.c:47
+msgid "Invalid parameters provided"
+msgstr "Parámetros no válidos"
+
+#: src/io/image_io.c:50
+#, c-format
+msgid "File not found: %s"
+msgstr "Fichero no encontrado: %s"
+
+#: src/io/image_io.c:53
+msgid "File not found"
+msgstr "Archivo no encontrado"
+
+#: src/io/image_io.c:55
+msgid "Failed to read file. The file may be locked or inaccessible."
+msgstr ""
+"No se ha podido leer el archivo. El archivo puede estar bloqueado o "
+"inaccesible."
+
+#: src/io/image_io.c:57
+msgid "Failed to write file. The file may be locked or the disk may be full."
+msgstr ""
+"Error al escribir el archivo. Puede que el archivo esté bloqueado o que el "
+"disco esté lleno."
+
+#: src/io/image_io.c:59
+msgid ""
+"Unsupported file format. The file format is not recognized or not supported."
+msgstr ""
+"Formato de archivo no compatible. El formato de archivo no se reconoce o no "
+"es compatible."
+
+#: src/io/image_io.c:61
+msgid "File is corrupted or incomplete. The file may be damaged."
+msgstr "El archivo está dañado o incompleto. El archivo puede estar dañado."
+
+#: src/io/image_io.c:63
+msgid "Out of memory. The file is too large to load."
+msgstr "Sin memoria. El archivo es demasiado grande para cargar."
+
+#: src/io/image_io.c:65
+msgid "Unsupported feature. The file uses features that are not supported."
+msgstr ""
+"Característica no soportada. El archivo utiliza funciones no compatibles."
+
+#: src/io/image_io.c:67
+msgid "Load cancelled."
+msgstr "Carga cancelada."
+
+#: src/io/image_io.c:69
+msgid "JPEG compression is not supported."
+msgstr "No se admite la compresión JPEG."
+
+#: src/io/image_io.c:72
+msgid "An unknown error occurred while loading the file."
+msgstr "Se ha producido un error desconocido al cargar el archivo."
+
+#: src/plugins/plugin_avif.c:325 src/plugins/plugin_heic.c:322
+msgid "Frame 1"
+msgstr "Cuadro 1"
+
+#: src/plugins/plugin_avif.c:325 src/plugins/plugin_bmp.c:373
+#: src/plugins/plugin_cut.c:379 src/plugins/plugin_deep.c:1152
+#: src/plugins/plugin_exr.c:953 src/plugins/plugin_fits.c:586
+#: src/plugins/plugin_hdr.c:554 src/plugins/plugin_heic.c:322
+#: src/plugins/plugin_jpeg.c:219 src/plugins/plugin_netpbm.c:394
+#: src/plugins/plugin_pcd.c:1484 src/plugins/plugin_pcx.c:345
+#: src/plugins/plugin_png.c:330 src/plugins/plugin_ras.c:289
+#: src/plugins/plugin_sgi.c:377 src/plugins/plugin_tga.c:220
+#: src/plugins/plugin_webp.c:400 src/plugins/plugin_xbm.c:389
+#: src/plugins/plugin_xpm.c:453 src/ui/ui_file_menu.c:1510
+msgid "Background"
+msgstr "Fondo"
+
+#: src/plugins/plugin_avif.c:327 src/plugins/plugin_heic.c:326
+#, c-format
+msgid "Frame %d"
+msgstr "Fotograma %d"
+
+#: src/plugins/plugin_host_api.c:22 src/ui/ui_file_menu.c:1483 src/ui.c:834
+#: src/ui.c:997 src/ui.c:1110 src/ui.c:1136
+msgid "Untitled"
+msgstr "Sin título"
+
+#: src/plugins/plugin_pcd.c:1333
+msgid "Choose resolution to load:"
+msgstr "Elija la resolución que desea cargar:"
+
+#: src/render/layer.c:50 src/ui/layers_panel.c:560
+#, c-format
+msgid "%s (%d)"
+msgstr "%s (%d)"
+
+#: src/ui/dialogs/beeps_dialog.c:230
+msgid "edge preservation mode"
+msgstr "modo de conservación de bordes"
+
+#: src/ui/dialogs/beeps_dialog.c:236
+msgid "gentle"
+msgstr "suave"
+
+#: src/ui/dialogs/beeps_dialog.c:237
+#: resources/ui/webp_options_dialog.glade:247
+msgid "balanced"
+msgstr "equilibrado"
+
+#: src/ui/dialogs/beeps_dialog.c:238
+msgid "sharp"
+msgstr "agudo"
+
+#: src/ui/dialogs/beeps_dialog.c:251
+msgid "smoothing strength"
+msgstr "fuerza de alisado"
+
+#: src/ui/dialogs/beeps_dialog.c:284
+msgid "smoothing radius"
+msgstr "radio de suavizado"
+
+#: src/ui/dialogs/canvas_size_dialog.c:807 src/ui/dialogs/resize_dialog.c:489
+msgid "percent"
+msgstr "por ciento"
+
+#: src/ui/dialogs/canvas_size_dialog.c:809 src/ui/dialogs/resize_dialog.c:491
+msgid "pixels"
+msgstr "píxeles"
+
+#: src/ui/dialogs/canvas_size_dialog.c:811 src/ui/dialogs/resize_dialog.c:493
+msgid "inches"
+msgstr "pulgadas"
+
+#: src/ui/dialogs/canvas_size_dialog.c:813 src/ui/dialogs/resize_dialog.c:495
+msgid "centimeters"
+msgstr "centímetros"
+
+#: src/ui/dialogs/canvas_size_dialog.c:815 src/ui/dialogs/resize_dialog.c:497
+msgid "millimeters"
+msgstr "milímetros"
+
+#: src/ui/dialogs/canvas_size_dialog.c:817 src/ui/dialogs/resize_dialog.c:499
+msgid "points"
+msgstr "puntos"
+
+#: src/ui/dialogs/canvas_size_dialog.c:819 src/ui/dialogs/resize_dialog.c:501
+msgid "picas"
+msgstr "picas"
+
+#: src/ui/dialogs/canvas_size_dialog.c:856 src/ui/dialogs/resize_dialog.c:534
+msgid "pixels / inch (PPI)"
+msgstr "píxeles / pulgada (PPI)"
+
+#: src/ui/dialogs/canvas_size_dialog.c:858 src/ui/dialogs/resize_dialog.c:536
+msgid "pixels / centimeter (PPCM)"
+msgstr "píxeles / centímetro (PPCM)"
+
+#: src/ui/dialogs/channel_mixer_dialog.c:188
+msgid "output channel"
+msgstr "canal de salida"
+
+#: src/ui/dialogs/channel_mixer_dialog.c:203
+#: src/ui/dialogs/color_balance_dialog.c:306
+#: src/ui/dialogs/curves_dialog.c:250 src/ui/dialogs/gamma_dialog.c:405
+msgid "red"
+msgstr "rojo"
+
+#: src/ui/dialogs/channel_mixer_dialog.c:217
+#: src/ui/dialogs/color_balance_dialog.c:338
+#: src/ui/dialogs/curves_dialog.c:263 src/ui/dialogs/gamma_dialog.c:431
+msgid "green"
+msgstr "verde"
+
+#: src/ui/dialogs/channel_mixer_dialog.c:231
+#: src/ui/dialogs/color_balance_dialog.c:370
+#: src/ui/dialogs/curves_dialog.c:276 src/ui/dialogs/gamma_dialog.c:457
+msgid "blue"
+msgstr "azul"
+
+#: src/ui/dialogs/channel_mixer_dialog.c:293
+msgid "input channel(s)"
+msgstr "canal(es) de entrada"
+
+#: src/ui/dialogs/channel_mixer_dialog.c:376
+msgid "options for all channels"
+msgstr "opciones para todos los canales"
+
+#: src/ui/dialogs/clouds_dialog.c:422 src/ui/dialogs/retinex_dialog.c:303
+msgid "scale"
+msgstr "escala"
+
+#: src/ui/dialogs/clouds_dialog.c:454 src/ui/dialogs/rotate_dialog.c:279
+#: resources/ui/avif_options_dialog.glade:85
+#: resources/ui/heic_options_dialog.glade:86
+#: resources/ui/jpeg_options_dialog.glade:97
+#: resources/ui/webp_options_dialog.glade:146
+msgid "quality"
+msgstr "calidad"
+
+#: src/ui/dialogs/clouds_dialog.c:486
+msgid "shadow color"
+msgstr "color de sombra"
+
+#: src/ui/dialogs/clouds_dialog.c:509
+msgid "highlight color"
+msgstr "color de realce"
+
+#: src/ui/dialogs/clouds_dialog.c:532
+msgid "opacity"
+msgstr "opacidad"
+
+#: src/ui/dialogs/clouds_dialog.c:564 src/ui/ui_filter_effects.c:558
+msgid "seed"
+msgstr "semilla"
+
+#: src/ui/dialogs/clouds_dialog.c:596
+msgid "generator"
+msgstr "generador"
+
+#: src/ui/dialogs/clouds_dialog.c:602
+msgid "Perlin"
+msgstr "Perlin"
+
+#: src/ui/dialogs/clouds_dialog.c:603
+msgid "Simplex"
+msgstr "Simplex"
+
+#: src/ui/dialogs/color_balance_dialog.c:402
+msgid "tone balance:"
+msgstr "equilibrio tonal:"
+
+#: src/ui/dialogs/color_balance_dialog.c:429
+msgid "preserve luminosity"
+msgstr "preservar la luminosidad"
+
+#: src/ui/dialogs/color_chooser_dialog.c:639
+msgid "Hue"
+msgstr "Hue"
+
+#: src/ui/dialogs/color_chooser_dialog.c:662
+msgid "Saturation"
+msgstr "Saturación"
+
+#: src/ui/dialogs/color_chooser_dialog.c:685
+msgid "Value"
+msgstr "Valor"
+
+#: src/ui/dialogs/color_chooser_dialog.c:712
+msgid "Red"
+msgstr "Rojo"
+
+#: src/ui/dialogs/color_chooser_dialog.c:735
+msgid "Green"
+msgstr "Verde"
+
+#: src/ui/dialogs/color_chooser_dialog.c:758
+msgid "Blue"
+msgstr "Azul"
+
+#: src/ui/dialogs/color_chooser_dialog.c:783
+msgid "HTML"
+msgstr "HTML"
+
+#: src/ui/dialogs/convolution_dialog.c:337
+msgid "convolution matrix"
+msgstr "matriz de convolución"
+
+#: src/ui/dialogs/convolution_dialog.c:398
+msgid "divisor"
+msgstr "divisor"
+
+#: src/ui/dialogs/convolution_dialog.c:429
+msgid "offset"
+msgstr "offset"
+
+#: src/ui/dialogs/curves_dialog.c:228
+msgid "channel"
+msgstr "canal"
+
+#: src/ui/dialogs/curves_dialog.c:303
+msgid "histogram overlay"
+msgstr "superposición del histograma"
+
+#: src/ui/dialogs/curves_dialog.c:308 src/ui/dialogs/curves_dialog.c:323
+#: src/ui/dialogs/curves_dialog.c:338
+msgid "show"
+msgstr "mostrar"
+
+#: src/ui/dialogs/curves_dialog.c:318
+msgid "grid"
+msgstr "cuadrícula"
+
+#: src/ui/dialogs/curves_dialog.c:333
+msgid "original curve (diagonal line)"
+msgstr "curva original (línea diagonal)"
+
+#: src/ui/dialogs/curves_dialog.c:547
+msgid "tool"
+msgstr "herramienta"
+
+#: src/ui/dialogs/curves_dialog.c:570
+msgid "options"
+msgstr "opciones"
+
+#: src/ui/dialogs/gamma_dialog.c:389
+msgid "new gamma curve:"
+msgstr "nueva curva gamma:"
+
+#: src/ui/dialogs/gamma_dialog.c:486
+msgid "keep all colors in sync"
+msgstr "mantener todos los colores sincronizados"
+
+#: src/ui/dialogs/new_image_dialog.c:852 src/ui/dialogs/new_image_dialog.c:866
+#: resources/ui/main_window.glade:1668
+msgid "px"
+msgstr "px"
+
+#: src/ui/dialogs/new_image_dialog.c:854 src/ui/dialogs/new_image_dialog.c:868
+#: resources/ui/main_window.glade:1671
+msgid "in"
+msgstr "en"
+
+#: src/ui/dialogs/new_image_dialog.c:856 src/ui/dialogs/new_image_dialog.c:870
+#: resources/ui/main_window.glade:1674
+msgid "cm"
+msgstr "cm"
+
+#: src/ui/dialogs/new_image_dialog.c:858 src/ui/dialogs/new_image_dialog.c:872
+#: resources/ui/main_window.glade:1677
+msgid "mm"
+msgstr "mm"
+
+#: src/ui/dialogs/new_image_dialog.c:860 src/ui/dialogs/new_image_dialog.c:874
+#: resources/ui/main_window.glade:1680
+msgid "pt"
+msgstr "pt"
+
+#: src/ui/dialogs/new_image_dialog.c:862 src/ui/dialogs/new_image_dialog.c:876
+#: resources/ui/main_window.glade:1683
+msgid "pc"
+msgstr "pc"
+
+#: src/ui/dialogs/new_image_dialog.c:881
+msgid "PPI"
+msgstr "PPI"
+
+#: src/ui/dialogs/new_image_dialog.c:883
+msgid "PPCM"
+msgstr "PPCM"
+
+#: src/ui/dialogs/new_layer_dialog.c:209
+#, c-format
+msgid "Layer %d"
+msgstr "Capa %d"
+
+#: src/ui/dialogs/new_layer_dialog.c:218
+msgid "Above current layer"
+msgstr "Por encima de la capa actual"
+
+#: src/ui/dialogs/new_layer_dialog.c:221
+msgid "Below current layer"
+msgstr "Por debajo de la capa actual"
+
+#: src/ui/dialogs/new_layer_dialog.c:224
+msgid "Top of layer stack"
+msgstr "Parte superior de la pila de capas"
+
+#: src/ui/dialogs/new_layer_dialog.c:227
+msgid "Bottom of layer stack"
+msgstr "Parte inferior de la pila de capas"
+
+#: src/ui/dialogs/palettize_dialog.c:429
+msgid "Quantize Method"
+msgstr "Método de cuantización"
+
+#: src/ui/dialogs/palettize_dialog.c:435
+msgid "Median Cut"
+msgstr "Corte medio"
+
+#: src/ui/dialogs/palettize_dialog.c:436
+msgid "Octree"
+msgstr "Octree"
+
+#: src/ui/dialogs/palettize_dialog.c:447
+msgid "Palette Size"
+msgstr "Tamaño de la paleta"
+
+#: src/ui/dialogs/palettize_dialog.c:464 src/ui/dialogs/palettize_dialog.c:566
+msgid "Dither Method"
+msgstr "Método Dither"
+
+#: src/ui/dialogs/palettize_dialog.c:470 src/ui/dialogs/palettize_dialog.c:572
+#: src/ui/tool_options_panel.c:2895 src/ui/tool_options_panel.c:2988
+#: src/ui/tool_options_panel.c:3064 src/ui/tool_options_panel.c:3130
+#: src/ui/tool_options_panel.c:3196 resources/ui/crop_options.glade:283
+#: resources/ui/main_window.glade:1595
+msgid "None"
+msgstr "Ninguno"
+
+#: src/ui/dialogs/palettize_dialog.c:471 src/ui/dialogs/palettize_dialog.c:573
+msgid "Burkes"
+msgstr "Burkes"
+
+#: src/ui/dialogs/palettize_dialog.c:472 src/ui/dialogs/palettize_dialog.c:574
+msgid "Floyd-Steinberg"
+msgstr "Floyd-Steinberg"
+
+#: src/ui/dialogs/palettize_dialog.c:473 src/ui/dialogs/palettize_dialog.c:575
+msgid "Stucki"
+msgstr "Stucki"
+
+#: src/ui/dialogs/palettize_dialog.c:474 src/ui/dialogs/palettize_dialog.c:576
+msgid "Atkinson"
+msgstr "Atkinson"
+
+#: src/ui/dialogs/palettize_dialog.c:475 src/ui/dialogs/palettize_dialog.c:577
+msgid "Sierra"
+msgstr "Sierra"
+
+#: src/ui/dialogs/palettize_dialog.c:476 src/ui/dialogs/palettize_dialog.c:578
+msgid "Sierra Two Row"
+msgstr "Sierra Dos Filas"
+
+#: src/ui/dialogs/palettize_dialog.c:477 src/ui/dialogs/palettize_dialog.c:579
+msgid "Sierra Lite"
+msgstr "Sierra Lite"
+
+#: src/ui/dialogs/palettize_dialog.c:478 src/ui/dialogs/palettize_dialog.c:580
+msgid "JJN"
+msgstr "JJN"
+
+#: src/ui/dialogs/palettize_dialog.c:479 src/ui/dialogs/palettize_dialog.c:581
+msgid "Single Neighbor"
+msgstr "Vecino único"
+
+#: src/ui/dialogs/palettize_dialog.c:480 src/ui/dialogs/palettize_dialog.c:582
+msgid "Bayer 4x4"
+msgstr "Bayer 4x4"
+
+#: src/ui/dialogs/palettize_dialog.c:481 src/ui/dialogs/palettize_dialog.c:583
+msgid "Bayer 8x8"
+msgstr "Bayer 8x8"
+
+#: src/ui/dialogs/palettize_dialog.c:492 src/ui/dialogs/palettize_dialog.c:594
+msgid "Dither Amount"
+msgstr "Cantidad de Dither"
+
+#: src/ui/dialogs/palettize_dialog.c:544
+msgid "Palette File"
+msgstr "Archivo de paletas"
+
+#: src/ui/dialogs/palettize_dialog.c:552
+msgid "Select File..."
+msgstr "Seleccione Archivo..."
+
+#: src/ui/dialogs/palettize_dialog.c:557
+msgid "No file selected"
+msgstr "Ningún fichero seleccionado"
+
+#: src/ui/dialogs/palettize_dialog.c:717
+msgid "Optimal"
+msgstr "Óptimo"
+
+#: src/ui/dialogs/palettize_dialog.c:721
+msgid "From File"
+msgstr "De archivo"
+
+#: src/ui/dialogs/resize_dialog.c:547
+msgid "Nearest neighbor"
+msgstr "Vecino más próximo"
+
+#: src/ui/dialogs/resize_dialog.c:549
+msgid "Bilinear"
+msgstr "Bilineal"
+
+#: src/ui/dialogs/resize_dialog.c:551
+msgid "Bicubic"
+msgstr "Bicúbica"
+
+#: src/ui/dialogs/resize_dialog.c:553
+msgid "Lanczos"
+msgstr "Lanczos"
+
+#: src/ui/dialogs/retinex_dialog.c:283
+msgid "scale distribution"
+msgstr "distribución de la escala"
+
+#: src/ui/dialogs/retinex_dialog.c:289
+msgid "Uniform"
+msgstr "Uniforme"
+
+#: src/ui/dialogs/retinex_dialog.c:290
+msgid "Low"
+msgstr "Bajo"
+
+#: src/ui/dialogs/retinex_dialog.c:291
+msgid "High"
+msgstr "Alta"
+
+#: src/ui/dialogs/retinex_dialog.c:335
+msgid "number of scales"
+msgstr "número de escalas"
+
+#: src/ui/dialogs/retinex_dialog.c:367
+msgid "dynamic range"
+msgstr "rango dinámico"
+
+#: src/ui/dialogs/rotate_dialog.c:213 src/ui/ui_filter_effects.c:277
+#: src/ui/ui_filter_effects.c:893
+msgid "angle"
+msgstr "ángulo"
+
+#: src/ui/dialogs/rotate_dialog.c:260
+msgid "size"
+msgstr "talla"
+
+#: src/ui/dialogs/rotate_dialog.c:301
+msgid "border regions"
+msgstr "regiones fronterizas"
+
+#: src/ui/dialogs/selection_radius_dialog.c:103
+msgid "Radius:"
+msgstr "Radio:"
+
+#: src/ui/dialogs/settings_dialog.c:459
+msgid "Select Temporary File Location"
+msgstr "Seleccione la ubicación del archivo temporal"
+
+#: src/ui/dialogs/settings_dialog.c:462 src/ui/dialogs/settings_dialog.c:493
+msgid "Select"
+msgstr "Seleccione"
+
+#: src/ui/dialogs/settings_dialog.c:463 src/ui/dialogs/settings_dialog.c:494
+msgid "Cancel"
+msgstr "Cancelar"
+
+#: src/ui/dialogs/settings_dialog.c:490
+msgid "Select a color profile"
+msgstr "Seleccionar un perfil de color"
+
+#: src/ui/dialogs/settings_dialog.c:496
+msgid "ICC profile (.icc, .icm)"
+msgstr "Perfil ICC (.icc, .icm)"
+
+#: src/ui/swatches_panel.c:160
+msgid "Import Palette File"
+msgstr "Importar archivo de paleta"
+
+#: src/ui/swatches_panel.c:163 src/ui/ui_file_menu.c:905
+#: resources/ui/main_window.glade:985
+msgid "_Open"
+msgstr "abrir"
+
+#: src/ui/swatches_panel.c:164 src/ui/swatches_panel.c:302
+#: src/ui/ui_file_menu.c:456 src/ui/ui_file_menu.c:906
+#: src/ui/ui_file_menu.c:1203 src/ui.c:1006
+msgid "_Cancel"
+msgstr "cancelar"
+
+#: src/ui/swatches_panel.c:168 src/ui/swatches_panel.c:308
+msgid "GIMP Palette (*.gpl)"
+msgstr "Paleta GIMP (*.gpl)"
+
+#: src/ui/swatches_panel.c:174 src/ui/swatches_panel.c:313
+msgid "RIFF Palette (*.pal)"
+msgstr "Paleta RIFF (*.pal)"
+
+#: src/ui/swatches_panel.c:180 src/ui/swatches_panel.c:318
+msgid "Adobe Color Swatch (*.aco)"
+msgstr "Muestras de color de Adobe (*.aco)"
+
+#: src/ui/swatches_panel.c:186 src/ui/swatches_panel.c:323
+msgid "Paint.NET Palette (*.txt)"
+msgstr "Paleta de Paint.NET (*.txt)"
+
+#: src/ui/swatches_panel.c:192 src/ui/swatches_panel.c:328
+msgid "Adobe Color Table (*.act)"
+msgstr "Tabla de colores de Adobe (*.act)"
+
+#: src/ui/swatches_panel.c:204
+msgid "All Palette Files"
+msgstr "Todos los archivos de paletas"
+
+#: src/ui/swatches_panel.c:214 src/ui/swatches_panel.c:333
+#: src/ui/ui_file_menu.c:969 src/ui/ui_file_menu.c:1275
+msgid "All Files"
+msgstr "Todos los archivos"
+
+#: src/ui/swatches_panel.c:259
+#, c-format
+msgid "Failed to load palette file: %s"
+msgstr "Error al cargar el archivo de paleta: %s"
+
+#: src/ui/swatches_panel.c:261 src/ui/swatches_panel.c:287
+#: src/ui/ui_edit_menu.c:1046 src/ui/ui_edit_menu.c:1183
+#: src/ui/ui_file_menu.c:119 src/ui/ui_file_menu.c:135
+#: src/ui/ui_file_menu.c:372 src/ui/ui_file_menu.c:397
+#: src/ui/ui_file_menu.c:473 src/ui/ui_file_menu.c:490
+#: src/ui/ui_file_menu.c:500 src/ui/ui_file_menu.c:519
+#: src/ui/ui_file_menu.c:537 src/ui/ui_file_menu.c:549
+#: src/ui/ui_file_menu.c:864 src/ui/ui_file_menu.c:1055
+#: src/ui/ui_file_menu.c:1145 src/ui/ui_file_menu.c:1470
+#: src/ui/ui_file_menu.c:1502
+msgid "_OK"
+msgstr "nO"
+
+#: src/ui/swatches_panel.c:287
+msgid "No swatches to export"
+msgstr "No hay muestras para exportar"
+
+#: src/ui/swatches_panel.c:298
+msgid "Export Palette File"
+msgstr "Exportar archivo de paleta"
+
+#: src/ui/swatches_panel.c:301 src/ui/ui_file_menu.c:1202 src/ui.c:1007
+#: resources/ui/main_window.glade:1008
+msgid "_Save"
+msgstr "guardar"
+
+#: src/ui/swatches_panel.c:353
+msgid "RasterLab Swatches"
+msgstr "Muestras RasterLab"
+
+#: src/ui/tools_panel.c:163
+msgid "Choose Background Color"
+msgstr "Elija el color de fondo"
+
+#: src/ui/tool_options_panel.c:2896 src/ui/tool_options_panel.c:2989
+#: src/ui/tool_options_panel.c:3065 src/ui/tool_options_panel.c:3131
+#: src/ui/tool_options_panel.c:3197
+msgid "Antialiased"
+msgstr "Antialiased"
+
+#: src/ui/tool_options_panel.c:2897 src/ui/tool_options_panel.c:2990
+#: src/ui/tool_options_panel.c:3066 src/ui/tool_options_panel.c:3132
+#: src/ui/tool_options_panel.c:3198
+msgid "Feathered"
+msgstr "Con plumas"
+
+#: src/ui/tool_options_panel.c:3077 src/ui/tool_options_panel.c:3141
+msgid "Interior"
+msgstr "Interior"
+
+#: src/ui/tool_options_panel.c:3078 src/ui/tool_options_panel.c:3142
+msgid "Exterior"
+msgstr "Exterior"
+
+#: src/ui/tool_options_panel.c:3079 src/ui/tool_options_panel.c:3143
+#: resources/ui/main_window.glade:1637
+msgid "Border"
+msgstr "Frontera"
+
+#: src/ui/ui_edit_menu.c:756 resources/ui/main_window.glade:377
+msgid "Cut"
+msgstr "Corte"
+
+#: src/ui/ui_edit_menu.c:897 resources/ui/main_window.glade:436
+msgid "Clear"
+msgstr "Claro"
+
+#: src/ui/ui_edit_menu.c:1045 src/ui/ui_edit_menu.c:1182
+msgid "No valid image found in clipboard."
+msgstr "No se ha encontrado ninguna imagen válida en el portapapeles."
+
+#: src/ui/ui_edit_menu.c:1066 src/ui/ui_edit_menu.c:1197
+#: src/ui/ui_edit_menu.c:1244
+msgid "Clipboard Image"
+msgstr "Imagen del portapapeles"
+
+#: src/ui/ui_edit_menu.c:1435
+msgid "Cut Merged"
+msgstr "Corte Fusionado"
+
+#: src/ui/ui_edit_menu.c:1595 resources/ui/fill_dialog.glade:14
+msgid "Fill"
+msgstr "Rellene"
+
+#: src/ui/ui_edit_menu.c:1726
+#, c-format
+msgid "_Undo: %s"
+msgstr "deshacer: %s"
+
+#: src/ui/ui_edit_menu.c:1730 src/ui/ui_edit_menu.c:1733
+#: resources/ui/main_window.glade:352
+msgid "_Undo"
+msgstr "undo"
+
+#: src/ui/ui_edit_menu.c:1742
+#, c-format
+msgid "_Redo: %s"
+msgstr "_Redo: %s"
+
+#: src/ui/ui_edit_menu.c:1746 src/ui/ui_edit_menu.c:1749
+#: resources/ui/main_window.glade:362
+msgid "_Redo"
+msgstr "_Redo"
+
+#: src/ui/ui_file_menu.c:62
+#, c-format
+msgid "Saving %s..."
+msgstr "Guardando %s..."
+
+#: src/ui/ui_file_menu.c:116
+#, c-format
+msgid ""
+"Failed to load image: %s\n"
+"\n"
+"%s"
+msgstr ""
+"Error al cargar la imagen: %s\n"
+"\n"
+"%s"
+
+#: src/ui/ui_file_menu.c:132
+#, c-format
+msgid "Failed to initialize document rendering for: %s"
+msgstr "Fallo al inicializar la representación del documento para: %s"
+
+#: src/ui/ui_file_menu.c:168
+msgid "Image successfully loaded"
+msgstr "Imagen cargada correctamente"
+
+#: src/ui/ui_file_menu.c:369
+#, c-format
+msgid ""
+"File not found: %s\n"
+"\n"
+"The file has been removed from the recent files list."
+msgstr ""
+"Fichero no encontrado: %s\n"
+"\n"
+"El fichero ha sido eliminado de la lista de ficheros recientes."
+
+#: src/ui/ui_file_menu.c:394
+#, c-format
+msgid ""
+"Unsupported file format: %s\n"
+"\n"
+"No plugin is available to load this file type.\n"
+"\n"
+"The file has been removed from the recent files list."
+msgstr ""
+"Formato de archivo no compatible: %s\n"
+"\n"
+"No hay ningún plugin disponible para cargar este tipo de archivo.\n"
+"\n"
+"El archivo ha sido eliminado de la lista de archivos recientes."
+
+#: src/ui/ui_file_menu.c:452
+msgid "Revert to saved file?"
+msgstr "¿Volver al archivo guardado?"
+
+#: src/ui/ui_file_menu.c:453
+msgid ""
+"The document will be reloaded from disk. Undo history for this document will"
+" be cleared. You can undo the revert from the Edit menu."
+msgstr ""
+"El documento se volverá a cargar desde el disco. Se borrará el historial de "
+"deshacer para este documento. Puede deshacer la reversión desde el menú "
+"Edición."
+
+#: src/ui/ui_file_menu.c:457
+msgid "_Revert"
+msgstr "_Revertir"
+
+#: src/ui/ui_file_menu.c:468
+msgid "revert"
+msgstr "volver"
+
+#: src/ui/ui_file_menu.c:472
+msgid "Out of memory preparing revert."
+msgstr "Sin memoria preparando la reversión."
+
+#: src/ui/ui_file_menu.c:488
+#, c-format
+msgid ""
+"Could not reload the file for revert:\n"
+"\n"
+"%s"
+msgstr ""
+"No se ha podido recargar el archivo para revertirlo:\n"
+"\n"
+"%s"
+
+#: src/ui/ui_file_menu.c:499
+msgid "Could not initialize rendering after reload."
+msgstr "No se ha podido inicializar el renderizado tras la recarga."
+
+#: src/ui/ui_file_menu.c:518
+msgid "Could not prepare revert undo data."
+msgstr "No se han podido preparar los datos de deshacer la reversión."
+
+#: src/ui/ui_file_menu.c:536
+msgid "Could not apply revert."
+msgstr "No se ha podido aplicar la reversión."
+
+#: src/ui/ui_file_menu.c:548
+msgid "Could not create revert undo step."
+msgstr "No se ha podido crear el paso de revertir deshacer."
+
+#: src/ui/ui_file_menu.c:564
+msgid "Reverted to saved file"
+msgstr "Revertido al archivo guardado"
+
+#: src/ui/ui_file_menu.c:762
+msgid "Clear Recent Files"
+msgstr "Borrar archivos recientes"
+
+#: src/ui/ui_file_menu.c:862
+#, c-format
+msgid "Unsupported file format: %s"
+msgstr "Formato de archivo no compatible: %s"
+
+#: src/ui/ui_file_menu.c:902
+msgid "Open Image"
+msgstr "Abrir imagen"
+
+#: src/ui/ui_file_menu.c:916
+msgid "All Supported Images"
+msgstr "Todas las imágenes compatibles"
+
+#: src/ui/ui_file_menu.c:1043 src/ui/ui_file_menu.c:1132
+msgid "Image successfully saved"
+msgstr "Imagen guardada correctamente"
+
+#: src/ui/ui_file_menu.c:1052 src/ui/ui_file_menu.c:1142
+#, c-format
+msgid ""
+"Failed to save image: %s\n"
+"\n"
+"%s"
+msgstr ""
+"Error al guardar la imagen: %s\n"
+"\n"
+"%s"
+
+#: src/ui/ui_file_menu.c:1199
+msgid "Save Image As"
+msgstr "Guardar imagen como"
+
+#: src/ui/ui_file_menu.c:1467
+#, c-format
+msgid ""
+"Invalid image dimensions: %u x %u\n"
+"\n"
+"Width and height must be greater than 0."
+msgstr ""
+"Dimensiones de imagen no válidas: %u x %u\n"
+"\n"
+"La anchura y la altura deben ser mayores que 0."
+
+#: src/ui/ui_file_menu.c:1501
+msgid "Failed to initialize document rendering structures"
+msgstr "Error al inicializar las estructuras de representación de documentos"
+
+#: src/ui/ui_file_menu.c:1551
+msgid "New image created"
+msgstr "Nueva imagen creada"
+
+#: src/ui/ui_filter.c:107 src/ui/ui_filter.c:238
+#, c-format
+msgid "Applying %s..."
+msgstr "Aplicando %s..."
+
+#: src/ui/ui_filter.c:108 src/ui/ui_filter.c:239
+msgid "filter"
+msgstr "filtro"
+
+#: src/ui/ui_filter_adjust.c:161 resources/ui/main_window.glade:307
+msgid "Grayscale"
+msgstr "Escala de grises"
+
+#: src/ui/ui_filter_adjust.c:183
+msgid "Temperature (K):"
+msgstr "Temperatura (K):"
+
+#: src/ui/ui_filter_adjust.c:193
+msgid "Tint"
+msgstr "Tinte"
+
+#: src/ui/ui_filter_adjust.c:203 src/ui/ui_filter_adjust.c:211
+msgid "White Balance"
+msgstr "Balance de blancos"
+
+#: src/ui/ui_filter_adjust.c:234
+msgid "vibrance"
+msgstr "vibrance"
+
+#: src/ui/ui_filter_adjust.c:244 src/ui/ui_filter_adjust.c:252
+#: resources/ui/main_window.glade:122
+msgid "Vibrance"
+msgstr "Vibrance"
+
+#: src/ui/ui_filter_adjust.c:264 resources/ui/main_window.glade:173
+msgid "Equalize"
+msgstr "Igualar"
+
+#: src/ui/ui_filter_adjust.c:274
+msgid "Histogram Stretch"
+msgstr "Estiramiento del histograma"
+
+#: src/ui/ui_filter_adjust.c:365 src/ui/ui_filter_adjust.c:1591
+msgid "Intensity"
+msgstr "Intensidad"
+
+#: src/ui/ui_filter_adjust.c:375 src/ui/ui_filter_adjust.c:383
+#: resources/ui/main_window.glade:136
+msgid "Sepia"
+msgstr "Sepia"
+
+#: src/ui/ui_filter_adjust.c:406 src/ui/ui_filter_effects.c:2038
+msgid "Angle"
+msgstr "Ángulo"
+
+#: src/ui/ui_filter_adjust.c:417
+msgid "Size"
+msgstr "Talla"
+
+#: src/ui/ui_filter_adjust.c:428
+msgid "Curvature"
+msgstr "Curvatura"
+
+#: src/ui/ui_filter_adjust.c:439 src/ui/ui_filter_adjust.c:507
+msgid "Quality"
+msgstr "Calidad"
+
+#: src/ui/ui_filter_adjust.c:450 src/ui/ui_filter_adjust.c:518
+msgid "If pixels lie outside the image"
+msgstr "Si los píxeles están fuera de la imagen"
+
+#: src/ui/ui_filter_adjust.c:455 src/ui/ui_filter_adjust.c:462
+#: resources/ui/main_window.glade:490
+msgid "Glass Tiles"
+msgstr "Baldosas de vidrio"
+
+#: src/ui/ui_filter_adjust.c:485
+msgid "Scale"
+msgstr "Escala"
+
+#: src/ui/ui_filter_adjust.c:496
+msgid "Turbulence"
+msgstr "Turbulencia"
+
+#: src/ui/ui_filter_adjust.c:525
+msgid "Random seed"
+msgstr "Semilla aleatoria"
+
+#: src/ui/ui_filter_adjust.c:534 src/ui/ui_filter_adjust.c:541
+#: resources/ui/main_window.glade:498
+msgid "Marble"
+msgstr "Mármol"
+
+#: src/ui/ui_filter_adjust.c:553 resources/ui/main_window.glade:203
+msgid "Backlight Repair"
+msgstr "Reparación de retroiluminación"
+
+#: src/ui/ui_filter_adjust.c:563 resources/ui/main_window.glade:44
+msgid "Auto White Balance"
+msgstr "Balance de blancos automático"
+
+#: src/ui/ui_filter_adjust.c:573 resources/ui/main_window.glade:12
+msgid "Auto Contrast"
+msgstr "Contraste automático"
+
+#: src/ui/ui_filter_adjust.c:583
+msgid "Auto Gamma"
+msgstr "Auto Gamma"
+
+#: src/ui/ui_filter_adjust.c:593
+msgid "Auto Level"
+msgstr "Nivel automático"
+
+#: src/ui/ui_filter_adjust.c:603 resources/ui/main_window.glade:36
+msgid "Auto Threshold"
+msgstr "Umbral automático"
+
+#: src/ui/ui_filter_adjust.c:730 resources/ui/main_window.glade:243
+msgid "Gamma Correction"
+msgstr "Corrección gamma"
+
+#: src/ui/ui_filter_adjust.c:1031 resources/ui/main_window.glade:76
+msgid "Color Balance"
+msgstr "Balance de color"
+
+#: src/ui/ui_filter_adjust.c:1139 resources/ui/main_window.glade:68
+msgid "Channel Mixer"
+msgstr "Mezclador de canales"
+
+#: src/ui/ui_filter_adjust.c:1165 resources/ui/hdr_image_dialog.glade:553
+#: resources/ui/hdr_image_dialog.glade:769
+msgid "exposure"
+msgstr "exposición"
+
+#: src/ui/ui_filter_adjust.c:1175 src/ui/ui_filter_adjust.c:1183
+#: resources/ui/main_window.glade:235
+msgid "Exposure"
+msgstr "Exposición"
+
+#: src/ui/ui_filter_adjust.c:1206
+msgid "hue"
+msgstr "matiz"
+
+#: src/ui/ui_filter_adjust.c:1216
+msgid "saturation"
+msgstr "saturación"
+
+#: src/ui/ui_filter_adjust.c:1226
+msgid "lightness"
+msgstr "ligereza"
+
+#: src/ui/ui_filter_adjust.c:1236 src/ui/ui_filter_adjust.c:1244
+msgid "HSL"
+msgstr "HSL"
+
+#: src/ui/ui_filter_adjust.c:1267
+msgid "brightness"
+msgstr "brillo"
+
+#: src/ui/ui_filter_adjust.c:1277
+msgid "contrast"
+msgstr "contraste"
+
+#: src/ui/ui_filter_adjust.c:1287 resources/ui/main_window.glade:211
+msgid "Brightness and Contrast"
+msgstr "Brillo y contraste"
+
+#: src/ui/ui_filter_adjust.c:1295
+msgid "Brightness And Contrast"
+msgstr "Brillo y contraste"
+
+#: src/ui/ui_filter_adjust.c:1318
+msgid "shadows"
+msgstr "sombras"
+
+#: src/ui/ui_filter_adjust.c:1328
+msgid "midtone contrast"
+msgstr "contraste de medios tonos"
+
+#: src/ui/ui_filter_adjust.c:1338
+msgid "highlights"
+msgstr "destaca"
+
+#: src/ui/ui_filter_adjust.c:1348 resources/ui/main_window.glade:259
+msgid "Shadows and Highlights"
+msgstr "Sombras y luces"
+
+#: src/ui/ui_filter_adjust.c:1356
+msgid "Shadows And Highlights"
+msgstr "Sombras y luces"
+
+#: src/ui/ui_filter_adjust.c:1379
+msgid "temperature (K)"
+msgstr "temperatura (K)"
+
+#: src/ui/ui_filter_adjust.c:1389 src/ui/ui_filter_effects.c:1164
+#: src/ui/ui_filter_effects.c:1253 src/ui/ui_filter_effects.c:1883
+msgid "strength"
+msgstr "fuerza"
+
+#: src/ui/ui_filter_adjust.c:1399 src/ui/ui_filter_adjust.c:1407
+msgid "Color Temperature"
+msgstr "Temperatura de color"
+
+#: src/ui/ui_filter_adjust.c:1444 src/ui/ui_filter_effects.c:204
+#: src/ui/ui_filter_effects.c:352 src/ui/ui_filter_effects.c:682
+#: src/ui/ui_filter_effects.c:733 src/ui/ui_filter_effects.c:783
+#: src/ui/ui_filter_effects.c:833 src/ui/ui_filter_effects.c:1060
+#: src/ui/ui_filter_effects.c:1303 src/ui/ui_filter_effects.c:1374
+#: src/ui/ui_filter_effects.c:1423 src/ui/ui_filter_effects.c:1472
+#: src/ui/ui_filter_effects.c:1521 src/ui/ui_filter_effects.c:1570
+#: src/ui/ui_filter_effects.c:1620 src/ui/ui_filter_effects.c:1768
+#: src/ui/ui_filter_effects.c:1943
+msgid "radius"
+msgstr "radio"
+
+#: src/ui/ui_filter_adjust.c:1454
+msgid "edge preservation radius"
+msgstr "radio de conservación de bordes"
+
+#: src/ui/ui_filter_adjust.c:1464
+msgid "sky brightness"
+msgstr "brillo del cielo"
+
+#: src/ui/ui_filter_adjust.c:1474 src/ui/ui_filter_effects.c:1002
+#: src/ui/ui_filter_effects.c:1314 resources/ui/hdr_image_dialog.glade:849
+msgid "intensity"
+msgstr "intensidad"
+
+#: src/ui/ui_filter_adjust.c:1484
+msgid "edge sensitivity"
+msgstr "sensibilidad de borde"
+
+#: src/ui/ui_filter_adjust.c:1494
+msgid "minimum transmission"
+msgstr "transmisión mínima"
+
+#: src/ui/ui_filter_adjust.c:1504 src/ui/ui_filter_adjust.c:1512
+#: resources/ui/main_window.glade:227
+msgid "Dehaze"
+msgstr "Dehaze"
+
+#: src/ui/ui_filter_adjust.c:1538 resources/ui/main_window.glade:315
+#: resources/ui/main_window.glade:1604
+msgid "Invert"
+msgstr "Invertir"
+
+#: src/ui/ui_filter_adjust.c:1584 resources/ui/main_window.glade:58
+msgid "Color"
+msgstr "Color"
+
+#: src/ui/ui_filter_adjust.c:1600 src/ui/ui_filter_adjust.c:1611
+#: resources/ui/main_window.glade:323
+msgid "Monochrome"
+msgstr "Monocromo"
+
+#: src/ui/ui_filter_adjust.c:1667
+msgid "Color to Remove"
+msgstr "Color a eliminar"
+
+#: src/ui/ui_filter_adjust.c:1674 src/ui/ui_filter_adjust.c:1816
+#: src/ui/ui_filter_adjust.c:1825 src/ui/ui_filter_adjust.c:1837
+#: resources/ui/main_window.glade:339
+msgid "Threshold"
+msgstr "Umbral"
+
+#: src/ui/ui_filter_adjust.c:1685
+msgid "Smoothing"
+msgstr "Alisado"
+
+#: src/ui/ui_filter_adjust.c:1694 src/ui/ui_filter_adjust.c:1714
+msgid "Chroma Key"
+msgstr "Croma"
+
+#: src/ui/ui_filter_adjust.c:1757
+msgid "Levels"
+msgstr "Niveles"
+
+#: src/ui/ui_filter_adjust.c:1766 src/ui/ui_filter_adjust.c:1773
+#: resources/ui/main_window.glade:331
+msgid "Posterize"
+msgstr "Posterizar"
+
+#: src/ui/ui_filter_adjust.c:1888
+msgid "Shadow Tint"
+msgstr "Tinte de sombra"
+
+#: src/ui/ui_filter_adjust.c:1895
+msgid "Highlight Tint"
+msgstr "Tinte de realce"
+
+#: src/ui/ui_filter_adjust.c:1902
+msgid "Shadow Intensity"
+msgstr "Intensidad de la sombra"
+
+#: src/ui/ui_filter_adjust.c:1913
+msgid "Highlight Intensity"
+msgstr "Intensidad de resaltado"
+
+#: src/ui/ui_filter_adjust.c:1922 src/ui/ui_filter_adjust.c:1947
+#: resources/ui/main_window.glade:144
+msgid "Shadows/Highlights Tint"
+msgstr "Tinte de sombras/iluminación"
+
+#: src/ui/ui_filter_adjust.c:1998
+msgid "Highlight Color"
+msgstr "Color de realce"
+
+#: src/ui/ui_filter_adjust.c:2005
+msgid "Balance"
+msgstr "Saldo"
+
+#: src/ui/ui_filter_adjust.c:2016
+msgid "Shadow Color"
+msgstr "Sombra Color"
+
+#: src/ui/ui_filter_adjust.c:2023
+msgid "Toning Strength"
+msgstr "Fuerza tonificante"
+
+#: src/ui/ui_filter_adjust.c:2032 src/ui/ui_filter_adjust.c:2046
+msgid "Split Toning"
+msgstr "Tonalidad dividida"
+
+#: src/ui/ui_filter_effects.c:214 src/ui/ui_filter_effects.c:222
+#: resources/ui/main_window.glade:536
+msgid "Average Blur"
+msgstr "Desenfoque medio"
+
+#: src/ui/ui_filter_effects.c:242 src/ui/ui_filter_effects.c:397
+msgid "amount"
+msgstr "importe"
+
+#: src/ui/ui_filter_effects.c:251 src/ui/ui_filter_effects.c:257
+#: resources/ui/main_window.glade:630
+msgid "Pinch"
+msgstr "Pellizcar"
+
+#: src/ui/ui_filter_effects.c:286 src/ui/ui_filter_effects.c:292
+#: resources/ui/main_window.glade:662
+msgid "Twirl"
+msgstr "Giro"
+
+#: src/ui/ui_filter_effects.c:312
+msgid "wavelength"
+msgstr "longitud de onda"
+
+#: src/ui/ui_filter_effects.c:322
+msgid "amplitude"
+msgstr "amplitud"
+
+#: src/ui/ui_filter_effects.c:332 src/ui/ui_filter_effects.c:623
+#: src/ui/ui_filter_effects.c:982 src/ui/ui_filter_effects.c:1184
+msgid "center X"
+msgstr "centro X"
+
+#: src/ui/ui_filter_effects.c:342 src/ui/ui_filter_effects.c:633
+#: src/ui/ui_filter_effects.c:992 src/ui/ui_filter_effects.c:1194
+msgid "center Y"
+msgstr "centro Y"
+
+#: src/ui/ui_filter_effects.c:362
+msgid "phase"
+msgstr "fase"
+
+#: src/ui/ui_filter_effects.c:371 src/ui/ui_filter_effects.c:377
+#: resources/ui/main_window.glade:646
+msgid "Ripple"
+msgstr "Ripple"
+
+#: src/ui/ui_filter_effects.c:411 src/ui/ui_filter_effects.c:445
+msgid "mode"
+msgstr "modo"
+
+#: src/ui/ui_filter_effects.c:416 src/ui/ui_filter_effects.c:422
+#: resources/ui/main_window.glade:654
+msgid "Spherize"
+msgstr "Esferizar"
+
+#: src/ui/ui_filter_effects.c:450 src/ui/ui_filter_effects.c:456
+#: resources/ui/main_window.glade:638
+msgid "Polar Coordinates"
+msgstr "Coordenadas polares"
+
+#: src/ui/ui_filter_effects.c:476
+msgid "generators"
+msgstr "generadores"
+
+#: src/ui/ui_filter_effects.c:486
+msgid "min wavelength"
+msgstr "longitud de onda mínima"
+
+#: src/ui/ui_filter_effects.c:496
+msgid "max wavelength"
+msgstr "longitud de onda máxima"
+
+#: src/ui/ui_filter_effects.c:506
+msgid "min amplitude"
+msgstr "amplitud mínima"
+
+#: src/ui/ui_filter_effects.c:516
+msgid "max amplitude"
+msgstr "amplitud máxima"
+
+#: src/ui/ui_filter_effects.c:526
+msgid "scale X"
+msgstr "escala X"
+
+#: src/ui/ui_filter_effects.c:536
+msgid "scale Y"
+msgstr "escala Y"
+
+#: src/ui/ui_filter_effects.c:552
+msgid "wave type"
+msgstr "tipo de onda"
+
+#: src/ui/ui_filter_effects.c:567 src/ui/ui_filter_effects.c:573
+#: resources/ui/main_window.glade:670
+msgid "Wave"
+msgstr "Onda"
+
+#: src/ui/ui_filter_effects.c:593
+msgid "mirrors"
+msgstr "espejos"
+
+#: src/ui/ui_filter_effects.c:603
+msgid "primary angle"
+msgstr "ángulo primario"
+
+#: src/ui/ui_filter_effects.c:613
+msgid "secondary angle"
+msgstr "ángulo secundario"
+
+#: src/ui/ui_filter_effects.c:643
+msgid "radius %"
+msgstr "radio %"
+
+#: src/ui/ui_filter_effects.c:652 src/ui/ui_filter_effects.c:658
+#: resources/ui/main_window.glade:622
+msgid "Kaleidoscope"
+msgstr "Caleidoscopio"
+
+#: src/ui/ui_filter_effects.c:692 src/ui/ui_filter_effects.c:700
+#: resources/ui/main_window.glade:560
+msgid "Gaussian Blur"
+msgstr "Desenfoque gaussiano"
+
+#: src/ui/ui_filter_effects.c:742 src/ui/ui_filter_effects.c:750
+#: resources/ui/main_window.glade:552
+msgid "Exponential Blur"
+msgstr "Desenfoque exponencial"
+
+#: src/ui/ui_filter_effects.c:792 src/ui/ui_filter_effects.c:800
+#: resources/ui/main_window.glade:544
+msgid "Box Blur"
+msgstr "Desenfoque de caja"
+
+#: src/ui/ui_filter_effects.c:842 src/ui/ui_filter_effects.c:850
+#: resources/ui/main_window.glade:568
+msgid "Median Blur"
+msgstr "Desenfoque medio"
+
+#: src/ui/ui_filter_effects.c:883 src/ui/ui_filter_effects.c:1174
+msgid "distance"
+msgstr "distancia"
+
+#: src/ui/ui_filter_effects.c:902 src/ui/ui_filter_effects.c:910
+#: resources/ui/main_window.glade:576
+msgid "Motion Blur"
+msgstr "Desenfoque de movimiento"
+
+#: src/ui/ui_filter_effects.c:1011 src/ui/ui_filter_effects.c:1027
+#: resources/ui/main_window.glade:584
+msgid "Radial Blur"
+msgstr "Desenfoque radial"
+
+#: src/ui/ui_filter_effects.c:1070 src/ui/ui_filter_effects.c:1325
+#: src/ui/ui_filter_effects.c:1631
+msgid "threshold"
+msgstr "umbral"
+
+#: src/ui/ui_filter_effects.c:1079 src/ui/ui_filter_effects.c:1087
+#: resources/ui/main_window.glade:592
+msgid "Surface Blur"
+msgstr "Desenfoque de superficie"
+
+#: src/ui/ui_filter_effects.c:1203 src/ui/ui_filter_effects.c:1220
+#: resources/ui/main_window.glade:600
+msgid "Zoom Blur"
+msgstr "Desenfoque de zoom"
+
+#: src/ui/ui_filter_effects.c:1262 src/ui/ui_filter_effects.c:1269
+#: resources/ui/main_window.glade:928 resources/ui/main_window.glade:1653
+msgid "Sharpen"
+msgstr "Afilar"
+
+#: src/ui/ui_filter_effects.c:1334 src/ui/ui_filter_effects.c:1341
+msgid "Unsharp Mask"
+msgstr "Máscara de desenfoque"
+
+#: src/ui/ui_filter_effects.c:1383 src/ui/ui_filter_effects.c:1390
+#: resources/ui/main_window.glade:808
+msgid "Dilate"
+msgstr "Dilate"
+
+#: src/ui/ui_filter_effects.c:1432 src/ui/ui_filter_effects.c:1439
+#: resources/ui/main_window.glade:816
+msgid "Erode"
+msgstr "Erode"
+
+#: src/ui/ui_filter_effects.c:1481 src/ui/ui_filter_effects.c:1488
+msgid "Highpass"
+msgstr "Paso alto"
+
+#: src/ui/ui_filter_effects.c:1530 src/ui/ui_filter_effects.c:1537
+msgid "Min"
+msgstr "Min"
+
+#: src/ui/ui_filter_effects.c:1579 src/ui/ui_filter_effects.c:1586
+msgid "Max"
+msgstr "Max"
+
+#: src/ui/ui_filter_effects.c:1640 src/ui/ui_filter_effects.c:1647
+#: resources/ui/main_window.glade:770
+msgid "Despeckle"
+msgstr "Despeckle"
+
+#: src/ui/ui_filter_effects.c:1681
+msgid "smoothness"
+msgstr "suavidad"
+
+#: src/ui/ui_filter_effects.c:1692
+msgid "edge preservation"
+msgstr "conservación de bordes"
+
+#: src/ui/ui_filter_effects.c:1701 src/ui/ui_filter_effects.c:1708
+#: resources/ui/main_window.glade:762
+msgid "Bilateral"
+msgstr "Bilateral"
+
+#: src/ui/ui_filter_effects.c:1779
+msgid "edge sharpness"
+msgstr "nitidez de los bordes"
+
+#: src/ui/ui_filter_effects.c:1788 src/ui/ui_filter_effects.c:1801
+#: resources/ui/main_window.glade:778
+msgid "Guided"
+msgstr "Guiado"
+
+#: src/ui/ui_filter_effects.c:1834
+msgid "smoothing level"
+msgstr "nivel de suavizado"
+
+#: src/ui/ui_filter_effects.c:1843 src/ui/ui_filter_effects.c:1850
+msgid "Skin Smooth"
+msgstr "Piel suave"
+
+#: src/ui/ui_filter_effects.c:1893
+msgid "softness"
+msgstr "suavidad"
+
+#: src/ui/ui_filter_effects.c:1902 src/ui/ui_filter_effects.c:1910
+#: resources/ui/main_window.glade:474
+msgid "Film Grain"
+msgstr "Grano de película"
+
+#: src/ui/ui_filter_effects.c:1953
+msgid "range"
+msgstr "gama"
+
+#: src/ui/ui_filter_effects.c:1962 src/ui/ui_filter_effects.c:1970
+#: resources/ui/main_window.glade:482
+msgid "Frosted Glass"
+msgstr "Cristal esmerilado"
+
+#: src/ui/ui_filter_effects.c:2049
+msgid "Offset"
+msgstr "Desplazamiento"
+
+#: src/ui/ui_filter_effects.c:2058 src/ui/ui_filter_effects.c:2067
+#: resources/ui/main_window.glade:514
+msgid "Relief"
+msgstr "Ayuda"
+
+#: src/ui/ui_filter_effects.c:2087
+msgid "brush size"
+msgstr "tamaño del cepillo"
+
+#: src/ui/ui_filter_effects.c:2097
+msgid "detail"
+msgstr "detalle"
+
+#: src/ui/ui_filter_effects.c:2106 src/ui/ui_filter_effects.c:2114
+#: resources/ui/main_window.glade:506
+msgid "Oil Painting"
+msgstr "Pintura al óleo"
+
+#: src/ui/ui_filter_effects.c:2125 resources/ui/main_window.glade:692
+msgid "Canny Edge"
+msgstr "Canny Edge"
+
+#: src/ui/ui_filter_effects.c:2134 resources/ui/main_window.glade:700
+msgid "Gradient Edge"
+msgstr "Borde degradado"
+
+#: src/ui/ui_filter_effects.c:2143 resources/ui/main_window.glade:708
+msgid "Laplacian Edge"
+msgstr "Arista Laplaciana"
+
+#: src/ui/ui_filter_effects.c:2152 resources/ui/main_window.glade:716
+msgid "Prewitt Edge"
+msgstr "Borde Prewitt"
+
+#: src/ui/ui_filter_effects.c:2161 resources/ui/main_window.glade:724
+msgid "Roberts Edge"
+msgstr "Borde Roberts"
+
+#: src/ui/ui_filter_effects.c:2170 resources/ui/main_window.glade:732
+msgid "Sobel Edge"
+msgstr "Borde Sobel"
+
+#: src/ui/ui_filter_effects.c:2262
+msgid "Block Size"
+msgstr "Tamaño del bloque"
+
+#: src/ui/ui_filter_effects.c:2271 src/ui/ui_filter_effects.c:2278
+#: resources/ui/main_window.glade:886
+msgid "Mosaic"
+msgstr "Mosaico"
+
+#: src/ui/ui_filter_effects.c:2299 src/ui/ui_filter_effects.c:2441
+msgid "Cell Size"
+msgstr "Tamaño de la célula"
+
+#: src/ui/ui_filter_effects.c:2315 resources/ui/main_window.glade:870
+msgid "Crystallize"
+msgstr "Cristalice"
+
+#: src/ui/ui_filter_effects.c:2325 resources/ui/main_window.glade:878
+msgid "Fragment"
+msgstr "Fragmento"
+
+#: src/ui/ui_filter_effects.c:2358
+msgid "Radius"
+msgstr "Radio"
+
+#: src/ui/ui_filter_effects.c:2369
+msgid "Dot Density"
+msgstr "Densidad de puntos"
+
+#: src/ui/ui_filter_effects.c:2380
+msgid "Cyan Angle"
+msgstr "Ángulo cian"
+
+#: src/ui/ui_filter_effects.c:2391
+msgid "Magenta Angle"
+msgstr "Ángulo magenta"
+
+#: src/ui/ui_filter_effects.c:2402
+msgid "Yellow Angle"
+msgstr "Ángulo amarillo"
+
+#: src/ui/ui_filter_effects.c:2411 src/ui/ui_filter_effects.c:2419
+#: resources/ui/main_window.glade:862
+msgid "Color Halftone"
+msgstr "Medios tonos en color"
+
+#: src/ui/ui_filter_effects.c:2452 resources/ui/fill_dialog.glade:134
+msgid "Background Color"
+msgstr "Color de fondo"
+
+#: src/ui/ui_filter_effects.c:2457 src/ui/ui_filter_effects.c:2468
+#: resources/ui/main_window.glade:894
+msgid "Pointillize"
+msgstr "Puntillizar"
+
+#: src/ui/ui_image_menu.c:623
+msgid "Untitled copy"
+msgstr "Copia sin título"
+
+#: src/ui/ui_image_menu.c:1316
+msgid "Rotate 90° clockwise"
+msgstr "Girar 90° en el sentido de las agujas del reloj"
+
+#: src/ui/ui_image_menu.c:1322
+msgid "Rotate 90° counter-clockwise"
+msgstr "Girar 90° en sentido antihorario"
+
+#: src/ui/ui_image_menu.c:1328
+msgid "Rotate 180°"
+msgstr "Girar 180"
+
+#: src/ui/ui_image_menu.c:1355 src/ui/ui_image_menu.c:1385
+msgid "Rotate image"
+msgstr "Girar imagen"
+
+#: src/ui/ui_layer_menu.c:52 resources/ui/main_window.glade:1258
+msgid "_New Layer"
+msgstr "nueva capa"
+
+#: src/ui/ui_layer_menu.c:58 resources/ui/main_window.glade:1274
+#: resources/ui/main_window.glade:1514
+msgid "_Duplicate Layer"
+msgstr "capa duplicada"
+
+#: src/ui/ui_layer_menu.c:67 resources/ui/main_window.glade:1266
+#: resources/ui/main_window.glade:1522
+msgid "_Delete Layer"
+msgstr "borrar capa"
+
+#: src/ui/ui_select_menu.c:418
+#, c-format
+msgid "Processing %s..."
+msgstr "Procesando %s..."
+
+#: src/ui/ui_select_menu.c:419
+msgid "selection"
+msgstr "selección"
+
+#: src/ui/ui_select_menu.c:476
+msgid "Grow Selection"
+msgstr "Selección de cultivos"
+
+#: src/ui/ui_select_menu.c:484
+msgid "Shrink Selection"
+msgstr "Selección de retractilado"
+
+#: src/ui/ui_select_menu.c:492
+msgid "Border Selection"
+msgstr "Selección de fronteras"
+
+#: src/ui/ui_select_menu.c:500
+msgid "Feather Selection"
+msgstr "Selección de plumas"
+
+#: src/ui/ui_select_menu.c:508
+msgid "Sharpen Selection"
+msgstr "Afilar Selección"
+
+#: src/ui/ui_tools_menu.c:57
+msgid ""
+"Restart the application for all interface text to use the new language."
+msgstr ""
+"Reinicie la aplicación para que todo el texto de la interfaz utilice el "
+"nuevo idioma."
+
+#: src/ui/ui_utils.c:171
+msgid "Choose Color"
+msgstr "Elegir color"
+
+#: src/ui/widgets/accordion.c:151 src/ui/widgets/vertical_spin_button.c:331
+msgid "▼"
+msgstr "▼"
+
+#: src/ui/widgets/vertical_spin_button.c:292
+msgid "▲"
+msgstr "▲"
+
+#: src/ui.c:996
+#, c-format
+msgid "Save changes to \"%s\" before closing?"
+msgstr "¿Guardar los cambios en \"%s\" antes de cerrar?"
+
+#: src/ui.c:1003
+msgid "If you don't save, changes will be lost."
+msgstr "Si no guarda, se perderán los cambios."
+
+#: src/ui.c:1005
+msgid "_Discard"
+msgstr "descartar"
+
+#: src/ui.c:1135
+#, c-format
+msgid "RasterLab - %s%s"
+msgstr "RasterLab - %s%s"
+
+#: src/ui.c:1138
+msgid "RasterLab"
+msgstr "RasterLab"
+
+#: src/ui.c:2015 src/ui.c:2177 resources/ui/main_window.glade:1977
+msgid "Fit image"
+msgstr "Ajustar imagen"
+
+#: src/ui.c:2017 src/ui.c:2179 resources/ui/main_window.glade:1971
+msgid "Fit width"
+msgstr "Anchura de ajuste"
+
+#: src/ui.c:2019 src/ui.c:2181 resources/ui/main_window.glade:1974
+msgid "Fit height"
+msgstr "Altura de ajuste"
+
+#: src/ui.c:2135
+msgid "—"
+msgstr "-"
+
+#: src/ui.c:2159 src/ui.c:2347
+#, c-format
+msgid "%s × %s"
+msgstr "%s × %s"
+
+#: src/ui.c:2386
+#, c-format
+msgid "Time taken: %.3f ms"
+msgstr "Tiempo empleado: %.3f ms"
+
+#: src/ui.c:2388
+#, c-format
+msgid "Time taken: %.3f s"
+msgstr "Tiempo empleado: %.3f s"
+
+#: src/ui.c:2390
+#, c-format
+msgid "Time taken: %.2f s"
+msgstr "Tiempo empleado: %.2f s"
+
+#: src/ui.c:2456 src/ui.c:2481 src/ui.c:2489
+#, c-format
+msgid "(%d, %d)"
+msgstr "(%d, %d)"
+
+#: src/ui.c:2461 src/ui.c:2476
+#, c-format
+msgid "(%.1f, %.1f)"
+msgstr "(%.1f, %.1f)"
+
+#: src/ui.c:2466
+#, c-format
+msgid "(%.3f, %.3f)"
+msgstr "(%.3f, %.3f)"
+
+#: src/ui.c:2471 src/ui.c:2486
+#, c-format
+msgid "(%.2f, %.2f)"
+msgstr "(%.2f, %.2f)"
+
+#: resources/ui/avif_options_dialog.glade:14
+msgid "AVIF options"
+msgstr "Opciones AVIF"
+
+#: resources/ui/bmp_options_dialog.glade:14
+msgid "BMP options"
+msgstr "Opciones BMP"
+
+#: resources/ui/bmp_options_dialog.glade:89
+msgid "color model"
+msgstr "modelo de color"
+
+#: resources/ui/bmp_options_dialog.glade:107
+#: resources/ui/jpeg_options_dialog.glade:383
+#: resources/ui/png_options_dialog.glade:12
+#: resources/ui/png_options_dialog.glade:97
+#: resources/ui/tiff_options_dialog.glade:12
+#: resources/ui/tiff_options_dialog.glade:59
+#: resources/ui/tiff_options_dialog.glade:181
+#: resources/ui/tiff_options_dialog.glade:272
+msgid "auto"
+msgstr "auto"
+
+#: resources/ui/bmp_options_dialog.glade:121
+msgid "color + transparency"
+msgstr "color + transparencia"
+
+#: resources/ui/bmp_options_dialog.glade:134
+msgid "color only"
+msgstr "sólo color"
+
+#: resources/ui/bmp_options_dialog.glade:147
+#: resources/ui/png_options_dialog.glade:18
+#: resources/ui/tiff_options_dialog.glade:18
+msgid "grayscale"
+msgstr "escala de grises"
+
+#: resources/ui/bmp_options_dialog.glade:174
+msgid "flip row order (top-down)"
+msgstr "invertir el orden de las filas (arriba-abajo)"
+
+#: resources/ui/bmp_options_dialog.glade:198
+#: resources/ui/bmp_options_dialog.glade:292
+#: resources/ui/jpeg_options_dialog.glade:367
+#: resources/ui/png_options_dialog.glade:410
+#: resources/ui/tiff_options_dialog.glade:486
+msgid "depth"
+msgstr "profundidad"
+
+#: resources/ui/bmp_options_dialog.glade:216
+msgid "32-bpp XRGB"
+msgstr "32-bpp XRGB"
+
+#: resources/ui/bmp_options_dialog.glade:229
+msgid "24-bpp RGB"
+msgstr "rGB de 24 ppp"
+
+#: resources/ui/bmp_options_dialog.glade:242
+msgid "16-bpp"
+msgstr "16 ppp"
+
+#: resources/ui/bmp_options_dialog.glade:255
+#: resources/ui/bmp_options_dialog.glade:309
+msgid "8-bpp"
+msgstr "8 ppp"
+
+#: resources/ui/bmp_options_dialog.glade:323
+msgid "4-bpp"
+msgstr "4 ppp"
+
+#: resources/ui/bmp_options_dialog.glade:336
+msgid "1-bpp"
+msgstr "1 bpp"
+
+#: resources/ui/bmp_options_dialog.glade:363
+msgid "use legacy 15-bit encoding"
+msgstr "utilizar codificación heredada de 15 bits"
+
+#: resources/ui/bmp_options_dialog.glade:382
+msgid "use RLE compression"
+msgstr "utilizar compresión RLE"
+
+#: resources/ui/bmp_options_dialog.glade:396
+msgid "restrict palette size"
+msgstr "restringir el tamaño de la paleta"
+
+#: resources/ui/bmp_options_dialog.glade:447
+msgid "unique colors"
+msgstr "colores únicos"
+
+#: resources/ui/canvas_size_dialog.glade:8
+msgid "Canvas Size"
+msgstr "Tamaño del lienzo"
+
+#: resources/ui/canvas_size_dialog.glade:100
+#: resources/ui/new_image_dialog.glade:100
+#: resources/ui/resize_dialog.glade:100
+msgid "width"
+msgstr "anchura"
+
+#: resources/ui/canvas_size_dialog.glade:118
+#: resources/ui/new_image_dialog.glade:118
+#: resources/ui/resize_dialog.glade:118
+msgid "height"
+msgstr "altura"
+
+#: resources/ui/canvas_size_dialog.glade:136
+#: resources/ui/new_image_dialog.glade:136
+#: resources/ui/resize_dialog.glade:136
+msgid "resolution"
+msgstr "resolución"
+
+#: resources/ui/canvas_size_dialog.glade:154
+#: resources/ui/new_image_dialog.glade:154
+#: resources/ui/resize_dialog.glade:154
+msgid "dimensions"
+msgstr "dimensiones"
+
+#: resources/ui/canvas_size_dialog.glade:168
+#: resources/ui/new_image_dialog.glade:168
+#: resources/ui/resize_dialog.glade:168
+msgid "aspect ratio"
+msgstr "relación de aspecto"
+
+#: resources/ui/canvas_size_dialog.glade:363
+#: resources/ui/new_image_dialog.glade:357
+#: resources/ui/resize_dialog.glade:357
+msgid "500 px X 500 px (2.00 MB)"
+msgstr "500 px X 500 px (2,00 MB)"
+
+#: resources/ui/canvas_size_dialog.glade:376
+#: resources/ui/new_image_dialog.glade:370
+#: resources/ui/resize_dialog.glade:370
+msgid "1:1 (1.0)"
+msgstr "1:1 (1.0)"
+
+#: resources/ui/canvas_size_dialog.glade:400
+#: resources/ui/new_image_dialog.glade:394
+#: resources/ui/resize_dialog.glade:394
+msgid "link"
+msgstr "enlace"
+
+#: resources/ui/canvas_size_dialog.glade:442
+msgid "anchor position"
+msgstr "posición de anclaje"
+
+#: resources/ui/color_picker_options.glade:141
+msgid "layer"
+msgstr "capa"
+
+#: resources/ui/color_picker_options.glade:155
+msgid "image"
+msgstr "imagen"
+
+#: resources/ui/crop_options.glade:284
+msgid "Rule of Thirds"
+msgstr "Regla de los tercios"
+
+#: resources/ui/crop_options.glade:285
+msgid "Phi Grid"
+msgstr "Rejilla Phi"
+
+#: resources/ui/crop_options.glade:286
+msgid "Diagonal"
+msgstr "Diagonal"
+
+#: resources/ui/crop_options.glade:287
+msgid "Center Lines"
+msgstr "Líneas centrales"
+
+#: resources/ui/fill_dialog.glade:89
+msgid "Custom Color"
+msgstr "Color personalizado"
+
+#: resources/ui/fill_dialog.glade:119
+msgid "Foreground Color"
+msgstr "Color de primer plano"
+
+#: resources/ui/fill_dialog.glade:170
+msgid "Opacity"
+msgstr "Opacidad"
+
+#: resources/ui/fill_dialog.glade:237
+msgid "Blend Mode"
+msgstr "Modo de fusión"
+
+#: resources/ui/hdr_image_dialog.glade:65
+msgid "HDR image identified"
+msgstr "Imagen HDR identificada"
+
+#: resources/ui/hdr_image_dialog.glade:93
+msgid "Reset all parameters to defaults"
+msgstr "Restablecer todos los parámetros por defecto"
+
+#: resources/ui/hdr_image_dialog.glade:193
+msgid ""
+"This image contains more than 8-bit color depth. Before it can be displayed "
+"on your screen, it must be converted to a simpler format. This process is "
+"called tone mapping."
+msgstr ""
+"Esta imagen contiene más de 8 bits de profundidad de color. Antes de poder "
+"visualizarla en la pantalla, hay que convertirla a un formato más sencillo. "
+"Este proceso se denomina mapeo de tonos."
+
+#: resources/ui/hdr_image_dialog.glade:243
+msgid "tone-mapping operator"
+msgstr "operador de mapeo tonal"
+
+#: resources/ui/hdr_image_dialog.glade:260
+msgid "Linear"
+msgstr "Lineal"
+
+#: resources/ui/hdr_image_dialog.glade:274
+msgid "Filmic"
+msgstr "Fílmico"
+
+#: resources/ui/hdr_image_dialog.glade:287
+msgid "Drago"
+msgstr "Drago"
+
+#: resources/ui/hdr_image_dialog.glade:300
+msgid "Reinhard"
+msgstr "Reinhard"
+
+#: resources/ui/hdr_image_dialog.glade:335
+#: resources/ui/hdr_image_dialog.glade:486
+#: resources/ui/hdr_image_dialog.glade:701
+msgid "gamma"
+msgstr "gamma"
+
+#: resources/ui/hdr_image_dialog.glade:395
+msgid "normalize"
+msgstr "normalizar"
+
+#: resources/ui/hdr_image_dialog.glade:412
+#: resources/ui/jpeg_options_dialog.glade:291
+#: resources/ui/png_options_dialog.glade:109
+#: resources/ui/tiff_options_dialog.glade:71
+#: resources/ui/tiff_options_dialog.glade:221
+#: resources/ui/tiff_options_dialog.glade:325
+msgid "none"
+msgstr "ninguno"
+
+#: resources/ui/hdr_image_dialog.glade:426
+msgid "visible spectrum"
+msgstr "espectro visible"
+
+#: resources/ui/hdr_image_dialog.glade:439
+msgid "full spectrum"
+msgstr "espectro completo"
+
+#: resources/ui/hdr_image_dialog.glade:518
+#: resources/ui/hdr_image_dialog.glade:586
+#: resources/ui/hdr_image_dialog.glade:654
+#: resources/ui/hdr_image_dialog.glade:734
+#: resources/ui/hdr_image_dialog.glade:802
+#: resources/ui/hdr_image_dialog.glade:882
+#: resources/ui/hdr_image_dialog.glade:950
+#: resources/ui/hdr_image_dialog.glade:1018
+msgid "2.20"
+msgstr "2.20"
+
+#: resources/ui/hdr_image_dialog.glade:621
+msgid "white point"
+msgstr "punto blanco"
+
+#: resources/ui/hdr_image_dialog.glade:917
+msgid "adaptation"
+msgstr "adaptación"
+
+#: resources/ui/hdr_image_dialog.glade:985
+msgid "color correction"
+msgstr "corrección del color"
+
+#: resources/ui/hdr_image_dialog.glade:1052
+msgid "automatically apply these settings"
+msgstr "aplicar automáticamente estos ajustes"
+
+#: resources/ui/heic_options_dialog.glade:14
+msgid "HEIC options"
+msgstr "Opciones del HEIC"
+
+#: resources/ui/heic_options_dialog.glade:104
+msgid "lossless"
+msgstr "sin pérdidas"
+
+#: resources/ui/heic_options_dialog.glade:118
+msgid "lossy"
+msgstr "con pérdidas"
+
+#: resources/ui/heic_options_dialog.glade:197
+msgid "image format"
+msgstr "formato de imagen"
+
+#: resources/ui/heic_options_dialog.glade:213
+msgid "single frame (composited image)"
+msgstr "fotograma único (imagen compuesta)"
+
+#: resources/ui/heic_options_dialog.glade:227
+msgid "multiframe (one frame per layer)"
+msgstr "multitrama (una trama por capa)"
+
+#: resources/ui/jpeg_options_dialog.glade:7
+msgid "JPEG options"
+msgstr "Opciones JPEG"
+
+#: resources/ui/jpeg_options_dialog.glade:119
+msgid "perfect (99)"
+msgstr "perfecto (99)"
+
+#: resources/ui/jpeg_options_dialog.glade:120
+msgid "excellent (92)"
+msgstr "excelente (92)"
+
+#: resources/ui/jpeg_options_dialog.glade:121
+msgid "good (80)"
+msgstr "bueno (80)"
+
+#: resources/ui/jpeg_options_dialog.glade:122
+msgid "average (65)"
+msgstr "media (65)"
+
+#: resources/ui/jpeg_options_dialog.glade:123
+msgid "custom quality"
+msgstr "calidad personalizada"
+
+#: resources/ui/jpeg_options_dialog.glade:182
+msgid "compression method"
+msgstr "método de compresión"
+
+#: resources/ui/jpeg_options_dialog.glade:198
+msgid "baseline"
+msgstr "línea de base"
+
+#: resources/ui/jpeg_options_dialog.glade:211
+msgid "optimized baseline"
+msgstr "línea de base optimizada"
+
+#: resources/ui/jpeg_options_dialog.glade:226
+msgid "progressive"
+msgstr "progresiva"
+
+#: resources/ui/jpeg_options_dialog.glade:275
+msgid "chroma subsampling"
+msgstr "submuestreo de croma"
+
+#: resources/ui/jpeg_options_dialog.glade:304
+msgid "low (default)"
+msgstr "bajo (por defecto)"
+
+#: resources/ui/jpeg_options_dialog.glade:319
+msgid "medium"
+msgstr "medio"
+
+#: resources/ui/jpeg_options_dialog.glade:332
+msgid "high"
+msgstr "alta"
+
+#: resources/ui/jpeg_options_dialog.glade:398
+msgid "color (24-bpp)"
+msgstr "color (24 bpp)"
+
+#: resources/ui/jpeg_options_dialog.glade:411
+msgid "grayscale (8-bpp)"
+msgstr "escala de grises (8-bpp)"
+
+#: resources/ui/jpeg_options_dialog.glade:438
+msgid "embed thumbnail image"
+msgstr "incrustar imagen en miniatura"
+
+#: resources/ui/lasso_select_options.glade:384
+#: resources/ui/polygon_select_options.glade:443
+msgid "Adjust the width of the selection border"
+msgstr "Ajustar la anchura del borde de selección"
+
+#: resources/ui/layers_panel.glade:19
+msgid "opacity:"
+msgstr "opacidad:"
+
+#: resources/ui/layers_panel.glade:86
+msgid "blend:"
+msgstr "mezcla:"
+
+#: resources/ui/layers_panel.glade:141
+msgid "<b>Add layer</b>"
+msgstr "<b>Añadir capa</b>"
+
+#: resources/ui/layers_panel.glade:154
+msgid "<b>Delete layer</b>"
+msgstr "<b>Borrar capa</b>"
+
+#: resources/ui/layers_panel.glade:167
+msgid "<b>Move layer up</b>"
+msgstr "<b>Subir capa</b>"
+
+#: resources/ui/layers_panel.glade:180
+msgid "<b>Move layer down</b>"
+msgstr "<b>Mover capa hacia abajo</b>"
+
+#: resources/ui/layers_panel.glade:193
+msgid "<b>Duplicate layer</b>"
+msgstr "<b>Capa duplicada</b>"
+
+#: resources/ui/magic_wand_select_options.glade:345
+msgid "Color matching tolerance (0=exact match, 100=all colors)"
+msgstr "Tolerancia de coincidencia de color (0=exacta, 100=todos los colores)"
+
+#: resources/ui/magic_wand_select_options.glade:395
+#: resources/ui/paintbucket_options.glade:113
+#: resources/ui/png_options_dialog.glade:15
+#: resources/ui/tiff_options_dialog.glade:15
+msgid "color"
+msgstr "color"
+
+#: resources/ui/magic_wand_select_options.glade:396
+#: resources/ui/paintbucket_options.glade:114
+msgid "color and opacity"
+msgstr "color y opacidad"
+
+#: resources/ui/magic_wand_select_options.glade:397
+#: resources/ui/paintbucket_options.glade:115
+msgid "luminance"
+msgstr "luminancia"
+
+#: resources/ui/magic_wand_select_options.glade:398
+#: resources/ui/paintbucket_options.glade:116
+msgid "red only"
+msgstr "sólo rojo"
+
+#: resources/ui/magic_wand_select_options.glade:399
+#: resources/ui/paintbucket_options.glade:117
+msgid "green only"
+msgstr "sólo verde"
+
+#: resources/ui/magic_wand_select_options.glade:400
+#: resources/ui/paintbucket_options.glade:118
+msgid "blue only"
+msgstr "sólo azul"
+
+#: resources/ui/magic_wand_select_options.glade:401
+#: resources/ui/paintbucket_options.glade:119
+msgid "alpha only"
+msgstr "sólo alfa"
+
+#: resources/ui/main_window.glade:20
+msgid "Auto Gamma Correction"
+msgstr "Corrección gamma automática"
+
+#: resources/ui/main_window.glade:28
+msgid "Auto Levels"
+msgstr "Niveles automáticos"
+
+#: resources/ui/main_window.glade:84
+msgid "White balance"
+msgstr "Balance de blancos"
+
+#: resources/ui/main_window.glade:98
+msgid "Choma Key"
+msgstr "Llave Choma"
+
+#: resources/ui/main_window.glade:106
+msgid "Hue and saturation"
+msgstr "Tono y saturación"
+
+#: resources/ui/main_window.glade:114
+msgid "Temperature"
+msgstr "Temperatura"
+
+#: resources/ui/main_window.glade:152
+msgid "Split toning"
+msgstr "Tonalidad dividida"
+
+#: resources/ui/main_window.glade:164
+msgid "Histogram"
+msgstr "Histograma"
+
+#: resources/ui/main_window.glade:181
+msgid "Stretch"
+msgstr "Estire"
+
+#: resources/ui/main_window.glade:193
+msgid "Lighting"
+msgstr "Iluminación"
+
+#: resources/ui/main_window.glade:219
+msgid "Curves"
+msgstr "Curvas"
+
+#: resources/ui/main_window.glade:251
+msgid "Retinex"
+msgstr "Retinex"
+
+#: resources/ui/main_window.glade:271
+msgid "Map"
+msgstr "Mapa"
+
+#: resources/ui/main_window.glade:281
+msgid "Color map"
+msgstr "Mapa en color"
+
+#: resources/ui/main_window.glade:289
+msgid "Palette map"
+msgstr "Mapa de paletas"
+
+#: resources/ui/main_window.glade:386
+msgid "Cut merged"
+msgstr "Corte fusionado"
+
+#: resources/ui/main_window.glade:394
+msgid "Copy"
+msgstr "Copia"
+
+#: resources/ui/main_window.glade:403
+msgid "Copy merged"
+msgstr "Copia fusionada"
+
+#: resources/ui/main_window.glade:412
+msgid "Paste"
+msgstr "Pegar"
+
+#: resources/ui/main_window.glade:421
+msgid "Paste to new image"
+msgstr "Pegar en nueva imagen"
+
+#: resources/ui/main_window.glade:444
+msgid "Fill..."
+msgstr "Llena..."
+
+#: resources/ui/main_window.glade:452
+msgid "Stroke..."
+msgstr "Accidente cerebrovascular..."
+
+#: resources/ui/main_window.glade:464
+msgid "Artistic"
+msgstr "Artístico"
+
+#: resources/ui/main_window.glade:526
+msgid "Blur"
+msgstr "Desenfoque"
+
+#: resources/ui/main_window.glade:612
+msgid "Distort"
+msgstr "Distorsionar"
+
+#: resources/ui/main_window.glade:682
+msgid "Edge Detect"
+msgstr "Detección de bordes"
+
+#: resources/ui/main_window.glade:744
+msgid "Noise"
+msgstr "Ruido"
+
+#: resources/ui/main_window.glade:754
+msgid "BEEPS"
+msgstr "BEEPS"
+
+#: resources/ui/main_window.glade:786
+msgid "Skin Smoothing"
+msgstr "Alisado de la piel"
+
+#: resources/ui/main_window.glade:798
+msgid "Other"
+msgstr "Otros"
+
+#: resources/ui/main_window.glade:824
+msgid "High Pass"
+msgstr "Paso alto"
+
+#: resources/ui/main_window.glade:832
+msgid "Maximum"
+msgstr "Máximo"
+
+#: resources/ui/main_window.glade:840
+msgid "Minimum"
+msgstr "Mínimo"
+
+#: resources/ui/main_window.glade:852
+msgid "Pixelate"
+msgstr "Pixelate"
+
+#: resources/ui/main_window.glade:906
+msgid "Render"
+msgstr "Render"
+
+#: resources/ui/main_window.glade:916
+msgid "Clouds"
+msgstr "Nubes"
+
+#: resources/ui/main_window.glade:938
+msgid "Sharpen..."
+msgstr "Afila..."
+
+#: resources/ui/main_window.glade:946
+msgid "Unsharp mask..."
+msgstr "Máscara de desenfoque..."
+
+#: resources/ui/main_window.glade:964
+msgid "Custom filter..."
+msgstr "Filtro personalizado..."
+
+#: resources/ui/main_window.glade:976
+msgid "_New"
+msgstr "nuevo"
+
+#: resources/ui/main_window.glade:994
+msgid "Open Recent"
+msgstr "Abierto Recientes"
+
+#: resources/ui/main_window.glade:1017
+msgid "Save As..."
+msgstr "Guardar como..."
+
+#: resources/ui/main_window.glade:1026
+msgid "Revert"
+msgstr "Volver a"
+
+#: resources/ui/main_window.glade:1040
+msgid "Close"
+msgstr "Cerrar"
+
+#: resources/ui/main_window.glade:1049
+msgid "Close All"
+msgstr "Cerrar Todos"
+
+#: resources/ui/main_window.glade:1063
+msgid "Exit"
+msgstr "Salida"
+
+#: resources/ui/main_window.glade:1076
+msgid "Duplicate"
+msgstr "Duplicar"
+
+#: resources/ui/main_window.glade:1091
+msgid "Resize..."
+msgstr "Redimensionar..."
+
+#: resources/ui/main_window.glade:1106
+msgid "Canvas size..."
+msgstr "Tamaño del lienzo..."
+
+#: resources/ui/main_window.glade:1115
+msgid "Fit canvas to active layer"
+msgstr "Ajustar la lona a la capa activa"
+
+#: resources/ui/main_window.glade:1123
+msgid "Fit canvas around all layers"
+msgstr "Ajustar la lona alrededor de todas las capas"
+
+#: resources/ui/main_window.glade:1137
+msgid "Crop to selection"
+msgstr "Cultivo a selección"
+
+#: resources/ui/main_window.glade:1145
+msgid "Trim to borders"
+msgstr "Recortar a los bordes"
+
+#: resources/ui/main_window.glade:1159
+msgid "Rotate"
+msgstr "Gire"
+
+#: resources/ui/main_window.glade:1169
+msgid "Rotate 90 clockwise"
+msgstr "Girar 90 en el sentido de las agujas del reloj"
+
+#: resources/ui/main_window.glade:1178
+msgid "Rotate 90 counter-clockwise"
+msgstr "Girar 90 en sentido antihorario"
+
+#: resources/ui/main_window.glade:1187
+msgid "Rotate 180"
+msgstr "Giro 180"
+
+#: resources/ui/main_window.glade:1195
+msgid "Rotate arbitrary..."
+msgstr "Gira arbitrariamente..."
+
+#: resources/ui/main_window.glade:1207
+msgid "Flip horizontal"
+msgstr "Voltear horizontal"
+
+#: resources/ui/main_window.glade:1215
+msgid "Flip vertical"
+msgstr "Voltear vertical"
+
+#: resources/ui/main_window.glade:1223
+msgid "Transpose"
+msgstr "Transponer"
+
+#: resources/ui/main_window.glade:1237 resources/ui/main_window.glade:1566
+msgid "Merge visible layers"
+msgstr "Fusionar capas visibles"
+
+#: resources/ui/main_window.glade:1246
+msgid "Flatten image..."
+msgstr "Aplanar imagen..."
+
+#: resources/ui/main_window.glade:1288 resources/ui/main_window.glade:1536
+msgid "Rasterize Text Layer"
+msgstr "Rasterizar capa de texto"
+
+#: resources/ui/main_window.glade:1302 resources/ui/main_window.glade:1550
+msgid "Merge up"
+msgstr "Fusión hacia arriba"
+
+#: resources/ui/main_window.glade:1310 resources/ui/main_window.glade:1558
+msgid "Merge down"
+msgstr "Fusión hacia abajo"
+
+#: resources/ui/main_window.glade:1325
+msgid "Order"
+msgstr "Pida"
+
+#: resources/ui/main_window.glade:1335
+msgid "Select top layer"
+msgstr "Seleccione la capa superior"
+
+#: resources/ui/main_window.glade:1344
+msgid "Select layer above"
+msgstr "Seleccione la capa superior"
+
+#: resources/ui/main_window.glade:1353
+msgid "Select layer below"
+msgstr "Seleccione la capa inferior"
+
+#: resources/ui/main_window.glade:1362
+msgid "Select bottom layer"
+msgstr "Seleccione la capa inferior"
+
+#: resources/ui/main_window.glade:1377
+msgid "Move layer to top"
+msgstr "Mover la capa a la parte superior"
+
+#: resources/ui/main_window.glade:1385
+msgid "Move layer up"
+msgstr "Mover capa hacia arriba"
+
+#: resources/ui/main_window.glade:1393
+msgid "Move layer down"
+msgstr "Mover capa hacia abajo"
+
+#: resources/ui/main_window.glade:1401
+msgid "Move layer to bottom"
+msgstr "Mover capa al fondo"
+
+#: resources/ui/main_window.glade:1413
+msgid "Visibility"
+msgstr "Visibilidad"
+
+#: resources/ui/main_window.glade:1423 resources/ui/main_window.glade:1483
+msgid "Show this layer"
+msgstr "Mostrar esta capa"
+
+#: resources/ui/main_window.glade:1437 resources/ui/main_window.glade:1492
+msgid "Show only this layer"
+msgstr "Mostrar sólo esta capa"
+
+#: resources/ui/main_window.glade:1445 resources/ui/main_window.glade:1500
+msgid "Hide only this layer"
+msgstr "Ocultar sólo esta capa"
+
+#: resources/ui/main_window.glade:1459
+msgid "Show all layers"
+msgstr "Mostrar todas las capas"
+
+#: resources/ui/main_window.glade:1467
+msgid "Hide all layers"
+msgstr "Ocultar todas las capas"
+
+#: resources/ui/main_window.glade:1574
+msgid "Flatten image"
+msgstr "Aplanar imagen"
+
+#: resources/ui/main_window.glade:1586
+msgid "All"
+msgstr "Todos"
+
+#: resources/ui/main_window.glade:1619
+msgid "Grow"
+msgstr "Crecer"
+
+#: resources/ui/main_window.glade:1628
+msgid "Shrink"
+msgstr "Retráctil"
+
+#: resources/ui/main_window.glade:1645
+msgid "Feather"
+msgstr "Pluma"
+
+#: resources/ui/main_window.glade:1665
+msgid "%"
+msgstr "%"
+
+#: resources/ui/main_window.glade:1694
+msgid "Language"
+msgstr "Idioma"
+
+#: resources/ui/main_window.glade:1707
+msgid "Settings..."
+msgstr "Ajustes..."
+
+#: resources/ui/main_window.glade:1719
+msgid "Fit on Screen"
+msgstr "Ajuste en pantalla"
+
+#: resources/ui/main_window.glade:1727
+msgid "Actual Pixel Size"
+msgstr "Tamaño real de los píxeles"
+
+#: resources/ui/main_window.glade:1735
+msgid "Zoom In"
+msgstr "Ampliar"
+
+#: resources/ui/main_window.glade:1743
+msgid "Zoom Out"
+msgstr "Alejar"
+
+#: resources/ui/main_window.glade:1758
+msgid "Zoom to"
+msgstr "Zoom a"
+
+#: resources/ui/main_window.glade:1768
+msgid "16:1 (1600%) "
+msgstr "16:1 (1600%)"
+
+#: resources/ui/main_window.glade:1776
+msgid "8:1 (800%) "
+msgstr "8:1 (800%)"
+
+#: resources/ui/main_window.glade:1784
+msgid "4:1 (400%)"
+msgstr "4:1 (400%)"
+
+#: resources/ui/main_window.glade:1792
+msgid "2:1 (200%)"
+msgstr "2:1 (200%)"
+
+#: resources/ui/main_window.glade:1800
+msgid "1:1 (100%)"
+msgstr "1:1 (100%)"
+
+#: resources/ui/main_window.glade:1808
+msgid "2:1 (50%)"
+msgstr "2:1 (50%)"
+
+#: resources/ui/main_window.glade:1816
+msgid "1:4 (25%)"
+msgstr "1:4 (25%)"
+
+#: resources/ui/main_window.glade:1824
+msgid "1:8 (12.5%)"
+msgstr "1:8 (12.5%)"
+
+#: resources/ui/main_window.glade:1832
+msgid "1:16 (6.25%)"
+msgstr "1:16 (6.25%)"
+
+#: resources/ui/main_window.glade:1850
+msgid "Show rulers"
+msgstr "Mostrar reglas"
+
+#: resources/ui/main_window.glade:1859
+msgid "Show statusbar"
+msgstr "Mostrar barra de estado"
+
+#: resources/ui/main_window.glade:1868
+msgid "Show layer edges"
+msgstr "Mostrar bordes de capa"
+
+#: resources/ui/main_window.glade:2001
+msgid "_File"
+msgstr "archivo"
+
+#: resources/ui/main_window.glade:2009
+msgid "_Edit"
+msgstr "editar"
+
+#: resources/ui/main_window.glade:2017
+msgid "_Image"
+msgstr "imagen"
+
+#: resources/ui/main_window.glade:2025
+msgid "_Select"
+msgstr "seleccionar"
+
+#: resources/ui/main_window.glade:2033
+msgid "_Layer"
+msgstr "capa"
+
+#: resources/ui/main_window.glade:2041
+msgid "_Adjustments"
+msgstr "ajustes"
+
+#: resources/ui/main_window.glade:2049
+msgid "_Effects"
+msgstr "efectos"
+
+#: resources/ui/main_window.glade:2057
+msgid "_Tools"
+msgstr "herramientas"
+
+#: resources/ui/main_window.glade:2065
+msgid "_View"
+msgstr "ver"
+
+#: resources/ui/main_window.glade:2108
+msgid ""
+"Hand (click and drag image scrolling)\n"
+"Shortcut Key: H"
+msgstr ""
+"Mano (hacer clic y arrastrar para desplazar la imagen)\n"
+"Tecla de acceso directo: H"
+
+#: resources/ui/main_window.glade:2134
+msgid ""
+"Zoom\n"
+"Shortcut Key: Z"
+msgstr ""
+"Zoom\n"
+"Tecla de acceso directo: Z"
+
+#: resources/ui/main_window.glade:2160
+msgid ""
+"Move image layers\n"
+"Shortcut Key: M"
+msgstr ""
+"Mover capas de imagen\n"
+"Tecla de acceso directo: M"
+
+#: resources/ui/main_window.glade:2186
+msgid ""
+"Color Picker\n"
+"Shortcut Key: I"
+msgstr ""
+"Selector de color\n"
+"Tecla de acceso directo: I"
+
+#: resources/ui/main_window.glade:2212
+msgid ""
+"Crop\n"
+"Shortcut Key: C"
+msgstr ""
+"Recortar\n"
+"Tecla de acceso directo: C"
+
+#: resources/ui/main_window.glade:2238
+msgid ""
+"Pencil\n"
+"Shortcut Key: P"
+msgstr ""
+"Lápiz\n"
+"Tecla de acceso directo: P"
+
+#: resources/ui/main_window.glade:2264
+msgid ""
+"Paintbrush\n"
+"Shortcut Key: B"
+msgstr ""
+"Pincel\n"
+"Tecla de acceso directo: B"
+
+#: resources/ui/main_window.glade:2290
+msgid ""
+"Eraser\n"
+"Shortcut Key: E"
+msgstr ""
+"Borrador\n"
+"Tecla de acceso directo: E"
+
+#: resources/ui/main_window.glade:2316
+msgid ""
+"Paint bucket\n"
+"Shortcut Key: F"
+msgstr ""
+"Cubo de pintura\n"
+"Tecla de acceso directo: F"
+
+#: resources/ui/main_window.glade:2353
+msgid ""
+"Rectangular Selection\n"
+"Shortcut Key: S"
+msgstr ""
+"Selección rectangular\n"
+"Tecla de acceso directo: S"
+
+#: resources/ui/main_window.glade:2379
+msgid ""
+"Elliptical Selection\n"
+"Shortcut Key: S"
+msgstr ""
+"Selección elíptica\n"
+"Tecla de acceso directo: S"
+
+#: resources/ui/main_window.glade:2405
+msgid ""
+"Polygon Selection\n"
+"Shortcut Key: L"
+msgstr ""
+"Selección de polígonos\n"
+"Tecla de acceso directo: L"
+
+#: resources/ui/main_window.glade:2431
+msgid ""
+"Lasso Selection\n"
+"Shortcut Key: L"
+msgstr ""
+"Selección de Lazo\n"
+"Tecla de acceso directo: L"
+
+#: resources/ui/main_window.glade:2457
+msgid ""
+"Magic Wand Selection\n"
+"Shortcut Key: W"
+msgstr ""
+"Selección Varita Mágica\n"
+"Tecla de acceso directo: W"
+
+#: resources/ui/main_window.glade:2494
+msgid ""
+"Text\n"
+"Shortcut Key: T"
+msgstr ""
+"Texto\n"
+"Tecla de acceso directo: T"
+
+#: resources/ui/main_window.glade:2763 resources/ui/main_window.glade:2879
+msgid "500 x 500"
+msgstr "500 x 500"
+
+#: resources/ui/main_window.glade:2831
+msgid "(500, 500)"
+msgstr "(500, 500)"
+
+#: resources/ui/move_options.glade:47
+msgid "auto select layer"
+msgstr "seleccionar capa automáticamente"
+
+#: resources/ui/new_image_dialog.glade:8
+msgid "New image"
+msgstr "Nueva imagen"
+
+#: resources/ui/new_image_dialog.glade:440
+#: resources/ui/new_layer_dialog.glade:129
+msgid "background"
+msgstr "fondo"
+
+#: resources/ui/new_image_dialog.glade:450
+#: resources/ui/new_layer_dialog.glade:139
+msgid "transparent"
+msgstr "transparente"
+
+#: resources/ui/new_image_dialog.glade:465
+#: resources/ui/new_layer_dialog.glade:154
+msgid "black"
+msgstr "negro"
+
+#: resources/ui/new_image_dialog.glade:480
+#: resources/ui/new_layer_dialog.glade:169
+msgid "white"
+msgstr "blanco"
+
+#: resources/ui/new_image_dialog.glade:495
+#: resources/ui/new_layer_dialog.glade:184
+msgid "custom color"
+msgstr "color personalizado"
+
+#: resources/ui/new_layer_dialog.glade:9
+msgid "Add New Layer"
+msgstr "Añadir nueva capa"
+
+#: resources/ui/new_layer_dialog.glade:231
+msgid "position"
+msgstr "posición"
+
+#: resources/ui/new_layer_dialog.glade:254
+msgid "make the new layer the active"
+msgstr "hacer que la nueva capa sea la activa"
+
+#: resources/ui/pencil_options.glade:170 resources/ui/text_options.glade:481
+msgid "antialiased"
+msgstr "antialiasing"
+
+#: resources/ui/pencil_options.glade:184
+msgid "align to pixel grid"
+msgstr "alinear con la cuadrícula de píxeles"
+
+#: resources/ui/png_options_dialog.glade:35
+msgid "automatic"
+msgstr "automático"
+
+#: resources/ui/png_options_dialog.glade:38
+msgid "optimize: fast filters"
+msgstr "optimizar: filtros rápidos"
+
+#: resources/ui/png_options_dialog.glade:41
+msgid "optimize: all filters"
+msgstr "optimizar: todos los filtros"
+
+#: resources/ui/png_options_dialog.glade:44
+msgid "single filter: none"
+msgstr "filtro único: ninguno"
+
+#: resources/ui/png_options_dialog.glade:47
+msgid "single filter: sub"
+msgstr "filtro único: sub"
+
+#: resources/ui/png_options_dialog.glade:50
+msgid "single filter: up"
+msgstr "filtro individual: arriba"
+
+#: resources/ui/png_options_dialog.glade:53
+msgid "single filter: average"
+msgstr "filtro único: media"
+
+#: resources/ui/png_options_dialog.glade:56
+msgid "single filter: paeth"
+msgstr "filtro individual: paeth"
+
+#: resources/ui/png_options_dialog.glade:67
+#: resources/ui/tiff_options_dialog.glade:29
+msgid "HDR"
+msgstr "HDR"
+
+#: resources/ui/png_options_dialog.glade:70
+#: resources/ui/tiff_options_dialog.glade:32
+msgid "standard"
+msgstr "estándar"
+
+#: resources/ui/png_options_dialog.glade:73
+#: resources/ui/tiff_options_dialog.glade:35
+msgid "indexed"
+msgstr "indexado"
+
+#: resources/ui/png_options_dialog.glade:100
+#: resources/ui/tiff_options_dialog.glade:62
+msgid "full"
+msgstr "completo"
+
+#: resources/ui/png_options_dialog.glade:103
+#: resources/ui/tiff_options_dialog.glade:65
+msgid "binary (cut-off)"
+msgstr "binario (corte)"
+
+#: resources/ui/png_options_dialog.glade:106
+#: resources/ui/tiff_options_dialog.glade:68
+msgid "binary (color)"
+msgstr "binario (color)"
+
+#: resources/ui/png_options_dialog.glade:116
+msgid "PNG options"
+msgstr "Opciones PNG"
+
+#: resources/ui/png_options_dialog.glade:207
+msgid "compression level"
+msgstr "nivel de compresión"
+
+#: resources/ui/png_options_dialog.glade:272
+msgid "compression optimization"
+msgstr "optimización de la compresión"
+
+#: resources/ui/png_options_dialog.glade:314
+msgid "embed background color"
+msgstr "incrustar color de fondo"
+
+#: resources/ui/png_options_dialog.glade:373
+#: resources/ui/tiff_options_dialog.glade:449
+msgid "color format"
+msgstr "formato de color"
+
+#: resources/ui/png_options_dialog.glade:455
+#: resources/ui/tiff_options_dialog.glade:531
+msgid "palette size"
+msgstr "tamaño de la paleta"
+
+#: resources/ui/png_options_dialog.glade:526
+#: resources/ui/tiff_options_dialog.glade:602
+msgid "transparency format"
+msgstr "formato de transparencia"
+
+#: resources/ui/png_options_dialog.glade:563
+#: resources/ui/tiff_options_dialog.glade:639
+msgid "transparency cut-off"
+msgstr "límite de transparencia"
+
+#: resources/ui/png_options_dialog.glade:626
+#: resources/ui/tiff_options_dialog.glade:702
+msgid "transparent color"
+msgstr "color transparente"
+
+#: resources/ui/png_options_dialog.glade:663
+#: resources/ui/tiff_options_dialog.glade:740
+msgid "compositing color"
+msgstr "composición de color"
+
+#: resources/ui/polygon_select_options.glade:346
+msgid "Adjust the curvature of a polygon selection's sides"
+msgstr "Ajustar la curvatura de los lados de una selección poligonal"
+
+#: resources/ui/resize_dialog.glade:8
+msgid "Resize"
+msgstr "Cambie el tamaño de"
+
+#: resources/ui/resize_dialog.glade:437
+msgid "resampling"
+msgstr "remuestreo"
+
+#: resources/ui/settings_dialog.glade:41
+msgid "RasterLab Settings"
+msgstr "Configuración de RasterLab"
+
+#: resources/ui/settings_dialog.glade:113
+msgid "General"
+msgstr "General"
+
+#: resources/ui/settings_dialog.glade:139
+msgid "canvas background color:"
+msgstr "color de fondo del lienzo:"
+
+#: resources/ui/settings_dialog.glade:178
+msgid "tranparency:"
+msgstr "tranparencia:"
+
+#: resources/ui/settings_dialog.glade:216
+msgid "grid size:"
+msgstr "tamaño de cuadrícula:"
+
+#: resources/ui/settings_dialog.glade:253
+msgid "grid colors:"
+msgstr "colores de cuadrícula:"
+
+#: resources/ui/settings_dialog.glade:302
+msgid "User Interface"
+msgstr "Interfaz de usuario"
+
+#: resources/ui/settings_dialog.glade:330
+msgid "undo compression level:"
+msgstr "deshacer el nivel de compresión:"
+
+#: resources/ui/settings_dialog.glade:343
+msgid "undo limit:"
+msgstr "límite de deshacer:"
+
+#: resources/ui/settings_dialog.glade:374
+#: resources/ui/settings_dialog.glade:413
+#: resources/ui/settings_dialog.glade:465
+#: resources/ui/settings_dialog.glade:517
+#: resources/ui/settings_dialog.glade:569
+msgid "1"
+msgstr "1"
+
+#: resources/ui/settings_dialog.glade:434
+msgid "number of threads to use:"
+msgstr "número de hilos a utilizar:"
+
+#: resources/ui/settings_dialog.glade:486
+msgid "maximum number of recent files to track:"
+msgstr "número máximo de archivos recientes a rastrear:"
+
+#: resources/ui/settings_dialog.glade:538
+msgid "file recovery interval:"
+msgstr "intervalo de recuperación de archivos:"
+
+#: resources/ui/settings_dialog.glade:583
+msgid "seconds"
+msgstr "segundos"
+
+#: resources/ui/settings_dialog.glade:602
+msgid "renderer:"
+msgstr "renderizador:"
+
+#: resources/ui/settings_dialog.glade:637
+msgid "hardware acceleration:"
+msgstr "aceleración por hardware:"
+
+#: resources/ui/settings_dialog.glade:652
+msgid "enable OpenGL acceleration"
+msgstr "activar la aceleración OpenGL"
+
+#: resources/ui/settings_dialog.glade:686
+msgid "Performance"
+msgstr "Rendimiento"
+
+#: resources/ui/settings_dialog.glade:710
+msgid "use the current system profile for each display"
+msgstr "utilizar el perfil actual del sistema para cada pantalla"
+
+#: resources/ui/settings_dialog.glade:725
+msgid "use custom profile for each display"
+msgstr "utilizar un perfil personalizado para cada pantalla"
+
+#: resources/ui/settings_dialog.glade:751
+msgid "available displays:"
+msgstr "pantallas disponibles:"
+
+#: resources/ui/settings_dialog.glade:776
+msgid "color profile for this display:"
+msgstr "perfil de color para esta pantalla:"
+
+#: resources/ui/settings_dialog.glade:803
+msgid "..."
+msgstr "..."
+
+#: resources/ui/settings_dialog.glade:833
+msgid "display rendering intent:"
+msgstr "intención de visualización:"
+
+#: resources/ui/settings_dialog.glade:855
+msgid "use black point compensation"
+msgstr "utilizar la compensación del punto negro"
+
+#: resources/ui/settings_dialog.glade:871
+msgid "use embedded ICC profiles when loading files, if available"
+msgstr ""
+"utilizar perfiles ICC incrustados al cargar archivos, si están disponibles"
+
+#: resources/ui/settings_dialog.glade:886
+msgid "turn off display color management"
+msgstr "desactivar la gestión del color de la pantalla"
+
+#: resources/ui/settings_dialog.glade:915
+msgid "Color management"
+msgstr "Gestión del color"
+
+#: resources/ui/settings_dialog.glade:942
+msgid "temporary file location:"
+msgstr "ubicación del archivo temporal:"
+
+#: resources/ui/settings_dialog.glade:974
+msgid "Browse for folder"
+msgstr "Buscar carpeta"
+
+#: resources/ui/settings_dialog.glade:994
+msgid ""
+"WARNING: this folder is invalid (or can't be accessed). Please provide a valid folder. If a valid folder is\n"
+"not provided, RasterLab will use the system temp folder."
+msgstr ""
+"ADVERTENCIA: esta carpeta no es válida (o no se puede acceder a ella). Por favor, proporcione una carpeta válida. Si no se\n"
+"válida, RasterLab utilizará la carpeta temporal del sistema."
+
+#: resources/ui/settings_dialog.glade:1025
+msgid "Advanced"
+msgstr "Avanzado"
+
+#: resources/ui/tiff_options_dialog.glade:78
+msgid "TIFF options"
+msgstr "Opciones TIFF"
+
+#: resources/ui/tiff_options_dialog.glade:165
+msgid "color compression"
+msgstr "compresión de color"
+
+#: resources/ui/tiff_options_dialog.glade:195
+#: resources/ui/tiff_options_dialog.glade:312
+msgid "LZW"
+msgstr "LZW"
+
+#: resources/ui/tiff_options_dialog.glade:208
+msgid "ZIP"
+msgstr "ZIP"
+
+#: resources/ui/tiff_options_dialog.glade:256
+msgid "monochrome compression"
+msgstr "compresión monocroma"
+
+#: resources/ui/tiff_options_dialog.glade:286
+msgid "CCITT Fax 4"
+msgstr "Fax 4 del CCITT"
+
+#: resources/ui/tiff_options_dialog.glade:299
+msgid "CCIT Fax 3"
+msgstr "CCIT Fax 3"
+
+#: resources/ui/tiff_options_dialog.glade:360
+msgid "page format"
+msgstr "formato de página"
+
+#: resources/ui/tiff_options_dialog.glade:376
+msgid "single page (composited image)"
+msgstr "página única (imagen compuesta)"
+
+#: resources/ui/tiff_options_dialog.glade:390
+msgid "multipage (one page per layer)"
+msgstr "multipágina (una página por capa)"
+
+#: resources/ui/tiff_options_dialog.glade:424
+msgid "basic"
+msgstr "básico"
+
+#: resources/ui/tiff_options_dialog.glade:716
+#: resources/ui/tiff_options_dialog.glade:754
+msgid "Change color"
+msgstr "Cambiar color"
+
+#: resources/ui/tiff_options_dialog.glade:790
+msgid "advanced"
+msgstr "avanzado"
+
+#: resources/ui/webp_options_dialog.glade:12
+msgid "default"
+msgstr "por defecto"
+
+#: resources/ui/webp_options_dialog.glade:15
+msgid "indoor photo"
+msgstr "foto de interior"
+
+#: resources/ui/webp_options_dialog.glade:18
+msgid "outdoor photo"
+msgstr "foto exterior"
+
+#: resources/ui/webp_options_dialog.glade:21
+msgid "graph"
+msgstr "gráfico"
+
+#: resources/ui/webp_options_dialog.glade:34
+msgid "WebP options"
+msgstr "Opciones WebP"
+
+#: resources/ui/webp_options_dialog.glade:103
+msgid "image type"
+msgstr "tipo de imagen"
+
+#: resources/ui/webp_options_dialog.glade:216
+msgid "compression"
+msgstr "compresión"
+
+#: resources/ui/webp_options_dialog.glade:234
+msgid "fast"
+msgstr "rápido"
+
+#: resources/ui/webp_options_dialog.glade:261
+msgid "best"
+msgstr "mejor"

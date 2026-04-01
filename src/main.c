@@ -1,16 +1,17 @@
 #include "app/autosave.h"
 #include "app/recent_files.h"
 #include "app/settings.h"
+#include "i18n.h"
 #include "plugins/builtin_plugins.h"
 #include "plugins/format_registry.h"
 #include "plugins/plugin_host_api.h"
 #include "plugins/plugin_loader.h"
 #include "render/layer.h"
 #include "render/render_utils.h"
-#include "i18n.h"
 #include "test_widgets.h"
 #include "ui.h"
 #include "ui/swatches.h"
+#include "ui/ui_tools_menu.h"
 #include <cairo.h>
 #include <gtk/gtk.h>
 #include <stdio.h>
@@ -62,9 +63,18 @@ static void setup_gdk_pixbuf_loaders(void) {
 int main(int argc, char* argv[]) {
     AppContext* app;
     gchar* app_dir;
+    Settings* settings;
 
     /* Set pixbuf loaders path before gtk_init so loaders work from any cwd (Windows cmd) */
     setup_gdk_pixbuf_loaders();
+
+    app_dir = settings_get_executable_dir();
+    settings = settings_load(app_dir);
+
+#ifdef HAVE_GETTEXT
+    /* Otherwise gtk_init() may call setlocale(LC_ALL, "") and break gettext/LANGUAGE. */
+    gtk_disable_setlocale();
+#endif
 
     /* Print GTK version information */
     printf("GTK Version: %d.%d.%d\n",
@@ -75,11 +85,8 @@ int main(int argc, char* argv[]) {
     /* Initialize GTK */
     gtk_init(&argc, &argv);
 
-#ifdef HAVE_GETTEXT
-    setlocale(LC_ALL, "");
-    bindtextdomain(GETTEXT_PACKAGE, LOCALEDIR);
-    textdomain(GETTEXT_PACKAGE);
-#endif
+    /* After GTK init: bind catalog + LANGUAGE from settings (must run before any UI gettext). */
+    i18n_apply_locale(app_dir, settings_get_interface_locale(settings));
 
     load_global_css();
 
@@ -99,8 +106,6 @@ int main(int argc, char* argv[]) {
     /* TODO: Scan and load plugins from ./plugins/ and ./plugins/formats/ directories */
     /* For now, we only use built-in plugins */
 
-    app_dir = settings_get_executable_dir();
-
     autosave_init();
 
     // test_color_chooser();
@@ -112,11 +117,12 @@ int main(int argc, char* argv[]) {
     // test_curves_widget();
     // test_anchor_position_widget();
 
-    /* Create the main application UI (will load settings) */
-    app = ui_create_main_window();
+    /* Create the main application UI (settings loaded above for locale + persistence) */
+    app = ui_create_main_window(settings);
     if (app) {
         /* Store app directory in context */
         app->app_dir = app_dir;
+        ui_tools_menu_populate_language(app);
 
         /* Load swatches from file (widgets are created in ui_create_main_window, 
          * and they sync when created, but we also sync here to ensure they're updated) */
@@ -130,8 +136,6 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        /* Load settings */
-        app->settings = settings_load(app_dir);
         if (app->settings) {
             /* Connect recent_files system to settings */
             recent_files_set_settings(app->settings);
@@ -160,6 +164,7 @@ int main(int argc, char* argv[]) {
         }
     } else {
         g_free(app_dir);
+        settings_free(settings);
     }
 
     /* Start GTK main event loop (no initial document) */

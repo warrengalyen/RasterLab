@@ -328,3 +328,13 @@ void ui_utils_set_header_bar(GtkWindow* window, const gchar* title) {
 
     gtk_widget_show(hb);
 }
+
+void ui_utils_builder_set_translation_domain(GtkBuilder* builder) {
+#ifdef HAVE_GETTEXT
+    if (builder) {
+        gtk_builder_set_translation_domain(builder, GETTEXT_PACKAGE);
+    }
+#else
+    (void)builder;
+#endif
+}

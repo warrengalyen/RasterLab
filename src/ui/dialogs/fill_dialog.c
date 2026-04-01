@@ -91,6 +91,7 @@ gboolean fill_dialog_run(GtkWindow* parent, FillDialogResult* result) {
         return FALSE;
 
     builder = gtk_builder_new();
+    ui_utils_builder_set_translation_domain(builder);
     if (!gtk_builder_add_from_resource(builder, "/ui/fill_dialog.glade", &error)) {
         g_warning("Failed to load fill_dialog.glade: %s", error ? error->message : "Unknown error");
         if (error)

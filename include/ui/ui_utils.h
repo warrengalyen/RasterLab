@@ -95,4 +95,10 @@ gint ui_utils_message_dialog_run(GtkWindow* parent,
                                  gint default_response,
                                  ...);
 
+/**
+ * Set gettext domain for GtkBuilder so translatable Glade strings use the rasterlab catalog.
+ * Call after gtk_builder_new(), before gtk_builder_add_from_resource() / add_from_file().
+ */
+void ui_utils_builder_set_translation_domain(GtkBuilder* builder);
+
 #endif /* UI_UTILS_H */

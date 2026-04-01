@@ -739,6 +739,7 @@ NewImageDialog* new_image_dialog_new(void) {
 
     /* Load dialog from Glade resource */
     builder = gtk_builder_new();
+    ui_utils_builder_set_translation_domain(builder);
     if (!gtk_builder_add_from_resource(builder, "/ui/new_image_dialog.glade", &error)) {
         g_warning("Failed to load new_image_dialog.glade: %s", error ? error->message : "Unknown error");
         if (error) {

@@ -29,6 +29,7 @@
 #define DEFAULT_WORKER_THREADS 4                   /* Number of worker threads */
 #define DEFAULT_FILE_RECOVERY_INTERVAL_SECONDS 300 /* File recovery save interval (30-2700) */
 #define DEFAULT_GPU_ACCELERATION TRUE              /* GPU acceleration enabled by default */
+#define DEFAULT_INTERFACE_LOCALE "en_US"
 
 /* Default tool option values */
 #define DEFAULT_TOOL_SIZE 5.0f              /* 5px brush size */
@@ -114,6 +115,8 @@ static Settings* settings_create_default(void) {
     settings->cm_use_embedded_icc = TRUE;
     settings->cm_mode = 0; /* CM_MODE_SYSTEM_PROFILE */
     settings->cm_display_profiles = NULL;
+
+    settings->interface_locale = g_strdup(DEFAULT_INTERFACE_LOCALE);
 
     return settings;
 }
@@ -466,6 +469,10 @@ Settings* settings_load(const char* app_dir) {
     xmlFreeDoc(doc);
     g_free(file_path);
 
+    if (!settings->interface_locale || !settings->interface_locale[0]) {
+        settings_set_interface_locale(settings, DEFAULT_INTERFACE_LOCALE);
+    }
+
     return settings;
 }
 
@@ -665,6 +672,13 @@ static void settings_load_ui(Settings* settings, xmlNode* ui_node) {
                 }
                 xmlFree(value_attr);
             }
+        } else if (xmlStrcmp(cur->name, (const xmlChar*)"interface_locale") == 0) {
+            xmlChar* value_attr = xmlGetProp(cur, (const xmlChar*)"value");
+            if (value_attr) {
+                const char* s = (const char*)value_attr;
+                settings_set_interface_locale(settings, s);
+                xmlFree(value_attr);
+            }
         }
     }
 }
@@ -828,6 +842,12 @@ static void settings_save_ui(xmlTextWriterPtr writer, Settings* settings) {
         xmlTextWriterWriteAttribute(writer, (const xmlChar*)"value", (const xmlChar*)buf);
         xmlTextWriterEndElement(writer);
     }
+
+    xmlTextWriterStartElement(writer, (const xmlChar*)"interface_locale");
+    xmlTextWriterWriteAttribute(
+        writer, (const xmlChar*)"value",
+        (const xmlChar*)settings_get_interface_locale(settings));
+    xmlTextWriterEndElement(writer);
 
     xmlTextWriterEndElement(writer); /* ui */
 }
@@ -1054,6 +1074,8 @@ void settings_free(Settings* settings) {
     if (settings->cm_display_profiles) {
         g_hash_table_destroy(settings->cm_display_profiles);
     }
+
+    g_free(settings->interface_locale);
 
     g_free(settings);
 }
@@ -2163,4 +2185,23 @@ const gchar* settings_get_cm_display_profile(Settings* settings, const gchar* di
     if (!settings || !display_id || !settings->cm_display_profiles)
         return NULL;
     return (const gchar*)g_hash_table_lookup(settings->cm_display_profiles, display_id);
+}
+
+void settings_set_interface_locale(Settings* settings, const gchar* locale) {
+    if (!settings) {
+        return;
+    }
+    g_free(settings->interface_locale);
+    if (locale && locale[0]) {
+        settings->interface_locale = g_strdup(locale);
+    } else {
+        settings->interface_locale = g_strdup(DEFAULT_INTERFACE_LOCALE);
+    }
+}
+
+const gchar* settings_get_interface_locale(Settings* settings) {
+    if (!settings || !settings->interface_locale || !settings->interface_locale[0]) {
+        return DEFAULT_INTERFACE_LOCALE;
+    }
+    return settings->interface_locale;
 }

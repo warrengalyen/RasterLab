@@ -88,6 +88,9 @@ typedef struct {
     gboolean cm_use_embedded_icc;         /* Use embedded ICC profiles in files when available (default TRUE) */
     gint cm_mode;                         /* ColorManagementMode (default: SYSTEM_PROFILE) */
     GHashTable* cm_display_profiles;      /* When mode=CUSTOM: display_id (gchar*) -> profile path (gchar*). NULL if unused. */
+
+    /* UI language: gettext locale tag (e.g. es_ES); default en_US */
+    gchar* interface_locale;
 } Settings;
 
 /**
@@ -420,5 +423,10 @@ void settings_set_cm_display_profile(Settings* settings, const gchar* display_id
 /** Get custom profile path for a display. Returns NULL if not set or mode is not CUSTOM. Caller must not free.
  *  When no system profile is available and no ICC/ICM path is set for the display, use default sRGB (no transform). */
 const gchar* settings_get_cm_display_profile(Settings* settings, const gchar* display_id);
+
+/** Interface language: locale tag (e.g. es_ES). NULL or empty string stores en_US. */
+void settings_set_interface_locale(Settings* settings, const gchar* locale);
+/** Locale tag for the UI (default en_US). Caller must not free. */
+const gchar* settings_get_interface_locale(Settings* settings);
 
 #endif /* SETTINGS_H */

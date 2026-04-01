@@ -470,6 +470,7 @@ static void on_swatches_delete_button_clicked(GtkButton* button, gpointer user_d
  */
 GtkWidget* swatches_panel_create(AppContext* ctx) {
     GtkBuilder* swatches_builder = gtk_builder_new();
+    ui_utils_builder_set_translation_domain(swatches_builder);
     GtkWidget* swatches_panel = NULL;
     GError* error = NULL;
 

@@ -598,6 +598,7 @@ void settings_dialog_show(AppContext* ctx) {
 
     GError* error = NULL;
     GtkBuilder* builder = gtk_builder_new();
+    ui_utils_builder_set_translation_domain(builder);
     if (!gtk_builder_add_from_resource(builder, "/ui/settings_dialog.glade", &error)) {
         g_warning("Failed to load settings_dialog.glade: %s", error ? error->message : "Unknown error");
         if (error) {

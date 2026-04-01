@@ -134,9 +134,10 @@ gboolean crop_apply_if_active(AppContext* ctx);
 
 /**
  * Create the main application UI
+ * @param initial_settings Loaded settings (may be NULL); context takes ownership when non-NULL
  * @return Initialized AppContext
  */
-AppContext* ui_create_main_window(void);
+AppContext* ui_create_main_window(Settings* initial_settings);
 
 /**
  * Create and attach a new document tab to the notebook

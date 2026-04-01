@@ -11,4 +11,9 @@
  */
 void ui_tools_menu_setup(GtkBuilder* builder, AppContext* ctx);
 
+/**
+ * Fill Tools > Language from app_dir/languages (after ctx->app_dir is set).
+ */
+void ui_tools_menu_populate_language(AppContext* ctx);
+
 #endif /* UI_TOOLS_MENU_H */

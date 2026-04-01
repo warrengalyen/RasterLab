@@ -332,8 +332,9 @@ void ui_combo_popup_shown_fix(GObject* obj, GParamSpec* pspec, gpointer user_dat
 /**
  * Create the main application UI
  */
-AppContext* ui_create_main_window(void) {
+AppContext* ui_create_main_window(Settings* initial_settings) {
     AppContext* ctx = (AppContext*)g_malloc(sizeof(AppContext));
+    GtkBuilder* builder;
     GtkWidget* tools_panel;
     GtkWidget* workspace_widget;
 
@@ -432,8 +433,8 @@ AppContext* ui_create_main_window(void) {
     ctx->effects_menu_item = NULL;
     ctx->workspace = NULL;           /* Initialize workspace early */
     ctx->layers_panel = NULL;        /* Will be set from workspace */
-    ctx->settings = NULL;            /* Will be set in main.c */
-    ctx->app_dir = NULL;             /* Will be set in main.c */
+    ctx->settings = initial_settings;
+    ctx->app_dir = NULL; /* Set in main.c after window creation */
     ctx->size_unit = g_strdup("px"); /* Default size unit is pixels */
     swatches_init(&ctx->swatches);   /* Initialize swatches data */
 
@@ -463,12 +464,19 @@ AppContext* ui_create_main_window(void) {
         menu_warning_suppressed = TRUE;
     }
 
-    /* Load main window from Glade */
-    GtkBuilder* builder = gtk_builder_new_from_resource("/ui/main_window.glade");
-    if (!builder) {
-        g_warning("Failed to load main window from Glade");
-        g_free(ctx);
-        return NULL;
+    /* Load main window from Glade (translation domain must be set before load for translatable strings) */
+    {
+        GError* glade_err = NULL;
+
+        builder = gtk_builder_new();
+        ui_utils_builder_set_translation_domain(builder);
+        if (!gtk_builder_add_from_resource(builder, "/ui/main_window.glade", &glade_err)) {
+            g_warning("Failed to load main window from Glade: %s", glade_err ? glade_err->message : "unknown");
+            g_clear_error(&glade_err);
+            g_object_unref(builder);
+            g_free(ctx);
+            return NULL;
+        }
     }
 
     /* Get main window */

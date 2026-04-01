@@ -670,6 +670,7 @@ CanvasSizeDialog* canvas_size_dialog_new(ImageDocument* doc) {
 
     /* Load dialog from Glade resource */
     builder = gtk_builder_new();
+    ui_utils_builder_set_translation_domain(builder);
     if (!gtk_builder_add_from_resource(builder, "/ui/canvas_size_dialog.glade", &error)) {
         g_warning("Failed to load canvas_size_dialog.glade: %s", error ? error->message : "Unknown error");
         if (error) {
