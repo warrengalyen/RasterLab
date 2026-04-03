@@ -88,7 +88,7 @@ static void debug_log_unlock(void) {
 
 #define DEBUG_DIR_NAME "debug"
 #define DEBUG_REPORT_PREFIX "DebugReport_"
-#define DEBUG_REPORT_SUFFIX ".txt"
+#define DEBUG_REPORT_SUFFIX ".log"
 #define RASTERLAB_VERSION_LINE "1.0.0 (build 152)"
 
 static char s_debug_dir[4096];
@@ -140,19 +140,16 @@ static int mkdir_debug_folder(const char* path) {
 #endif
 }
 
+/**
+ * Return index 1–10 if @a name is DebugReport_<n>.log.
+ */
 static int parse_report_index(const char* name) {
-    /* DebugReport_<n>.txt */
-    const char* p = name;
     const size_t pre_len = strlen(DEBUG_REPORT_PREFIX);
-    const size_t suf_len = strlen(DEBUG_REPORT_SUFFIX);
     size_t nlen = strlen(name);
-    if (nlen < pre_len + 1u + suf_len) {
+    if (nlen < pre_len + 1u + strlen(DEBUG_REPORT_SUFFIX)) {
         return -1;
     }
-    if (strncmp(p, DEBUG_REPORT_PREFIX, pre_len) != 0) {
-        return -1;
-    }
-    if (strcmp(name + (nlen - suf_len), DEBUG_REPORT_SUFFIX) != 0) {
+    if (strncmp(name, DEBUG_REPORT_PREFIX, pre_len) != 0) {
         return -1;
     }
     const char* num = name + pre_len;
@@ -168,10 +165,17 @@ static int parse_report_index(const char* name) {
 }
 
 /**
- * Scan ./debug for DebugReport_<1-10>.txt; return (max_index % 10) + 1, or 1 if none.
+ * Scan ./debug for DebugReport_<1-10>.log.
+ * Use the smallest index i in 1..10 with no file yet (reuse gaps after deletes).
+ * If all ten slots exist, rotate: (max_index % 10) + 1 (same as before when full).
  */
 static int debug_get_next_index(void) {
+    int present[11]; /* present[1..10] */
     int max_index = 0;
+    for (int i = 0; i < 11; i++) {
+        present[i] = 0;
+    }
+
 #ifdef _WIN32
     char search[4096];
     if (snprintf(search, sizeof(search), "%s\\%s*", s_debug_dir, DEBUG_REPORT_PREFIX) >= (int)sizeof(search)) {
@@ -185,8 +189,11 @@ static int debug_get_next_index(void) {
     do {
         if (!(ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
             int idx = parse_report_index(ffd.cFileName);
-            if (idx > max_index) {
-                max_index = idx;
+            if (idx >= 1 && idx <= 10) {
+                present[idx] = 1;
+                if (idx > max_index) {
+                    max_index = idx;
+                }
             }
         }
     } while (FindNextFileA(h, &ffd));
@@ -199,12 +206,22 @@ static int debug_get_next_index(void) {
     struct dirent* ent;
     while ((ent = readdir(d)) != NULL) {
         int idx = parse_report_index(ent->d_name);
-        if (idx > max_index) {
-            max_index = idx;
+        if (idx >= 1 && idx <= 10) {
+            present[idx] = 1;
+            if (idx > max_index) {
+                max_index = idx;
+            }
         }
     }
     closedir(d);
 #endif
+
+    for (int i = 1; i <= 10; i++) {
+        if (!present[i]) {
+            return i;
+        }
+    }
+    /* All ten slots occupied — overwrite using previous rotation rule */
     if (max_index <= 0) {
         return 1;
     }
