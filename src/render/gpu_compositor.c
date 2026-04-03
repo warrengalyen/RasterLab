@@ -1,5 +1,6 @@
 #include "render/gpu_compositor.h"
 #include "render/blend.h"
+#include "debug_logger.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -837,7 +838,7 @@ GPUCompositor* gpu_compositor_create(const gchar* device_name) {
     compositor->active_device.index = 0;
     compositor->active_device.is_default = TRUE;
     
-    g_message("GPU Compositor: Using %s (%s)", 
+    debug_log("DBG", "GPU Compositor: Using %s (%s)", 
               compositor->active_device.name, 
               compositor->active_device.vendor);
     

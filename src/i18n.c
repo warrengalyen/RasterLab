@@ -2,6 +2,7 @@
 #include <glib.h>
 #include <stdlib.h>
 #include <string.h>
+#include "debug_logger.h"
 
 #ifndef GETTEXT_PACKAGE
 #define GETTEXT_PACKAGE "rasterlab"
@@ -235,23 +236,23 @@ void i18n_apply_locale(const gchar* app_dir, const gchar* locale_code_or_null) {
     bind_textdomain_codeset(GETTEXT_PACKAGE, "UTF-8");
     textdomain(GETTEXT_PACKAGE);
 
-    g_message("i18n: bindtextdomain domain=%s path=%s (user tree=%s)",
+    debug_log("DBG", "i18n: bindtextdomain domain=%s path=%s (user tree=%s)",
               GETTEXT_PACKAGE,
               bind_path,
               user_base ? "yes" : "no (using LOCALEDIR)");
-    g_message("i18n: getenv LANGUAGE=%s LANG=%s",
+    debug_log("DBG", "i18n: getenv LANGUAGE=%s LANG=%s",
               g_getenv("LANGUAGE") ? g_getenv("LANGUAGE") : "(null)",
               g_getenv("LANG") ? g_getenv("LANG") : "(null)");
     if (locale_code_or_null && locale_code_or_null[0]) {
-        g_message("i18n: settings locale tag %s", locale_code_or_null);
+        debug_log("DBG", "i18n: settings locale tag %s", locale_code_or_null);
         if (effective_lang && g_strcmp0(effective_lang, locale_code_or_null) != 0) {
-            g_message(
+            debug_log("DBG", 
                 "i18n: LANGUAGE effective=%s (catalog for %s not under bind path; using existing MO directory)",
                 effective_lang,
                 locale_code_or_null);
         }
     } else {
-        g_message("i18n: LANGUAGE unset — using system locale / default messages");
+        debug_log("DBG", "i18n: LANGUAGE unset — using system locale / default messages");
     }
 
     g_free(effective_lang);
@@ -259,7 +260,7 @@ void i18n_apply_locale(const gchar* app_dir, const gchar* locale_code_or_null) {
 #else
     (void)app_dir;
     (void)locale_code_or_null;
-    g_message("i18n: gettext disabled at build time (HAVE_GETTEXT off)");
+    debug_log("DBG", "i18n: gettext disabled at build time (HAVE_GETTEXT off)");
 #endif
 }
 
@@ -274,7 +275,7 @@ GPtrArray* i18n_collect_mo_locales(const gchar* app_dir) {
     gchar* base_loc;
 
     if (!app_dir) {
-        g_message("i18n: collect locales skipped (app_dir is NULL)");
+        debug_log("DBG", "i18n: collect locales skipped (app_dir is NULL)");
         return out;
     }
 
@@ -295,7 +296,7 @@ GPtrArray* i18n_collect_mo_locales(const gchar* app_dir) {
     g_ptr_array_sort(out, str_ptr_cmp);
 
     if (out->len == 0) {
-        g_message("i18n: no %s catalogs under \"%s/languages\" or \"%s/locale\" (expected .../<locale>/LC_MESSAGES/%s.mo)",
+        debug_log("DBG", "i18n: no %s catalogs under \"%s/languages\" or \"%s/locale\" (expected .../<locale>/LC_MESSAGES/%s.mo)",
                   GETTEXT_PACKAGE, app_dir, app_dir, GETTEXT_PACKAGE);
     } else {
         GString* s = g_string_new(NULL);
@@ -307,7 +308,7 @@ GPtrArray* i18n_collect_mo_locales(const gchar* app_dir) {
             }
             g_string_append(s, (const gchar*)g_ptr_array_index(out, i));
         }
-        g_message("i18n: found %u language(s) in app dir: [%s]", out->len, s->str);
+        debug_log("DBG", "i18n: found %u language(s) in app dir: [%s]", out->len, s->str);
         g_string_free(s, TRUE);
     }
 

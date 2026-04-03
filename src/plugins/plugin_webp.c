@@ -22,6 +22,7 @@
 #if defined(HAVE_LCMS2)
 #include "color_manager.h"
 #include "color_manager/icc_utils.h"
+#include "debug_logger.h"
 #endif
 
 /**
@@ -221,7 +222,7 @@ static PluginError load_webp(ImageDocument* doc, const char* filename) {
                         if (api->get_use_embedded_icc && !api->get_use_embedded_icc())
                             icc_destroy(profile);
                         else {
-                            g_message("WebP: embedded ICC profile found, will convert to sRGB");
+                            debug_log("DBG", "WebP: embedded ICC profile found, will convert to sRGB");
                             api->document_set_load_icc_profile(doc, profile);
                         }
                     } else {

@@ -1,3 +1,4 @@
+#include "debug_logger.h"
 #include "document.h"
 #include "i18n.h"
 #include "image_format_plugin.h"
@@ -12,6 +13,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
 #if defined(HAVE_LIBPNG) && defined(HAVE_LCMS2)
 #include "color_manager.h"
 #include "color_manager/icc_utils.h"
@@ -290,7 +292,7 @@ static PluginError load_png(ImageDocument* doc, const char* filename) {
                     if (api->get_use_embedded_icc && !api->get_use_embedded_icc())
                         icc_destroy(profile);
                     else {
-                        g_message("PNG: embedded ICC profile found, will convert to sRGB");
+                        debug_log("DBG", "PNG: embedded ICC profile found, will convert to sRGB");
                         api->document_set_load_icc_profile(doc, profile);
                     }
                 } else {

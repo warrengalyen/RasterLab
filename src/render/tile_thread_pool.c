@@ -1,4 +1,5 @@
 #include "render/tile_thread_pool.h"
+#include "debug_logger.h"
 #include "render/compositor.h"
 #include "render/layer.h"
 #include <glib.h>
@@ -128,7 +129,7 @@ TileThreadPool* tile_thread_pool_create(guint num_workers) {
         }
     }
 
-    g_message("Created tile thread pool with %u workers", num_workers);
+    debug_log("DBG", "Created tile thread pool with %u workers", num_workers);
 
     return pool;
 }

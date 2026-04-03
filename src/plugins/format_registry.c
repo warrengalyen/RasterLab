@@ -10,6 +10,7 @@
 #include <glib.h>
 #include <stdio.h>
 #include <string.h>
+#include "debug_logger.h"
 
 /* Format registry state */
 static GList* format_handlers = NULL;
@@ -116,10 +117,10 @@ gboolean format_registry_register(PluginHandle* plugin_handle, ImageFormatPlugin
     ImageFormatPlugin* existing_plugin = plugin_loader_get_plugin(plugin_handle);
     if (!existing_plugin) {
         /* Initialize plugin */
-        g_message("Initializing plugin before registration");
+        debug_log("DBG", "Initializing plugin before registration");
         if (!plugin_loader_init_with_host(plugin_handle, host_api)) {
             g_warning("Failed to initialize plugin");
-            g_message("Plugin registration failed (initialization failed)");
+            debug_log("ERR", "Plugin registration failed (initialization failed)");
             return FALSE;
         }
         plugin = plugin_loader_get_plugin(plugin_handle);
@@ -166,11 +167,11 @@ gboolean format_registry_register(PluginHandle* plugin_handle, ImageFormatPlugin
     format_handlers = g_list_append(format_handlers, handler);
 
     if (plugin && plugin->format_info.name) {
-        g_message("Successfully registered plugin: %s (extensions: %s)",
+        debug_log("DBG", "Successfully registered plugin: %s (extensions: %s)",
                   plugin->format_info.name,
                   plugin->format_info.extensions ? plugin->format_info.extensions : "none");
     } else {
-        g_message("Successfully registered plugin (from handle)");
+        debug_log("DBG", "Successfully registered plugin (from handle)");
     }
 
     return TRUE;
@@ -216,7 +217,7 @@ gboolean format_registry_register_builtin(ImageFormatPlugin* plugin) {
     /* Add to registry */
     format_handlers = g_list_append(format_handlers, handler);
 
-    // g_message("Successfully registered built-in plugin: %s (extensions: %s)",
+    // debug_log("DBG", "Successfully registered built-in plugin: %s (extensions: %s)",
     //           plugin->format_info.name,
     //           plugin->format_info.extensions ? plugin->format_info.extensions : "none");
 

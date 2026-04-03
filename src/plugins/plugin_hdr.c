@@ -17,6 +17,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "debug_logger.h"
 
 /* HDR file signature */
 #define HDR_SIGNATURE_RADIANCE "#?RADIANCE"
@@ -435,7 +436,7 @@ static PluginError load_hdr(ImageDocument* doc, const char* filename) {
         return PLUGIN_ERROR_CORRUPT_FILE;
     }
 
-    g_message("HDR plugin: Loading %ux%u image (RLE=%s)",
+    debug_log("DBG", "HDR plugin: Loading %ux%u image (RLE=%s)",
               width, height, is_rle_format ? "yes" : "auto-detect");
 
     /* Validate dimensions */
@@ -532,7 +533,7 @@ static PluginError load_hdr(ImageDocument* doc, const char* filename) {
         }
     } else {
         /* Auto apply is enabled - use saved settings without showing dialog */
-        g_message("HDR plugin: Auto-apply enabled, using saved tone mapping settings");
+        debug_log("DBG", "HDR plugin: Auto-apply enabled, using saved tone mapping settings");
     }
 
     /* User confirmed dialog - now create/modify document */

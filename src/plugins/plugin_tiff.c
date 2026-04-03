@@ -17,6 +17,7 @@
 #if defined(HAVE_LCMS2)
 #include "color_manager.h"
 #include "color_manager/icc_utils.h"
+#include "debug_logger.h"
 #endif
 
 /**
@@ -435,12 +436,12 @@ static PluginError load_tiff(ImageDocument* doc, const char* filename) {
                     cmyk_icc = NULL;
                 }
                 if (cmyk_icc)
-                    g_message("TIFF: CMYK ICC profile found, will convert to sRGB");
+                    debug_log("DBG", "TIFF: CMYK ICC profile found, will convert to sRGB");
             } else if (use_icc) {
                 cmsHPROFILE rgb_prof = icc_profile_from_memory(icc_data, (size_t)icc_len);
                 if (rgb_prof) {
                     if (api && api->document_set_load_icc_profile) {
-                        g_message("TIFF: embedded ICC profile found, will convert to sRGB");
+                        debug_log("DBG", "TIFF: embedded ICC profile found, will convert to sRGB");
                         api->document_set_load_icc_profile(doc, rgb_prof);
                     } else {
                         icc_destroy(rgb_prof);

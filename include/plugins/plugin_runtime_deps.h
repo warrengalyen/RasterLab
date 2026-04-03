@@ -20,6 +20,15 @@ gboolean plugin_runtime_deps_tiff_ok(const gchar* app_dir);
 gboolean plugin_runtime_deps_heic_ok(const gchar* app_dir);
 gboolean plugin_runtime_deps_exr_ok(const gchar* app_dir);
 
+/**
+ * Shared libraries used by the debug log summary.
+ */
+gboolean plugin_runtime_deps_zlib_ok(const gchar* app_dir);
+gboolean plugin_runtime_deps_libde265_ok(const gchar* app_dir);
+gboolean plugin_runtime_deps_libaom_ok(const gchar* app_dir);
+gboolean plugin_runtime_deps_libheif_ok(const gchar* app_dir);
+gboolean plugin_runtime_deps_lcms2_ok(const gchar* app_dir);
+
 #ifdef __cplusplus
 }
 #endif

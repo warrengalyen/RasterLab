@@ -46,6 +46,12 @@ all_files_exist_in_dir(const gchar* app_dir, const gchar* const* names, gsize n)
 #ifdef _WIN32
 
 gboolean
+plugin_runtime_deps_zlib_ok(const gchar* app_dir) {
+    static const gchar* alt[] = {"zlib1.dll", "libz.dll"};
+    return any_file_exists_in_dir(app_dir, alt, G_N_ELEMENTS(alt));
+}
+
+gboolean
 plugin_runtime_deps_jpeg_ok(const gchar* app_dir) {
     static const gchar* alt[] = {"libjpeg-8.dll", "libjpeg.dll"};
     return any_file_exists_in_dir(app_dir, alt, G_N_ELEMENTS(alt));
@@ -166,6 +172,32 @@ plugin_runtime_deps_exr_ok(const gchar* app_dir) {
     return TRUE;
 }
 
+gboolean
+plugin_runtime_deps_libde265_ok(const gchar* app_dir) {
+    if (file_exists_in_dir(app_dir, "libde265.dll")) {
+        return TRUE;
+    }
+    return win_dir_has_prefix_dll(app_dir, "libde265");
+}
+
+gboolean
+plugin_runtime_deps_libaom_ok(const gchar* app_dir) {
+    static const gchar* alt[] = {"libaom.dll", "aom.dll"};
+    return any_file_exists_in_dir(app_dir, alt, G_N_ELEMENTS(alt));
+}
+
+gboolean
+plugin_runtime_deps_libheif_ok(const gchar* app_dir) {
+    static const gchar* alt[] = {"libheif.dll", "heif.dll"};
+    return any_file_exists_in_dir(app_dir, alt, G_N_ELEMENTS(alt));
+}
+
+gboolean
+plugin_runtime_deps_lcms2_ok(const gchar* app_dir) {
+    static const gchar* alt[] = {"liblcms2.dll", "lcms2.dll"};
+    return any_file_exists_in_dir(app_dir, alt, G_N_ELEMENTS(alt));
+}
+
 #else /* Unix (Linux, macOS): shared libs copied next to binary for portable installs */
 
 static gboolean
@@ -221,6 +253,11 @@ unix_has_zlib_shlib(const gchar* app_dir) {
     }
     g_dir_close(d);
     return found;
+}
+
+gboolean
+plugin_runtime_deps_zlib_ok(const gchar* app_dir) {
+    return unix_has_zlib_shlib(app_dir);
 }
 
 gboolean
@@ -351,6 +388,26 @@ plugin_runtime_deps_exr_ok(const gchar* app_dir) {
         return FALSE;
     }
     return TRUE;
+}
+
+gboolean
+plugin_runtime_deps_libde265_ok(const gchar* app_dir) {
+    return unix_dir_has_shlib_prefix(app_dir, "libde265");
+}
+
+gboolean
+plugin_runtime_deps_libaom_ok(const gchar* app_dir) {
+    return unix_dir_has_shlib_prefix(app_dir, "libaom");
+}
+
+gboolean
+plugin_runtime_deps_libheif_ok(const gchar* app_dir) {
+    return unix_dir_has_shlib_prefix(app_dir, "libheif");
+}
+
+gboolean
+plugin_runtime_deps_lcms2_ok(const gchar* app_dir) {
+    return unix_dir_has_shlib_prefix(app_dir, "liblcms2");
 }
 
 #endif /* !_WIN32 */

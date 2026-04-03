@@ -7,6 +7,7 @@
 #include "ui/widgets/hsv_scale.h"
 #include "ui/widgets/rgb_scale.h"
 #include <math.h>
+#include "debug_logger.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -60,7 +61,7 @@ static void apply_curves_filter(CurvesTestData* data) {
         return;
     }
 
-    g_message("apply_curves_filter called: curves=%p, refcount=%d, is_widget=%d",
+    debug_log("DBG", "apply_curves_filter called: curves=%p, refcount=%d, is_widget=%d",
               data->curves, G_OBJECT(data->curves)->ref_count, CURVES_IS_WIDGET(data->curves));
 
     // Create fresh curves for this operation
@@ -142,7 +143,7 @@ static void apply_curves_filter(CurvesTestData* data) {
         gtk_widget_queue_draw(GTK_WIDGET(data->preview));
         cairo_surface_destroy(after_surface);
 
-        g_message("ocularCurvesFilter succeeded with status %d", status);
+        debug_log("DBG", "ocularCurvesFilter succeeded with status %d", status);
     } else {
         g_warning("ocularCurvesFilter failed with status %d", status);
     }
@@ -243,7 +244,7 @@ static void test_curves_widget(void) {
     for (int i = 0; sample_paths[i] != NULL && !pixbuf; i++) {
         pixbuf = gdk_pixbuf_new_from_file(sample_paths[i], &error);
         if (pixbuf) {
-            g_message("Loaded image from: %s", sample_paths[i]);
+            debug_log("DBG", "Loaded image from: %s", sample_paths[i]);
             break;
         }
         if (error) {
@@ -253,7 +254,7 @@ static void test_curves_widget(void) {
 
     /* If no sample image found, create a test pattern */
     if (!pixbuf) {
-        g_message("No sample image found, creating test pattern...");
+        debug_log("DBG", "No sample image found, creating test pattern...");
         pixbuf = gdk_pixbuf_new(GDK_COLORSPACE_RGB, TRUE, 8, width, height);
     }
 
@@ -268,17 +269,17 @@ static void test_curves_widget(void) {
     int n_channels = gdk_pixbuf_get_n_channels(pixbuf);
     gboolean has_alpha = gdk_pixbuf_get_has_alpha(pixbuf);
 
-    g_message("Loaded image: %dx%d, channels=%d, has_alpha=%d",
+    debug_log("DBG", "Loaded image: %dx%d, channels=%d, has_alpha=%d",
               data->image_width, data->image_height, n_channels, has_alpha);
 
     /* Sample first pixel to debug channel order */
     if (data->image_height > 0 && data->image_width > 0) {
         guchar* sample = pixbuf_data;
         if (n_channels >= 3) {
-            g_message("First pixel values from pixbuf: [0]=%u, [1]=%u, [2]=%u",
+            debug_log("DBG", "First pixel values from pixbuf: [0]=%u, [1]=%u, [2]=%u",
                       sample[0], sample[1], sample[2]);
             if (n_channels >= 4) {
-                g_message("  [3]=%u", sample[3]);
+                debug_log("DBG", "  [3]=%u", sample[3]);
             }
         }
     }
@@ -337,7 +338,7 @@ static void test_curves_widget(void) {
 
     /* Create curves widget */
     curves = curves_widget_new();
-    g_message("curves_widget_new() returned: %p", curves);
+    debug_log("DBG", "curves_widget_new() returned: %p", curves);
 
     if (!curves) {
         g_warning("Failed to create curves widget");
@@ -356,7 +357,7 @@ static void test_curves_widget(void) {
     GObject* obj = G_OBJECT(curves);
     g_object_ref_sink(obj); /* Convert floating ref to normal ref */
     data->curves = (CurvesWidget*)curves;
-    g_message("curves_widget_new() returned: %p, is_widget=%d, refcount=%d",
+    debug_log("DBG", "curves_widget_new() returned: %p, is_widget=%d, refcount=%d",
               curves, CURVES_IS_WIDGET(data->curves), obj->ref_count);
 
     /* Note: Connect curves change signal AFTER all setup (moved below) */
@@ -415,7 +416,7 @@ static void test_curves_widget(void) {
         gtk_main_iteration();
 
     /* Compute and set histogram from image (AFTER widget is realized) */
-    g_message("Setting histogram data on curves widget...");
+    debug_log("DBG", "Setting histogram data on curves widget...");
     double hist_r[256], hist_g[256], hist_b[256];
     compute_image_histogram(data->test_image, data->image_width, data->image_height, hist_r, hist_g, hist_b);
 
@@ -430,28 +431,28 @@ static void test_curves_widget(void) {
             max_b = hist_b[i];
     }
 
-    g_message("Computed histogram from %dx%d image:", data->image_width, data->image_height);
-    g_message("  R: max=%f, [0]=%f, [128]=%f, [255]=%f", max_r, hist_r[0], hist_r[128], hist_r[255]);
-    g_message("  G: max=%f, [0]=%f, [128]=%f, [255]=%f", max_g, hist_g[0], hist_g[128], hist_g[255]);
-    g_message("  B: max=%f, [0]=%f, [128]=%f, [255]=%f", max_b, hist_b[0], hist_b[128], hist_b[255]);
+    debug_log("DBG", "Computed histogram from %dx%d image:", data->image_width, data->image_height);
+    debug_log("DBG", "  R: max=%f, [0]=%f, [128]=%f, [255]=%f", max_r, hist_r[0], hist_r[128], hist_r[255]);
+    debug_log("DBG", "  G: max=%f, [0]=%f, [128]=%f, [255]=%f", max_g, hist_g[0], hist_g[128], hist_g[255]);
+    debug_log("DBG", "  B: max=%f, [0]=%f, [128]=%f, [255]=%f", max_b, hist_b[0], hist_b[128], hist_b[255]);
 
     /* Ensure histogram display is enabled */
     curves_widget_set_histogram_visible(data->curves, TRUE);
-    g_message("Histogram visibility set to TRUE");
+    debug_log("DBG", "Histogram visibility set to TRUE");
 
     /* Set histograms for individual channels */
-    g_message("Setting CHANNEL_RED histogram...");
+    debug_log("DBG", "Setting CHANNEL_RED histogram...");
     curves_widget_set_histogram_data(data->curves, CHANNEL_RED, hist_r, 256);
-    g_message("Setting CHANNEL_GREEN histogram...");
+    debug_log("DBG", "Setting CHANNEL_GREEN histogram...");
     curves_widget_set_histogram_data(data->curves, CHANNEL_GREEN, hist_g, 256);
-    g_message("Setting CHANNEL_BLUE histogram...");
+    debug_log("DBG", "Setting CHANNEL_BLUE histogram...");
     curves_widget_set_histogram_data(data->curves, CHANNEL_BLUE, hist_b, 256);
 
     /* Also set RGB histogram (for RGB channel mode) - use the red channel as base */
-    g_message("Setting CHANNEL_RGB histogram...");
+    debug_log("DBG", "Setting CHANNEL_RGB histogram...");
     curves_widget_set_histogram_data(data->curves, CHANNEL_RGB, hist_r, 256);
 
-    g_message("Histogram data set, requesting widget redraw...");
+    debug_log("DBG", "Histogram data set, requesting widget redraw...");
     gtk_widget_queue_draw(GTK_WIDGET(data->curves));
 
     /* Process events again to flush the redraw */
@@ -821,7 +822,7 @@ static void test_anchor_position_widget(void) {
 
     /* Get final position */
     position = anchor_position_widget_get_position(anchor_widget);
-    g_message("Final anchor position: %d", position);
+    debug_log("DBG", "Final anchor position: %d", position);
 
     /* Clean up */
     anchor_position_widget_free(anchor_widget);

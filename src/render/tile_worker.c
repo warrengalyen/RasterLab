@@ -8,6 +8,7 @@
 #include <string.h>
 #if HAVE_LCMS2
 #include "color_manager.h"
+#include "debug_logger.h"
 #endif
 
 /**
@@ -344,7 +345,7 @@ TileWorkerPool* tile_worker_pool_create(guint num_workers) {
                                     tile_worker_priority_compare,
                                     NULL);
 
-    g_message("Created tile worker pool with %u threads (priority queue enabled)", num_workers);
+    debug_log("DBG", "Created tile worker pool with %u threads (priority queue enabled)", num_workers);
 
     return pool;
 }

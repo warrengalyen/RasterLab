@@ -1,5 +1,6 @@
 #include "undo/undo_disk.h"
 #include "command.h"
+#include "debug_logger.h"
 #include "document.h"
 #include "render/layer.h"
 #include "render/tile.h"
@@ -404,9 +405,9 @@ gboolean undo_journal_write_tile_command(UndoJournal* journal, Command* cmd) {
         fseek(journal->journal_file, 0, SEEK_END);
 
         if (file_exists) {
-            g_message("Successfully reopened existing journal file '%s'", journal->journal_path);
+            debug_log("DBG", "Successfully reopened existing journal file '%s'", journal->journal_path);
         } else {
-            g_message("Created new journal file '%s' (previous file was deleted)", journal->journal_path);
+            debug_log("DBG", "Created new journal file '%s' (previous file was deleted)", journal->journal_path);
         }
     }
 

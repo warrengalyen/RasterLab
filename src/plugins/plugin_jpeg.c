@@ -20,6 +20,7 @@
 #ifdef HAVE_LIBJPEG
 #include <jerror.h>
 #include <jpeglib.h>
+#include "debug_logger.h"
 
 /**
  * JPEG compression method
@@ -178,12 +179,12 @@ static PluginError load_jpeg(ImageDocument* doc, const char* filename) {
                     embedded_icc = NULL;
                 }
                 if (embedded_icc)
-                    g_message("JPEG: CMYK ICC profile found, will convert to sRGB");
+                    debug_log("DBG", "JPEG: CMYK ICC profile found, will convert to sRGB");
             } else if (use_icc) {
                 cmsHPROFILE rgb_prof = icc_profile_from_memory(icc_data, (size_t)icc_len);
                 if (rgb_prof) {
                     if (api && api->document_set_load_icc_profile) {
-                        g_message("JPEG: embedded ICC profile found, will convert to sRGB");
+                        debug_log("DBG", "JPEG: embedded ICC profile found, will convert to sRGB");
                         api->document_set_load_icc_profile(doc, rgb_prof);
                     } else {
                         icc_destroy(rgb_prof);

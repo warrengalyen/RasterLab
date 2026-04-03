@@ -40,6 +40,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "debug_logger.h"
 
 /* Forward declarations */
 static void on_scroll_adjustment_changed(GtkAdjustment* adjustment, gpointer user_data);
@@ -1642,21 +1643,21 @@ void document_free(ImageDocument* doc) {
 
     /* Shutdown Cairo-safe worker pool before freeing document */
     if (doc->tile_worker_pool) {
-        g_message("Shutting down tile worker pool...");
+        debug_log("DBG", "Shutting down tile worker pool...");
         tile_worker_pool_destroy(doc->tile_worker_pool);
         doc->tile_worker_pool = NULL;
     }
 
     /* Shutdown legacy thread pool (if enabled) */
     if (doc->tile_thread_pool) {
-        g_message("Shutting down legacy tile thread pool...");
+        debug_log("DBG", "Shutting down legacy tile thread pool...");
         tile_thread_pool_destroy(doc->tile_thread_pool);
         doc->tile_thread_pool = NULL;
     }
 
     /* Shutdown GPU compositor if enabled */
     if (doc->gpu_compositor) {
-        g_message("Shutting down GPU compositor...");
+        debug_log("DBG", "Shutting down GPU compositor...");
         gpu_compositor_destroy(doc->gpu_compositor);
         doc->gpu_compositor = NULL;
     }
@@ -2139,7 +2140,7 @@ gboolean document_init_rendering_structures(ImageDocument* doc) {
         if (!doc->tile_worker_pool) {
             g_warning("Failed to create tile worker pool, will use single-threaded compositing");
         } else {
-            g_message("Tile compositing: Using worker threads (Cairo-safe pixel buffer approach)");
+            debug_log("DBG", "Tile compositing: Using worker threads (Cairo-safe pixel buffer approach)");
         }
     }
 
@@ -2156,13 +2157,13 @@ gboolean document_init_rendering_structures(ImageDocument* doc) {
             if (doc->gpu_compositor) {
                 const GPUDeviceInfo* gpu_info = gpu_compositor_get_active_device(doc->gpu_compositor);
                 if (gpu_info) {
-                    g_message("GPU acceleration: Enabled (%s)", gpu_info->name);
+                    debug_log("DBG", "GPU acceleration: Enabled (%s)", gpu_info->name);
                 }
             } else {
                 g_warning("GPU compositor creation failed, falling back to CPU compositing");
             }
         } else {
-            g_message("GPU acceleration: Disabled by settings");
+            debug_log("DBG", "GPU acceleration: Disabled by settings");
         }
 
         if (app_settings) {

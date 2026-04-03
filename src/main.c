@@ -1,6 +1,7 @@
 #include "app/autosave.h"
 #include "app/recent_files.h"
 #include "app/settings.h"
+#include "debug_logger.h"
 #include "i18n.h"
 #include "plugins/builtin_plugins.h"
 #include "plugins/format_registry.h"
@@ -71,16 +72,12 @@ int main(int argc, char* argv[]) {
     app_dir = settings_get_executable_dir();
     settings = settings_load(app_dir);
 
+    debug_init(app_dir ? app_dir : "");
+
 #ifdef HAVE_GETTEXT
     /* Otherwise gtk_init() may call setlocale(LC_ALL, "") and break gettext/LANGUAGE. */
     gtk_disable_setlocale();
 #endif
-
-    /* Print GTK version information */
-    printf("GTK Version: %d.%d.%d\n",
-           gtk_get_major_version(),
-           gtk_get_minor_version(),
-           gtk_get_micro_version());
 
     /* Initialize GTK */
     gtk_init(&argc, &argv);
@@ -202,6 +199,8 @@ int main(int argc, char* argv[]) {
     /* Shutdown plugin system */
     format_registry_shutdown();
     plugin_loader_shutdown();
+
+    debug_shutdown();
 
     /* Cleanup - free context and all resources */
     if (app) {

@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "debug_logger.h"
 
 /**
  * Read header bytes from a file
@@ -152,7 +153,7 @@ gboolean image_io_load(ImageDocument* doc, const char* filename, PluginError* er
         char desc_buf[256];
 
         if (icc_get_profile_description(embedded, desc_buf, sizeof(desc_buf))) {
-            g_message("Loaded ICC profile: %s", desc_buf);
+            debug_log("DBG", "Loaded ICC profile: %s", desc_buf);
         }
 
         guint layer_count = document_get_layer_count(doc);
@@ -200,10 +201,10 @@ gboolean image_io_load(ImageDocument* doc, const char* filename, PluginError* er
             }
             if (converted > 0) {
                 const char* name = desc_buf[0] ? desc_buf : "(embedded)";
-                g_message("Converted %u layer(s) from: %s → sRGB", converted, name);
+                debug_log("DBG", "Converted %u layer(s) from: %s → sRGB", converted, name);
             }
         } else if (layer_count > 0) {
-            g_message("Profile is sRGB, no conversion needed");
+            debug_log("DBG", "Profile is sRGB, no conversion needed");
         }
 
         icc_destroy(embedded);
@@ -213,7 +214,7 @@ gboolean image_io_load(ImageDocument* doc, const char* filename, PluginError* er
             icc_destroy((cmsHPROFILE)doc->load_icc_profile);
             doc->load_icc_profile = NULL;
         }
-        g_message("No ICC found or use embedded ICC disabled, assuming sRGB");
+        debug_log("DBG", "No ICC found or use embedded ICC disabled, assuming sRGB");
     }
 #endif
 

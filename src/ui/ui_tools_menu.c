@@ -9,6 +9,7 @@
 #include "ui/dialogs/settings_dialog.h"
 #include <glib.h>
 #include <gtk/gtk.h>
+#include "debug_logger.h"
 
 #define RL_LOCALE_KEY "rl-locale"
 
@@ -59,12 +60,12 @@ static void on_language_activate(GtkMenuItem* item, gpointer user_data) {
 
     settings_set_interface_locale(ctx->settings, new_loc);
     if (!settings_save(ctx->settings, ctx->app_dir)) {
-        g_message("i18n: failed to save settings after language change");
+        debug_log("WRN", "i18n: failed to save settings after language change");
     } else {
-        g_message("i18n: settings saved with interface locale \"%s\"", new_loc);
+        debug_log("DBG", "i18n: settings saved with interface locale \"%s\"", new_loc);
     }
     i18n_apply_locale(ctx->app_dir, new_loc);
-    g_message("i18n: gettext rebound for locale \"%s\"", new_loc);
+    debug_log("DBG", "i18n: gettext rebound for locale \"%s\"", new_loc);
 
     {
         GtkWidget* dialog = gtk_message_dialog_new(
@@ -108,13 +109,13 @@ void ui_tools_menu_populate_language(AppContext* ctx) {
     GtkWidget* submenu;
 
     if (!ctx || !ctx->window) {
-        g_message("i18n: language menu not populated (no window)");
+        debug_log("DBG", "i18n: language menu not populated (no window)");
         return;
     }
 
     builder = g_object_get_data(G_OBJECT(ctx->window), "main_builder");
     if (!builder) {
-        g_message("i18n: language menu not populated (no main_builder on window)");
+        debug_log("DBG", "i18n: language menu not populated (no main_builder on window)");
         return;
     }
 
@@ -131,17 +132,17 @@ void ui_tools_menu_populate_language(AppContext* ctx) {
             submenu = GTK_WIDGET(gtk_builder_get_object(builder, "tools_menu_language_submenu"));
             if (submenu && lang_mi) {
                 gtk_menu_item_set_submenu(GTK_MENU_ITEM(lang_mi), submenu);
-                g_message("i18n: attached tools_menu_language_submenu to Language menu item (was detached)");
+                debug_log("DBG", "i18n: attached tools_menu_language_submenu to Language menu item (was detached)");
             }
         }
     }
 
     if (!submenu) {
-        g_message("i18n: language menu not populated (no Language submenu widget)");
+        debug_log("DBG", "i18n: language menu not populated (no Language submenu widget)");
         return;
     }
 
-    g_message("i18n: populating language menu (app_dir=%s)", ctx->app_dir ? ctx->app_dir : "(null)");
+    debug_log("DBG", "i18n: populating language menu (app_dir=%s)", ctx->app_dir ? ctx->app_dir : "(null)");
 
     {
         GtkContainer* container = GTK_CONTAINER(submenu);
@@ -191,7 +192,7 @@ void ui_tools_menu_populate_language(AppContext* ctx) {
         guint n = (guint)g_list_length(ch);
 
         g_list_free(ch);
-        g_message("i18n: language submenu now has %u item(s) (visible after show_all)", n);
+        debug_log("DBG", "i18n: language submenu now has %u item(s) (visible after show_all)", n);
     }
 
     {

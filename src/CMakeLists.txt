@@ -40,6 +40,7 @@ set(SOURCES
     app/recent_files.c
     app/settings.c
     command.c
+    debug_logger.c
     color_manager/color_manager.c
     color_manager/display_profile.c
     color_manager/icc_utils.c
