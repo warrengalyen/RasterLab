@@ -3,6 +3,7 @@
 #include "ocular.h"
 #include "ui/filters/filter_utils.h"
 #include <glib.h>
+#include "debug_logger.h"
 
 /**
  * Apply bilateral filter to a layer using Ocular library
@@ -38,7 +39,7 @@ gboolean filter_bilateral_apply(ImageLayer* layer, const gfloat* values, gint nu
                                    sigma_spatial, sigma_range);
 
     if (status != OC_STATUS_OK) {
-        g_warning("Bilateral filter: Ocular filter returned error %d", status);
+        debug_log("WRN", "Bilateral filter: Ocular filter returned error %d", status);
         filter_utils_free_rgb_buffers(&buffers);
         return FALSE;
     }

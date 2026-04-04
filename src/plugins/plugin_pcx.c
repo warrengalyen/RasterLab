@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "debug_logger.h"
 
 /* Helper function to read little-endian uint16_t */
 static uint16_t read_le16(const uint8_t* data) {
@@ -656,7 +657,7 @@ static PluginError load_pcx(ImageDocument* doc, const char* filename) {
                             g_free(vga_palette);
                         }
                         fclose(infile);
-                        g_warning("Error decompressing scanline\n");
+                        debug_log("WRN", "Error decompressing scanline\n");
                         return PLUGIN_ERROR_FILE_READ_ERROR;
                     }
                 }

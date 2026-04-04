@@ -4,6 +4,7 @@
 #include "render/dirty.h"
 #include "selection/selection_render.h"
 #include <glib.h>
+#include "debug_logger.h"
 
 gboolean filter_utils_allocate_rgb_buffers(cairo_surface_t* surface,
                                            FilterRGBBuffers* buffers,
@@ -31,7 +32,7 @@ gboolean filter_utils_allocate_rgb_buffers(cairo_surface_t* surface,
     buffers->rgb_output = (guchar*)g_malloc(width * height * 3);
 
     if (!buffers->rgb_input || !buffers->rgb_output) {
-        g_warning("%s: Failed to allocate memory", filter_name);
+        debug_log("WRN", "%s: Failed to allocate memory", filter_name);
         filter_utils_free_rgb_buffers(buffers);
         return FALSE;
     }
@@ -74,7 +75,7 @@ gboolean filter_utils_allocate_rgba_buffers(cairo_surface_t* surface,
     buffers->rgba_output = (guchar*)g_malloc(width * height * 4);
 
     if (!buffers->rgba_input || !buffers->rgba_output) {
-        g_warning("%s: Failed to allocate memory", filter_name);
+        debug_log("WRN", "%s: Failed to allocate memory", filter_name);
         filter_utils_free_rgba_buffers(buffers);
         return FALSE;
     }
@@ -100,7 +101,7 @@ gboolean filter_utils_cairo_to_rgb(cairo_surface_t* surface,
 
     /* Convert from Cairo ARGB32 to RGB */
     if (!adjustments_cairo_to_rgb(surface, buffers->rgb_input)) {
-        g_warning("%s: Failed to convert surface to RGB", filter_name);
+        debug_log("WRN", "%s: Failed to convert surface to RGB", filter_name);
         return FALSE;
     }
 
@@ -116,7 +117,7 @@ gboolean filter_utils_rgb_to_cairo(cairo_surface_t* surface,
 
     /* Convert back from RGB to Cairo ARGB32 */
     if (!adjustments_rgb_to_cairo(surface, buffers->rgb_output)) {
-        g_warning("%s: Failed to convert RGB to surface", filter_name);
+        debug_log("WRN", "%s: Failed to convert RGB to surface", filter_name);
         return FALSE;
     }
 
@@ -132,7 +133,7 @@ gboolean filter_utils_cairo_to_rgba(cairo_surface_t* surface,
 
     /* Convert from Cairo ARGB32 to RGBA */
     if (!adjustments_cairo_to_rgba(surface, buffers->rgba_input)) {
-        g_warning("%s: Failed to convert surface to RGBA", filter_name);
+        debug_log("WRN", "%s: Failed to convert surface to RGBA", filter_name);
         return FALSE;
     }
 
@@ -148,7 +149,7 @@ gboolean filter_utils_rgba_to_cairo(cairo_surface_t* surface,
 
     /* Convert back from RGBA to Cairo ARGB32 */
     if (!adjustments_rgba_to_cairo(surface, buffers->rgba_output)) {
-        g_warning("%s: Failed to convert RGBA to surface", filter_name);
+        debug_log("WRN", "%s: Failed to convert RGBA to surface", filter_name);
         return FALSE;
     }
 

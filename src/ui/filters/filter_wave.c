@@ -2,6 +2,7 @@
 #include "ocular.h"
 #include "ui/filters/filter_distort_utils.h"
 #include <glib.h>
+#include "debug_logger.h"
 
 static OcWaveType wave_type_from_value(gint wave_type_value) {
     switch (wave_type_value) {
@@ -49,7 +50,7 @@ gboolean filter_wave_apply(ImageLayer* layer, const gfloat* values, gint num_val
                                         scale_x, scale_y,
                                         wave_type, seed);
     if (status != OC_STATUS_OK) {
-        g_warning("Wave distortion: Ocular filter returned error %d", status);
+        debug_log("WRN", "Wave distortion: Ocular filter returned error %d", status);
         filter_distort_utils_free(&buffers);
         return FALSE;
     }

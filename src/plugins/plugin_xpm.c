@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "debug_logger.h"
 
 /* XPM color entry structure */
 typedef struct {
@@ -545,7 +546,7 @@ static PluginError load_xpm(ImageDocument* doc, const char* filename) {
             layer_free(base_layer);
         }
         free_xpm_state(&state);
-        g_warning("Invalid XPM values: width: %u, height: %u, num_colors: %u, cpp: %u, found_values: %d, colors_read: %u, pixels_read: %u\n",
+        debug_log("WRN", "Invalid XPM values: width: %u, height: %u, num_colors: %u, cpp: %u, found_values: %d, colors_read: %u, pixels_read: %u\n",
                   state.width, state.height, state.num_colors, state.cpp, found_values, colors_read, pixels_read);
         return PLUGIN_ERROR_CORRUPT_FILE;
     }

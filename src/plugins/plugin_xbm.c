@@ -1,3 +1,4 @@
+#include "debug_logger.h"
 /*
  * XBM (X Bitmap) image format plugin
  * Supports .xbm and .h - monochrome C source bitmaps (X11 and X10 style).
@@ -348,7 +349,7 @@ static PluginError load_xbm(ImageDocument* doc, const char* filename) {
     fclose(f);
 
     if (width == 0 || height == 0) {
-        g_warning("XBM plugin: Failed to parse dimensions (width=%u, height=%u)", width, height);
+        debug_log("WRN", "XBM plugin: Failed to parse dimensions (width=%u, height=%u)", width, height);
         g_free(bits);
         g_free(bits16);
         return PLUGIN_ERROR_UNSUPPORTED_FORMAT;
@@ -359,7 +360,7 @@ static PluginError load_xbm(ImageDocument* doc, const char* filename) {
         size_t expected_words = (size_t)height * ((width + 15) / 16);
         /* Allow some extra data (padding), but must have at least the expected amount */
         if (bits_count < expected_words) {
-            g_warning("XBM plugin: Not enough data - expected at least %zu words, got %zu", expected_words, bits_count);
+            debug_log("WRN", "XBM plugin: Not enough data - expected at least %zu words, got %zu", expected_words, bits_count);
             g_free(bits16);
             return PLUGIN_ERROR_CORRUPT_FILE;
         }
@@ -368,7 +369,7 @@ static PluginError load_xbm(ImageDocument* doc, const char* filename) {
         size_t expected_bytes = (size_t)height * row_stride_bytes;
         /* Allow some extra data (padding), but must have at least the expected amount */
         if (bits_count < expected_bytes) {
-            g_warning("XBM plugin: Not enough data - expected at least %zu bytes, got %zu", expected_bytes, bits_count);
+            debug_log("WRN", "XBM plugin: Not enough data - expected at least %zu bytes, got %zu", expected_bytes, bits_count);
             g_free(bits);
             return PLUGIN_ERROR_CORRUPT_FILE;
         }

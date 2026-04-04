@@ -6,6 +6,7 @@
 #include <glib.h>
 #include <gtk/gtk.h>
 #include <string.h>
+#include "debug_logger.h"
 
 #ifdef HAVE_LIBTIFF
 
@@ -386,7 +387,7 @@ gboolean tiff_options_dialog_show(GtkWindow* parent, SaveOptions* opts, ImageDoc
     builder = gtk_builder_new();
     ui_utils_builder_set_translation_domain(builder);
     if (!gtk_builder_add_from_resource(builder, "/ui/tiff_options_dialog.glade", &error)) {
-        g_warning("Failed to load tiff_options_dialog.glade: %s", error ? error->message : "Unknown error");
+        debug_log("WRN", "Failed to load tiff_options_dialog.glade: %s", error ? error->message : "Unknown error");
         if (error) {
             g_error_free(error);
         }
@@ -397,7 +398,7 @@ gboolean tiff_options_dialog_show(GtkWindow* parent, SaveOptions* opts, ImageDoc
     /* Get dialog widget */
     dialog = GTK_WIDGET(gtk_builder_get_object(builder, "tiff_options_dialog"));
     if (!dialog) {
-        g_warning("Failed to get tiff_options_dialog from builder");
+        debug_log("WRN", "Failed to get tiff_options_dialog from builder");
         g_object_unref(builder);
         return FALSE;
     }

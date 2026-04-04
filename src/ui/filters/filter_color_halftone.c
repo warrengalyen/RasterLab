@@ -2,6 +2,7 @@
 #include "filters.h"
 #include "ocular.h"
 #include <glib.h>
+#include "debug_logger.h"
 
 /**
  * Apply color halftone filter to a layer using Ocular library
@@ -39,7 +40,7 @@ gboolean filter_color_halftone_apply(ImageLayer* layer, const gfloat* values, gi
     rgb_output = (guchar*)g_malloc(width * height * 3);
 
     if (!rgb_input || !rgb_output) {
-        g_warning("Color halftone filter: Failed to allocate memory");
+        debug_log("WRN", "Color halftone filter: Failed to allocate memory");
         g_free(rgb_input);
         g_free(rgb_output);
         return FALSE;
@@ -47,7 +48,7 @@ gboolean filter_color_halftone_apply(ImageLayer* layer, const gfloat* values, gi
 
     /* Convert from Cairo ARGB32 to RGB */
     if (!adjustments_cairo_to_rgb(surface, rgb_input)) {
-        g_warning("Color halftone filter: Failed to convert surface to RGB");
+        debug_log("WRN", "Color halftone filter: Failed to convert surface to RGB");
         g_free(rgb_input);
         g_free(rgb_output);
         return FALSE;
@@ -63,7 +64,7 @@ gboolean filter_color_halftone_apply(ImageLayer* layer, const gfloat* values, gi
                                        cyan_angle, magenta_angle, yellow_angle);
 
     if (status != OC_STATUS_OK) {
-        g_warning("Color halftone filter: Ocular filter returned error %d", status);
+        debug_log("WRN", "Color halftone filter: Ocular filter returned error %d", status);
         g_free(rgb_input);
         g_free(rgb_output);
         return FALSE;
@@ -71,7 +72,7 @@ gboolean filter_color_halftone_apply(ImageLayer* layer, const gfloat* values, gi
 
     /* Convert back from RGB to Cairo ARGB32 */
     if (!adjustments_rgb_to_cairo(surface, rgb_output)) {
-        g_warning("Color halftone filter: Failed to convert RGB to surface");
+        debug_log("WRN", "Color halftone filter: Failed to convert RGB to surface");
         g_free(rgb_input);
         g_free(rgb_output);
         return FALSE;

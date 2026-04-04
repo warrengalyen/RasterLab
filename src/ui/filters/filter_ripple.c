@@ -2,6 +2,7 @@
 #include "ocular.h"
 #include "ui/filters/filter_distort_utils.h"
 #include <glib.h>
+#include "debug_logger.h"
 
 gboolean filter_ripple_apply(ImageLayer* layer, const gfloat* values, gint num_values) {
     DistortBuffers buffers;
@@ -28,7 +29,7 @@ gboolean filter_ripple_apply(ImageLayer* layer, const gfloat* values, gint num_v
                                           center_x, center_y,
                                           radius_percentage, phase);
     if (status != OC_STATUS_OK) {
-        g_warning("Ripple distortion: Ocular filter returned error %d", status);
+        debug_log("WRN", "Ripple distortion: Ocular filter returned error %d", status);
         filter_distort_utils_free(&buffers);
         return FALSE;
     }

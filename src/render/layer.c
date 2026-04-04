@@ -8,6 +8,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#include "debug_logger.h"
 
 /* Forward declarations */
 static void layer_fill_background(ImageLayer* layer, LayerBackgroundType background, const gdouble* custom_color);
@@ -525,7 +526,7 @@ gboolean document_delete_layer(ImageDocument* doc, ImageLayer* layer) {
 
     /* Don't delete the last layer */
     if (g_list_length(doc->layers) == 1) {
-        g_warning("Cannot delete the last layer");
+        debug_log("WRN", "Cannot delete the last layer");
         return FALSE;
     }
 
@@ -869,7 +870,7 @@ gboolean layer_ensure_cache(ImageLayer* layer) {
         CAIRO_FORMAT_ARGB32, layer->width, layer->height);
 
     if (cairo_surface_status(layer->cache_surface) != CAIRO_STATUS_SUCCESS) {
-        g_warning("Failed to create layer cache surface");
+        debug_log("WRN", "Failed to create layer cache surface");
         layer->cache_surface = NULL;
         return FALSE;
     }

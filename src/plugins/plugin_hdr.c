@@ -198,7 +198,7 @@ static int decompress_rle_component(FILE* f, uint8_t* output, uint32_t width) {
     while (x < width) {
         /* Read 2-byte packet header */
         if (fread(buf, 1, 2, f) != 2) {
-            g_warning("HDR plugin: Unexpected EOF while decompressing RLE component at position %u/%u", x, width);
+            debug_log("WRN", "HDR plugin: Unexpected EOF while decompressing RLE component at position %u/%u", x, width);
             return -1;
         }
 
@@ -209,7 +209,7 @@ static int decompress_rle_component(FILE* f, uint8_t* output, uint32_t width) {
 
             /* Validate run length */
             if (count == 0 || count > (int)(width - x)) {
-                g_warning("HDR plugin: RLE run length %d invalid or exceeds remaining width %u", count, width - x);
+                debug_log("WRN", "HDR plugin: RLE run length %d invalid or exceeds remaining width %u", count, width - x);
                 return -1;
             }
 
@@ -223,7 +223,7 @@ static int decompress_rle_component(FILE* f, uint8_t* output, uint32_t width) {
 
             /* Validate count */
             if (count == 0 || count > (int)(width - x)) {
-                g_warning("HDR plugin: RLE non-run count %d invalid or exceeds remaining width %u", count, width - x);
+                debug_log("WRN", "HDR plugin: RLE non-run count %d invalid or exceeds remaining width %u", count, width - x);
                 return -1;
             }
 
@@ -233,7 +233,7 @@ static int decompress_rle_component(FILE* f, uint8_t* output, uint32_t width) {
             /* Read remaining literal bytes if count > 1 */
             if (--count > 0) {
                 if (fread(&output[x], 1, count, f) != (size_t)count) {
-                    g_warning("HDR plugin: Failed to read %d literal bytes", count);
+                    debug_log("WRN", "HDR plugin: Failed to read %d literal bytes", count);
                     return -1;
                 }
                 x += count;
@@ -242,7 +242,7 @@ static int decompress_rle_component(FILE* f, uint8_t* output, uint32_t width) {
     }
 
     if (x != width) {
-        g_warning("HDR plugin: RLE component decompression incomplete: got %u, expected %u", x, width);
+        debug_log("WRN", "HDR plugin: RLE component decompression incomplete: got %u, expected %u", x, width);
         return -1;
     }
 
@@ -275,10 +275,10 @@ static bool read_hdr_scanline(FILE* f, uint8_t* output, uint32_t width) {
 
         /* Use the scanline width from the header, but ensure it doesn't exceed expected width */
         if (scanline_width > width) {
-            g_warning("HDR plugin: RLE scanline width %u exceeds expected width %u - using expected width", scanline_width, width);
+            debug_log("WRN", "HDR plugin: RLE scanline width %u exceeds expected width %u - using expected width", scanline_width, width);
             scanline_width = width;
         } else if (scanline_width == 0) {
-            g_warning("HDR plugin: Invalid RLE scanline width 0");
+            debug_log("WRN", "HDR plugin: Invalid RLE scanline width 0");
             return false;
         }
 
@@ -295,22 +295,22 @@ static bool read_hdr_scanline(FILE* f, uint8_t* output, uint32_t width) {
         uint8_t* e_component = temp_components + scanline_width * 3;
 
         if (decompress_rle_component(f, r_component, scanline_width) != (int)scanline_width) {
-            g_warning("HDR plugin: Failed to decompress R component");
+            debug_log("WRN", "HDR plugin: Failed to decompress R component");
             g_free(temp_components);
             return false;
         }
         if (decompress_rle_component(f, g_component, scanline_width) != (int)scanline_width) {
-            g_warning("HDR plugin: Failed to decompress G component");
+            debug_log("WRN", "HDR plugin: Failed to decompress G component");
             g_free(temp_components);
             return false;
         }
         if (decompress_rle_component(f, b_component, scanline_width) != (int)scanline_width) {
-            g_warning("HDR plugin: Failed to decompress B component");
+            debug_log("WRN", "HDR plugin: Failed to decompress B component");
             g_free(temp_components);
             return false;
         }
         if (decompress_rle_component(f, e_component, scanline_width) != (int)scanline_width) {
-            g_warning("HDR plugin: Failed to decompress E component");
+            debug_log("WRN", "HDR plugin: Failed to decompress E component");
             g_free(temp_components);
             return false;
         }
@@ -340,7 +340,7 @@ static bool read_hdr_scanline(FILE* f, uint8_t* output, uint32_t width) {
 
         /* Read pixel-interleaved RGBE data */
         if (fread(output, 1, width * 4, f) != width * 4) {
-            g_warning("HDR plugin: Failed to read uncompressed scanline (expected %u bytes)", width * 4);
+            debug_log("WRN", "HDR plugin: Failed to read uncompressed scanline (expected %u bytes)", width * 4);
             return false;
         }
     }
@@ -425,13 +425,13 @@ static PluginError load_hdr(ImageDocument* doc, const char* filename) {
     }
 
     if (!found_signature) {
-        g_warning("HDR plugin: File does not contain Radiance signature");
+        debug_log("WRN", "HDR plugin: File does not contain Radiance signature");
         fclose(infile);
         return PLUGIN_ERROR_UNSUPPORTED_FORMAT;
     }
 
     if (!found_resolution || width == 0 || height == 0) {
-        g_warning("HDR plugin: Failed to parse resolution (width=%u, height=%u)", width, height);
+        debug_log("WRN", "HDR plugin: Failed to parse resolution (width=%u, height=%u)", width, height);
         fclose(infile);
         return PLUGIN_ERROR_CORRUPT_FILE;
     }
@@ -457,7 +457,7 @@ static PluginError load_hdr(ImageDocument* doc, const char* filename) {
     for (uint32_t y = 0; y < height; y++) {
         uint8_t* scanline = rgbe_data + y * width * 4;
         if (!read_hdr_scanline(infile, scanline, width)) {
-            g_warning("HDR plugin: Failed to read scanline %u of %u", y + 1, height);
+            debug_log("WRN", "HDR plugin: Failed to read scanline %u of %u", y + 1, height);
             g_free(rgbe_data);
             fclose(infile);
             return PLUGIN_ERROR_FILE_READ_ERROR;

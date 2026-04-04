@@ -89,7 +89,7 @@ gboolean image_io_load(ImageDocument* doc, const char* filename, PluginError* er
     PluginError error = PLUGIN_ERROR_NONE;
 
     if (!doc || !filename) {
-        g_warning("Invalid parameters for image_io_load");
+        debug_log("WRN", "Invalid parameters for image_io_load");
         if (error_out) {
             *error_out = PLUGIN_ERROR_INVALID_PARAMETERS;
         }
@@ -98,7 +98,7 @@ gboolean image_io_load(ImageDocument* doc, const char* filename, PluginError* er
 
     /* Read file header for format detection */
     if (!read_file_header(filename, header, sizeof(header), &header_size)) {
-        g_warning("Failed to read file header: %s", filename);
+        debug_log("WRN", "Failed to read file header: %s", filename);
         if (error_out) {
             *error_out = PLUGIN_ERROR_FILE_READ_ERROR;
         }
@@ -108,7 +108,7 @@ gboolean image_io_load(ImageDocument* doc, const char* filename, PluginError* er
     /* Find appropriate plugin */
     handler = format_registry_find_loader(filename, header, header_size);
     if (!handler) {
-        g_warning("No plugin found to load file: %s", filename);
+        debug_log("WRN", "No plugin found to load file: %s", filename);
         if (error_out) {
             *error_out = PLUGIN_ERROR_UNSUPPORTED_FORMAT;
         }
@@ -120,7 +120,7 @@ gboolean image_io_load(ImageDocument* doc, const char* filename, PluginError* er
 
     if (error != PLUGIN_ERROR_NONE) {
         if (error != PLUGIN_ERROR_USER_CANCELLED)
-            g_warning("Plugin failed to load file %s: error %d", filename, error);
+            debug_log("WRN", "Plugin failed to load file %s: error %d", filename, error);
         if (error_out) {
             *error_out = error;
         }
@@ -196,7 +196,7 @@ gboolean image_io_load(ImageDocument* doc, const char* filename, PluginError* er
                     cairo_surface_mark_dirty(layer->surface);
                     converted++;
                 } else {
-                    g_warning("ICC transform failed on layer %u, assuming sRGB", li);
+                    debug_log("WRN", "ICC transform failed on layer %u, assuming sRGB", li);
                 }
             }
             if (converted > 0) {
@@ -253,7 +253,7 @@ gboolean image_io_save(ImageDocument* doc, const char* filename, const SaveOptio
     void* plugin_data = NULL;
 
     if (!doc || !filename) {
-        g_warning("Invalid parameters for image_io_save");
+        debug_log("WRN", "Invalid parameters for image_io_save");
         if (error_out) {
             *error_out = PLUGIN_ERROR_INVALID_PARAMETERS;
         }
@@ -263,7 +263,7 @@ gboolean image_io_save(ImageDocument* doc, const char* filename, const SaveOptio
     /* Find appropriate plugin */
     handler = format_registry_find_saver(filename);
     if (!handler) {
-        g_warning("No plugin found to save file: %s", filename);
+        debug_log("WRN", "No plugin found to save file: %s", filename);
         if (error_out) {
             *error_out = PLUGIN_ERROR_UNSUPPORTED_FORMAT;
         }
@@ -273,7 +273,7 @@ gboolean image_io_save(ImageDocument* doc, const char* filename, const SaveOptio
     /* Allocate options structure */
     actual_opts = g_malloc(sizeof(SaveOptions));
     if (!actual_opts) {
-        g_warning("Failed to allocate memory for save options");
+        debug_log("WRN", "Failed to allocate memory for save options");
         if (error_out) {
             *error_out = PLUGIN_ERROR_OUT_OF_MEMORY;
         }
@@ -334,7 +334,7 @@ gboolean image_io_save(ImageDocument* doc, const char* filename, const SaveOptio
 
     /* Call plugin's save function */
     if (!handler || !handler->plugin || !handler->plugin->callbacks.save) {
-        g_warning("Invalid plugin handler for saving file: %s", filename);
+        debug_log("WRN", "Invalid plugin handler for saving file: %s", filename);
         if (plugin_data) {
             g_free(plugin_data);
         }
@@ -355,7 +355,7 @@ gboolean image_io_save(ImageDocument* doc, const char* filename, const SaveOptio
     g_free(actual_opts);
 
     if (error != PLUGIN_ERROR_NONE) {
-        g_warning("Plugin failed to save file %s: error %d", filename, error);
+        debug_log("WRN", "Plugin failed to save file %s: error %d", filename, error);
         if (error_out) {
             *error_out = error;
         }

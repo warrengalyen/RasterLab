@@ -2,6 +2,7 @@
 #include "filters.h"
 #include "ocular.h"
 #include <glib.h>
+#include "debug_logger.h"
 
 /**
  * Apply zoom blur filter to a layer using Ocular library
@@ -37,14 +38,14 @@ gboolean filter_zoom_blur_apply(ImageLayer *layer, const gfloat *values, gint nu
     rgb_output = (guchar *)g_malloc(width * height * 3);
     
     if (!rgb_input || !rgb_output) {
-        g_warning("Zoom blur filter: Failed to allocate memory");
+        debug_log("WRN", "Zoom blur filter: Failed to allocate memory");
         g_free(rgb_input);
         g_free(rgb_output);
         return FALSE;
     }
 
     if (!adjustments_cairo_to_rgb(surface, rgb_input)) {
-        g_warning("Zoom blur filter: Failed to convert surface to RGB");
+        debug_log("WRN", "Zoom blur filter: Failed to convert surface to RGB");
         g_free(rgb_input);
         g_free(rgb_output);
         return FALSE;
@@ -53,14 +54,14 @@ gboolean filter_zoom_blur_apply(ImageLayer *layer, const gfloat *values, gint nu
     status = ocularZoomBlur(rgb_input, rgb_output, width, height, stride, sample_radius, blur_amount, center_x, center_y);
     
     if (status != OC_STATUS_OK) {
-        g_warning("Zoom blur filter: Ocular filter returned error %d", status);
+        debug_log("WRN", "Zoom blur filter: Ocular filter returned error %d", status);
         g_free(rgb_input);
         g_free(rgb_output);
         return FALSE;
     }
 
     if (!adjustments_rgb_to_cairo(surface, rgb_output)) {
-        g_warning("Zoom blur filter: Failed to convert RGB to surface");
+        debug_log("WRN", "Zoom blur filter: Failed to convert RGB to surface");
         g_free(rgb_input);
         g_free(rgb_output);
         return FALSE;

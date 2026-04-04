@@ -2,6 +2,7 @@
 #include "filters.h"
 #include "ocular.h"
 #include <glib.h>
+#include "debug_logger.h"
 
 /**
  * Apply Canny edge detection filter to a layer using Ocular library
@@ -31,7 +32,7 @@ gboolean filter_canny_edge_apply(ImageLayer* layer) {
     guchar* edge_output = (guchar*)g_malloc(width * height);
 
     if (!rgb_input || !grayscale_input || !edge_output) {
-        g_warning("Canny edge filter: Failed to allocate memory");
+        debug_log("WRN", "Canny edge filter: Failed to allocate memory");
         g_free(rgb_input);
         g_free(grayscale_input);
         g_free(edge_output);
@@ -40,7 +41,7 @@ gboolean filter_canny_edge_apply(ImageLayer* layer) {
 
     /* Convert from Cairo ARGB32 to RGB */
     if (!adjustments_cairo_to_rgb(surface, rgb_input)) {
-        g_warning("Canny edge filter: Failed to convert surface to RGB");
+        debug_log("WRN", "Canny edge filter: Failed to convert surface to RGB");
         g_free(rgb_input);
         g_free(grayscale_input);
         g_free(edge_output);
@@ -50,7 +51,7 @@ gboolean filter_canny_edge_apply(ImageLayer* layer) {
     /* Convert RGB to grayscale (single channel) */
     status = ocularGrayscaleFilter(rgb_input, grayscale_input, width, height, width * 3);
     if (status != OC_STATUS_OK) {
-        g_warning("Canny edge filter: Grayscale conversion returned error %d", status);
+        debug_log("WRN", "Canny edge filter: Grayscale conversion returned error %d", status);
         g_free(rgb_input);
         g_free(grayscale_input);
         g_free(edge_output);
@@ -64,7 +65,7 @@ gboolean filter_canny_edge_apply(ImageLayer* layer) {
                                    CannyGaus3x3, 30, 100);
 
     if (status != OC_STATUS_OK) {
-        g_warning("Canny edge filter: Ocular filter returned error %d", status);
+        debug_log("WRN", "Canny edge filter: Ocular filter returned error %d", status);
         g_free(rgb_input);
         g_free(grayscale_input);
         g_free(edge_output);
@@ -73,7 +74,7 @@ gboolean filter_canny_edge_apply(ImageLayer* layer) {
 
     /* Convert back from single channel grayscale to Cairo ARGB32 */
     if (!adjustments_grayscale_to_cairo(surface, edge_output)) {
-        g_warning("Canny edge filter: Failed to convert grayscale to surface");
+        debug_log("WRN", "Canny edge filter: Failed to convert grayscale to surface");
         g_free(rgb_input);
         g_free(grayscale_input);
         g_free(edge_output);

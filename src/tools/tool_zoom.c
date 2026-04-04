@@ -3,6 +3,7 @@
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <gdk/gdk.h>
 #include <stdio.h>
+#include "debug_logger.h"
 
 /* Forward declaration */
 typedef struct AppContext AppContext;
@@ -56,7 +57,7 @@ static GdkCursor* create_zoom_cursor(void) {
                                     &error);
     if (!bytes) {
         if (error) {
-            g_warning("Failed to load zoom cursor resource: %s", error->message);
+            debug_log("WRN", "Failed to load zoom cursor resource: %s", error->message);
             g_error_free(error);
         }
         return gdk_cursor_new_for_display(display, GDK_ARROW);
@@ -73,7 +74,7 @@ static GdkCursor* create_zoom_cursor(void) {
 
     if (!pixbuf) {
         if (error) {
-            g_warning("Failed to parse zoom cursor: %s", error->message);
+            debug_log("WRN", "Failed to parse zoom cursor: %s", error->message);
             g_error_free(error);
         }
         return gdk_cursor_new_for_display(display, GDK_ARROW);

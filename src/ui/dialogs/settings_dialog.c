@@ -1,3 +1,4 @@
+#include "debug_logger.h"
 /*
  * Settings dialog 
  * Uses layout from resources/ui/settings_dialog.glade
@@ -54,7 +55,7 @@ static void set_tab_icon_label(GtkNotebook* notebook, GtkWidget* page_child, Gtk
     GdkPixbuf* pixbuf = gdk_pixbuf_new_from_resource(icon_resource, &err);
     if (!pixbuf) {
         if (err) {
-            g_warning("Settings tab icon %s: %s", icon_resource, err->message);
+            debug_log("WRN", "Settings tab icon %s: %s", icon_resource, err->message);
             g_error_free(err);
         }
         return;
@@ -600,7 +601,7 @@ void settings_dialog_show(AppContext* ctx) {
     GtkBuilder* builder = gtk_builder_new();
     ui_utils_builder_set_translation_domain(builder);
     if (!gtk_builder_add_from_resource(builder, "/ui/settings_dialog.glade", &error)) {
-        g_warning("Failed to load settings_dialog.glade: %s", error ? error->message : "Unknown error");
+        debug_log("WRN", "Failed to load settings_dialog.glade: %s", error ? error->message : "Unknown error");
         if (error) {
             g_error_free(error);
         }

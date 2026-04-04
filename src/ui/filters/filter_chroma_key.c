@@ -3,6 +3,7 @@
 #include "ocular.h"
 #include "ui/filters/filter_utils.h"
 #include <glib.h>
+#include "debug_logger.h"
 
 /**
  * Apply chroma key filter to a layer using Ocular library
@@ -43,7 +44,7 @@ gboolean filter_chroma_key_apply(ImageLayer* layer, const gfloat* values, gint n
                                    color_r, color_g, color_b, threshold, smoothing);
 
     if (status != OC_STATUS_OK) {
-        g_warning("Chroma key filter: Ocular filter returned error %d", status);
+        debug_log("WRN", "Chroma key filter: Ocular filter returned error %d", status);
         filter_utils_free_rgba_buffers(&buffers);
         return FALSE;
     }

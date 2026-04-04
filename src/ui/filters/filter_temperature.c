@@ -3,6 +3,7 @@
 #include "ocular.h"
 #include "ui/filters/filter_utils.h"
 #include <glib.h>
+#include "debug_logger.h"
 
 /**
  * Apply color temperature filter to a layer using Ocular library
@@ -37,7 +38,7 @@ gboolean filter_temperature_apply(ImageLayer* layer, const gfloat* values, gint 
                                     temperature, strength);
 
     if (status != OC_STATUS_OK) {
-        g_warning("Color temperature filter: Ocular filter returned error %d", status);
+        debug_log("WRN", "Color temperature filter: Ocular filter returned error %d", status);
         filter_utils_free_rgb_buffers(&buffers);
         return FALSE;
     }

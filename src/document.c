@@ -380,7 +380,7 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
 
             /* Safety: verify Cairo surface is valid */
             if (cairo_surface_status(completed.surface) != CAIRO_STATUS_SUCCESS) {
-                g_warning("Discarding invalid Cairo surface from worker thread");
+                debug_log("WRN", "Discarding invalid Cairo surface from worker thread");
                 cairo_surface_destroy(completed.surface);
                 continue;
             }
@@ -1546,7 +1546,7 @@ ImageDocument* document_new(const gchar* filename, gboolean create_worker_pool, 
     if (create_worker_pool) {
         doc->tile_worker_pool = tile_worker_pool_create(0);
         if (!doc->tile_worker_pool) {
-            g_warning("Failed to create tile worker pool, will use single-threaded compositing");
+            debug_log("WRN", "Failed to create tile worker pool, will use single-threaded compositing");
         }
     } else {
         doc->tile_worker_pool = NULL;
@@ -2119,7 +2119,7 @@ gboolean document_init_rendering_structures(ImageDocument* doc) {
        Tile size of 128 is a good balance between memory and performance */
     doc->tile_grid = tile_grid_create(doc->width, doc->height, 128);
     if (!doc->tile_grid) {
-        g_warning("Failed to create tile grid");
+        debug_log("WRN", "Failed to create tile grid");
         return FALSE;
     }
 
@@ -2129,7 +2129,7 @@ gboolean document_init_rendering_structures(ImageDocument* doc) {
     }
     doc->selection_mask = selection_mask_new(doc->width, doc->height);
     if (!doc->selection_mask) {
-        g_warning("Failed to create selection mask");
+        debug_log("WRN", "Failed to create selection mask");
         return FALSE;
     }
 
@@ -2138,7 +2138,7 @@ gboolean document_init_rendering_structures(ImageDocument* doc) {
     if (!doc->tile_worker_pool) {
         doc->tile_worker_pool = tile_worker_pool_create(0);
         if (!doc->tile_worker_pool) {
-            g_warning("Failed to create tile worker pool, will use single-threaded compositing");
+            debug_log("WRN", "Failed to create tile worker pool, will use single-threaded compositing");
         } else {
             debug_log("DBG", "Tile compositing: Using worker threads (Cairo-safe pixel buffer approach)");
         }
@@ -2160,7 +2160,7 @@ gboolean document_init_rendering_structures(ImageDocument* doc) {
                     debug_log("DBG", "GPU acceleration: Enabled (%s)", gpu_info->name);
                 }
             } else {
-                g_warning("GPU compositor creation failed, falling back to CPU compositing");
+                debug_log("WRN", "GPU compositor creation failed, falling back to CPU compositing");
             }
         } else {
             debug_log("DBG", "GPU acceleration: Disabled by settings");
@@ -2436,27 +2436,27 @@ gboolean document_save_as_png(ImageDocument* doc, const gchar* filename) {
     gboolean result = FALSE;
 
     if (!doc || !filename) {
-        g_warning("Invalid parameters for document_save_as_png");
+        debug_log("WRN", "Invalid parameters for document_save_as_png");
         return FALSE;
     }
 
     /* Get a fresh composite surface for export (includes all layers) */
     composite = document_export_composite_surface(doc);
     if (!composite) {
-        g_warning("No composite surface to save");
+        debug_log("WRN", "No composite surface to save");
         return FALSE;
     }
 
     /* Convert to pixbuf with alpha channel */
     pixbuf = cairo_surface_to_pixbuf(composite, TRUE);
     if (!pixbuf) {
-        g_warning("Failed to convert surface to pixbuf");
+        debug_log("WRN", "Failed to convert surface to pixbuf");
         return FALSE;
     }
 
     /* Verify pixbuf has alpha channel (should always be true when keep_alpha=TRUE) */
     if (!gdk_pixbuf_get_has_alpha(pixbuf)) {
-        g_warning("Pixbuf does not have alpha channel - this should not happen");
+        debug_log("WRN", "Pixbuf does not have alpha channel - this should not happen");
     }
 
     /* Save as PNG with alpha channel preserved
@@ -2464,7 +2464,7 @@ gboolean document_save_as_png(ImageDocument* doc, const gchar* filename) {
     result = gdk_pixbuf_save(pixbuf, filename, "png", &error, NULL);
 
     if (!result) {
-        g_warning("Failed to save PNG: %s", error ? error->message : "Unknown error");
+        debug_log("WRN", "Failed to save PNG: %s", error ? error->message : "Unknown error");
         if (error) {
             g_error_free(error);
         }
@@ -2498,7 +2498,7 @@ gboolean document_save_as_jpeg(ImageDocument* doc, const gchar* filename, gint q
     gchar quality_str[4];
 
     if (!doc || !filename) {
-        g_warning("Invalid parameters for document_save_as_jpeg");
+        debug_log("WRN", "Invalid parameters for document_save_as_jpeg");
         return FALSE;
     }
 
@@ -2511,7 +2511,7 @@ gboolean document_save_as_jpeg(ImageDocument* doc, const gchar* filename, gint q
     /* Get a fresh composite surface for export (includes all layers) */
     composite = document_export_composite_surface(doc);
     if (!composite) {
-        g_warning("No composite surface to save");
+        debug_log("WRN", "No composite surface to save");
         return FALSE;
     }
 
@@ -2521,7 +2521,7 @@ gboolean document_save_as_jpeg(ImageDocument* doc, const gchar* filename, gint q
     /* Clean up the export surface */
     cairo_surface_destroy(composite);
     if (!flattened) {
-        g_warning("Failed to flatten image");
+        debug_log("WRN", "Failed to flatten image");
         return FALSE;
     }
 
@@ -2530,7 +2530,7 @@ gboolean document_save_as_jpeg(ImageDocument* doc, const gchar* filename, gint q
     cairo_surface_destroy(flattened);
 
     if (!pixbuf) {
-        g_warning("Failed to convert surface to pixbuf");
+        debug_log("WRN", "Failed to convert surface to pixbuf");
         return FALSE;
     }
 
@@ -2539,7 +2539,7 @@ gboolean document_save_as_jpeg(ImageDocument* doc, const gchar* filename, gint q
     result = gdk_pixbuf_save(pixbuf, filename, "jpeg", &error, "quality", quality_str, NULL);
 
     if (!result) {
-        g_warning("Failed to save JPEG: %s", error ? error->message : "Unknown error");
+        debug_log("WRN", "Failed to save JPEG: %s", error ? error->message : "Unknown error");
         if (error) {
             g_error_free(error);
         }
@@ -2978,7 +2978,7 @@ gboolean document_resize_canvas(ImageDocument* doc, guint new_width, guint new_h
     }
     doc->tile_grid = tile_grid_create(new_width, new_height, 128);
     if (!doc->tile_grid) {
-        g_warning("Failed to create tile grid after canvas resize");
+        debug_log("WRN", "Failed to create tile grid after canvas resize");
     }
 
     /* Invalidate composite */
@@ -3205,7 +3205,7 @@ gboolean document_content_snapshot_apply(ImageDocument* doc, const DocumentConte
     }
     doc->tile_grid = tile_grid_create(doc->width, doc->height, 128);
     if (!doc->tile_grid) {
-        g_warning("document_content_snapshot_apply: failed to create tile grid");
+        debug_log("WRN", "document_content_snapshot_apply: failed to create tile grid");
         return FALSE;
     }
 

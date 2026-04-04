@@ -3,6 +3,7 @@
 #include "ocular.h"
 #include "ui/filters/filter_utils.h"
 #include <glib.h>
+#include "debug_logger.h"
 
 /**
  * Apply brightness and contrast filter to a layer using Ocular library
@@ -37,7 +38,7 @@ gboolean filter_brightness_contrast_apply(ImageLayer* layer, const gfloat* value
                                                brightness, contrast);
 
     if (status != OC_STATUS_OK) {
-        g_warning("Brightness/Contrast filter: Ocular filter returned error %d", status);
+        debug_log("WRN", "Brightness/Contrast filter: Ocular filter returned error %d", status);
         filter_utils_free_rgb_buffers(&buffers);
         return FALSE;
     }

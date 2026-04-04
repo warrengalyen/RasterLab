@@ -2,6 +2,7 @@
 #include "filters.h"
 #include "ocular.h"
 #include <glib.h>
+#include "debug_logger.h"
 
 /**
  * Apply split toning filter to a layer using Ocular library
@@ -43,14 +44,14 @@ gboolean filter_split_toning_apply(ImageLayer* layer, const gfloat* values, gint
     rgb_output = (guchar*)g_malloc(width * height * 3);
 
     if (!rgb_input || !rgb_output) {
-        g_warning("Split Toning filter: Failed to allocate memory");
+        debug_log("WRN", "Split Toning filter: Failed to allocate memory");
         g_free(rgb_input);
         g_free(rgb_output);
         return FALSE;
     }
 
     if (!adjustments_cairo_to_rgb(surface, rgb_input)) {
-        g_warning("Split Toning filter: Failed to convert surface to RGB");
+        debug_log("WRN", "Split Toning filter: Failed to convert surface to RGB");
         g_free(rgb_input);
         g_free(rgb_output);
         return FALSE;
@@ -60,14 +61,14 @@ gboolean filter_split_toning_apply(ImageLayer* layer, const gfloat* values, gint
                                      highlight_color, shadow_color, balance, strength);
 
     if (status != OC_STATUS_OK) {
-        g_warning("Split Toning filter: Ocular filter returned error %d", status);
+        debug_log("WRN", "Split Toning filter: Ocular filter returned error %d", status);
         g_free(rgb_input);
         g_free(rgb_output);
         return FALSE;
     }
 
     if (!adjustments_rgb_to_cairo(surface, rgb_output)) {
-        g_warning("Split Toning filter: Failed to convert RGB to surface");
+        debug_log("WRN", "Split Toning filter: Failed to convert RGB to surface");
         g_free(rgb_input);
         g_free(rgb_output);
         return FALSE;

@@ -4,6 +4,7 @@
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
+#include "debug_logger.h"
 
 /**
  * Clip Cairo context to dirty rectangle
@@ -46,7 +47,7 @@ cairo_surface_t* pixbuf_to_cairo_surface(GdkPixbuf* pixbuf) {
     surface = cairo_image_surface_create(format, width, height);
 
     if (cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS) {
-        g_warning("Failed to create Cairo surface");
+        debug_log("WRN", "Failed to create Cairo surface");
         return NULL;
     }
 
@@ -104,13 +105,13 @@ GdkPixbuf* cairo_surface_to_pixbuf(cairo_surface_t* surface, gboolean keep_alpha
 
     /* Verify surface has alpha if we need to keep it */
     if (keep_alpha && format != CAIRO_FORMAT_ARGB32) {
-        g_warning("Surface format is not ARGB32, alpha may not be preserved");
+        debug_log("WRN", "Surface format is not ARGB32, alpha may not be preserved");
     }
 
     /* Create pixbuf with or without alpha channel */
     pixbuf = gdk_pixbuf_new(GDK_COLORSPACE_RGB, keep_alpha ? TRUE : FALSE, 8, width, height);
     if (!pixbuf) {
-        g_warning("Failed to create pixbuf");
+        debug_log("WRN", "Failed to create pixbuf");
         return NULL;
     }
 

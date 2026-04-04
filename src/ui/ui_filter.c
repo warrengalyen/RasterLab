@@ -7,6 +7,7 @@
 #include "ui/filters/filter_utils.h"
 #include <glib.h>
 #include <gtk/gtk.h>
+#include "debug_logger.h"
 
 /* Forward declaration */
 static gboolean pulse_progress_bar(gpointer user_data);
@@ -85,21 +86,21 @@ gboolean ui_apply_layer_filter(AppContext* ctx,
 
     doc = ui_get_active_document(ctx);
     if (!doc) {
-        g_warning("No document open");
+        debug_log("WRN", "No document open");
         return FALSE;
     }
 
     /* Get the currently selected layer */
     layer = document_get_selected_layer(doc);
     if (!layer) {
-        g_warning("No layer selected");
+        debug_log("WRN", "No layer selected");
         return FALSE;
     }
 
     /* Create a draw command for undo/redo (saves layer snapshot) */
     cmd = command_create_draw(layer, filter_name);
     if (!cmd) {
-        g_warning("Failed to create undo command for %s filter", filter_name);
+        debug_log("WRN", "Failed to create undo command for %s filter", filter_name);
         return FALSE;
     }
 
@@ -153,7 +154,7 @@ gboolean ui_apply_layer_filter(AppContext* ctx,
     ui_hide_progress(ctx);
 
     if (!success) {
-        g_warning("Failed to apply %s filter", filter_name);
+        debug_log("WRN", "Failed to apply %s filter", filter_name);
         command_free(cmd);
         return FALSE;
     }
@@ -216,21 +217,21 @@ gboolean ui_apply_layer_filter_with_value(AppContext* ctx,
 
     doc = ui_get_active_document(ctx);
     if (!doc) {
-        g_warning("No document open");
+        debug_log("WRN", "No document open");
         return FALSE;
     }
 
     /* Get the currently selected layer */
     layer = document_get_selected_layer(doc);
     if (!layer) {
-        g_warning("No layer selected");
+        debug_log("WRN", "No layer selected");
         return FALSE;
     }
 
     /* Create a draw command for undo/redo (saves layer snapshot) */
     cmd = command_create_draw(layer, filter_name);
     if (!cmd) {
-        g_warning("Failed to create undo command for %s filter", filter_name);
+        debug_log("WRN", "Failed to create undo command for %s filter", filter_name);
         return FALSE;
     }
 
@@ -284,7 +285,7 @@ gboolean ui_apply_layer_filter_with_value(AppContext* ctx,
     ui_hide_progress(ctx);
 
     if (!success) {
-        g_warning("Failed to apply %s filter", filter_name);
+        debug_log("WRN", "Failed to apply %s filter", filter_name);
         command_free(cmd);
         return FALSE;
     }
@@ -369,21 +370,21 @@ gint ui_show_filter_dialog_with_zoom_pan(AppContext* ctx,
 
     doc = ui_get_active_document(ctx);
     if (!doc) {
-        g_warning("No document open");
+        debug_log("WRN", "No document open");
         return GTK_RESPONSE_CANCEL;
     }
 
     /* Get the currently selected layer */
     layer = document_get_selected_layer(doc);
     if (!layer) {
-        g_warning("No layer selected");
+        debug_log("WRN", "No layer selected");
         return GTK_RESPONSE_CANCEL;
     }
 
     /* Create filter dialog */
     dialog = filter_dialog_new(title, controls, num_controls);
     if (!dialog) {
-        g_warning("Failed to create filter dialog");
+        debug_log("WRN", "Failed to create filter dialog");
         return GTK_RESPONSE_CANCEL;
     }
 
@@ -397,7 +398,7 @@ gint ui_show_filter_dialog_with_zoom_pan(AppContext* ctx,
     temp_layer = layer_new("Temp", layer->width, layer->height, TRUE,
                            LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL, NULL);
     if (!temp_layer) {
-        g_warning("Failed to create temporary layer for preview");
+        debug_log("WRN", "Failed to create temporary layer for preview");
         filter_dialog_free(dialog);
         return GTK_RESPONSE_CANCEL;
     }

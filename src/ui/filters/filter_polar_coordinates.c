@@ -2,6 +2,7 @@
 #include "ocular.h"
 #include "ui/filters/filter_distort_utils.h"
 #include <glib.h>
+#include "debug_logger.h"
 
 static OcPolarMode polar_mode_from_value(gint mode_value) {
     return (mode_value != 0) ? OC_POLAR_POLAR_TO_RECT : OC_POLAR_RECT_TO_POLAR;
@@ -26,7 +27,7 @@ gboolean filter_polar_coordinates_apply(ImageLayer* layer, const gfloat* values,
                                           buffers.width, buffers.height, buffers.width * 3,
                                           mode);
     if (status != OC_STATUS_OK) {
-        g_warning("Polar coordinates: Ocular filter returned error %d", status);
+        debug_log("WRN", "Polar coordinates: Ocular filter returned error %d", status);
         filter_distort_utils_free(&buffers);
         return FALSE;
     }

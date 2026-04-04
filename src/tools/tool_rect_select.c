@@ -16,6 +16,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "debug_logger.h"
 
 /* Timer callback data structure to hold both tool and document */
 typedef struct {
@@ -48,7 +49,7 @@ static GdkCursor* create_rect_select_cursor(void) {
                                     &error);
     if (!bytes) {
         if (error) {
-            g_warning("Failed to load rect select cursor resource: %s", error->message);
+            debug_log("WRN", "Failed to load rect select cursor resource: %s", error->message);
             g_error_free(error);
         }
         return gdk_cursor_new_for_display(display, GDK_CROSSHAIR);
@@ -65,7 +66,7 @@ static GdkCursor* create_rect_select_cursor(void) {
 
     if (!pixbuf) {
         if (error) {
-            g_warning("Failed to parse rect select cursor: %s", error->message);
+            debug_log("WRN", "Failed to parse rect select cursor: %s", error->message);
             g_error_free(error);
         }
         return gdk_cursor_new_for_display(display, GDK_CROSSHAIR);

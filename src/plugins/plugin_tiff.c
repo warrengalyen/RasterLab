@@ -190,7 +190,7 @@ static PluginError load_tiff_page_cmyk(TIFF* tif, ImageDocument* doc, ImageLayer
 
     for (uint32_t y = 0; y < page_height; y++) {
         if (TIFFReadScanline(tif, sl_buf, y, 0) < 0) {
-            g_warning("TIFF plugin: failed to read CMYK scanline %u", y);
+            debug_log("WRN", "TIFF plugin: failed to read CMYK scanline %u", y);
             break;
         }
 
@@ -250,7 +250,7 @@ static PluginError load_tiff_page(TIFF* tif, ImageDocument* doc, ImageLayer* lay
     /* Get surface data */
     temp_surface = layer->surface;
     if (!temp_surface) {
-        g_warning("TIFF plugin: layer->surface is NULL");
+        debug_log("WRN", "TIFF plugin: layer->surface is NULL");
         return PLUGIN_ERROR_OUT_OF_MEMORY;
     }
 
@@ -259,7 +259,7 @@ static PluginError load_tiff_page(TIFF* tif, ImageDocument* doc, ImageLayer* lay
     surface_stride = cairo_image_surface_get_stride(temp_surface);
 
     if (!surface_data) {
-        g_warning("TIFF plugin: cairo_image_surface_get_data returned NULL");
+        debug_log("WRN", "TIFF plugin: cairo_image_surface_get_data returned NULL");
         return PLUGIN_ERROR_OUT_OF_MEMORY;
     }
 
@@ -268,13 +268,13 @@ static PluginError load_tiff_page(TIFF* tif, ImageDocument* doc, ImageLayer* lay
     uint32_t npixels = page_width * page_height;
     raster = (uint32_t*)_TIFFmalloc(npixels * sizeof(uint32_t));
     if (!raster) {
-        g_warning("TIFF plugin: Failed to allocate raster");
+        debug_log("WRN", "TIFF plugin: Failed to allocate raster");
         return PLUGIN_ERROR_OUT_OF_MEMORY;
     }
 
     /* Read image - TIFFReadRGBAImage handles 8-bit and 16-bit automatically */
     if (!TIFFReadRGBAImage(tif, page_width, page_height, raster, 0)) {
-        g_warning("TIFF plugin: Failed to read RGBA image");
+        debug_log("WRN", "TIFF plugin: Failed to read RGBA image");
         _TIFFfree(raster);
         return PLUGIN_ERROR_FILE_READ_ERROR;
     }
@@ -282,7 +282,7 @@ static PluginError load_tiff_page(TIFF* tif, ImageDocument* doc, ImageLayer* lay
     /* Allocate image data buffer */
     image_data = g_malloc(page_width * page_height * 4);
     if (!image_data) {
-        g_warning("TIFF plugin: Failed to allocate image data");
+        debug_log("WRN", "TIFF plugin: Failed to allocate image data");
         _TIFFfree(raster);
         return PLUGIN_ERROR_OUT_OF_MEMORY;
     }
@@ -374,7 +374,7 @@ static PluginError load_tiff(ImageDocument* doc, const char* filename) {
     PluginError error = PLUGIN_ERROR_NONE;
 
     if (!doc || !filename) {
-        g_warning("TIFF plugin: Invalid parameters");
+        debug_log("WRN", "TIFF plugin: Invalid parameters");
         return PLUGIN_ERROR_INVALID_PARAMETERS;
     }
 
@@ -386,20 +386,20 @@ static PluginError load_tiff(ImageDocument* doc, const char* filename) {
     /* Note: TIFFOpen automatically reads the first directory */
     tif = TIFFOpen(filename, "r");
     if (!tif) {
-        g_warning("TIFF plugin: Failed to open file: %s", filename);
+        debug_log("WRN", "TIFF plugin: Failed to open file: %s", filename);
         return PLUGIN_ERROR_FILE_NOT_FOUND;
     }
 
     /* Get first page dimensions to set document canvas size */
     if (!TIFFGetField(tif, TIFFTAG_IMAGEWIDTH, &width) ||
         !TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &height)) {
-        g_warning("TIFF plugin: Failed to get image dimensions");
+        debug_log("WRN", "TIFF plugin: Failed to get image dimensions");
         TIFFClose(tif);
         return PLUGIN_ERROR_FILE_READ_ERROR;
     }
 
     if (width == 0 || height == 0) {
-        g_warning("TIFF plugin: Invalid dimensions: %ux%u", width, height);
+        debug_log("WRN", "TIFF plugin: Invalid dimensions: %ux%u", width, height);
         TIFFClose(tif);
         return PLUGIN_ERROR_UNSUPPORTED_FORMAT;
     }
@@ -475,12 +475,12 @@ static PluginError load_tiff(ImageDocument* doc, const char* filename) {
         /* Get current page dimensions */
         if (!TIFFGetField(tif, TIFFTAG_IMAGEWIDTH, &page_width) ||
             !TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &page_height)) {
-            g_warning("TIFF plugin: Failed to get page %u dimensions", page_num + 1);
+            debug_log("WRN", "TIFF plugin: Failed to get page %u dimensions", page_num + 1);
             continue;
         }
 
         if (page_width == 0 || page_height == 0) {
-            g_warning("TIFF plugin: Invalid page %u dimensions: %ux%u", page_num + 1, page_width, page_height);
+            debug_log("WRN", "TIFF plugin: Invalid page %u dimensions: %ux%u", page_num + 1, page_width, page_height);
             continue;
         }
 
@@ -495,7 +495,7 @@ static PluginError load_tiff(ImageDocument* doc, const char* filename) {
         layer = layer_new(layer_name, doc->width, doc->height, TRUE,
                           LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL, doc);
         if (!layer) {
-            g_warning("TIFF plugin: Failed to create layer for page %u", page_num + 1);
+            debug_log("WRN", "TIFF plugin: Failed to create layer for page %u", page_num + 1);
             continue;
         }
 
@@ -514,7 +514,7 @@ static PluginError load_tiff(ImageDocument* doc, const char* filename) {
             error = load_tiff_page(tif, doc, layer, page_width, page_height);
         }
         if (error != PLUGIN_ERROR_NONE) {
-            g_warning("TIFF plugin: Failed to load page %u", page_num + 1);
+            debug_log("WRN", "TIFF plugin: Failed to load page %u", page_num + 1);
             layer_free(layer);
             continue;
         }
@@ -538,7 +538,7 @@ static PluginError load_tiff(ImageDocument* doc, const char* filename) {
 
     /* Check if we loaded any pages */
     if (doc->layers == NULL) {
-        g_warning("TIFF plugin: Failed to load any pages from TIFF file");
+        debug_log("WRN", "TIFF plugin: Failed to load any pages from TIFF file");
         return PLUGIN_ERROR_FILE_READ_ERROR;
     }
 

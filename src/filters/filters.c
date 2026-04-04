@@ -2,6 +2,7 @@
 #include "ocular.h"
 #include "render/layer.h"
 #include <glib.h>
+#include "debug_logger.h"
 
 /**
  * Validate surface format and get dimensions
@@ -15,7 +16,7 @@ gboolean adjustments_validate_surface(cairo_surface_t* surface, gint* width, gin
 
     format = cairo_image_surface_get_format(surface);
     if (format != CAIRO_FORMAT_ARGB32) {
-        g_warning("Adjustment filter: Unsupported surface format");
+        debug_log("WRN", "Adjustment filter: Unsupported surface format");
         return FALSE;
     }
 
@@ -23,7 +24,7 @@ gboolean adjustments_validate_surface(cairo_surface_t* surface, gint* width, gin
     *height = cairo_image_surface_get_height(surface);
 
     if (*width <= 0 || *height <= 0) {
-        g_warning("Adjustment filter: Invalid surface dimensions");
+        debug_log("WRN", "Adjustment filter: Invalid surface dimensions");
         return FALSE;
     }
 

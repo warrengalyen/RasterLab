@@ -175,26 +175,26 @@ static PluginError load_png(ImageDocument* doc, const char* filename) {
     png_bytep image_data = NULL;
 
     if (!doc || !filename) {
-        g_warning("PNG plugin: Invalid parameters (doc=%p, filename=%p)", doc, filename);
+        debug_log("WRN", "PNG plugin: Invalid parameters (doc=%p, filename=%p)", doc, filename);
         return PLUGIN_ERROR_INVALID_PARAMETERS;
     }
 
     /* Open PNG file */
     infile = g_fopen(filename, "rb");
     if (!infile) {
-        g_warning("PNG plugin: Failed to open file: %s", filename);
+        debug_log("WRN", "PNG plugin: Failed to open file: %s", filename);
         return PLUGIN_ERROR_FILE_NOT_FOUND;
     }
 
     /* Check PNG signature */
     png_byte header[8];
     if (fread(header, 1, 8, infile) != 8) {
-        g_warning("PNG plugin: Failed to read PNG signature");
+        debug_log("WRN", "PNG plugin: Failed to read PNG signature");
         fclose(infile);
         return PLUGIN_ERROR_FILE_READ_ERROR;
     }
     if (png_sig_cmp(header, 0, 8)) {
-        g_warning("PNG plugin: Invalid PNG signature");
+        debug_log("WRN", "PNG plugin: Invalid PNG signature");
         fclose(infile);
         return PLUGIN_ERROR_UNSUPPORTED_FORMAT;
     }
@@ -222,14 +222,14 @@ static PluginError load_png(ImageDocument* doc, const char* filename) {
     /* Initialize libpng structures - now that jmp_buf is initialized */
     png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, &error_info, png_error_handler, png_warning_handler);
     if (!png_ptr) {
-        g_warning("PNG plugin: png_create_read_struct failed");
+        debug_log("WRN", "PNG plugin: png_create_read_struct failed");
         fclose(infile);
         return PLUGIN_ERROR_OUT_OF_MEMORY;
     }
 
     info_ptr = png_create_info_struct(png_ptr);
     if (!info_ptr) {
-        g_warning("PNG plugin: Failed to create png_info_struct");
+        debug_log("WRN", "PNG plugin: Failed to create png_info_struct");
         png_destroy_read_struct(&png_ptr, NULL, NULL);
         fclose(infile);
         return PLUGIN_ERROR_OUT_OF_MEMORY;
@@ -299,7 +299,7 @@ static PluginError load_png(ImageDocument* doc, const char* filename) {
                     icc_destroy(profile);
                 }
             } else {
-                g_warning("PNG plugin: Invalid or non-RGB embedded ICC profile; assuming sRGB");
+                debug_log("WRN", "PNG plugin: Invalid or non-RGB embedded ICC profile; assuming sRGB");
             }
         }
         /* No iCCP chunk or malformed */
@@ -322,7 +322,7 @@ static PluginError load_png(ImageDocument* doc, const char* filename) {
 
     /* Validate dimensions before creating layer */
     if (width == 0 || height == 0) {
-        g_warning("PNG plugin: Invalid dimensions: %ux%u", width, height);
+        debug_log("WRN", "PNG plugin: Invalid dimensions: %ux%u", width, height);
         png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
         fclose(infile);
         return PLUGIN_ERROR_UNSUPPORTED_FORMAT;
@@ -332,7 +332,7 @@ static PluginError load_png(ImageDocument* doc, const char* filename) {
     base_layer = layer_new(_("Background"), doc->width, doc->height, TRUE,
                            LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL, doc);
     if (!base_layer) {
-        g_warning("PNG plugin: layer_new returned NULL for %ux%u layer", doc->width, doc->height);
+        debug_log("WRN", "PNG plugin: layer_new returned NULL for %ux%u layer", doc->width, doc->height);
         png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
         fclose(infile);
         return PLUGIN_ERROR_OUT_OF_MEMORY;
@@ -341,7 +341,7 @@ static PluginError load_png(ImageDocument* doc, const char* filename) {
     /* Get surface data */
     temp_surface = base_layer->surface;
     if (!temp_surface) {
-        g_warning("PNG plugin: base_layer->surface is NULL");
+        debug_log("WRN", "PNG plugin: base_layer->surface is NULL");
         png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
         layer_free(base_layer);
         fclose(infile);
@@ -350,7 +350,7 @@ static PluginError load_png(ImageDocument* doc, const char* filename) {
 
     cairo_status_t surface_status = cairo_surface_status(temp_surface);
     if (surface_status != CAIRO_STATUS_SUCCESS) {
-        g_warning("PNG plugin: Cairo surface status error: %s", cairo_status_to_string(surface_status));
+        debug_log("WRN", "PNG plugin: Cairo surface status error: %s", cairo_status_to_string(surface_status));
         png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
         layer_free(base_layer);
         fclose(infile);
@@ -362,7 +362,7 @@ static PluginError load_png(ImageDocument* doc, const char* filename) {
     surface_stride = cairo_image_surface_get_stride(temp_surface);
 
     if (!surface_data) {
-        g_warning("PNG plugin: cairo_image_surface_get_data returned NULL");
+        debug_log("WRN", "PNG plugin: cairo_image_surface_get_data returned NULL");
         png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
         layer_free(base_layer);
         fclose(infile);
@@ -372,7 +372,7 @@ static PluginError load_png(ImageDocument* doc, const char* filename) {
     /* Allocate row pointers */
     row_pointers = g_malloc(sizeof(png_bytep) * height);
     if (!row_pointers) {
-        g_warning("PNG plugin: Failed to allocate row_pointers array (%u pointers)", height);
+        debug_log("WRN", "PNG plugin: Failed to allocate row_pointers array (%u pointers)", height);
         png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
         layer_free(base_layer);
         fclose(infile);
@@ -383,7 +383,7 @@ static PluginError load_png(ImageDocument* doc, const char* filename) {
     png_uint_32 rowbytes = png_get_rowbytes(png_ptr, info_ptr);
     image_data = g_malloc(rowbytes * height);
     if (!image_data) {
-        g_warning("PNG plugin: Failed to allocate image_data buffer (%u bytes)", rowbytes * height);
+        debug_log("WRN", "PNG plugin: Failed to allocate image_data buffer (%u bytes)", rowbytes * height);
         g_free(row_pointers);
         png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
         layer_free(base_layer);

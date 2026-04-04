@@ -10,6 +10,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
+#include "debug_logger.h"
 
 /* CLAMP macro if not defined */
 #ifndef CLAMP
@@ -94,14 +95,14 @@ static void on_swatches_add_button_clicked(GtkButton* button, gpointer user_data
 
     AppContext* ctx = (AppContext*)user_data;
     if (!ctx) {
-        g_warning("on_swatches_add_button_clicked: AppContext not found");
+        debug_log("WRN", "on_swatches_add_button_clicked: AppContext not found");
         return;
     }
 
     /* Get current foreground color */
     GdkRGBA fg_color;
     if (!tools_panel_get_foreground_color(&fg_color)) {
-        g_warning("on_swatches_add_button_clicked: Failed to get foreground color");
+        debug_log("WRN", "on_swatches_add_button_clicked: Failed to get foreground color");
         return;
     }
 
@@ -113,7 +114,7 @@ static void on_swatches_add_button_clicked(GtkButton* button, gpointer user_data
     if (main_widget && SWATCHES_IS_WIDGET(main_widget)) {
         swatches_sync_to_widgets(&ctx->swatches, main_widget, NULL);
     } else {
-        g_warning("on_swatches_add_button_clicked: main_swatches_widget not found");
+        debug_log("WRN", "on_swatches_add_button_clicked: main_swatches_widget not found");
     }
 }
 
@@ -125,7 +126,7 @@ static void on_swatches_reset_button_clicked(GtkButton* button, gpointer user_da
 
     AppContext* ctx = (AppContext*)user_data;
     if (!ctx) {
-        g_warning("on_swatches_reset_button_clicked: AppContext not found");
+        debug_log("WRN", "on_swatches_reset_button_clicked: AppContext not found");
         return;
     }
 
@@ -146,7 +147,7 @@ static void on_swatches_import_button_clicked(GtkButton* button, gpointer user_d
 
     AppContext* ctx = (AppContext*)user_data;
     if (!ctx || !ctx->window) {
-        g_warning("on_swatches_import_button_clicked: AppContext or window not found");
+        debug_log("WRN", "on_swatches_import_button_clicked: AppContext or window not found");
         return;
     }
 
@@ -277,7 +278,7 @@ static void on_swatches_export_button_clicked(GtkButton* button, gpointer user_d
 
     AppContext* ctx = (AppContext*)user_data;
     if (!ctx || !ctx->window) {
-        g_warning("on_swatches_export_button_clicked: AppContext or window not found");
+        debug_log("WRN", "on_swatches_export_button_clicked: AppContext or window not found");
         return;
     }
 
@@ -420,14 +421,14 @@ static void on_swatches_delete_button_clicked(GtkButton* button, gpointer user_d
 
     AppContext* ctx = (AppContext*)user_data;
     if (!ctx) {
-        g_warning("on_swatches_delete_button_clicked: AppContext not found");
+        debug_log("WRN", "on_swatches_delete_button_clicked: AppContext not found");
         return;
     }
 
     /* Get the main swatches widget */
     GtkWidget* main_widget = (GtkWidget*)g_object_get_data(G_OBJECT(ctx->window), "main_swatches_widget");
     if (!main_widget || !SWATCHES_IS_WIDGET(main_widget)) {
-        g_warning("on_swatches_delete_button_clicked: main_swatches_widget not found");
+        debug_log("WRN", "on_swatches_delete_button_clicked: main_swatches_widget not found");
         return;
     }
 
@@ -536,10 +537,10 @@ GtkWidget* swatches_panel_create(AppContext* ctx) {
                     gtk_widget_queue_resize(GTK_WIDGET(recent_colors_widget));
                     gtk_widget_queue_resize(swatches_recent_colors_box);
                 } else {
-                    g_warning("Failed to create recent colors widget");
+                    debug_log("WRN", "Failed to create recent colors widget");
                 }
             } else {
-                g_warning("Failed to get swatches_recent_colors_box from builder");
+                debug_log("WRN", "Failed to get swatches_recent_colors_box from builder");
             }
 
             /* Apply CSS to remove padding from swatches buttons */
@@ -692,11 +693,11 @@ GtkWidget* swatches_panel_create(AppContext* ctx) {
                 }
             }
         } else {
-            g_warning("Failed to get swatches_panel from builder");
+            debug_log("WRN", "Failed to get swatches_panel from builder");
             g_object_unref(swatches_builder);
         }
     } else {
-        g_warning("Failed to load swatches_panel.glade: %s", error ? error->message : "Unknown error");
+        debug_log("WRN", "Failed to load swatches_panel.glade: %s", error ? error->message : "Unknown error");
         if (error) {
             g_error_free(error);
         }

@@ -52,6 +52,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include "debug_logger.h"
 
 
 /* Log handler to suppress harmless GTK Builder menu warnings */
@@ -441,7 +442,7 @@ AppContext* ui_create_main_window(Settings* initial_settings) {
     /* Create and initialize tool manager */
     ctx->tool_registry = tool_manager_new();
     if (!tool_manager_init_defaults(ctx->tool_registry)) {
-        g_warning("Failed to initialize tool manager");
+        debug_log("WRN", "Failed to initialize tool manager");
         g_free(ctx);
         return NULL;
     }
@@ -471,7 +472,7 @@ AppContext* ui_create_main_window(Settings* initial_settings) {
         builder = gtk_builder_new();
         ui_utils_builder_set_translation_domain(builder);
         if (!gtk_builder_add_from_resource(builder, "/ui/main_window.glade", &glade_err)) {
-            g_warning("Failed to load main window from Glade: %s", glade_err ? glade_err->message : "unknown");
+            debug_log("WRN", "Failed to load main window from Glade: %s", glade_err ? glade_err->message : "unknown");
             g_clear_error(&glade_err);
             g_object_unref(builder);
             g_free(ctx);
@@ -482,7 +483,7 @@ AppContext* ui_create_main_window(Settings* initial_settings) {
     /* Get main window */
     ctx->window = GTK_WIDGET(gtk_builder_get_object(builder, "main_window"));
     if (!ctx->window) {
-        g_warning("Failed to get main_window from Glade");
+        debug_log("WRN", "Failed to get main_window from Glade");
         g_object_unref(builder);
         g_free(ctx);
         return NULL;
@@ -508,11 +509,11 @@ AppContext* ui_create_main_window(Settings* initial_settings) {
                 gtk_window_set_icon(GTK_WINDOW(ctx->window), icon_pixbuf);
                 g_object_unref(icon_pixbuf);
             } else if (error) {
-                g_warning("Failed to create pixbuf from app-icon: %s", error->message);
+                debug_log("WRN", "Failed to create pixbuf from app-icon: %s", error->message);
                 g_error_free(error);
             }
         } else if (error) {
-            g_warning("Failed to load app-icon resource: %s", error->message);
+            debug_log("WRN", "Failed to load app-icon resource: %s", error->message);
             g_error_free(error);
         }
     }
@@ -527,7 +528,7 @@ AppContext* ui_create_main_window(Settings* initial_settings) {
 
     if (!main_vbox || !tool_options_container || !main_hbox ||
         !ctx->notebook || !right_panel_container || !ctx->status_bar) {
-        g_warning("Failed to get required widgets from Glade");
+        debug_log("WRN", "Failed to get required widgets from Glade");
         g_object_unref(builder);
         g_free(ctx);
         return NULL;
@@ -564,7 +565,7 @@ AppContext* ui_create_main_window(Settings* initial_settings) {
     /* ==== TOP PANEL: Tool Options ==== */
     ctx->tool_options_panel = create_tool_options_panel();
     if (!ctx->tool_options_panel || !ctx->tool_options_panel->panel) {
-        g_warning("Failed to create tool options panel");
+        debug_log("WRN", "Failed to create tool options panel");
         g_object_unref(builder);
         g_free(ctx);
         return NULL;
@@ -595,14 +596,14 @@ AppContext* ui_create_main_window(Settings* initial_settings) {
     /* ==== RIGHT PANEL: Workspace ==== */
     ctx->workspace = workspace_create(ctx);
     if (!ctx->workspace) {
-        g_warning("Failed to create workspace");
+        debug_log("WRN", "Failed to create workspace");
         g_object_unref(builder);
         g_free(ctx);
         return NULL;
     }
     workspace_widget = workspace_get_panel(ctx->workspace);
     if (!workspace_widget) {
-        g_warning("Failed to get workspace panel");
+        debug_log("WRN", "Failed to get workspace panel");
         workspace_free(ctx->workspace);
         g_object_unref(builder);
         g_free(ctx);
@@ -746,7 +747,7 @@ ImageDocument* ui_create_document_without_tab(AppContext* ctx, const gchar* file
         tile_worker_pool_destroy(doc->tile_worker_pool);
         doc->tile_worker_pool = tile_worker_pool_create(worker_threads);
         if (!doc->tile_worker_pool) {
-            g_warning("Failed to create tile worker pool with %u threads", worker_threads);
+            debug_log("WRN", "Failed to create tile worker pool with %u threads", worker_threads);
         }
     }
 
@@ -756,7 +757,7 @@ ImageDocument* ui_create_document_without_tab(AppContext* ctx, const gchar* file
         const gchar* temp_dir = settings_get_undo_temp_directory(ctx->settings);
         doc->undo_journal = undo_journal_create((struct ImageDocument*)doc, temp_dir, compression_level);
         if (!doc->undo_journal) {
-            g_warning("Failed to create undo journal, falling back to in-memory undo");
+            debug_log("WRN", "Failed to create undo journal, falling back to in-memory undo");
         }
         /* Set max_entries on journal to match undo_levels */
         if (doc->undo_journal && undo_levels > 0) {
@@ -1754,7 +1755,7 @@ static gboolean flip_layer(ImageLayer* layer, OcDirection direction) {
     rgba_output = (guchar*)g_malloc(width * height * 4);
 
     if (!rgba_input || !rgba_output) {
-        g_warning("Flip layer: Failed to allocate memory");
+        debug_log("WRN", "Flip layer: Failed to allocate memory");
         g_free(rgba_input);
         g_free(rgba_output);
         return FALSE;
@@ -1762,7 +1763,7 @@ static gboolean flip_layer(ImageLayer* layer, OcDirection direction) {
 
     /* Convert from Cairo ARGB32 to RGBA */
     if (!adjustments_cairo_to_rgba(surface, rgba_input)) {
-        g_warning("Flip layer: Failed to convert surface to RGBA");
+        debug_log("WRN", "Flip layer: Failed to convert surface to RGBA");
         g_free(rgba_input);
         g_free(rgba_output);
         return FALSE;
@@ -1772,7 +1773,7 @@ static gboolean flip_layer(ImageLayer* layer, OcDirection direction) {
     status = ocularFlipImage(rgba_input, rgba_output, width, height, 4, direction);
 
     if (status != OC_STATUS_OK) {
-        g_warning("Flip layer: Ocular flip returned error %d", status);
+        debug_log("WRN", "Flip layer: Ocular flip returned error %d", status);
         g_free(rgba_input);
         g_free(rgba_output);
         return FALSE;
@@ -1780,7 +1781,7 @@ static gboolean flip_layer(ImageLayer* layer, OcDirection direction) {
 
     /* Convert back from RGBA to Cairo ARGB32 */
     if (!adjustments_rgba_to_cairo(surface, rgba_output)) {
-        g_warning("Flip layer: Failed to convert RGBA to surface");
+        debug_log("WRN", "Flip layer: Failed to convert RGBA to surface");
         g_free(rgba_input);
         g_free(rgba_output);
         return FALSE;
@@ -1832,7 +1833,7 @@ static gboolean transpose_layer(ImageLayer* layer) {
     rgba_output = (guchar*)g_malloc(new_width * new_height * 4);
 
     if (!rgba_input || !rgba_output) {
-        g_warning("Transpose layer: Failed to allocate memory");
+        debug_log("WRN", "Transpose layer: Failed to allocate memory");
         g_free(rgba_input);
         g_free(rgba_output);
         return FALSE;
@@ -1840,7 +1841,7 @@ static gboolean transpose_layer(ImageLayer* layer) {
 
     /* Convert from Cairo ARGB32 to RGBA */
     if (!adjustments_cairo_to_rgba(old_surface, rgba_input)) {
-        g_warning("Transpose layer: Failed to convert surface to RGBA");
+        debug_log("WRN", "Transpose layer: Failed to convert surface to RGBA");
         g_free(rgba_input);
         g_free(rgba_output);
         return FALSE;
@@ -1851,7 +1852,7 @@ static gboolean transpose_layer(ImageLayer* layer) {
     status = ocularTransposeImage(rgba_input, rgba_output, old_width, old_height, old_width * 4);
 
     if (status != OC_STATUS_OK) {
-        g_warning("Transpose layer: Ocular transpose returned error %d", status);
+        debug_log("WRN", "Transpose layer: Ocular transpose returned error %d", status);
         g_free(rgba_input);
         g_free(rgba_output);
         return FALSE;
@@ -1860,7 +1861,7 @@ static gboolean transpose_layer(ImageLayer* layer) {
     /* Create new surface with swapped dimensions */
     new_surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, new_width, new_height);
     if (!new_surface) {
-        g_warning("Transpose layer: Failed to create new surface");
+        debug_log("WRN", "Transpose layer: Failed to create new surface");
         g_free(rgba_input);
         g_free(rgba_output);
         return FALSE;
@@ -1868,7 +1869,7 @@ static gboolean transpose_layer(ImageLayer* layer) {
 
     /* Convert RGBA output to new Cairo surface */
     if (!adjustments_rgba_to_cairo(new_surface, rgba_output)) {
-        g_warning("Transpose layer: Failed to convert RGBA to new surface");
+        debug_log("WRN", "Transpose layer: Failed to convert RGBA to new surface");
         cairo_surface_destroy(new_surface);
         g_free(rgba_input);
         g_free(rgba_output);

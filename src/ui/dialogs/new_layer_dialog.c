@@ -6,6 +6,7 @@
 #include <glib.h>
 #include <gtk/gtk.h>
 #include <string.h>
+#include "debug_logger.h"
 
 /**
  * New layer dialog structure
@@ -138,7 +139,7 @@ NewLayerDialog* new_layer_dialog_new(void) {
     builder = gtk_builder_new();
     ui_utils_builder_set_translation_domain(builder);
     if (!gtk_builder_add_from_resource(builder, "/ui/new_layer_dialog.glade", &error)) {
-        g_warning("Failed to load new_layer_dialog.glade: %s", error ? error->message : "Unknown error");
+        debug_log("WRN", "Failed to load new_layer_dialog.glade: %s", error ? error->message : "Unknown error");
         if (error) {
             g_error_free(error);
         }
@@ -150,7 +151,7 @@ NewLayerDialog* new_layer_dialog_new(void) {
     /* Get dialog widget */
     dialog->dialog = GTK_WIDGET(gtk_builder_get_object(builder, "new_layer_dialog"));
     if (!dialog->dialog) {
-        g_warning("Failed to get new_layer_dialog from builder");
+        debug_log("WRN", "Failed to get new_layer_dialog from builder");
         g_object_unref(builder);
         g_free(dialog);
         return NULL;
@@ -169,7 +170,7 @@ NewLayerDialog* new_layer_dialog_new(void) {
     if (!dialog->name_entry || !dialog->bg_transparent_rb || !dialog->bg_black_rb ||
         !dialog->bg_white_rb || !dialog->bg_custom_rb || !dialog->bg_custom_color ||
         !dialog->position_combo || !dialog->set_active_cb) {
-        g_warning("Failed to get all widgets from builder");
+        debug_log("WRN", "Failed to get all widgets from builder");
         g_object_unref(builder);
         g_free(dialog);
         return NULL;

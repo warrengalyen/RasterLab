@@ -1,3 +1,4 @@
+#include "debug_logger.h"
 /**
  * RLI (Rasterlab Image) format plugin.
  *
@@ -667,7 +668,7 @@ rli_load(ImageDocument* doc, const char* filename) {
     if (!rli_fread_u16le(f, &reserved))     { err = PLUGIN_ERROR_CORRUPT_FILE; goto done; }
 
     if (version > RLI_FORMAT_VERSION) {
-        g_warning("RLI: unsupported format version %u (max supported: %u)",
+        debug_log("WRN", "RLI: unsupported format version %u (max supported: %u)",
                   version, RLI_FORMAT_VERSION);
         err = PLUGIN_ERROR_UNSUPPORTED_FORMAT;
         goto done;
@@ -818,7 +819,7 @@ rli_load(ImageDocument* doc, const char* filename) {
                                            current_layer->height,
                                            (uint32_t)stride)) {
                     g_free(tile_data);
-                    g_warning("RLI: failed to decode pixel data for layer '%s'",
+                    debug_log("WRN", "RLI: failed to decode pixel data for layer '%s'",
                               current_layer->name ? current_layer->name : "?");
                     err = PLUGIN_ERROR_CORRUPT_FILE;
                     goto done;

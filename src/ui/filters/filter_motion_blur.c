@@ -2,6 +2,7 @@
 #include "filters.h"
 #include "ocular.h"
 #include <glib.h>
+#include "debug_logger.h"
 
 /**
  * Apply motion blur filter to a layer using Ocular library
@@ -34,14 +35,14 @@ gboolean filter_motion_blur_apply(ImageLayer *layer, const gfloat *values, gint 
     rgb_output = (guchar *)g_malloc(width * height * 3);
     
     if (!rgb_input || !rgb_output) {
-        g_warning("Motion blur filter: Failed to allocate memory");
+        debug_log("WRN", "Motion blur filter: Failed to allocate memory");
         g_free(rgb_input);
         g_free(rgb_output);
         return FALSE;
     }
 
     if (!adjustments_cairo_to_rgb(surface, rgb_input)) {
-        g_warning("Motion blur filter: Failed to convert surface to RGB");
+        debug_log("WRN", "Motion blur filter: Failed to convert surface to RGB");
         g_free(rgb_input);
         g_free(rgb_output);
         return FALSE;
@@ -50,14 +51,14 @@ gboolean filter_motion_blur_apply(ImageLayer *layer, const gfloat *values, gint 
     status = ocularMotionBlurFilter(rgb_input, rgb_output, width, height, stride, distance, angle);
     
     if (status != OC_STATUS_OK) {
-        g_warning("Motion blur filter: Ocular filter returned error %d", status);
+        debug_log("WRN", "Motion blur filter: Ocular filter returned error %d", status);
         g_free(rgb_input);
         g_free(rgb_output);
         return FALSE;
     }
 
     if (!adjustments_rgb_to_cairo(surface, rgb_output)) {
-        g_warning("Motion blur filter: Failed to convert RGB to surface");
+        debug_log("WRN", "Motion blur filter: Failed to convert RGB to surface");
         g_free(rgb_input);
         g_free(rgb_output);
         return FALSE;

@@ -6,6 +6,7 @@
 #include <gtk/gtk.h>
 #include <string.h>
 #include "i18n.h"
+#include "debug_logger.h"
 
 #ifdef HAVE_LIBHEIF
 
@@ -89,7 +90,7 @@ gboolean heic_options_dialog_show(GtkWindow* parent, SaveOptions* opts, ImageDoc
     builder = gtk_builder_new();
     ui_utils_builder_set_translation_domain(builder);
     if (!gtk_builder_add_from_resource(builder, "/ui/heic_options_dialog.glade", &error)) {
-        g_warning("Failed to load heic_options_dialog.glade: %s", error ? error->message : "Unknown error");
+        debug_log("WRN", "Failed to load heic_options_dialog.glade: %s", error ? error->message : "Unknown error");
         if (error) {
             g_error_free(error);
         }
@@ -99,7 +100,7 @@ gboolean heic_options_dialog_show(GtkWindow* parent, SaveOptions* opts, ImageDoc
 
     dialog = GTK_WIDGET(gtk_builder_get_object(builder, "heic_options_dialog"));
     if (!dialog) {
-        g_warning("Failed to get heic_options_dialog from builder");
+        debug_log("WRN", "Failed to get heic_options_dialog from builder");
         g_object_unref(builder);
         return FALSE;
     }
@@ -127,7 +128,7 @@ gboolean heic_options_dialog_show(GtkWindow* parent, SaveOptions* opts, ImageDoc
     quality_adjustment = GTK_ADJUSTMENT(gtk_builder_get_object(builder, "quality_adjustment"));
 
     if (!quality_controls_box || !compression_lossless || !compression_lossy_button) {
-        g_warning("Failed to get required widgets from heic_options_dialog");
+        debug_log("WRN", "Failed to get required widgets from heic_options_dialog");
         g_object_unref(builder);
         gtk_widget_destroy(dialog);
         return FALSE;

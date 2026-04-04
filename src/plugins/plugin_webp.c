@@ -149,14 +149,14 @@ static PluginError load_webp(ImageDocument* doc, const char* filename) {
     bool is_animated = false;
 
     if (!doc || !filename) {
-        g_warning("WebP plugin: Invalid parameters (doc=%p, filename=%p)", doc, filename);
+        debug_log("WRN", "WebP plugin: Invalid parameters (doc=%p, filename=%p)", doc, filename);
         return PLUGIN_ERROR_INVALID_PARAMETERS;
     }
 
     /* Open WebP file */
     infile = g_fopen(filename, "rb");
     if (!infile) {
-        g_warning("WebP plugin: Failed to open file: %s", filename);
+        debug_log("WRN", "WebP plugin: Failed to open file: %s", filename);
         return PLUGIN_ERROR_FILE_NOT_FOUND;
     }
 
@@ -166,7 +166,7 @@ static PluginError load_webp(ImageDocument* doc, const char* filename) {
     fseek(infile, 0, SEEK_SET);
 
     if (file_size == 0 || file_size > 100 * 1024 * 1024) { /* Max 100MB */
-        g_warning("WebP plugin: Invalid file size: %zu", file_size);
+        debug_log("WRN", "WebP plugin: Invalid file size: %zu", file_size);
         fclose(infile);
         return PLUGIN_ERROR_FILE_READ_ERROR;
     }
@@ -174,7 +174,7 @@ static PluginError load_webp(ImageDocument* doc, const char* filename) {
     /* Read entire file into memory */
     file_data = g_malloc(file_size);
     if (!file_data) {
-        g_warning("WebP plugin: Failed to allocate memory for file data");
+        debug_log("WRN", "WebP plugin: Failed to allocate memory for file data");
         fclose(infile);
         return PLUGIN_ERROR_OUT_OF_MEMORY;
     }
@@ -183,7 +183,7 @@ static PluginError load_webp(ImageDocument* doc, const char* filename) {
     fclose(infile);
 
     if (bytes_read != file_size) {
-        g_warning("WebP plugin: Failed to read entire file (read %zu of %zu bytes)", bytes_read, file_size);
+        debug_log("WRN", "WebP plugin: Failed to read entire file (read %zu of %zu bytes)", bytes_read, file_size);
         g_free(file_data);
         return PLUGIN_ERROR_FILE_READ_ERROR;
     }
@@ -195,7 +195,7 @@ static PluginError load_webp(ImageDocument* doc, const char* filename) {
     /* Create demuxer to check if file is animated */
     demux = WebPDemux(&webp_data);
     if (!demux) {
-        g_warning("WebP plugin: Failed to create demuxer");
+        debug_log("WRN", "WebP plugin: Failed to create demuxer");
         g_free(file_data);
         return PLUGIN_ERROR_UNSUPPORTED_FORMAT;
     }
@@ -229,7 +229,7 @@ static PluginError load_webp(ImageDocument* doc, const char* filename) {
                         icc_destroy(profile);
                     }
                 } else {
-                    g_warning("WebP plugin: Invalid or non-RGB embedded ICC profile; assuming sRGB");
+                    debug_log("WRN", "WebP plugin: Invalid or non-RGB embedded ICC profile; assuming sRGB");
                 }
             } else {
                 WebPDemuxReleaseChunkIterator(&chunk_iter);
@@ -240,7 +240,7 @@ static PluginError load_webp(ImageDocument* doc, const char* filename) {
 #endif
 
     if (canvas_width <= 0 || canvas_height <= 0 || canvas_width > 65535 || canvas_height > 65535) {
-        g_warning("WebP plugin: Invalid canvas dimensions: %ux%u", canvas_width, canvas_height);
+        debug_log("WRN", "WebP plugin: Invalid canvas dimensions: %ux%u", canvas_width, canvas_height);
         WebPDemuxDelete(demux);
         g_free(file_data);
         return PLUGIN_ERROR_UNSUPPORTED_FORMAT;
@@ -276,7 +276,7 @@ static PluginError load_webp(ImageDocument* doc, const char* filename) {
                 /* Decode frame */
                 decoded_data = WebPDecodeRGBA(iter.fragment.bytes, iter.fragment.size, &frame_width, &frame_height);
                 if (!decoded_data) {
-                    g_warning("WebP plugin: Failed to decode frame %d", frame_num);
+                    debug_log("WRN", "WebP plugin: Failed to decode frame %d", frame_num);
                     continue;
                 }
 
@@ -287,7 +287,7 @@ static PluginError load_webp(ImageDocument* doc, const char* filename) {
                 layer = layer_new(layer_name, doc->width, doc->height, TRUE,
                                   LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL, doc);
                 if (!layer) {
-                    g_warning("WebP plugin: Failed to create layer for frame %d", frame_num);
+                    debug_log("WRN", "WebP plugin: Failed to create layer for frame %d", frame_num);
                     WebPFree(decoded_data);
                     continue;
                 }
@@ -295,7 +295,7 @@ static PluginError load_webp(ImageDocument* doc, const char* filename) {
                 /* Get surface data */
                 temp_surface = layer->surface;
                 if (!temp_surface) {
-                    g_warning("WebP plugin: layer->surface is NULL for frame %d", frame_num);
+                    debug_log("WRN", "WebP plugin: layer->surface is NULL for frame %d", frame_num);
                     layer_free(layer);
                     WebPFree(decoded_data);
                     continue;
@@ -310,7 +310,7 @@ static PluginError load_webp(ImageDocument* doc, const char* filename) {
                     /* Frame matches canvas exactly - simple copy */
                     if (!convert_rgba_to_layer(decoded_data, frame_width, frame_height,
                                                temp_surface, surface_stride)) {
-                        g_warning("WebP plugin: Failed to convert frame %d", frame_num);
+                        debug_log("WRN", "WebP plugin: Failed to convert frame %d", frame_num);
                         layer_free(layer);
                         WebPFree(decoded_data);
                         continue;
@@ -378,7 +378,7 @@ static PluginError load_webp(ImageDocument* doc, const char* filename) {
         }
 
         if (doc->layers == NULL) {
-            g_warning("WebP plugin: Failed to load any frames from animated WebP");
+            debug_log("WRN", "WebP plugin: Failed to load any frames from animated WebP");
             WebPDemuxDelete(demux);
             g_free(file_data);
             return PLUGIN_ERROR_FILE_READ_ERROR;
@@ -391,7 +391,7 @@ static PluginError load_webp(ImageDocument* doc, const char* filename) {
         /* Decode WebP image to RGBA */
         decoded_data = WebPDecodeRGBA(file_data, file_size, &width, &height);
         if (!decoded_data) {
-            g_warning("WebP plugin: Failed to decode WebP image");
+            debug_log("WRN", "WebP plugin: Failed to decode WebP image");
             WebPDemuxDelete(demux);
             g_free(file_data);
             return PLUGIN_ERROR_FILE_READ_ERROR;
@@ -401,7 +401,7 @@ static PluginError load_webp(ImageDocument* doc, const char* filename) {
         layer = layer_new(_("Background"), doc->width, doc->height, TRUE,
                           LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL, doc);
         if (!layer) {
-            g_warning("WebP plugin: layer_new returned NULL for %ux%u layer", doc->width, doc->height);
+            debug_log("WRN", "WebP plugin: layer_new returned NULL for %ux%u layer", doc->width, doc->height);
             WebPFree(decoded_data);
             WebPDemuxDelete(demux);
             g_free(file_data);
@@ -411,7 +411,7 @@ static PluginError load_webp(ImageDocument* doc, const char* filename) {
         /* Get surface data */
         cairo_surface_t* temp_surface = layer->surface;
         if (!temp_surface) {
-            g_warning("WebP plugin: base_layer->surface is NULL");
+            debug_log("WRN", "WebP plugin: base_layer->surface is NULL");
             layer_free(layer);
             WebPFree(decoded_data);
             WebPDemuxDelete(demux);
@@ -424,7 +424,7 @@ static PluginError load_webp(ImageDocument* doc, const char* filename) {
 
         /* Convert and copy RGBA data to layer */
         if (!convert_rgba_to_layer(decoded_data, width, height, temp_surface, surface_stride)) {
-            g_warning("WebP plugin: Failed to convert RGBA to layer");
+            debug_log("WRN", "WebP plugin: Failed to convert RGBA to layer");
             layer_free(layer);
             WebPFree(decoded_data);
             WebPDemuxDelete(demux);
@@ -554,7 +554,7 @@ static PluginError save_webp(ImageDocument* doc, const char* filename, const Sav
 
     /* Validate config */
     if (!WebPValidateConfig(&config)) {
-        g_warning("WebP plugin: Invalid WebP config");
+        debug_log("WRN", "WebP plugin: Invalid WebP config");
         cairo_surface_destroy(composite);
         return PLUGIN_ERROR_UNKNOWN;
     }
@@ -607,7 +607,7 @@ static PluginError save_webp(ImageDocument* doc, const char* filename, const Sav
 
     /* Import RGBA data */
     if (!WebPPictureImportRGBA(&picture, rgba_data, width * 4)) {
-        g_warning("WebP plugin: WebPPictureImportRGBA failed");
+        debug_log("WRN", "WebP plugin: WebPPictureImportRGBA failed");
         g_free(rgba_data);
         WebPPictureFree(&picture);
         cairo_surface_destroy(composite);
@@ -625,7 +625,7 @@ static PluginError save_webp(ImageDocument* doc, const char* filename, const Sav
     picture.custom_ptr = &writer;
 
     if (!WebPEncode(&config, &picture)) {
-        g_warning("WebP plugin: WebPEncode failed (error code: %d)", picture.error_code);
+        debug_log("WRN", "WebP plugin: WebPEncode failed (error code: %d)", picture.error_code);
         WebPMemoryWriterClear(&writer);
         g_free(rgba_data);
         WebPPictureFree(&picture);
@@ -676,7 +676,7 @@ static PluginError save_webp(ImageDocument* doc, const char* filename, const Sav
     /* Write to file */
     outfile = g_fopen(filename, "wb");
     if (!outfile) {
-        g_warning("WebP plugin: Failed to open file for writing: %s", filename);
+        debug_log("WRN", "WebP plugin: Failed to open file for writing: %s", filename);
 #if defined(HAVE_LIBWEBP) && defined(HAVE_LCMS2)
         if (assembled_webp.bytes)
             WebPDataClear(&assembled_webp);
@@ -693,7 +693,7 @@ static PluginError save_webp(ImageDocument* doc, const char* filename, const Sav
     fclose(outfile);
 
     if (result != (int)webp_size) {
-        g_warning("WebP plugin: Failed to write entire file (wrote %d of %zu bytes)", result, webp_size);
+        debug_log("WRN", "WebP plugin: Failed to write entire file (wrote %d of %zu bytes)", result, webp_size);
 #if defined(HAVE_LIBWEBP) && defined(HAVE_LCMS2)
         if (assembled_webp.bytes)
             WebPDataClear(&assembled_webp);

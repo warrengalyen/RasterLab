@@ -8,6 +8,7 @@
 #include "ui/layers_panel.h"
 #include "ui/workspace.h"
 #include <stdio.h>
+#include "debug_logger.h"
 
 /**
  * Map BlendMode enum to Cairo operator
@@ -61,7 +62,7 @@ gboolean document_render_composite(ImageDocument* doc) {
     }
 
     if (cairo_surface_status(doc->composite_surface) != CAIRO_STATUS_SUCCESS) {
-        g_warning("Failed to create composite surface");
+        debug_log("WRN", "Failed to create composite surface");
         return FALSE;
     }
 
@@ -163,7 +164,7 @@ gboolean document_render_composite_dirty(ImageDocument* doc, const DirtyRect* di
     }
 
     if (cairo_surface_status(doc->composite_surface) != CAIRO_STATUS_SUCCESS) {
-        g_warning("Failed to create composite surface");
+        debug_log("WRN", "Failed to create composite surface");
         return FALSE;
     }
 
@@ -357,7 +358,7 @@ cairo_surface_t* document_export_composite_surface(ImageDocument* doc) {
         CAIRO_FORMAT_ARGB32, doc->width, doc->height);
 
     if (cairo_surface_status(export_surface) != CAIRO_STATUS_SUCCESS) {
-        g_warning("Failed to create export composite surface");
+        debug_log("WRN", "Failed to create export composite surface");
         return NULL;
     }
 

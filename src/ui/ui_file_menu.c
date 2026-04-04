@@ -19,6 +19,7 @@
 #include <glib/gstdio.h>
 #include <stdio.h>
 #include <string.h>
+#include "debug_logger.h"
 
 /* Header probe size for format detection (must be >= 132 for DICOM) */
 #define FILE_HEADER_PROBE_SIZE 256
@@ -541,7 +542,7 @@ static void on_file_revert(GtkMenuItem* menu_item, gpointer user_data) {
     cmd = command_create_document_revert(doc, diff, doc->file_path, ctx->settings);
     if (!cmd) {
         if (!document_revert_diff_apply_undo(doc, diff)) {
-            g_warning("Revert: failed to restore document after command creation failure");
+            debug_log("WRN", "Revert: failed to restore document after command creation failure");
         }
         document_revert_diff_free(diff);
         ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_ERROR,
@@ -654,7 +655,7 @@ void ui_update_recent_files_menu(AppContext* ctx) {
     }
 
     if (!GTK_IS_MENU(recent_submenu)) {
-        g_warning("recent_files_submenu is not a GtkMenu");
+        debug_log("WRN", "recent_files_submenu is not a GtkMenu");
         return;
     }
 
@@ -802,7 +803,7 @@ void ui_file_menu_setup(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* acc
     /* Setup "Open Recent" submenu */
     if (ctx->file_menu_open_recent) {
         if (!file_menu) {
-            g_warning("file_menu is NULL, cannot setup Open Recent submenu");
+            debug_log("WRN", "file_menu is NULL, cannot setup Open Recent submenu");
         } else {
             GtkWidget* recent_submenu = gtk_menu_new();
             gtk_menu_item_set_submenu(GTK_MENU_ITEM(ctx->file_menu_open_recent), recent_submenu);
@@ -884,11 +885,11 @@ void on_file_open(GtkWidget* widget, gpointer data) {
 
     AppContext* ctx = (AppContext*)data;
     if (!ctx) {
-        g_warning("Invalid context in on_file_open");
+        debug_log("WRN", "Invalid context in on_file_open");
         return;
     }
     if (!ctx->window || !GTK_IS_WINDOW(ctx->window)) {
-        g_warning("Invalid window in on_file_open");
+        debug_log("WRN", "Invalid window in on_file_open");
         return;
     }
     GtkFileChooserNative* native_dialog;
@@ -988,7 +989,7 @@ void on_file_save(GtkWidget* widget, gpointer data) {
     ImageDocument* doc = ui_get_active_document(ctx);
 
     if (!doc) {
-        g_warning("No document open");
+        debug_log("WRN", "No document open");
         return;
     }
 
@@ -1190,7 +1191,7 @@ void on_file_save_as(GtkWidget* widget, gpointer data) {
     gint response;
 
     if (!doc) {
-        g_warning("No document open");
+        debug_log("WRN", "No document open");
         return;
     }
 
@@ -1440,12 +1441,12 @@ void on_file_new(GtkWidget* widget, gpointer data) {
     const gdouble* custom_color = NULL;
 
     if (!ctx) {
-        g_warning("Invalid application context");
+        debug_log("WRN", "Invalid application context");
         return;
     }
 
     if (!ctx->window || !GTK_IS_WINDOW(ctx->window)) {
-        g_warning("Invalid main window");
+        debug_log("WRN", "Invalid main window");
         return;
     }
 
@@ -1454,7 +1455,7 @@ void on_file_new(GtkWidget* widget, gpointer data) {
     /* Create and show new image dialog */
     dialog = new_image_dialog_new();
     if (!dialog) {
-        g_warning("Failed to create new image dialog");
+        debug_log("WRN", "Failed to create new image dialog");
         return;
     }
 
@@ -1482,7 +1483,7 @@ void on_file_new(GtkWidget* widget, gpointer data) {
         /* Create new document */
         doc = ui_create_document_without_tab(ctx, _("Untitled"));
         if (!doc) {
-            g_warning("Failed to create document");
+            debug_log("WRN", "Failed to create document");
             new_image_dialog_result_free(result);
             new_image_dialog_free(dialog);
             return;
@@ -1511,7 +1512,7 @@ void on_file_new(GtkWidget* widget, gpointer data) {
                                      result->background, LAYER_POSITION_ABOVE_CURRENT,
                                      custom_color, doc);
         if (!background_layer) {
-            g_warning("Failed to create background layer");
+            debug_log("WRN", "Failed to create background layer");
             document_free(doc);
             new_image_dialog_result_free(result);
             new_image_dialog_free(dialog);

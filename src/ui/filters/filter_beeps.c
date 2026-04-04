@@ -3,6 +3,7 @@
 #include "ocular.h"
 #include "ui/filters/filter_utils.h"
 #include <glib.h>
+#include "debug_logger.h"
 
 /**
  * Apply BEEPS filter to a layer using Ocular library
@@ -33,7 +34,7 @@ gboolean filter_beeps_apply(ImageLayer* layer, gfloat photometric_std_dev, gfloa
                                photometric_std_dev, spatial_decay, range_filter);
 
     if (status != OC_STATUS_OK) {
-        g_warning("BEEPS filter: Ocular filter returned error %d", status);
+        debug_log("WRN", "BEEPS filter: Ocular filter returned error %d", status);
         filter_utils_free_rgb_buffers(&buffers);
         return FALSE;
     }

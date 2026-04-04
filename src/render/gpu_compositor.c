@@ -571,7 +571,7 @@ static gboolean load_gl_extensions(void) {
     
     /* Check required functions */
     if (!glGenFramebuffers || !glBindFramebuffer || !glCreateShader || !glCreateProgram) {
-        g_warning("GPU Compositor: Failed to load required OpenGL extensions");
+        debug_log("WRN", "GPU Compositor: Failed to load required OpenGL extensions");
         return FALSE;
     }
     
@@ -600,7 +600,7 @@ static gboolean ensure_glfw_initialized(void) {
     
     if (!g_glfw_initialized) {
         if (!glfwInit()) {
-            g_warning("GPU Compositor: Failed to initialize GLFW");
+            debug_log("WRN", "GPU Compositor: Failed to initialize GLFW");
             g_mutex_unlock(&g_glfw_mutex);
             return FALSE;
         }
@@ -646,7 +646,7 @@ static GLuint compile_shader(GLenum type, const char* source) {
     if (status == GL_FALSE) {
         char info_log[512];
         glGetShaderInfoLog(shader, sizeof(info_log), NULL, info_log);
-        g_warning("GPU Compositor: Shader compilation failed: %s", info_log);
+        debug_log("WRN", "GPU Compositor: Shader compilation failed: %s", info_log);
         glDeleteShader(shader);
         return 0;
     }
@@ -690,7 +690,7 @@ static GLuint create_shader_program(void) {
     if (status == GL_FALSE) {
         char info_log[512];
         glGetProgramInfoLog(program, sizeof(info_log), NULL, info_log);
-        g_warning("GPU Compositor: Shader program linking failed: %s", info_log);
+        debug_log("WRN", "GPU Compositor: Shader program linking failed: %s", info_log);
         glDeleteProgram(program);
         return 0;
     }
@@ -808,7 +808,7 @@ GPUCompositor* gpu_compositor_create(const gchar* device_name) {
     
     compositor->window = glfwCreateWindow(1, 1, "RasterLab GPU Compositor", NULL, NULL);
     if (!compositor->window) {
-        g_warning("GPU Compositor: Failed to create GLFW window");
+        debug_log("WRN", "GPU Compositor: Failed to create GLFW window");
         release_glfw();
         g_mutex_clear(&compositor->mutex);
         g_free(compositor);
@@ -845,7 +845,7 @@ GPUCompositor* gpu_compositor_create(const gchar* device_name) {
     /* Create shader program */
     compositor->shader_program = create_shader_program();
     if (compositor->shader_program == 0) {
-        g_warning("GPU Compositor: Failed to create shader program");
+        debug_log("WRN", "GPU Compositor: Failed to create shader program");
         glfwDestroyWindow(compositor->window);
         release_glfw();
         g_mutex_clear(&compositor->mutex);
@@ -1003,7 +1003,7 @@ static gboolean ensure_fbo_size(GPUCompositor* compositor, gint width, gint heig
         /* Check FBO status */
         GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
         if (status != GL_FRAMEBUFFER_COMPLETE) {
-            g_warning("GPU Compositor: Framebuffer %d incomplete: 0x%x", i, status);
+            debug_log("WRN", "GPU Compositor: Framebuffer %d incomplete: 0x%x", i, status);
             return FALSE;
         }
     }
@@ -1246,7 +1246,7 @@ gboolean gpu_compositor_composite_tile(GPUCompositor* compositor,
     /* Verify FBO is complete before reading */
     GLenum fbo_status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
     if (fbo_status != GL_FRAMEBUFFER_COMPLETE) {
-        g_warning("GPU Compositor: Result FBO %d not complete before read: 0x%x", result_fbo, fbo_status);
+        debug_log("WRN", "GPU Compositor: Result FBO %d not complete before read: 0x%x", result_fbo, fbo_status);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         g_mutex_unlock(&compositor->mutex);
         return FALSE;

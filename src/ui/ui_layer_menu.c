@@ -11,6 +11,7 @@
 #include "ui/dialogs/new_layer_dialog.h"
 #include "ui/layers_panel.h"
 #include <glib.h>
+#include "debug_logger.h"
 
 static void on_layer_visibility_show_current_toggled(GtkCheckMenuItem* check_item, gpointer data);
 
@@ -388,14 +389,14 @@ void on_layer_new(GtkWidget* widget, gpointer data) {
     const gdouble* custom_color = NULL;
 
     if (!doc) {
-        g_warning("No document open");
+        debug_log("WRN", "No document open");
         return;
     }
 
     /* Create and show new layer dialog */
     dialog = new_layer_dialog_new();
     if (!dialog) {
-        g_warning("Failed to create new layer dialog");
+        debug_log("WRN", "Failed to create new layer dialog");
         return;
     }
 
@@ -469,7 +470,7 @@ void on_layer_delete(GtkWidget* widget, gpointer data) {
     Command* cmd;
 
     if (!doc || !doc->layers) {
-        g_warning("No document or layers");
+        debug_log("WRN", "No document or layers");
         return;
     }
 
@@ -480,14 +481,14 @@ void on_layer_delete(GtkWidget* widget, gpointer data) {
     }
 
     if (!selected_layer) {
-        g_warning("No layer selected");
+        debug_log("WRN", "No layer selected");
         return;
     }
 
     /* Create undo command before deleting */
     cmd = command_create_layer_delete(doc, selected_layer);
     if (!cmd) {
-        g_warning("Failed to create delete layer command");
+        debug_log("WRN", "Failed to create delete layer command");
         return;
     }
 
@@ -530,7 +531,7 @@ void on_layer_duplicate(GtkWidget* widget, gpointer data) {
     Command* cmd;
 
     if (!doc || !doc->layers) {
-        g_warning("No document or layers");
+        debug_log("WRN", "No document or layers");
         return;
     }
 
@@ -541,7 +542,7 @@ void on_layer_duplicate(GtkWidget* widget, gpointer data) {
     }
 
     if (!selected_layer) {
-        g_warning("No layer selected");
+        debug_log("WRN", "No layer selected");
         return;
     }
 
@@ -593,7 +594,7 @@ void on_layer_merge_up(GtkWidget* widget, gpointer data) {
     Command* cmd;
 
     if (!doc || !doc->layers) {
-        g_warning("No document or layers");
+        debug_log("WRN", "No document or layers");
         return;
     }
 
@@ -603,7 +604,7 @@ void on_layer_merge_up(GtkWidget* widget, gpointer data) {
     }
 
     if (!selected_layer) {
-        g_warning("No layer selected");
+        debug_log("WRN", "No layer selected");
         return;
     }
 
@@ -646,7 +647,7 @@ void on_layer_merge_down(GtkWidget* widget, gpointer data) {
     Command* cmd;
 
     if (!doc || !doc->layers) {
-        g_warning("No document or layers");
+        debug_log("WRN", "No document or layers");
         return;
     }
 
@@ -656,7 +657,7 @@ void on_layer_merge_down(GtkWidget* widget, gpointer data) {
     }
 
     if (!selected_layer) {
-        g_warning("No layer selected");
+        debug_log("WRN", "No layer selected");
         return;
     }
 
@@ -699,7 +700,7 @@ void on_layer_move_up(GtkWidget* widget, gpointer data) {
     Command* cmd;
 
     if (!doc || !doc->layers) {
-        g_warning("No document or layers");
+        debug_log("WRN", "No document or layers");
         return;
     }
 
@@ -710,7 +711,7 @@ void on_layer_move_up(GtkWidget* widget, gpointer data) {
     }
 
     if (!selected_layer) {
-        g_warning("No layer selected");
+        debug_log("WRN", "No layer selected");
         return;
     }
 
@@ -759,7 +760,7 @@ void on_layer_move_down(GtkWidget* widget, gpointer data) {
     Command* cmd;
 
     if (!doc || !doc->layers) {
-        g_warning("No document or layers");
+        debug_log("WRN", "No document or layers");
         return;
     }
 
@@ -770,7 +771,7 @@ void on_layer_move_down(GtkWidget* widget, gpointer data) {
     }
 
     if (!selected_layer) {
-        g_warning("No layer selected");
+        debug_log("WRN", "No layer selected");
         return;
     }
 
@@ -1222,7 +1223,7 @@ void on_layer_rasterize_text(GtkWidget* widget, gpointer data) {
         layer = document_get_selected_layer(doc);
 
     if (!layer || layer->layer_type != LAYER_TYPE_TEXT) {
-        g_warning("Rasterize Text: no text layer selected");
+        debug_log("WRN", "Rasterize Text: no text layer selected");
         return;
     }
 

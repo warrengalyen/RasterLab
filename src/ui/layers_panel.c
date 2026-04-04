@@ -18,6 +18,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
+#include "debug_logger.h"
 
 /* Forward declarations */
 static GdkPixbuf* create_layer_thumbnail(cairo_surface_t* layer_surface, gint thumb_size, gboolean visible);
@@ -792,7 +793,7 @@ static GdkPixbuf* create_text_layer_thumbnail(gint thumb_max_size, gboolean visi
     icon = gdk_pixbuf_new_from_resource("/icons/tool-text.png", &error);
     if (!icon) {
         if (error) {
-            g_warning("create_text_layer_thumbnail: %s", error->message);
+            debug_log("WRN", "create_text_layer_thumbnail: %s", error->message);
             g_error_free(error);
         }
         cairo_destroy(cr);
@@ -803,7 +804,7 @@ static GdkPixbuf* create_text_layer_thumbnail(gint thumb_max_size, gboolean visi
 
     if (gdk_pixbuf_get_width(icon) != TEXT_TOOL_ICON_SRC_PX ||
         gdk_pixbuf_get_height(icon) != TEXT_TOOL_ICON_SRC_PX) {
-        g_warning("tool-text.png expected %dx%d, got %dx%d", TEXT_TOOL_ICON_SRC_PX,
+        debug_log("WRN", "tool-text.png expected %dx%d, got %dx%d", TEXT_TOOL_ICON_SRC_PX,
                   TEXT_TOOL_ICON_SRC_PX, gdk_pixbuf_get_width(icon), gdk_pixbuf_get_height(icon));
     }
 
@@ -863,7 +864,7 @@ static GdkPixbuf* get_visibility_icon(gboolean visible) {
 
         return scaled;
     } else if (error) {
-        g_warning("Failed to load visibility icon from resource %s: %s", resource_path, error->message);
+        debug_log("WRN", "Failed to load visibility icon from resource %s: %s", resource_path, error->message);
         g_error_free(error);
     }
     return NULL;
@@ -937,7 +938,7 @@ static void set_button_icon(GtkButton* button, const gchar* resource_path, gint 
             g_object_unref(scaled);
         }
     } else if (error) {
-        g_warning("Failed to load icon from resource %s: %s", resource_path, error->message);
+        debug_log("WRN", "Failed to load icon from resource %s: %s", resource_path, error->message);
         g_error_free(error);
     }
 }
@@ -957,7 +958,7 @@ LayersPanel* create_layers_panel(AppContext* ctx) {
     builder = gtk_builder_new();
     ui_utils_builder_set_translation_domain(builder);
     if (!gtk_builder_add_from_resource(builder, "/ui/layers_panel.glade", &error)) {
-        g_warning("Failed to load layers_panel.glade: %s", error->message);
+        debug_log("WRN", "Failed to load layers_panel.glade: %s", error->message);
         g_error_free(error);
         g_object_unref(builder);
 

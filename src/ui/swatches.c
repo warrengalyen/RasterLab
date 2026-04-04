@@ -4,6 +4,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
+#include "debug_logger.h"
 
 /**
  * Initialize swatches data structure
@@ -224,13 +225,13 @@ static gchar* get_swatches_file_path(const gchar* app_dir) {
  */
 void swatches_load(SwatchesData* swatches, const gchar* app_dir) {
     if (!swatches || !app_dir) {
-        g_warning("swatches_load: Invalid parameters (swatches=%p, app_dir=%s)", swatches, app_dir ? app_dir : "(null)");
+        debug_log("WRN", "swatches_load: Invalid parameters (swatches=%p, app_dir=%s)", swatches, app_dir ? app_dir : "(null)");
         return;
     }
 
     gchar* file_path = get_swatches_file_path(app_dir);
     if (!file_path) {
-        g_warning("swatches_load: Failed to get file path (app_dir=%s)", app_dir);
+        debug_log("WRN", "swatches_load: Failed to get file path (app_dir=%s)", app_dir);
         return;
     }
 
@@ -247,10 +248,10 @@ void swatches_load(SwatchesData* swatches, const gchar* app_dir) {
 
     if (!g_file_get_contents(file_path, &contents, &length, &error)) {
         if (error) {
-            g_warning("swatches_load: Failed to read swatches file: %s", error->message);
+            debug_log("WRN", "swatches_load: Failed to read swatches file: %s", error->message);
             g_error_free(error);
         } else {
-            g_warning("swatches_load: Failed to read swatches file: %s (unknown error)", file_path);
+            debug_log("WRN", "swatches_load: Failed to read swatches file: %s (unknown error)", file_path);
         }
         g_free(file_path);
         return;
@@ -348,7 +349,7 @@ void swatches_save(const SwatchesData* swatches, const gchar* app_dir) {
 
     gchar* file_path = get_swatches_file_path(app_dir);
     if (!file_path) {
-        g_warning("swatches_save: Failed to get file path (app_dir=%s)", app_dir);
+        debug_log("WRN", "swatches_save: Failed to get file path (app_dir=%s)", app_dir);
         return;
     }
 
@@ -356,7 +357,7 @@ void swatches_save(const SwatchesData* swatches, const gchar* app_dir) {
 
     FILE* file = g_fopen(file_path, "w");
     if (!file) {
-        g_warning("swatches_save: Failed to open swatches file for writing: %s", file_path);
+        debug_log("WRN", "swatches_save: Failed to open swatches file for writing: %s", file_path);
         g_free(file_path);
         return;
     }

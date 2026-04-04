@@ -76,12 +76,12 @@ PluginHandle* plugin_loader_load(const char* plugin_path) {
     PluginInitFunc init_func;
 
     if (!plugin_loader_initialized) {
-        g_warning("Plugin loader not initialized");
+        debug_log("WRN", "Plugin loader not initialized");
         return NULL;
     }
 
     if (!plugin_path) {
-        g_warning("Invalid plugin path");
+        debug_log("WRN", "Invalid plugin path");
         return NULL;
     }
 
@@ -95,7 +95,7 @@ PluginHandle* plugin_loader_load(const char* plugin_path) {
     handle->handle = LoadLibraryA(plugin_path);
     if (!handle->handle) {
         DWORD error = GetLastError();
-        g_warning("Failed to load plugin %s: error %lu", plugin_path, (unsigned long)error);
+        debug_log("WRN", "Failed to load plugin %s: error %lu", plugin_path, (unsigned long)error);
         debug_log("ERR", "Plugin load failed: %s (error code: %lu)", plugin_path, (unsigned long)error);
         g_free(handle->plugin_path);
         g_free(handle);
@@ -108,7 +108,7 @@ PluginHandle* plugin_loader_load(const char* plugin_path) {
     handle->handle = dlopen(plugin_path, RTLD_LAZY | RTLD_LOCAL);
     if (!handle->handle) {
         const char* error = dlerror();
-        g_warning("Failed to load plugin %s: %s", plugin_path, error ? error : "Unknown error");
+        debug_log("WRN", "Failed to load plugin %s: %s", plugin_path, error ? error : "Unknown error");
         debug_log("ERR", "Plugin load failed: %s (%s)", plugin_path, error ? error : "Unknown error");
         g_free(handle->plugin_path);
         g_free(handle);
@@ -120,7 +120,7 @@ PluginHandle* plugin_loader_load(const char* plugin_path) {
     init_func = (PluginInitFunc)dlsym(handle->handle, "plugin_init");
     const char* dlsym_error = dlerror();
     if (dlsym_error) {
-        g_warning("Failed to find plugin_init in %s: %s", plugin_path, dlsym_error);
+        debug_log("WRN", "Failed to find plugin_init in %s: %s", plugin_path, dlsym_error);
         debug_log("ERR", "Plugin load failed: %s (symbol lookup error: %s)", plugin_path, dlsym_error);
         dlclose(handle->handle);
         g_free(handle->plugin_path);
@@ -130,7 +130,7 @@ PluginHandle* plugin_loader_load(const char* plugin_path) {
 #endif
 
     if (!init_func) {
-        g_warning("plugin_init symbol not found in %s", plugin_path);
+        debug_log("WRN", "plugin_init symbol not found in %s", plugin_path);
         debug_log("ERR", "Plugin load failed: %s (plugin_init symbol not found)", plugin_path);
 #ifdef _WIN32
         FreeLibrary(handle->handle);
@@ -171,13 +171,13 @@ static gboolean plugin_handle_init(PluginHandle* handle, const ImageFormatHostAP
     init_func = (PluginInitFunc)dlsym(handle->handle, "plugin_init");
     const char* dlsym_error = dlerror();
     if (dlsym_error) {
-        g_warning("Failed to find plugin_init: %s", dlsym_error);
+        debug_log("WRN", "Failed to find plugin_init: %s", dlsym_error);
         return FALSE;
     }
 #endif
 
     if (!init_func) {
-        g_warning("plugin_init symbol not found");
+        debug_log("WRN", "plugin_init symbol not found");
         return FALSE;
     }
 
@@ -186,7 +186,7 @@ static gboolean plugin_handle_init(PluginHandle* handle, const ImageFormatHostAP
 
     /* Call plugin_init */
     if (!init_func(host_api, &handle->plugin)) {
-        g_warning("Plugin initialization failed for %s", handle->plugin_path);
+        debug_log("WRN", "Plugin initialization failed for %s", handle->plugin_path);
         debug_log("ERR", "Plugin initialization failed: %s (plugin_init returned false)", handle->plugin_path);
         return FALSE;
     }
@@ -196,7 +196,7 @@ static gboolean plugin_handle_init(PluginHandle* handle, const ImageFormatHostAP
         !handle->plugin.callbacks.load ||
         !handle->plugin.callbacks.can_save ||
         !handle->plugin.callbacks.save) {
-        g_warning("Plugin %s missing required callbacks", handle->plugin_path);
+        debug_log("WRN", "Plugin %s missing required callbacks", handle->plugin_path);
         debug_log("ERR", "Plugin initialization failed: %s (missing required callbacks)", handle->plugin_path);
         return FALSE;
     }
@@ -294,7 +294,7 @@ GList* plugin_loader_scan_directory(const char* directory_path) {
     dir = g_dir_open(directory_path, 0, &error);
     if (!dir) {
         if (error) {
-            g_warning("Failed to open plugin directory %s: %s", directory_path, error->message);
+            debug_log("WRN", "Failed to open plugin directory %s: %s", directory_path, error->message);
             g_error_free(error);
         }
         return NULL;

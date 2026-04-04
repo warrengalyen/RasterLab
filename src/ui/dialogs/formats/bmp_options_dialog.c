@@ -4,6 +4,7 @@
 #include <gtk/gtk.h>
 #include <string.h>
 #include "i18n.h"
+#include "debug_logger.h"
 
 /* Forward declare BMP types from plugin_bmp.c */
 typedef enum {
@@ -270,7 +271,7 @@ gboolean bmp_options_dialog_show(GtkWindow* parent, SaveOptions* opts) {
     builder = gtk_builder_new();
     ui_utils_builder_set_translation_domain(builder);
     if (!gtk_builder_add_from_resource(builder, "/ui/bmp_options_dialog.glade", &error)) {
-        g_warning("Failed to load bmp_options_dialog.glade: %s", error ? error->message : "Unknown error");
+        debug_log("WRN", "Failed to load bmp_options_dialog.glade: %s", error ? error->message : "Unknown error");
         if (error) {
             g_error_free(error);
         }
@@ -281,7 +282,7 @@ gboolean bmp_options_dialog_show(GtkWindow* parent, SaveOptions* opts) {
     /* Get dialog widget */
     dialog = GTK_WIDGET(gtk_builder_get_object(builder, "bmp_options_dialog"));
     if (!dialog) {
-        g_warning("Failed to get bmp_options_dialog from builder");
+        debug_log("WRN", "Failed to get bmp_options_dialog from builder");
         g_object_unref(builder);
         return FALSE;
     }
@@ -325,7 +326,7 @@ gboolean bmp_options_dialog_show(GtkWindow* parent, SaveOptions* opts) {
     palette_size_adjustment = GTK_ADJUSTMENT(gtk_builder_get_object(builder, "palette_size_adjustment"));
 
     if (!color_model_auto_button || !flip_row_order_checkbox) {
-        g_warning("Failed to get required widgets from bmp_options_dialog");
+        debug_log("WRN", "Failed to get required widgets from bmp_options_dialog");
         g_object_unref(builder);
         gtk_widget_destroy(dialog);
         return FALSE;

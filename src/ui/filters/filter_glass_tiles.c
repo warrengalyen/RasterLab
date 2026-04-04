@@ -2,6 +2,7 @@
 #include "filters.h"
 #include "ocular.h"
 #include <glib.h>
+#include "debug_logger.h"
 
 /* Map combo index (clamp=0, reflect=1, wrap=2, erase=3, ignore=4) to OcEdgeMode */
 static const OcEdgeMode GLASS_TILES_EDGE_MAP[] = {
@@ -56,14 +57,14 @@ gboolean filter_glass_tiles_apply(ImageLayer* layer, const gfloat* values, gint 
     rgb_output = (guchar*)g_malloc((size_t)(height * stride));
 
     if (!rgb_input || !rgb_output) {
-        g_warning("Glass Tiles filter: Failed to allocate memory");
+        debug_log("WRN", "Glass Tiles filter: Failed to allocate memory");
         g_free(rgb_input);
         g_free(rgb_output);
         return FALSE;
     }
 
     if (!adjustments_cairo_to_rgb(surface, rgb_input)) {
-        g_warning("Glass Tiles filter: Failed to convert surface to RGB");
+        debug_log("WRN", "Glass Tiles filter: Failed to convert surface to RGB");
         g_free(rgb_input);
         g_free(rgb_output);
         return FALSE;
@@ -73,14 +74,14 @@ gboolean filter_glass_tiles_apply(ImageLayer* layer, const gfloat* values, gint 
                                     angle, tile_size, curvature, quality, edge_mode);
 
     if (status != OC_STATUS_OK) {
-        g_warning("Glass Tiles filter: Ocular returned error %d", status);
+        debug_log("WRN", "Glass Tiles filter: Ocular returned error %d", status);
         g_free(rgb_input);
         g_free(rgb_output);
         return FALSE;
     }
 
     if (!adjustments_rgb_to_cairo(surface, rgb_output)) {
-        g_warning("Glass Tiles filter: Failed to convert RGB to surface");
+        debug_log("WRN", "Glass Tiles filter: Failed to convert RGB to surface");
         g_free(rgb_input);
         g_free(rgb_output);
         return FALSE;

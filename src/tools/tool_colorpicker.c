@@ -13,6 +13,7 @@
 #include <glib.h>
 #include <math.h>
 #include <stdlib.h>
+#include "debug_logger.h"
 
 /* Deferred preview update: motion only stores pending; idle does sample + update */
 typedef struct {
@@ -99,7 +100,7 @@ static GdkCursor* create_colorpicker_cursor(void) {
                                             G_RESOURCE_LOOKUP_FLAGS_NONE, &error);
     if (!bytes) {
         if (error) {
-            g_warning("Failed to load colorpicker cursor resource: %s", error->message);
+            debug_log("WRN", "Failed to load colorpicker cursor resource: %s", error->message);
             g_error_free(error);
         }
         return gdk_cursor_new_for_display(display, GDK_CROSSHAIR);
@@ -112,7 +113,7 @@ static GdkCursor* create_colorpicker_cursor(void) {
 
     if (!pixbuf) {
         if (error) {
-            g_warning("Failed to parse colorpicker cursor: %s", error->message);
+            debug_log("WRN", "Failed to parse colorpicker cursor: %s", error->message);
             g_error_free(error);
         }
         return gdk_cursor_new_for_display(display, GDK_CROSSHAIR);

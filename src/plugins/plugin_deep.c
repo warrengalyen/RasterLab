@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "debug_logger.h"
 
 /* Reference: https://wiki.amigaos.net/wiki/DEEP_IFF_Chunky_Pixel_Image */
 
@@ -83,9 +84,9 @@ static bool read_be16_safe(FILE* f, uint16_t* out_value) {
     uint8_t bytes[2];
     if (fread(bytes, 1, 2, f) != 2) {
         if (ferror(f)) {
-            g_warning("DEEP plugin: Error reading 16-bit value at position %ld", ftell(f));
+            debug_log("WRN", "DEEP plugin: Error reading 16-bit value at position %ld", ftell(f));
         } else {
-            g_warning("DEEP plugin: EOF reading 16-bit value at position %ld", ftell(f));
+            debug_log("WRN", "DEEP plugin: EOF reading 16-bit value at position %ld", ftell(f));
         }
         return false;
     }
@@ -101,9 +102,9 @@ static bool read_be32_safe(FILE* f, uint32_t* out_value) {
     uint8_t bytes[4];
     if (fread(bytes, 1, 4, f) != 4) {
         if (ferror(f)) {
-            g_warning("DEEP plugin: Error reading 32-bit value at position %ld", ftell(f));
+            debug_log("WRN", "DEEP plugin: Error reading 32-bit value at position %ld", ftell(f));
         } else {
-            g_warning("DEEP plugin: EOF reading 32-bit value at position %ld", ftell(f));
+            debug_log("WRN", "DEEP plugin: EOF reading 32-bit value at position %ld", ftell(f));
         }
         return false;
     }
@@ -163,14 +164,14 @@ static bool read_iff_chunk_header(FILE* f, IFFChunkHeader* header) {
     long pos = ftell(f);
     if (fread(header->id, 1, 4, f) != 4) {
         if (ferror(f)) {
-            g_warning("DEEP plugin: Error reading chunk ID at position %ld", pos);
+            debug_log("WRN", "DEEP plugin: Error reading chunk ID at position %ld", pos);
         } else {
-            g_warning("DEEP plugin: EOF reading chunk ID at position %ld", pos);
+            debug_log("WRN", "DEEP plugin: EOF reading chunk ID at position %ld", pos);
         }
         return false;
     }
     if (!read_be32_safe(f, &header->size)) {
-        g_warning("DEEP plugin: Failed to read chunk size for chunk %c%c%c%c at position %ld",
+        debug_log("WRN", "DEEP plugin: Failed to read chunk size for chunk %c%c%c%c at position %ld",
                   header->id[0], header->id[1], header->id[2], header->id[3], pos);
         return false;
     }
@@ -251,7 +252,7 @@ static uint8_t* decompress_rle(const uint8_t* compressed_data, size_t compressed
     }
 
     if (out_pos != decompressed_size) {
-        g_warning("DEEP plugin: RLE decompression incomplete (expected %zu bytes, got %zu, input_pos=%zu/%zu)",
+        debug_log("WRN", "DEEP plugin: RLE decompression incomplete (expected %zu bytes, got %zu, input_pos=%zu/%zu)",
                   decompressed_size, out_pos, in_pos, compressed_size);
         /* Don't return partial data - it will cause crashes. Try alternative decompression methods */
         g_free(output);
@@ -401,7 +402,7 @@ static uint8_t* decompress_rle_per_component(const uint8_t* compressed_data, siz
     /* For RLE compression, we might not use all input if there are many repeated values */
     if (in_pos < compressed_size / 4) {
         /* Used less than 25% of input - probably wrong format */
-        g_warning("DEEP plugin: Per-component RLE used only %zu/%zu bytes (%.1f%%) of input - may be wrong format",
+        debug_log("WRN", "DEEP plugin: Per-component RLE used only %zu/%zu bytes (%.1f%%) of input - may be wrong format",
                   in_pos, compressed_size, (in_pos * 100.0) / compressed_size);
         g_free(output);
         return NULL;
@@ -410,7 +411,7 @@ static uint8_t* decompress_rle_per_component(const uint8_t* compressed_data, siz
     /* Check if we decompressed enough output data */
     size_t expected_output = width * height * num_elements;
     if (expected_output == 0) {
-        g_warning("DEEP plugin: Invalid output size calculation");
+        debug_log("WRN", "DEEP plugin: Invalid output size calculation");
         g_free(output);
         return NULL;
     }
@@ -440,7 +441,7 @@ static size_t decompress_tvdc(const uint8_t* source, size_t source_size, uint8_t
         size_t source_byte = pos >> 1;
         if (source_byte >= source_size) {
             /* Out of source data - fill remainder with last value */
-            g_warning("DEEP plugin: TVDC decompression ran out of source data (pos=%zu, source_size=%zu, i=%zu/%zu), filling remainder",
+            debug_log("WRN", "DEEP plugin: TVDC decompression ran out of source data (pos=%zu, source_size=%zu, i=%zu/%zu), filling remainder",
                       pos, source_size, i, size);
             /* Fill remaining bytes with last value */
             while (i < size) {
@@ -469,7 +470,7 @@ static size_t decompress_tvdc(const uint8_t* source, size_t source_size, uint8_t
 
         /* Safety check: ensure we don't write beyond buffer */
         if (i >= size) {
-            g_warning("DEEP plugin: TVDC decompression index %zu exceeds size %zu", i, size);
+            debug_log("WRN", "DEEP plugin: TVDC decompression index %zu exceeds size %zu", i, size);
             break;
         }
 
@@ -480,7 +481,7 @@ static size_t decompress_tvdc(const uint8_t* source, size_t source_size, uint8_t
             /* Check if we have enough source data for run length nibble */
             source_byte = pos >> 1;
             if (source_byte >= source_size) {
-                g_warning("DEEP plugin: TVDC decompression ran out of source data for run length (pos=%zu, source_size=%zu)",
+                debug_log("WRN", "DEEP plugin: TVDC decompression ran out of source data for run length (pos=%zu, source_size=%zu)",
                           pos, source_size);
                 break;
             }
@@ -501,7 +502,7 @@ static size_t decompress_tvdc(const uint8_t* source, size_t source_size, uint8_t
                 if (i >= size - 1) {
                     /* Can't write more - we're at or past the last valid index */
                     /* This can happen if compressed data is malformed */
-                    g_warning("DEEP plugin: TVDC run-length would exceed buffer (i=%zu, size=%zu, d=%u)",
+                    debug_log("WRN", "DEEP plugin: TVDC run-length would exceed buffer (i=%zu, size=%zu, d=%u)",
                               i, size, d);
                     break;
                 }
@@ -551,7 +552,7 @@ static uint8_t* decompress_tvdc_per_component(const uint8_t* compressed_data, si
             size_t bytes_consumed = 0;
 
             if (remaining_source == 0) {
-                g_warning("DEEP plugin: TVDC decompression ran out of source data (comp=%u, y=%u), filling with zeros",
+                debug_log("WRN", "DEEP plugin: TVDC decompression ran out of source data (comp=%u, y=%u), filling with zeros",
                           comp, y);
                 /* Fill remaining scanlines with zeros */
                 memset(temp_row, 0, width);
@@ -564,7 +565,7 @@ static uint8_t* decompress_tvdc_per_component(const uint8_t* compressed_data, si
 
                 /* Validate bytes_consumed is reasonable */
                 if (bytes_consumed == 0 || bytes_consumed > remaining_source) {
-                    g_warning("DEEP plugin: TVDC decompression returned invalid bytes_consumed=%zu (remaining=%zu, width=%u), filling with zeros",
+                    debug_log("WRN", "DEEP plugin: TVDC decompression returned invalid bytes_consumed=%zu (remaining=%zu, width=%u), filling with zeros",
                               bytes_consumed, remaining_source, width);
                     /* Fill with zeros on error */
                     memset(temp_row, 0, width);
@@ -583,7 +584,7 @@ static uint8_t* decompress_tvdc_per_component(const uint8_t* compressed_data, si
                 if (pixel_idx < output_size) {
                     output[pixel_idx] = temp_row[x];
                 } else {
-                    g_warning("DEEP plugin: TVDC pixel index %zu exceeds output size %zu (x=%u, y=%u, comp=%u)",
+                    debug_log("WRN", "DEEP plugin: TVDC pixel index %zu exceeds output size %zu (x=%u, y=%u, comp=%u)",
                               pixel_idx, output_size, x, y, comp);
                     g_free(temp_row);
                     g_free(output);
@@ -595,7 +596,7 @@ static uint8_t* decompress_tvdc_per_component(const uint8_t* compressed_data, si
 
             /* Input position was already advanced above, or set to 0 on error */
             if (in_pos > compressed_size) {
-                g_warning("DEEP plugin: TVDC decompression exceeded input buffer (pos=%zu, size=%zu)",
+                debug_log("WRN", "DEEP plugin: TVDC decompression exceeded input buffer (pos=%zu, size=%zu)",
                           in_pos, compressed_size);
                 g_free(output);
                 return NULL;
@@ -669,14 +670,14 @@ static PluginError load_deep(ImageDocument* doc, const char* filename) {
     uint32_t bytes_per_pixel = 0;
 
     if (!doc || !filename) {
-        g_warning("DEEP plugin: Invalid parameters (doc=%p, filename=%p)", doc, filename);
+        debug_log("WRN", "DEEP plugin: Invalid parameters (doc=%p, filename=%p)", doc, filename);
         return PLUGIN_ERROR_INVALID_PARAMETERS;
     }
 
     /* Open DEEP file */
     infile = g_fopen(filename, "rb");
     if (!infile) {
-        g_warning("DEEP plugin: Failed to open file: %s (errno=%d)", filename, errno);
+        debug_log("WRN", "DEEP plugin: Failed to open file: %s (errno=%d)", filename, errno);
         return PLUGIN_ERROR_FILE_NOT_FOUND;
     }
 
@@ -684,13 +685,13 @@ static PluginError load_deep(ImageDocument* doc, const char* filename) {
     long file_start = ftell(infile); /* Remember where we started */
 
     if (!read_iff_chunk_header(infile, &chunk_header)) {
-        g_warning("DEEP plugin: Failed to read FORM header at position %ld", file_start);
+        debug_log("WRN", "DEEP plugin: Failed to read FORM header at position %ld", file_start);
         fclose(infile);
         return PLUGIN_ERROR_CORRUPT_FILE;
     }
 
     if (memcmp(chunk_header.id, "FORM", 4) != 0) {
-        g_warning("DEEP plugin: Invalid FORM header");
+        debug_log("WRN", "DEEP plugin: Invalid FORM header");
         fclose(infile);
         return PLUGIN_ERROR_UNSUPPORTED_FORMAT;
     }
@@ -698,13 +699,13 @@ static PluginError load_deep(ImageDocument* doc, const char* filename) {
     /* Read form type (should be "DEEP") */
     char form_type[4];
     if (fread(form_type, 1, 4, infile) != 4) {
-        g_warning("DEEP plugin: Failed to read form type");
+        debug_log("WRN", "DEEP plugin: Failed to read form type");
         fclose(infile);
         return PLUGIN_ERROR_CORRUPT_FILE;
     }
 
     if (memcmp(form_type, "DEEP", 4) != 0) {
-        g_warning("DEEP plugin: Invalid form type (expected DEEP, got %.4s)", form_type);
+        debug_log("WRN", "DEEP plugin: Invalid form type (expected DEEP, got %.4s)", form_type);
         fclose(infile);
         return PLUGIN_ERROR_UNSUPPORTED_FORMAT;
     }
@@ -724,14 +725,14 @@ static PluginError load_deep(ImageDocument* doc, const char* filename) {
         }
 
         if (!read_iff_chunk_header(infile, &chunk_header)) {
-            g_warning("DEEP plugin: Failed to read chunk header at position %ld", ftell(infile));
+            debug_log("WRN", "DEEP plugin: Failed to read chunk header at position %ld", ftell(infile));
             break;
         }
 
         /* Validate chunk size is reasonable */
         long remaining = form_end - ftell(infile);
         if (chunk_header.size > (uint32_t)remaining) {
-            g_warning("DEEP plugin: Chunk %c%c%c%c size %u exceeds remaining form size %ld",
+            debug_log("WRN", "DEEP plugin: Chunk %c%c%c%c size %u exceeds remaining form size %ld",
                       chunk_header.id[0], chunk_header.id[1], chunk_header.id[2], chunk_header.id[3],
                       chunk_header.size, remaining);
             break;
@@ -742,14 +743,14 @@ static PluginError load_deep(ImageDocument* doc, const char* filename) {
             if (!read_be16_safe(infile, &global.display_width) ||
                 !read_be16_safe(infile, &global.display_height) ||
                 !read_be16_safe(infile, &global.compression)) {
-                g_warning("DEEP plugin: Failed to read DGBL chunk data");
+                debug_log("WRN", "DEEP plugin: Failed to read DGBL chunk data");
                 skip_iff_chunk(infile, chunk_header.size);
                 continue;
             }
             int x_aspect = fgetc(infile);
             int y_aspect = fgetc(infile);
             if (x_aspect == EOF || y_aspect == EOF) {
-                g_warning("DEEP plugin: Failed to read DGBL aspect ratios");
+                debug_log("WRN", "DEEP plugin: Failed to read DGBL aspect ratios");
                 skip_iff_chunk(infile, chunk_header.size);
                 continue;
             }
@@ -771,18 +772,18 @@ static PluginError load_deep(ImageDocument* doc, const char* filename) {
         } else if (memcmp(chunk_header.id, "DPEL", 4) == 0) {
             /* DEEP Pixel Elements chunk */
             if (chunk_header.size < 4) {
-                g_warning("DEEP plugin: DPEL chunk too small (%u bytes, expected at least 4)", chunk_header.size);
+                debug_log("WRN", "DEEP plugin: DPEL chunk too small (%u bytes, expected at least 4)", chunk_header.size);
                 skip_iff_chunk(infile, chunk_header.size);
                 continue;
             }
 
             if (!read_be32_safe(infile, &num_elements)) {
-                g_warning("DEEP plugin: Failed to read DPEL element count");
+                debug_log("WRN", "DEEP plugin: Failed to read DPEL element count");
                 skip_iff_chunk(infile, chunk_header.size);
                 continue;
             }
             if (num_elements == 0 || num_elements > 16) {
-                g_warning("DEEP plugin: Invalid number of elements: %u", num_elements);
+                debug_log("WRN", "DEEP plugin: Invalid number of elements: %u", num_elements);
                 skip_iff_chunk(infile, chunk_header.size - 4);
                 continue;
             }
@@ -790,7 +791,7 @@ static PluginError load_deep(ImageDocument* doc, const char* filename) {
             /* Validate chunk has enough data for all elements */
             uint32_t expected_size = 4 + (num_elements * 4);
             if (chunk_header.size < expected_size) {
-                g_warning("DEEP plugin: DPEL chunk too small for %u elements (got %u, expected %u)",
+                debug_log("WRN", "DEEP plugin: DPEL chunk too small for %u elements (got %u, expected %u)",
                           num_elements, chunk_header.size, expected_size);
                 skip_iff_chunk(infile, chunk_header.size - 4);
                 continue;
@@ -798,7 +799,7 @@ static PluginError load_deep(ImageDocument* doc, const char* filename) {
 
             pixel_elements = g_malloc(sizeof(DEEPPixelElement) * num_elements);
             if (!pixel_elements) {
-                g_warning("DEEP plugin: Failed to allocate pixel elements");
+                debug_log("WRN", "DEEP plugin: Failed to allocate pixel elements");
                 fclose(infile);
                 return PLUGIN_ERROR_OUT_OF_MEMORY;
             }
@@ -806,7 +807,7 @@ static PluginError load_deep(ImageDocument* doc, const char* filename) {
             for (uint32_t i = 0; i < num_elements; i++) {
                 if (!read_be16_safe(infile, &pixel_elements[i].c_type) ||
                     !read_be16_safe(infile, &pixel_elements[i].c_bit_depth)) {
-                    g_warning("DEEP plugin: Failed to read DPEL element %u", i);
+                    debug_log("WRN", "DEEP plugin: Failed to read DPEL element %u", i);
                     g_free(pixel_elements);
                     skip_iff_chunk(infile, chunk_header.size - 4 - (i * 4));
                     fclose(infile);
@@ -819,7 +820,7 @@ static PluginError load_deep(ImageDocument* doc, const char* filename) {
             /* Each element is stored in its natural byte size (rounded up) */
             element_info = g_malloc(sizeof(PixelElementInfo) * num_elements);
             if (!element_info) {
-                g_warning("DEEP plugin: Failed to allocate element info");
+                debug_log("WRN", "DEEP plugin: Failed to allocate element info");
                 g_free(pixel_elements);
                 fclose(infile);
                 return PLUGIN_ERROR_OUT_OF_MEMORY;
@@ -868,20 +869,20 @@ static PluginError load_deep(ImageDocument* doc, const char* filename) {
         } else if (memcmp(chunk_header.id, "DLOC", 4) == 0) {
             /* DEEP Location chunk */
             if (chunk_header.size < 8) {
-                g_warning("DEEP plugin: DLOC chunk too small (%u bytes, expected 8)", chunk_header.size);
+                debug_log("WRN", "DEEP plugin: DLOC chunk too small (%u bytes, expected 8)", chunk_header.size);
                 skip_iff_chunk(infile, chunk_header.size);
                 continue;
             }
             if (!read_be16_safe(infile, &location.w) ||
                 !read_be16_safe(infile, &location.h)) {
-                g_warning("DEEP plugin: Failed to read DLOC dimensions");
+                debug_log("WRN", "DEEP plugin: Failed to read DLOC dimensions");
                 skip_iff_chunk(infile, chunk_header.size);
                 continue;
             }
             int16_t x_val, y_val;
             if (!read_be16_safe(infile, (uint16_t*)&x_val) ||
                 !read_be16_safe(infile, (uint16_t*)&y_val)) {
-                g_warning("DEEP plugin: Failed to read DLOC offsets");
+                debug_log("WRN", "DEEP plugin: Failed to read DLOC offsets");
                 skip_iff_chunk(infile, chunk_header.size);
                 continue;
             }
@@ -892,7 +893,7 @@ static PluginError load_deep(ImageDocument* doc, const char* filename) {
             /* If offsets are too large, they're probably wrong - ignore DLOC */
             if (location.x < -10000 || location.x > 10000 ||
                 location.y < -10000 || location.y > 10000) {
-                g_warning("DEEP plugin: DLOC offsets out of range (x=%d, y=%d), ignoring DLOC chunk",
+                debug_log("WRN", "DEEP plugin: DLOC offsets out of range (x=%d, y=%d), ignoring DLOC chunk",
                           location.x, location.y);
                 /* Use display dimensions as body dimensions */
                 body_width = display_width;
@@ -913,7 +914,7 @@ static PluginError load_deep(ImageDocument* doc, const char* filename) {
         } else if (memcmp(chunk_header.id, "DBOD", 4) == 0) {
             /* DEEP Body chunk - pixel data */
             if (!has_dgbl || !has_dpel) {
-                g_warning("DEEP plugin: DBOD chunk found before DGBL or DPEL");
+                debug_log("WRN", "DEEP plugin: DBOD chunk found before DGBL or DPEL");
                 g_free(pixel_elements);
                 g_free(element_info);
                 fclose(infile);
@@ -927,7 +928,7 @@ static PluginError load_deep(ImageDocument* doc, const char* filename) {
             }
 
             if (body_width == 0 || body_height == 0) {
-                g_warning("DEEP plugin: Invalid dimensions: body=%ux%u, display=%ux%u",
+                debug_log("WRN", "DEEP plugin: Invalid dimensions: body=%ux%u, display=%ux%u",
                           body_width, body_height, display_width, display_height);
                 g_free(pixel_elements);
                 g_free(element_info);
@@ -936,7 +937,7 @@ static PluginError load_deep(ImageDocument* doc, const char* filename) {
             }
 
             if (bytes_per_pixel == 0) {
-                g_warning("DEEP plugin: Invalid bytes_per_pixel: %u", bytes_per_pixel);
+                debug_log("WRN", "DEEP plugin: Invalid bytes_per_pixel: %u", bytes_per_pixel);
                 g_free(pixel_elements);
                 g_free(element_info);
                 fclose(infile);
@@ -965,7 +966,7 @@ static PluginError load_deep(ImageDocument* doc, const char* filename) {
 
             /* Check both form boundary and file boundary */
             if (remaining_in_form < 0 || (size_t)remaining_in_form < data_size) {
-                g_warning("DEEP plugin: DBOD chunk size %zu exceeds remaining form size %ld",
+                debug_log("WRN", "DEEP plugin: DBOD chunk size %zu exceeds remaining form size %ld",
                           data_size, remaining_in_form);
                 g_free(pixel_elements);
                 g_free(element_info);
@@ -974,7 +975,7 @@ static PluginError load_deep(ImageDocument* doc, const char* filename) {
             }
 
             if (remaining_in_file >= 0 && (size_t)remaining_in_file < data_size) {
-                g_warning("DEEP plugin: DBOD chunk size %zu exceeds remaining file size %ld, limiting to available data",
+                debug_log("WRN", "DEEP plugin: DBOD chunk size %zu exceeds remaining file size %ld, limiting to available data",
                           data_size, remaining_in_file);
                 data_size = (size_t)remaining_in_file; /* Limit to what's available */
             }
@@ -985,7 +986,7 @@ static PluginError load_deep(ImageDocument* doc, const char* filename) {
             /* For uncompressed data, validate size matches (allow some tolerance for padding) */
             if (global.compression == DEEP_COMPRESSION_NONE) {
                 if (data_size < decompressed_size) {
-                    g_warning("DEEP plugin: DBOD chunk too small for uncompressed data (got %zu, expected %zu)",
+                    debug_log("WRN", "DEEP plugin: DBOD chunk too small for uncompressed data (got %zu, expected %zu)",
                               data_size, decompressed_size);
                     skip_iff_chunk(infile, chunk_header.size);
                     g_free(pixel_elements);
@@ -1001,7 +1002,7 @@ static PluginError load_deep(ImageDocument* doc, const char* filename) {
 
             compressed_data = g_malloc(data_size);
             if (!compressed_data) {
-                g_warning("DEEP plugin: Failed to allocate compressed data buffer (%zu bytes)", data_size);
+                debug_log("WRN", "DEEP plugin: Failed to allocate compressed data buffer (%zu bytes)", data_size);
                 g_free(pixel_elements);
                 g_free(element_info);
                 fclose(infile);
@@ -1013,13 +1014,13 @@ static PluginError load_deep(ImageDocument* doc, const char* filename) {
             long read_end_pos = ftell(infile);
 
             if (bytes_read != data_size) {
-                g_warning("DEEP plugin: Failed to read pixel data - expected %zu bytes, got %zu, start_pos=%ld, end_pos=%ld, errno=%d",
+                debug_log("WRN", "DEEP plugin: Failed to read pixel data - expected %zu bytes, got %zu, start_pos=%ld, end_pos=%ld, errno=%d",
                           data_size, bytes_read, read_start_pos, read_end_pos, ferror(infile) ? errno : 0);
                 if (ferror(infile)) {
-                    g_warning("DEEP plugin: File read error occurred");
+                    debug_log("WRN", "DEEP plugin: File read error occurred");
                 }
                 if (feof(infile)) {
-                    g_warning("DEEP plugin: End of file reached");
+                    debug_log("WRN", "DEEP plugin: End of file reached");
                 }
                 g_free(compressed_data);
                 g_free(pixel_elements);
@@ -1048,7 +1049,7 @@ static PluginError load_deep(ImageDocument* doc, const char* filename) {
                 g_free(compressed_data);
                 compressed_data = NULL; /* Mark as freed to prevent double-free */
                 if (!image_data) {
-                    g_warning("DEEP plugin: All RLE decompression methods failed (compressed: %zu, decompressed: %zu)",
+                    debug_log("WRN", "DEEP plugin: All RLE decompression methods failed (compressed: %zu, decompressed: %zu)",
                               data_size, decompressed_size);
                     g_free(pixel_elements);
                     g_free(element_info);
@@ -1060,7 +1061,7 @@ static PluginError load_deep(ImageDocument* doc, const char* filename) {
                 /* TODO: TVDC (TVPaint Deep Compression) support */
                 /* Compression is done line by line for each element (component) */
                 /* For RGBA for example we have a Red line, a Green line, and so on. */
-                g_warning("DEEP plugin: TVDC compression not yet implemented");
+                debug_log("WRN", "DEEP plugin: TVDC compression not yet implemented");
                 g_free(compressed_data);
                 g_free(pixel_elements);
                 g_free(element_info);
@@ -1071,7 +1072,7 @@ static PluginError load_deep(ImageDocument* doc, const char* filename) {
                 image_data = compressed_data;
                 compressed_data = NULL; /* Don't free it, we're using it */
             } else {
-                g_warning("DEEP plugin: Unsupported compression type: %u", global.compression);
+                debug_log("WRN", "DEEP plugin: Unsupported compression type: %u", global.compression);
                 g_free(compressed_data);
                 g_free(pixel_elements);
                 g_free(element_info);
@@ -1085,7 +1086,7 @@ static PluginError load_deep(ImageDocument* doc, const char* filename) {
         } else if (memcmp(chunk_header.id, "TVDC", 4) == 0) {
             /* TVDC (TVPaint Deep Compression) chunk - contains lookup table */
             if (chunk_header.size < 32) {
-                g_warning("DEEP plugin: TVDC chunk too small (%u bytes, expected at least 32)", chunk_header.size);
+                debug_log("WRN", "DEEP plugin: TVDC chunk too small (%u bytes, expected at least 32)", chunk_header.size);
                 skip_iff_chunk(infile, chunk_header.size);
                 continue;
             }
@@ -1093,7 +1094,7 @@ static PluginError load_deep(ImageDocument* doc, const char* filename) {
             /* Read 16-word lookup table (32 bytes total) */
             for (int i = 0; i < 16; i++) {
                 if (!read_be16_safe(infile, &tvdc_table[i])) {
-                    g_warning("DEEP plugin: Failed to read TVDC table entry %d", i);
+                    debug_log("WRN", "DEEP plugin: Failed to read TVDC table entry %d", i);
                     skip_iff_chunk(infile, chunk_header.size - (i * 2));
                     break;
                 }
@@ -1117,7 +1118,7 @@ static PluginError load_deep(ImageDocument* doc, const char* filename) {
 
     /* Validate we have required chunks */
     if (!has_dgbl || !has_dpel || !has_dbod) {
-        g_warning("DEEP plugin: Missing required chunks (DGBL=%d, DPEL=%d, DBOD=%d)", has_dgbl, has_dpel, has_dbod);
+        debug_log("WRN", "DEEP plugin: Missing required chunks (DGBL=%d, DPEL=%d, DBOD=%d)", has_dgbl, has_dpel, has_dbod);
         g_free(image_data);
         g_free(compressed_data);
         g_free(pixel_elements);
@@ -1152,7 +1153,7 @@ static PluginError load_deep(ImageDocument* doc, const char* filename) {
     base_layer = layer_new(_("Background"), doc->width, doc->height, TRUE,
                            LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL, doc);
     if (!base_layer) {
-        g_warning("DEEP plugin: layer_new returned NULL for %ux%u layer", doc->width, doc->height);
+        debug_log("WRN", "DEEP plugin: layer_new returned NULL for %ux%u layer", doc->width, doc->height);
         g_free(image_data);
         g_free(compressed_data);
         g_free(pixel_elements);
@@ -1163,7 +1164,7 @@ static PluginError load_deep(ImageDocument* doc, const char* filename) {
     /* Get surface data */
     temp_surface = base_layer->surface;
     if (!temp_surface) {
-        g_warning("DEEP plugin: base_layer->surface is NULL");
+        debug_log("WRN", "DEEP plugin: base_layer->surface is NULL");
         g_free(image_data);
         g_free(compressed_data);
         g_free(pixel_elements);
@@ -1177,7 +1178,7 @@ static PluginError load_deep(ImageDocument* doc, const char* filename) {
     surface_stride = cairo_image_surface_get_stride(temp_surface);
 
     if (!surface_data) {
-        g_warning("DEEP plugin: cairo_image_surface_get_data returned NULL");
+        debug_log("WRN", "DEEP plugin: cairo_image_surface_get_data returned NULL");
         g_free(image_data);
         g_free(compressed_data);
         g_free(pixel_elements);
@@ -1188,7 +1189,7 @@ static PluginError load_deep(ImageDocument* doc, const char* filename) {
 
     /* Convert DEEP pixel data to Cairo ARGB32 format */
     if (!image_data) {
-        g_warning("DEEP plugin: image_data is NULL after decompression");
+        debug_log("WRN", "DEEP plugin: image_data is NULL after decompression");
         g_free(compressed_data);
         g_free(pixel_elements);
         g_free(element_info);
@@ -1198,24 +1199,24 @@ static PluginError load_deep(ImageDocument* doc, const char* filename) {
 
     /* Safety check: ensure display dimensions are valid */
     if (display_height == 0) {
-        g_warning("DEEP plugin: display_height is 0! Using body_height %u instead", body_height);
+        debug_log("WRN", "DEEP plugin: display_height is 0! Using body_height %u instead", body_height);
         display_height = body_height;
         doc->height = display_height;
     }
     if (display_width == 0) {
-        g_warning("DEEP plugin: display_width is 0! Using body_width %u instead", body_width);
+        debug_log("WRN", "DEEP plugin: display_width is 0! Using body_width %u instead", body_width);
         display_width = body_width;
         doc->width = display_width;
     }
 
     /* Safety check: ensure display dimensions are valid */
     if (display_height == 0) {
-        g_warning("DEEP plugin: display_height is 0! Using body_height %u instead", body_height);
+        debug_log("WRN", "DEEP plugin: display_height is 0! Using body_height %u instead", body_height);
         display_height = body_height;
         doc->height = display_height;
     }
     if (display_width == 0) {
-        g_warning("DEEP plugin: display_width is 0! Using body_width %u instead", body_width);
+        debug_log("WRN", "DEEP plugin: display_width is 0! Using body_width %u instead", body_width);
         display_width = body_width;
         doc->width = display_width;
     }
@@ -1239,7 +1240,7 @@ static PluginError load_deep(ImageDocument* doc, const char* filename) {
 
         /* Safety check - prevent accessing beyond available data */
         if (row_offset >= actual_data_size) {
-            g_warning("DEEP plugin: Row %u offset %zu exceeds available data %zu - stopping pixel conversion",
+            debug_log("WRN", "DEEP plugin: Row %u offset %zu exceeds available data %zu - stopping pixel conversion",
                       y, row_offset, actual_data_size);
             pixels_skipped_y += (body_height - y);
             break; /* Stop processing remaining rows */
@@ -1248,7 +1249,7 @@ static PluginError load_deep(ImageDocument* doc, const char* filename) {
         if (row_offset + row_size > actual_data_size) {
             /* Partial row available - only process what we have */
             size_t available_pixels = (actual_data_size - row_offset) / bytes_per_pixel;
-            g_warning("DEEP plugin: Row %u partially available (%zu/%u pixels)", y, available_pixels, body_width);
+            debug_log("WRN", "DEEP plugin: Row %u partially available (%zu/%u pixels)", y, available_pixels, body_width);
             /* Process partial row - will be handled in inner loop */
         }
 
@@ -1423,7 +1424,7 @@ static PluginError load_deep(ImageDocument* doc, const char* filename) {
                 pixels_written++;
             } else {
                 if (y == 0 && x < 5) {
-                    g_warning("DEEP plugin: Pixel offset %u + 4 exceeds stride %d at x=%u, display_x=%d",
+                    debug_log("WRN", "DEEP plugin: Pixel offset %u + 4 exceeds stride %d at x=%u, display_x=%d",
                               pixel_offset, surface_stride, x, display_x);
                 }
             }

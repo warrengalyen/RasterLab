@@ -6,6 +6,7 @@
 #include "ui/ui_utils.h"
 #include <glib.h>
 #include <gtk/gtk.h>
+#include "debug_logger.h"
 
 /* Blend mode names matching BlendMode enum (document.h) */
 static const char* const blend_mode_names[] = {
@@ -93,7 +94,7 @@ gboolean fill_dialog_run(GtkWindow* parent, FillDialogResult* result) {
     builder = gtk_builder_new();
     ui_utils_builder_set_translation_domain(builder);
     if (!gtk_builder_add_from_resource(builder, "/ui/fill_dialog.glade", &error)) {
-        g_warning("Failed to load fill_dialog.glade: %s", error ? error->message : "Unknown error");
+        debug_log("WRN", "Failed to load fill_dialog.glade: %s", error ? error->message : "Unknown error");
         if (error)
             g_error_free(error);
         g_object_unref(builder);
@@ -112,7 +113,7 @@ gboolean fill_dialog_run(GtkWindow* parent, FillDialogResult* result) {
     if (!data.dialog || !data.custom_color_radio || !data.custom_color_button ||
         !data.foreground_color_radio || !data.background_color_radio ||
         !data.opacity_spin || !data.blend_mode_combo) {
-        g_warning("Failed to get fill dialog widgets from builder");
+        debug_log("WRN", "Failed to get fill dialog widgets from builder");
         g_object_unref(builder);
         return FALSE;
     }

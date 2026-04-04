@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include "debug_logger.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -1037,7 +1038,7 @@ gboolean settings_save(Settings* settings, const char* app_dir) {
         if (g_rename(temp_path, file_path) == 0) {
             success = TRUE;
         } else {
-            g_warning("Failed to rename settings file: %s -> %s", temp_path, file_path);
+            debug_log("WRN", "Failed to rename settings file: %s -> %s", temp_path, file_path);
         }
     }
 

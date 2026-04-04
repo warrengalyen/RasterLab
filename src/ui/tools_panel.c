@@ -11,6 +11,7 @@
 #include "ui/swatches.h"
 #include "ui/ui_utils.h"
 #include "ui/widgets/swatches_widget.h"
+#include "debug_logger.h"
 
 #include <stdio.h>
 
@@ -95,7 +96,7 @@ static void on_fg_color_clicked(GtkButton* button, gpointer user_data) {
     (void)user_data; /* Unused */
 
     if (!g_main_window) {
-        g_warning("Main window not set, cannot show color chooser dialog");
+        debug_log("WRN", "Main window not set, cannot show color chooser dialog");
         return;
     }
 
@@ -132,14 +133,14 @@ static void on_fg_color_clicked(GtkButton* button, gpointer user_data) {
             if (recent_widget && SWATCHES_IS_WIDGET(recent_widget)) {
                 swatches_sync_to_widgets(&ctx->swatches, NULL, recent_widget);
             } else {
-                g_warning("tools_panel: recent_colors_widget not found or invalid when adding color (window=%p, widget=%p)",
+                debug_log("WRN", "tools_panel: recent_colors_widget not found or invalid when adding color (window=%p, widget=%p)",
                           g_main_window, recent_widget);
             }
         } else {
-            g_warning("tools_panel: AppContext not found when adding color");
+            debug_log("WRN", "tools_panel: AppContext not found when adding color");
         }
     } else {
-        g_warning("tools_panel: g_main_window not set when adding color");
+        debug_log("WRN", "tools_panel: g_main_window not set when adding color");
     }
 
     gtk_widget_destroy(dialog);
@@ -153,7 +154,7 @@ static void on_bg_color_clicked(GtkButton* button, gpointer user_data) {
     (void)user_data; /* Unused */
 
     if (!g_main_window) {
-        g_warning("Main window not set, cannot show color chooser dialog");
+        debug_log("WRN", "Main window not set, cannot show color chooser dialog");
         return;
     }
 
@@ -190,14 +191,14 @@ static void on_bg_color_clicked(GtkButton* button, gpointer user_data) {
             if (recent_widget && SWATCHES_IS_WIDGET(recent_widget)) {
                 swatches_sync_to_widgets(&ctx->swatches, NULL, recent_widget);
             } else {
-                g_warning("tools_panel: recent_colors_widget not found or invalid when adding bg color (window=%p, widget=%p)",
+                debug_log("WRN", "tools_panel: recent_colors_widget not found or invalid when adding bg color (window=%p, widget=%p)",
                           g_main_window, recent_widget);
             }
         } else {
-            g_warning("tools_panel: AppContext not found when adding bg color");
+            debug_log("WRN", "tools_panel: AppContext not found when adding bg color");
         }
     } else {
-        g_warning("tools_panel: g_main_window not set when adding bg color");
+        debug_log("WRN", "tools_panel: g_main_window not set when adding bg color");
     }
 
     gtk_widget_destroy(dialog);
@@ -313,14 +314,14 @@ gboolean tools_panel_set_foreground_color(GdkRGBA* color) {
             if (recent_widget && SWATCHES_IS_WIDGET(recent_widget)) {
                 swatches_sync_to_widgets(&ctx->swatches, NULL, recent_widget);
             } else {
-                g_warning("tools_panel_set_foreground_color: recent_colors_widget not found or invalid (window=%p, widget=%p)",
+                debug_log("WRN", "tools_panel_set_foreground_color: recent_colors_widget not found or invalid (window=%p, widget=%p)",
                           g_main_window, recent_widget);
             }
         } else {
-            g_warning("tools_panel_set_foreground_color: AppContext not found");
+            debug_log("WRN", "tools_panel_set_foreground_color: AppContext not found");
         }
     } else {
-        g_warning("tools_panel_set_foreground_color: g_main_window not set");
+        debug_log("WRN", "tools_panel_set_foreground_color: g_main_window not set");
     }
 
     return TRUE;
@@ -345,14 +346,14 @@ GtkWidget* tools_panel_initialize_from_builder(GtkBuilder* builder, ToolRegistry
     GError* error = NULL;
 
     if (!builder) {
-        g_warning("Invalid builder for tools panel initialization");
+        debug_log("WRN", "Invalid builder for tools panel initialization");
         return gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     }
 
     /* Get the main panel from the builder */
     panel = GTK_WIDGET(gtk_builder_get_object(builder, "tool_panel"));
     if (!panel) {
-        g_warning("Failed to get tool_panel object from builder. Make sure main_window.glade includes the tool_panel with id='tool_panel'");
+        debug_log("WRN", "Failed to get tool_panel object from builder. Make sure main_window.glade includes the tool_panel with id='tool_panel'");
         return gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     }
 
@@ -452,7 +453,7 @@ GtkWidget* tools_panel_initialize_from_builder(GtkBuilder* builder, ToolRegistry
                         gtk_container_add(GTK_CONTAINER(tool_button), new_image);
                     }
                 } else if (error) {
-                    g_warning("Failed to load icon %s: %s", icon_resources[i], error->message);
+                    debug_log("WRN", "Failed to load icon %s: %s", icon_resources[i], error->message);
                     g_error_free(error);
                 }
             }
@@ -469,7 +470,7 @@ GtkWidget* tools_panel_initialize_from_builder(GtkBuilder* builder, ToolRegistry
                              G_CALLBACK(on_tool_button_clicked),
                              GINT_TO_POINTER(tool_types[i]));
         } else {
-            g_warning("Failed to get tool button %d from builder", i);
+            debug_log("WRN", "Failed to get tool button %d from builder", i);
         }
     }
 
@@ -487,7 +488,7 @@ GtkWidget* tools_panel_initialize_from_builder(GtkBuilder* builder, ToolRegistry
         /* Connect to clicked signal to show our custom dialog */
         g_signal_connect(fg_color, "clicked", G_CALLBACK(on_fg_color_clicked), NULL);
     } else {
-        g_warning("Failed to get foreground color button from builder");
+        debug_log("WRN", "Failed to get foreground color button from builder");
     }
 
     if (bg_color) {
@@ -500,7 +501,7 @@ GtkWidget* tools_panel_initialize_from_builder(GtkBuilder* builder, ToolRegistry
         /* Connect to clicked signal to show our custom dialog */
         g_signal_connect(bg_color, "clicked", G_CALLBACK(on_bg_color_clicked), NULL);
     } else {
-        g_warning("Failed to get background color button from builder");
+        debug_log("WRN", "Failed to get background color button from builder");
     }
 
     /* Connect swap image - EventBox is already in glade file */
@@ -522,7 +523,7 @@ GtkWidget* tools_panel_initialize_from_builder(GtkBuilder* builder, ToolRegistry
                 g_object_unref(scaled);
             }
         } else if (error) {
-            g_warning("Failed to load swap-colors icon: %s", error->message);
+            debug_log("WRN", "Failed to load swap-colors icon: %s", error->message);
             g_error_free(error);
         }
 
@@ -532,7 +533,7 @@ GtkWidget* tools_panel_initialize_from_builder(GtkBuilder* builder, ToolRegistry
         gtk_widget_set_margin_top(swap_image, 0);
         gtk_widget_set_margin_bottom(swap_image, 0);
     } else {
-        g_warning("Failed to get swap_colors_image from builder");
+        debug_log("WRN", "Failed to get swap_colors_image from builder");
     }
 
     if (swap_event_box) {
@@ -545,7 +546,7 @@ GtkWidget* tools_panel_initialize_from_builder(GtkBuilder* builder, ToolRegistry
         /* Connect button-press-event to event box */
         g_signal_connect(swap_event_box, "button-press-event", G_CALLBACK(on_swap_colors_clicked), NULL);
     } else {
-        g_warning("Failed to get swap_colors_event_box from builder");
+        debug_log("WRN", "Failed to get swap_colors_event_box from builder");
     }
 
     /* Sync Hand tool button to active state (Hand is the default tool) */

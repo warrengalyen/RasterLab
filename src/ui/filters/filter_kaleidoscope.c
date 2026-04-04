@@ -2,6 +2,7 @@
 #include "ocular.h"
 #include "ui/filters/filter_distort_utils.h"
 #include <glib.h>
+#include "debug_logger.h"
 
 gboolean filter_kaleidoscope_apply(ImageLayer* layer, const gfloat* values, gint num_values) {
     DistortBuffers buffers;
@@ -26,7 +27,7 @@ gboolean filter_kaleidoscope_apply(ImageLayer* layer, const gfloat* values, gint
                                       buffers.width, buffers.height, buffers.width * 3,
                                       mirrors, angle, angle2, center_x, center_y, radius_percent);
     if (status != OC_STATUS_OK) {
-        g_warning("Kaleidoscope: Ocular filter returned error %d", status);
+        debug_log("WRN", "Kaleidoscope: Ocular filter returned error %d", status);
         filter_distort_utils_free(&buffers);
         return FALSE;
     }

@@ -3,6 +3,7 @@
 #include "ocular.h"
 #include <glib.h>
 #include <string.h>
+#include "debug_logger.h"
 
 #define MIXER_SIZE 16
 
@@ -30,14 +31,14 @@ gboolean filter_channel_mixer_apply(ImageLayer* layer,
     rgb_input = (guchar*)g_malloc((size_t)(width * height * 3));
     rgb_output = (guchar*)g_malloc((size_t)(width * height * 3));
     if (!rgb_input || !rgb_output) {
-        g_warning("Channel mixer filter: Failed to allocate memory");
+        debug_log("WRN", "Channel mixer filter: Failed to allocate memory");
         g_free(rgb_input);
         g_free(rgb_output);
         return FALSE;
     }
 
     if (!adjustments_cairo_to_rgb(surface, rgb_input)) {
-        g_warning("Channel mixer filter: Failed to convert surface to RGB");
+        debug_log("WRN", "Channel mixer filter: Failed to convert surface to RGB");
         g_free(rgb_input);
         g_free(rgb_output);
         return FALSE;
@@ -55,14 +56,14 @@ gboolean filter_channel_mixer_apply(ImageLayer* layer,
     }
 
     if (status != OC_STATUS_OK) {
-        g_warning("Channel mixer filter: Ocular returned error %d", status);
+        debug_log("WRN", "Channel mixer filter: Ocular returned error %d", status);
         g_free(rgb_input);
         g_free(rgb_output);
         return FALSE;
     }
 
     if (!adjustments_rgb_to_cairo(surface, rgb_output)) {
-        g_warning("Channel mixer filter: Failed to convert RGB to surface");
+        debug_log("WRN", "Channel mixer filter: Failed to convert RGB to surface");
         g_free(rgb_input);
         g_free(rgb_output);
         return FALSE;

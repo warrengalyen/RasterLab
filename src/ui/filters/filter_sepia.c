@@ -3,6 +3,7 @@
 #include "ocular.h"
 #include "ui/filters/filter_utils.h"
 #include <glib.h>
+#include "debug_logger.h"
 
 /**
  * Apply sepia filter to a layer using Ocular library
@@ -36,7 +37,7 @@ gboolean filter_sepia_apply(ImageLayer* layer, const gfloat* values, gint num_va
                                buffers.width, buffers.height, buffers.stride, intensity);
 
     if (status != OC_STATUS_OK) {
-        g_warning("Sepia filter: Ocular filter returned error %d", status);
+        debug_log("WRN", "Sepia filter: Ocular filter returned error %d", status);
         filter_utils_free_rgb_buffers(&buffers);
         return FALSE;
     }

@@ -4,6 +4,7 @@
 #include "ui/filters/filter_utils.h"
 #include <glib.h>
 #include <string.h>
+#include "debug_logger.h"
 
 /**
  * Apply palettize filter to a layer using Ocular library
@@ -54,7 +55,7 @@ gboolean filter_palettize_apply(ImageLayer* layer, const PalettizeParams* params
     }
 
     if (status != OC_STATUS_OK) {
-        g_warning("Palettize filter: Ocular filter returned error %d", status);
+        debug_log("WRN", "Palettize filter: Ocular filter returned error %d", status);
         filter_utils_free_rgba_buffers(&buffers);
         return FALSE;
     }

@@ -42,7 +42,7 @@ static void compute_image_histogram(unsigned char* image_data, int width, int he
 
             // Validate values are in range
             if (b_val >= 256 || g_val >= 256 || r_val >= 256) {
-                g_warning("Invalid pixel value at (%d,%d): b=%u, g=%u, r=%u", x, y, b_val, g_val, r_val);
+                debug_log("WRN", "Invalid pixel value at (%d,%d): b=%u, g=%u, r=%u", x, y, b_val, g_val, r_val);
                 continue;
             }
 
@@ -56,7 +56,7 @@ static void compute_image_histogram(unsigned char* image_data, int width, int he
 // Convert curves widget to OcCurve format and apply filter
 static void apply_curves_filter(CurvesTestData* data) {
     if (!data || !data->test_image || !data->preview || !data->curves) {
-        g_warning("apply_curves_filter: missing data (%p, img=%p, prev=%p, curves=%p)",
+        debug_log("WRN", "apply_curves_filter: missing data (%p, img=%p, prev=%p, curves=%p)",
                   data, data ? data->test_image : NULL, data ? data->preview : NULL, data ? data->curves : NULL);
         return;
     }
@@ -71,7 +71,7 @@ static void apply_curves_filter(CurvesTestData* data) {
     OcCurve* curveL = createCurve();
 
     if (!curveR || !curveG || !curveB || !curveL) {
-        g_warning("Failed to create curves");
+        debug_log("WRN", "Failed to create curves");
         if (curveR)
             destroyCurve(curveR);
         if (curveG)
@@ -145,7 +145,7 @@ static void apply_curves_filter(CurvesTestData* data) {
 
         debug_log("DBG", "ocularCurvesFilter succeeded with status %d", status);
     } else {
-        g_warning("ocularCurvesFilter failed with status %d", status);
+        debug_log("WRN", "ocularCurvesFilter failed with status %d", status);
     }
 
     g_free(output_image);
@@ -167,7 +167,7 @@ static gboolean on_curves_update_timeout(gpointer user_data) {
     if (data && data->curves && CURVES_IS_WIDGET(data->curves)) {
         apply_curves_filter(data);
     } else {
-        g_warning("Widget invalid in curve update timeout");
+        debug_log("WRN", "Widget invalid in curve update timeout");
     }
 
     curve_update_timer = 0;
@@ -341,7 +341,7 @@ static void test_curves_widget(void) {
     debug_log("DBG", "curves_widget_new() returned: %p", curves);
 
     if (!curves) {
-        g_warning("Failed to create curves widget");
+        debug_log("WRN", "Failed to create curves widget");
         g_free(data->test_image);
         g_free(data);
         cairo_surface_destroy(before_surface);
@@ -636,7 +636,7 @@ static void test_filter_dialog(void) {
     /* Create filter dialog */
     dialog = filter_dialog_new("Filter Test", controls, 3);
     if (!dialog) {
-        g_warning("Failed to create filter dialog");
+        debug_log("WRN", "Failed to create filter dialog");
         return;
     }
 
@@ -647,7 +647,7 @@ static void test_filter_dialog(void) {
                             LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL, NULL);
 
     if (!before_layer || !after_layer) {
-        g_warning("Failed to create test layers");
+        debug_log("WRN", "Failed to create test layers");
         filter_dialog_free(dialog);
         if (before_layer)
             layer_free(before_layer);
@@ -787,7 +787,7 @@ static void test_anchor_position_widget(void) {
     /* Create anchor position widget */
     anchor_widget = anchor_position_widget_new();
     if (!anchor_widget) {
-        g_warning("Failed to create anchor position widget");
+        debug_log("WRN", "Failed to create anchor position widget");
         gtk_widget_destroy(dialog);
         return;
     }

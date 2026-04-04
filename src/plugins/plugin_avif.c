@@ -1,3 +1,4 @@
+#include "debug_logger.h"
 /**
  * AVIF image format plugin using libheif + libaom
  *
@@ -270,7 +271,7 @@ static PluginError load_avif(ImageDocument* doc, const char* filename) {
     num_images = heif_context_get_number_of_top_level_images(ctx);
     if (num_images <= 0) {
         heif_context_free(ctx);
-        g_warning("AVIF plugin: No top-level images");
+        debug_log("WRN", "AVIF plugin: No top-level images");
         return PLUGIN_ERROR_UNSUPPORTED_FORMAT;
     }
 
@@ -313,7 +314,7 @@ static PluginError load_avif(ImageDocument* doc, const char* filename) {
                                 icc_destroy(profile);
                             }
                         } else {
-                            g_warning("AVIF plugin: Invalid or non-RGB embedded ICC profile; assuming sRGB");
+                            debug_log("WRN", "AVIF plugin: Invalid or non-RGB embedded ICC profile; assuming sRGB");
                         }
                     }
                     g_free(profile_buf);
@@ -347,7 +348,7 @@ static PluginError load_avif(ImageDocument* doc, const char* filename) {
     heif_context_free(ctx);
 
     if (loaded_count == 0) {
-        g_warning("AVIF plugin: No decodable image found (incomplete/corrupt streams skipped)");
+        debug_log("WRN", "AVIF plugin: No decodable image found (incomplete/corrupt streams skipped)");
         return PLUGIN_ERROR_UNSUPPORTED_FORMAT;
     }
 
@@ -447,7 +448,7 @@ static PluginError save_avif_impl(ImageDocument* doc, const char* filename, cons
 #if defined(HAVE_LCMS2)
         if (icc_data) free(icc_data);
 #endif
-        g_warning("AVIF plugin: No AV1 encoder available (libaom required)");
+        debug_log("WRN", "AVIF plugin: No AV1 encoder available (libaom required)");
         return PLUGIN_ERROR_UNSUPPORTED_FEATURE;
     }
 
@@ -534,14 +535,14 @@ static PluginError save_avif_impl(ImageDocument* doc, const char* filename, cons
         heif_image_handle_release(handle);
     }
     if (err.code != heif_error_Ok) {
-        g_warning("AVIF plugin: Encode error: %s", err.message);
+        debug_log("WRN", "AVIF plugin: Encode error: %s", err.message);
         ret = PLUGIN_ERROR_FILE_WRITE_ERROR;
     }
 
     if (ret == PLUGIN_ERROR_NONE) {
         err = heif_context_write_to_file(ctx, filename);
         if (err.code != heif_error_Ok) {
-            g_warning("AVIF plugin: Write error: %s", err.message);
+            debug_log("WRN", "AVIF plugin: Write error: %s", err.message);
             ret = PLUGIN_ERROR_FILE_WRITE_ERROR;
         }
     }

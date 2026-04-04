@@ -8,6 +8,7 @@
 #include "ui/dialogs/selection_radius_dialog.h"
 #include <glib.h>
 #include <stdint.h>
+#include "debug_logger.h"
 
 /* Forward declarations */
 static gboolean pulse_selection_progress_bar(gpointer user_data);
@@ -385,14 +386,14 @@ static void execute_select_radius_operation(AppContext* ctx,
     gint response;
 
     if (!doc || !doc->selection_mask || selection_mask_is_empty(doc->selection_mask)) {
-        g_warning("No selection to modify");
+        debug_log("WRN", "No selection to modify");
         return;
     }
 
     /* Create dialog */
     dialog = selection_radius_dialog_new(operation_name);
     if (!dialog) {
-        g_warning("Failed to create %s dialog", operation_name);
+        debug_log("WRN", "Failed to create %s dialog", operation_name);
         return;
     }
 

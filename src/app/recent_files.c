@@ -2,6 +2,7 @@
 #include "app/settings.h"
 #include <glib.h>
 #include <time.h>
+#include "debug_logger.h"
 
 /* Internal storage */
 static GList* g_recent_files = NULL;
@@ -110,7 +111,7 @@ void recent_files_init(void) {
     }
 
     if (!g_settings) {
-        g_warning("recent_files_init() called but settings not set. Call recent_files_set_settings() first.");
+        debug_log("WRN", "recent_files_init() called but settings not set. Call recent_files_set_settings() first.");
         return;
     }
 

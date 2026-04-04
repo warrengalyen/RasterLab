@@ -8,6 +8,7 @@
 #include <math.h>
 #include <string.h>
 #include "i18n.h"
+#include "debug_logger.h"
 
 /* Forward declarations */
 static void on_operator_toggled(GtkToggleButton* button, gpointer user_data);
@@ -374,7 +375,7 @@ static void update_preview(GtkWidget* dialog, const uint8_t* rgbe_data, uint32_t
             g_object_set_data_full(G_OBJECT(preview_area), "preview_surface", new_surface, (GDestroyNotify)cairo_surface_destroy);
             gtk_widget_queue_draw(preview_area);
         } else {
-            g_warning("Failed to create preview surface: %s", cairo_status_to_string(cairo_surface_status(new_surface)));
+            debug_log("WRN", "Failed to create preview surface: %s", cairo_status_to_string(cairo_surface_status(new_surface)));
             cairo_surface_destroy(new_surface);
         }
     }
@@ -725,7 +726,7 @@ gint hdr_image_dialog_show(GtkWindow* parent, ToneMapParams* params, gboolean* a
     builder = gtk_builder_new();
     ui_utils_builder_set_translation_domain(builder);
     if (!gtk_builder_add_from_resource(builder, "/ui/hdr_image_dialog.glade", &error)) {
-        g_warning("Failed to load hdr_image_dialog.glade: %s", error ? error->message : "Unknown error");
+        debug_log("WRN", "Failed to load hdr_image_dialog.glade: %s", error ? error->message : "Unknown error");
         if (error) {
             g_error_free(error);
         }
@@ -736,7 +737,7 @@ gint hdr_image_dialog_show(GtkWindow* parent, ToneMapParams* params, gboolean* a
     /* Get dialog widget */
     dialog = GTK_WIDGET(gtk_builder_get_object(builder, "hdr_image_dialog"));
     if (!dialog) {
-        g_warning("Failed to get hdr_image_dialog from builder");
+        debug_log("WRN", "Failed to get hdr_image_dialog from builder");
         g_object_unref(builder);
         return GTK_RESPONSE_CANCEL;
     }
@@ -789,7 +790,7 @@ gint hdr_image_dialog_show(GtkWindow* parent, ToneMapParams* params, gboolean* a
     reinhard_color_correction_adjustment = GTK_ADJUSTMENT(gtk_builder_get_object(builder, "reinhard_color_correction_adjustment"));
 
     if (!linear_operator_button || !filmic_operator_button || !drago_operator_button || !reinhard_operator_button) {
-        g_warning("Failed to get operator buttons from hdr_image_dialog");
+        debug_log("WRN", "Failed to get operator buttons from hdr_image_dialog");
         g_object_unref(builder);
         gtk_widget_destroy(dialog);
         return GTK_RESPONSE_CANCEL;
@@ -903,7 +904,7 @@ gint hdr_image_dialog_show(GtkWindow* parent, ToneMapParams* params, gboolean* a
         /* Connect draw signal */
         g_signal_connect(preview_area, "draw", G_CALLBACK(on_preview_draw), NULL);
     } else {
-        g_warning("Failed to get preview_container from hdr_image_dialog");
+        debug_log("WRN", "Failed to get preview_container from hdr_image_dialog");
     }
 
     /* Connect parameter change signals to update preview */

@@ -3,6 +3,7 @@
 #include "ocular.h"
 #include "ui/filters/filter_utils.h"
 #include <glib.h>
+#include "debug_logger.h"
 
 /**
  * Apply Gaussian blur filter to a layer using Ocular library
@@ -36,7 +37,7 @@ gboolean filter_gaussian_blur_apply(ImageLayer* layer, const gfloat* values, gin
                                       buffers.width, buffers.height, buffers.stride, sigma);
 
     if (status != OC_STATUS_OK) {
-        g_warning("Gaussian blur filter: Ocular filter returned error %d", status);
+        debug_log("WRN", "Gaussian blur filter: Ocular filter returned error %d", status);
         filter_utils_free_rgb_buffers(&buffers);
         return FALSE;
     }

@@ -60,6 +60,7 @@
 #include "ui/widgets/filter_dialog.h"
 #include <glib.h>
 #include <math.h>
+#include "debug_logger.h"
 
 /* Filter wrapper functions moved to ui_filter_utils.c */
 
@@ -2489,27 +2490,27 @@ static void on_render_clouds(GtkWidget* widget, gpointer data) {
 
     doc = ui_get_active_document(ctx);
     if (!doc) {
-        g_warning("No document open");
+        debug_log("WRN", "No document open");
         return;
     }
 
     layer = document_get_selected_layer(doc);
     if (!layer) {
-        g_warning("No layer selected");
+        debug_log("WRN", "No layer selected");
         return;
     }
 
     /* Create clouds dialog */
     dialog = clouds_dialog_new("Render Clouds");
     if (!dialog) {
-        g_warning("Failed to create clouds dialog");
+        debug_log("WRN", "Failed to create clouds dialog");
         return;
     }
 
     /* Create a copy of the layer for preview */
     temp_layer = ui_filter_utils_create_temp_layer(layer);
     if (!temp_layer) {
-        g_warning("Failed to create temporary layer for preview");
+        debug_log("WRN", "Failed to create temporary layer for preview");
         clouds_dialog_free(dialog);
         return;
     }
@@ -2658,27 +2659,27 @@ static void on_effects_beeps(GtkWidget* widget, gpointer data) {
 
     doc = ui_get_active_document(ctx);
     if (!doc) {
-        g_warning("No document open");
+        debug_log("WRN", "No document open");
         return;
     }
 
     layer = document_get_selected_layer(doc);
     if (!layer) {
-        g_warning("No layer selected");
+        debug_log("WRN", "No layer selected");
         return;
     }
 
     /* Create BEEPS dialog */
     dialog = beeps_dialog_new("BEEPS");
     if (!dialog) {
-        g_warning("Failed to create BEEPS dialog");
+        debug_log("WRN", "Failed to create BEEPS dialog");
         return;
     }
 
     /* Create a copy of the layer for preview */
     temp_layer = ui_filter_utils_create_temp_layer(layer);
     if (!temp_layer) {
-        g_warning("Failed to create temporary layer for preview");
+        debug_log("WRN", "Failed to create temporary layer for preview");
         beeps_dialog_free(dialog);
         return;
     }
@@ -2858,27 +2859,27 @@ static void on_effects_custom(GtkWidget* widget, gpointer data) {
 
     doc = ui_get_active_document(ctx);
     if (!doc) {
-        g_warning("No document open");
+        debug_log("WRN", "No document open");
         return;
     }
 
     layer = document_get_selected_layer(doc);
     if (!layer) {
-        g_warning("No layer selected");
+        debug_log("WRN", "No layer selected");
         return;
     }
 
     /* Create convolution dialog */
     dialog = convolution_dialog_new(_("Custom filter"));
     if (!dialog) {
-        g_warning("Failed to create convolution dialog");
+        debug_log("WRN", "Failed to create convolution dialog");
         return;
     }
 
     /* Create a copy of the layer for preview */
     temp_layer = ui_filter_utils_create_temp_layer(layer);
     if (!temp_layer) {
-        g_warning("Failed to create temporary layer for preview");
+        debug_log("WRN", "Failed to create temporary layer for preview");
         convolution_dialog_free(dialog);
         return;
     }

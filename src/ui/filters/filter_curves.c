@@ -3,6 +3,7 @@
 #include "ocular.h"
 #include <glib.h>
 #include <string.h>
+#include "debug_logger.h"
 
 /**
  * Apply curves filter to a layer using Ocular library
@@ -33,7 +34,7 @@ gboolean filter_curves_apply(ImageLayer* layer, CurvesWidget* curves) {
     output_data = (guchar*)g_malloc(width * height * 4);
 
     if (!input_data || !output_data) {
-        g_warning("Curves filter: Failed to allocate memory");
+        debug_log("WRN", "Curves filter: Failed to allocate memory");
         g_free(input_data);
         g_free(output_data);
         return FALSE;
@@ -50,7 +51,7 @@ gboolean filter_curves_apply(ImageLayer* layer, CurvesWidget* curves) {
     curveL = createCurve();
 
     if (!curveR || !curveG || !curveB || !curveL) {
-        g_warning("Failed to create curves");
+        debug_log("WRN", "Failed to create curves");
         if (curveR)
             destroyCurve(curveR);
         if (curveG)
@@ -112,7 +113,7 @@ gboolean filter_curves_apply(ImageLayer* layer, CurvesWidget* curves) {
         memcpy(surface_data, output_data, width * height * 4);
         cairo_surface_mark_dirty(surface);
     } else {
-        g_warning("ocularCurvesFilter failed with status %d", status);
+        debug_log("WRN", "ocularCurvesFilter failed with status %d", status);
     }
 
     /* Clean up */

@@ -1,3 +1,4 @@
+#include "debug_logger.h"
 #ifdef HAVE_OPENEXR
 
 #include "plugins/plugin_exr.h"
@@ -31,7 +32,7 @@
 
 static void exr_error_cb(exr_const_context_t ctxt, exr_result_t code, const char* msg) {
     (void)ctxt;
-    g_warning("EXR plugin: %s (code %d)", msg ? msg : "unknown", code);
+    debug_log("WRN", "EXR plugin: %s (code %d)", msg ? msg : "unknown", code);
 }
 
 /** Custom I/O: use GLib's g_fopen so path handling matches the rest of the app (e.g. Windows UTF-8). */

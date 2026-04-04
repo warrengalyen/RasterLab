@@ -2,6 +2,7 @@
 #include "filters.h"
 #include "ocular.h"
 #include <glib.h>
+#include "debug_logger.h"
 
 /* Map combo index (clamp=0, reflect=1, wrap=2, erase=3, ignore=4) to OcEdgeMode */
 static const OcEdgeMode MARBLE_EDGE_MAP[] = {
@@ -61,14 +62,14 @@ gboolean filter_marble_apply(ImageLayer* layer, const gfloat* values, gint num_v
     rgb_output = (guchar*)g_malloc((size_t)(height * stride));
 
     if (!rgb_input || !rgb_output) {
-        g_warning("Marble filter: Failed to allocate memory");
+        debug_log("WRN", "Marble filter: Failed to allocate memory");
         g_free(rgb_input);
         g_free(rgb_output);
         return FALSE;
     }
 
     if (!adjustments_cairo_to_rgb(surface, rgb_input)) {
-        g_warning("Marble filter: Failed to convert surface to RGB");
+        debug_log("WRN", "Marble filter: Failed to convert surface to RGB");
         g_free(rgb_input);
         g_free(rgb_output);
         return FALSE;
@@ -78,14 +79,14 @@ gboolean filter_marble_apply(ImageLayer* layer, const gfloat* values, gint num_v
                                 scale, turbulence, quality, edge_mode, seed);
 
     if (status != OC_STATUS_OK) {
-        g_warning("Marble filter: Ocular returned error %d", status);
+        debug_log("WRN", "Marble filter: Ocular returned error %d", status);
         g_free(rgb_input);
         g_free(rgb_output);
         return FALSE;
     }
 
     if (!adjustments_rgb_to_cairo(surface, rgb_output)) {
-        g_warning("Marble filter: Failed to convert RGB to surface");
+        debug_log("WRN", "Marble filter: Failed to convert RGB to surface");
         g_free(rgb_input);
         g_free(rgb_output);
         return FALSE;

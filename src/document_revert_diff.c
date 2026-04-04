@@ -1,4 +1,5 @@
 #include "document_revert_diff.h"
+#include "debug_logger.h"
 
 #include "app/settings.h"
 #include "document.h"
@@ -270,7 +271,7 @@ gboolean document_revert_diff_apply_undo(ImageDocument* doc, const DocumentRever
     }
     doc->tile_grid = tile_grid_create(doc->width, doc->height, 128);
     if (!doc->tile_grid) {
-        g_warning("document_revert_diff_apply_undo: failed to create tile grid");
+        debug_log("WRN", "document_revert_diff_apply_undo: failed to create tile grid");
         return FALSE;
     }
 
@@ -405,7 +406,7 @@ gboolean document_revert_apply_loaded_document(ImageDocument* doc, ImageDocument
 
     new_grid = tile_grid_create(loaded->width, loaded->height, 128);
     if (!new_grid) {
-        g_warning("document_revert_apply_loaded_document: failed to create tile grid");
+        debug_log("WRN", "document_revert_apply_loaded_document: failed to create tile grid");
         return FALSE;
     }
 

@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "debug_logger.h"
 
 /**
  * FITS header card image size
@@ -371,15 +372,15 @@ static bool read_fits_header(FILE* file, FitsHeader* header, bool* is_extension)
 
     /* Validate required keywords */
     if (!found_simple && !found_xtension) {
-        g_warning("FITS plugin: Missing SIMPLE or XTENSION keyword");
+        debug_log("WRN", "FITS plugin: Missing SIMPLE or XTENSION keyword");
         return false;
     }
     if (!found_bitpix) {
-        g_warning("FITS plugin: Missing BITPIX keyword");
+        debug_log("WRN", "FITS plugin: Missing BITPIX keyword");
         return false;
     }
     if (!found_naxis) {
-        g_warning("FITS plugin: Missing NAXIS keyword");
+        debug_log("WRN", "FITS plugin: Missing NAXIS keyword");
         return false;
     }
 
@@ -390,11 +391,11 @@ static bool read_fits_header(FILE* file, FitsHeader* header, bool* is_extension)
 
     /* For image HDUs, we need NAXIS1 and NAXIS2 */
     if (naxis >= 1 && !found_naxis1) {
-        g_warning("FITS plugin: Missing NAXIS1 keyword");
+        debug_log("WRN", "FITS plugin: Missing NAXIS1 keyword");
         return false;
     }
     if (naxis >= 2 && !found_naxis2) {
-        g_warning("FITS plugin: Missing NAXIS2 keyword");
+        debug_log("WRN", "FITS plugin: Missing NAXIS2 keyword");
         return false;
     }
 
@@ -506,7 +507,7 @@ static PluginError load_fits(ImageDocument* doc, const char* filename) {
             if (!header_parsed) {
                 /* If we fail after the first HDU, treat as corrupt */
                 if (hdu_count > 0) {
-                    g_warning("FITS plugin: Failed to parse header from %s (HDU %d)", filename, hdu_count);
+                    debug_log("WRN", "FITS plugin: Failed to parse header from %s (HDU %d)", filename, hdu_count);
                     fclose(infile);
                     return PLUGIN_ERROR_CORRUPT_FILE;
                 }
@@ -560,7 +561,7 @@ static PluginError load_fits(ImageDocument* doc, const char* filename) {
         }
 
         if (!header_found) {
-            g_warning("FITS plugin: No image data found in any HDU in %s", filename);
+            debug_log("WRN", "FITS plugin: No image data found in any HDU in %s", filename);
             fclose(infile);
             return PLUGIN_ERROR_CORRUPT_FILE;
         }

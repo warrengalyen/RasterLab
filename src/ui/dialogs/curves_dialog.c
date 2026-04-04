@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "i18n.h"
+#include "debug_logger.h"
 
 
 /**
@@ -527,7 +528,7 @@ CurvesDialog* curves_dialog_new(const gchar* title) {
     /* Create curves widget */
     dialog->curves_widget = CURVES_WIDGET(curves_widget_new());
     if (!dialog->curves_widget) {
-        g_warning("Failed to create curves widget");
+        debug_log("WRN", "Failed to create curves widget");
         g_free(dialog);
         return NULL;
     }

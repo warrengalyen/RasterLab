@@ -1,6 +1,7 @@
 #include "ui/filters/filter_distort_utils.h"
 #include "filters.h"
 #include <cairo.h>
+#include "debug_logger.h"
 
 static void distort_buffers_init(DistortBuffers* b) {
     if (!b)
@@ -33,14 +34,14 @@ gboolean filter_distort_utils_prepare(ImageLayer* layer, DistortBuffers* buffers
     buffers->rgb_output = (guchar*)g_malloc((gsize)width * (gsize)height * 3);
 
     if (!buffers->rgb_input || !buffers->rgb_output) {
-        g_warning("%s: Failed to allocate memory", filter_name);
+        debug_log("WRN", "%s: Failed to allocate memory", filter_name);
         filter_distort_utils_free(buffers);
         return FALSE;
     }
 
     /* Convert from Cairo ARGB32 to straight RGB */
     if (!adjustments_cairo_to_rgb(surface, buffers->rgb_input)) {
-        g_warning("%s: Failed to convert surface to RGB", filter_name);
+        debug_log("WRN", "%s: Failed to convert surface to RGB", filter_name);
         filter_distort_utils_free(buffers);
         return FALSE;
     }
@@ -59,7 +60,7 @@ gboolean filter_distort_utils_commit(ImageLayer* layer, DistortBuffers* buffers,
 
     /* Convert back from RGB to Cairo ARGB32 (preserves existing alpha) */
     if (!adjustments_rgb_to_cairo(layer->surface, buffers->rgb_output)) {
-        g_warning("%s: Failed to convert RGB to surface", filter_name);
+        debug_log("WRN", "%s: Failed to convert RGB to surface", filter_name);
         return FALSE;
     }
 

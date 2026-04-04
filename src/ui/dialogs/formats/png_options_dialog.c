@@ -5,6 +5,7 @@
 #include <glib.h>
 #include <gtk/gtk.h>
 #include <string.h>
+#include "debug_logger.h"
 
 #ifdef HAVE_LIBPNG
 
@@ -387,7 +388,7 @@ gboolean png_options_dialog_show(GtkWindow* parent, SaveOptions* opts, ImageDocu
     builder = gtk_builder_new();
     ui_utils_builder_set_translation_domain(builder);
     if (!gtk_builder_add_from_resource(builder, "/ui/png_options_dialog.glade", &error)) {
-        g_warning("Failed to load png_options_dialog.glade: %s", error ? error->message : "Unknown error");
+        debug_log("WRN", "Failed to load png_options_dialog.glade: %s", error ? error->message : "Unknown error");
         if (error) {
             g_error_free(error);
         }
@@ -398,7 +399,7 @@ gboolean png_options_dialog_show(GtkWindow* parent, SaveOptions* opts, ImageDocu
     /* Get dialog widget */
     dialog = GTK_WIDGET(gtk_builder_get_object(builder, "png_options_dialog"));
     if (!dialog) {
-        g_warning("Failed to get png_options_dialog from builder");
+        debug_log("WRN", "Failed to get png_options_dialog from builder");
         g_object_unref(builder);
         return FALSE;
     }
@@ -445,7 +446,7 @@ gboolean png_options_dialog_show(GtkWindow* parent, SaveOptions* opts, ImageDocu
     GtkWidget* advanced_content = GTK_WIDGET(gtk_builder_get_object(builder, "advanced_content"));
 
     if (!compression_level_scale || !compression_level_spin || !compression_level_adjustment) {
-        g_warning("Failed to get required widgets from png_options_dialog");
+        debug_log("WRN", "Failed to get required widgets from png_options_dialog");
         g_object_unref(builder);
         gtk_widget_destroy(dialog);
         return FALSE;

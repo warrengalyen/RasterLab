@@ -1,3 +1,4 @@
+#include "debug_logger.h"
 /*
  * Image resize dialog - layout and logic similar to canvas size dialog,
  * with resampling (interpolation) method selection.
@@ -438,7 +439,7 @@ ResizeDialog* resize_dialog_new(ImageDocument* doc) {
     builder = gtk_builder_new();
     ui_utils_builder_set_translation_domain(builder);
     if (!gtk_builder_add_from_resource(builder, "/ui/resize_dialog.glade", &error)) {
-        g_warning("Failed to load resize_dialog.glade: %s", error ? error->message : "Unknown error");
+        debug_log("WRN", "Failed to load resize_dialog.glade: %s", error ? error->message : "Unknown error");
         if (error)
             g_error_free(error);
         g_object_unref(builder);
@@ -448,7 +449,7 @@ ResizeDialog* resize_dialog_new(ImageDocument* doc) {
 
     dialog->dialog = GTK_WIDGET(gtk_builder_get_object(builder, "resize_dialog"));
     if (!dialog->dialog) {
-        g_warning("Failed to get resize_dialog from builder");
+        debug_log("WRN", "Failed to get resize_dialog from builder");
         g_object_unref(builder);
         g_free(dialog);
         return NULL;
@@ -477,7 +478,7 @@ ResizeDialog* resize_dialog_new(ImageDocument* doc) {
         !dialog->width_reset_button || !dialog->height_reset_button || !dialog->resolution_reset_button ||
         !dialog->preserve_ratio_toggle || !dialog->dimensions_text || !dialog->aspect_ratio_text ||
         !dialog->resampling_combo) {
-        g_warning("Failed to get all widgets from resize_dialog builder");
+        debug_log("WRN", "Failed to get all widgets from resize_dialog builder");
         g_object_unref(builder);
         g_free(dialog);
         return NULL;

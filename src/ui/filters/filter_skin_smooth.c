@@ -4,6 +4,7 @@
 #include "ui/filters/filter_utils.h"
 #include <glib.h>
 #include <stdbool.h>
+#include "debug_logger.h"
 
 /**
  * Apply skin smoothing filter to a layer using Ocular library
@@ -39,7 +40,7 @@ gboolean filter_skin_smooth_apply(ImageLayer* layer, const gfloat* values, gint 
                                        smoothing_level, true);
 
     if (status != OC_STATUS_OK) {
-        g_warning("Skin smoothing filter: Ocular filter returned error %d", status);
+        debug_log("WRN", "Skin smoothing filter: Ocular filter returned error %d", status);
         filter_utils_free_rgb_buffers(&buffers);
         return FALSE;
     }

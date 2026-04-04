@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "debug_logger.h"
 
 /* RAS file format constants */
 #define RAS_MAGIC 0x59A66A95U
@@ -135,7 +136,7 @@ static uint8_t* decompress_rle(const uint8_t* compressed_data, size_t compressed
     }
 
     if (out_pos != decompressed_size) {
-        g_warning("RAS plugin: RLE decompression incomplete (expected %zu bytes, got %zu)", decompressed_size, out_pos);
+        debug_log("WRN", "RAS plugin: RLE decompression incomplete (expected %zu bytes, got %zu)", decompressed_size, out_pos);
         g_free(output);
         return NULL;
     }
@@ -160,14 +161,14 @@ static PluginError load_ras(ImageDocument* doc, const char* filename) {
     uint32_t colormap_size = 0;
 
     if (!doc || !filename) {
-        g_warning("RAS plugin: Invalid parameters (doc=%p, filename=%p)", doc, filename);
+        debug_log("WRN", "RAS plugin: Invalid parameters (doc=%p, filename=%p)", doc, filename);
         return PLUGIN_ERROR_INVALID_PARAMETERS;
     }
 
     /* Open RAS file */
     infile = g_fopen(filename, "rb");
     if (!infile) {
-        g_warning("RAS plugin: Failed to open file: %s", filename);
+        debug_log("WRN", "RAS plugin: Failed to open file: %s", filename);
         return PLUGIN_ERROR_FILE_NOT_FOUND;
     }
 
@@ -183,21 +184,21 @@ static PluginError load_ras(ImageDocument* doc, const char* filename) {
 
     /* Validate magic number */
     if (header.magic != RAS_MAGIC) {
-        g_warning("RAS plugin: Invalid magic number: 0x%08X (expected 0x%08X)", header.magic, RAS_MAGIC);
+        debug_log("WRN", "RAS plugin: Invalid magic number: 0x%08X (expected 0x%08X)", header.magic, RAS_MAGIC);
         fclose(infile);
         return PLUGIN_ERROR_UNSUPPORTED_FORMAT;
     }
 
     /* Validate dimensions */
     if (header.width == 0 || header.height == 0) {
-        g_warning("RAS plugin: Invalid dimensions: %ux%u", header.width, header.height);
+        debug_log("WRN", "RAS plugin: Invalid dimensions: %ux%u", header.width, header.height);
         fclose(infile);
         return PLUGIN_ERROR_UNSUPPORTED_FORMAT;
     }
 
     /* Validate depth */
     if (header.depth != 1 && header.depth != 8 && header.depth != 24 && header.depth != 32) {
-        g_warning("RAS plugin: Unsupported depth: %u bits per pixel", header.depth);
+        debug_log("WRN", "RAS plugin: Unsupported depth: %u bits per pixel", header.depth);
         fclose(infile);
         return PLUGIN_ERROR_UNSUPPORTED_FORMAT;
     }
@@ -214,13 +215,13 @@ static PluginError load_ras(ImageDocument* doc, const char* filename) {
         colormap_size = header.maplength;
         colormap = g_malloc(colormap_size);
         if (!colormap) {
-            g_warning("RAS plugin: Failed to allocate colormap (%u bytes)", colormap_size);
+            debug_log("WRN", "RAS plugin: Failed to allocate colormap (%u bytes)", colormap_size);
             fclose(infile);
             return PLUGIN_ERROR_OUT_OF_MEMORY;
         }
 
         if (fread(colormap, 1, colormap_size, infile) != colormap_size) {
-            g_warning("RAS plugin: Failed to read colormap");
+            debug_log("WRN", "RAS plugin: Failed to read colormap");
             g_free(colormap);
             fclose(infile);
             return PLUGIN_ERROR_FILE_READ_ERROR;
@@ -240,14 +241,14 @@ static PluginError load_ras(ImageDocument* doc, const char* filename) {
     /* Allocate buffer for compressed data (if RLE) or raw data */
     uint8_t* raw_data = g_malloc(expected_data_size);
     if (!raw_data) {
-        g_warning("RAS plugin: Failed to allocate image data buffer (%zu bytes)", expected_data_size);
+        debug_log("WRN", "RAS plugin: Failed to allocate image data buffer (%zu bytes)", expected_data_size);
         g_free(colormap);
         fclose(infile);
         return PLUGIN_ERROR_OUT_OF_MEMORY;
     }
 
     if (fread(raw_data, 1, expected_data_size, infile) != expected_data_size) {
-        g_warning("RAS plugin: Failed to read image data");
+        debug_log("WRN", "RAS plugin: Failed to read image data");
         g_free(raw_data);
         g_free(colormap);
         fclose(infile);
@@ -262,7 +263,7 @@ static PluginError load_ras(ImageDocument* doc, const char* filename) {
         image_data = decompress_rle(raw_data, expected_data_size, decompressed_size);
         g_free(raw_data);
         if (!image_data) {
-            g_warning("RAS plugin: RLE decompression failed");
+            debug_log("WRN", "RAS plugin: RLE decompression failed");
             g_free(colormap);
             return PLUGIN_ERROR_CORRUPT_FILE;
         }
@@ -289,7 +290,7 @@ static PluginError load_ras(ImageDocument* doc, const char* filename) {
     base_layer = layer_new(_("Background"), doc->width, doc->height, TRUE,
                            LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL, doc);
     if (!base_layer) {
-        g_warning("RAS plugin: layer_new returned NULL for %ux%u layer", doc->width, doc->height);
+        debug_log("WRN", "RAS plugin: layer_new returned NULL for %ux%u layer", doc->width, doc->height);
         g_free(image_data);
         g_free(colormap);
         return PLUGIN_ERROR_OUT_OF_MEMORY;
@@ -298,7 +299,7 @@ static PluginError load_ras(ImageDocument* doc, const char* filename) {
     /* Get surface data */
     temp_surface = base_layer->surface;
     if (!temp_surface) {
-        g_warning("RAS plugin: base_layer->surface is NULL");
+        debug_log("WRN", "RAS plugin: base_layer->surface is NULL");
         g_free(image_data);
         g_free(colormap);
         layer_free(base_layer);
@@ -310,7 +311,7 @@ static PluginError load_ras(ImageDocument* doc, const char* filename) {
     surface_stride = cairo_image_surface_get_stride(temp_surface);
 
     if (!surface_data) {
-        g_warning("RAS plugin: cairo_image_surface_get_data returned NULL");
+        debug_log("WRN", "RAS plugin: cairo_image_surface_get_data returned NULL");
         g_free(image_data);
         g_free(colormap);
         layer_free(base_layer);

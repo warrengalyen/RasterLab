@@ -98,7 +98,7 @@ TileThreadPool* tile_thread_pool_create(guint num_workers) {
     pool->completed_queue = g_queue_new();
 
     if (!pool->job_queue || !pool->completed_queue) {
-        g_warning("Failed to allocate queues for tile thread pool");
+        debug_log("WRN", "Failed to allocate queues for tile thread pool");
         g_free(pool);
         return NULL;
     }
@@ -112,7 +112,7 @@ TileThreadPool* tile_thread_pool_create(guint num_workers) {
     /* Create worker threads */
     pool->workers = (pthread_t*)g_malloc(sizeof(pthread_t) * num_workers);
     if (!pool->workers) {
-        g_warning("Failed to allocate worker thread handles");
+        debug_log("WRN", "Failed to allocate worker thread handles");
         g_queue_free(pool->job_queue);
         g_queue_free(pool->completed_queue);
         g_free(pool);
@@ -121,7 +121,7 @@ TileThreadPool* tile_thread_pool_create(guint num_workers) {
 
     for (i = 0; i < num_workers; i++) {
         if (pthread_create(&pool->workers[i], NULL, tile_worker_thread, pool) != 0) {
-            g_warning("Failed to create worker thread %u", i);
+            debug_log("WRN", "Failed to create worker thread %u", i);
             /* Clean up already-created threads */
             pool->num_workers = i;
             tile_thread_pool_destroy(pool);
@@ -335,7 +335,7 @@ static cairo_surface_t* composite_tile_cpu(ImageDocument* doc, Tile* tile) {
         if (tile_surface) {
             cairo_surface_destroy(tile_surface);
         }
-        g_warning("Worker: Failed to create tile surface (%d x %d)", tile->w, tile->h);
+        debug_log("WRN", "Worker: Failed to create tile surface (%d x %d)", tile->w, tile->h);
         return NULL;
     }
 
@@ -343,7 +343,7 @@ static cairo_surface_t* composite_tile_cpu(ImageDocument* doc, Tile* tile) {
     cr = cairo_create(tile_surface);
     if (!cr) {
         cairo_surface_destroy(tile_surface);
-        g_warning("Worker: Failed to create Cairo context");
+        debug_log("WRN", "Worker: Failed to create Cairo context");
         return NULL;
     }
 
@@ -428,7 +428,7 @@ static cairo_surface_t* composite_tile_cpu(ImageDocument* doc, Tile* tile) {
 
     /* Final safety check before returning */
     if (cairo_surface_status(tile_surface) != CAIRO_STATUS_SUCCESS) {
-        g_warning("Worker: Tile surface status error after compositing: %s",
+        debug_log("WRN", "Worker: Tile surface status error after compositing: %s",
                   cairo_status_to_string(cairo_surface_status(tile_surface)));
         cairo_surface_destroy(tile_surface);
         return NULL;
@@ -496,7 +496,7 @@ static gpointer tile_worker_thread(gpointer data) {
                 cairo_surface_destroy(new_surface);
             }
         } else if (new_surface) {
-            g_warning("Worker thread: Invalid Cairo surface status, discarding result");
+            debug_log("WRN", "Worker thread: Invalid Cairo surface status, discarding result");
             cairo_surface_destroy(new_surface);
         }
 

@@ -4,6 +4,7 @@
 #include "render/text_layer.h"
 #include <stdlib.h>
 #include <string.h>
+#include "debug_logger.h"
 
 /**
  * Create a new tile grid for a document
@@ -47,14 +48,14 @@ TileGrid* tile_grid_create(gint width, gint height, gint tile_size) {
             tile->pixel_buffer = (uint8_t*)g_malloc0(tile->stride * tile->h);
 
             if (!tile->pixel_buffer) {
-                g_warning("Failed to allocate pixel buffer for tile at (%d, %d)", x, y);
+                debug_log("WRN", "Failed to allocate pixel buffer for tile at (%d, %d)", x, y);
             }
 
             /* Create tile surface with Cairo's recommended stride */
             tile->surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, tile->w, tile->h);
 
             if (cairo_surface_status(tile->surface) != CAIRO_STATUS_SUCCESS) {
-                g_warning("Failed to create tile surface at (%d, %d)", x, y);
+                debug_log("WRN", "Failed to create tile surface at (%d, %d)", x, y);
                 tile->surface = NULL;
             }
 
@@ -352,7 +353,7 @@ gboolean tile_grid_composite(ImageDocument* doc, TileGrid* grid) {
                 if (tile_composite(doc, tile)) {
                     dirty_count++;
                 } else {
-                    g_warning("Failed to composite tile at (%d, %d)", x, y);
+                    debug_log("WRN", "Failed to composite tile at (%d, %d)", x, y);
                 }
             }
         }

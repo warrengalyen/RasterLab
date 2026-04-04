@@ -3,6 +3,7 @@
 #include <gtk/gtk.h>
 #include <stdlib.h>
 #include "i18n.h"
+#include "debug_logger.h"
 
 /**
  * Anchor position widget structure
@@ -109,7 +110,7 @@ static void update_button_icons(AnchorPositionWidget* widget) {
             /* Load icon (resource is to-pixdata format) */
             icon_pixbuf = gdk_pixbuf_new_from_resource(icon_resource, &icon_error);
             if (!icon_pixbuf) {
-                g_warning("Failed to create pixbuf from %s: %s", icon_resource, icon_error ? icon_error->message : "Unknown error");
+                debug_log("WRN", "Failed to create pixbuf from %s: %s", icon_resource, icon_error ? icon_error->message : "Unknown error");
                 if (icon_error) {
                     g_error_free(icon_error);
                     icon_error = NULL;
@@ -247,7 +248,7 @@ AnchorPositionWidget* anchor_position_widget_new(void) {
             gtk_container_add(GTK_CONTAINER(button), GTK_WIDGET(image));
             g_object_unref(pixbuf);
         } else {
-            g_warning("Failed to load %s: %s", icon_resources[i], error ? error->message : "Unknown error");
+            debug_log("WRN", "Failed to load %s: %s", icon_resources[i], error ? error->message : "Unknown error");
             if (error) {
                 g_error_free(error);
                 error = NULL;

@@ -3,6 +3,7 @@
 #include "ocular.h"
 #include "ui/filters/filter_utils.h"
 #include <glib.h>
+#include "debug_logger.h"
 
 /**
  * Apply guided filter to a layer using Ocular library
@@ -41,7 +42,7 @@ gboolean filter_guided_apply(ImageLayer* layer, const gfloat* values, gint num_v
                                 radius, epsilon);
 
     if (status != OC_STATUS_OK) {
-        g_warning("Guided filter: Ocular filter returned error %d", status);
+        debug_log("WRN", "Guided filter: Ocular filter returned error %d", status);
         filter_utils_free_rgb_buffers(&buffers);
         return FALSE;
     }

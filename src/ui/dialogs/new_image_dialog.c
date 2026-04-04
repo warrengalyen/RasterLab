@@ -8,6 +8,7 @@
 #include <gtk/gtk.h>
 #include <math.h>
 #include <string.h>
+#include "debug_logger.h"
 
 /**
  * New image dialog structure
@@ -571,7 +572,7 @@ static void update_preserve_ratio_icon(NewImageDialog* dialog) {
 
     pixbuf = gdk_pixbuf_new_from_resource(icon_resource, &error);
     if (!pixbuf) {
-        g_warning("Failed to load %s: %s", icon_resource, error ? error->message : "Unknown error");
+        debug_log("WRN", "Failed to load %s: %s", icon_resource, error ? error->message : "Unknown error");
         if (error) {
             g_error_free(error);
         }
@@ -614,7 +615,7 @@ static void set_reset_button_icon(GtkButton* button) {
     GError* error = NULL;
     GdkPixbuf* pixbuf = gdk_pixbuf_new_from_resource("/icons/reset.png", &error);
     if (!pixbuf) {
-        g_warning("Failed to load reset.png: %s", error ? error->message : "Unknown error");
+        debug_log("WRN", "Failed to load reset.png: %s", error ? error->message : "Unknown error");
         if (error) {
             g_error_free(error);
         }
@@ -741,7 +742,7 @@ NewImageDialog* new_image_dialog_new(void) {
     builder = gtk_builder_new();
     ui_utils_builder_set_translation_domain(builder);
     if (!gtk_builder_add_from_resource(builder, "/ui/new_image_dialog.glade", &error)) {
-        g_warning("Failed to load new_image_dialog.glade: %s", error ? error->message : "Unknown error");
+        debug_log("WRN", "Failed to load new_image_dialog.glade: %s", error ? error->message : "Unknown error");
         if (error) {
             g_error_free(error);
         }
@@ -753,7 +754,7 @@ NewImageDialog* new_image_dialog_new(void) {
     /* Get dialog widget */
     dialog->dialog = GTK_WIDGET(gtk_builder_get_object(builder, "new_image_dialog"));
     if (!dialog->dialog) {
-        g_warning("Failed to get new_image_dialog from builder");
+        debug_log("WRN", "Failed to get new_image_dialog from builder");
         g_object_unref(builder);
         g_free(dialog);
         return NULL;
@@ -788,7 +789,7 @@ NewImageDialog* new_image_dialog_new(void) {
         !dialog->preserve_ratio_toggle || !dialog->dimensions_text || !dialog->aspect_ratio_text ||
         !dialog->bg_transparent_rb || !dialog->bg_black_rb || !dialog->bg_white_rb ||
         !dialog->bg_custom_rb || !dialog->bg_custom_color) {
-        g_warning("Failed to get all widgets from builder");
+        debug_log("WRN", "Failed to get all widgets from builder");
         g_object_unref(builder);
         g_free(dialog);
         return NULL;
@@ -1005,7 +1006,7 @@ gint new_image_dialog_run(NewImageDialog* dialog, GtkWindow* parent, NewImageDia
     }
 
     if (!dialog->dialog || !GTK_IS_WIDGET(dialog->dialog)) {
-        g_warning("Invalid dialog widget");
+        debug_log("WRN", "Invalid dialog widget");
         return GTK_RESPONSE_CANCEL;
     }
 

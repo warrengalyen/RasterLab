@@ -2,6 +2,7 @@
 #include "ocular.h"
 #include "ui/filters/filter_distort_utils.h"
 #include <glib.h>
+#include "debug_logger.h"
 
 static OcSpherizeMode spherize_mode_from_value(gint mode_value) {
     switch (mode_value) {
@@ -35,7 +36,7 @@ gboolean filter_spherize_apply(ImageLayer* layer, const gfloat* values, gint num
                                             buffers.width, buffers.height, buffers.width * 3,
                                             amount, mode);
     if (status != OC_STATUS_OK) {
-        g_warning("Spherize distortion: Ocular filter returned error %d", status);
+        debug_log("WRN", "Spherize distortion: Ocular filter returned error %d", status);
         filter_distort_utils_free(&buffers);
         return FALSE;
     }

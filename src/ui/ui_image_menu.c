@@ -19,6 +19,7 @@
 #include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include "debug_logger.h"
 
 static gboolean image_doc_has_layer_with_surface(ImageDocument* doc) {
     if (!doc || !doc->layers) {
@@ -372,13 +373,13 @@ void on_image_resize(GtkWidget* widget, gpointer data) {
 
     doc = ui_get_active_document(ctx);
     if (!doc) {
-        g_warning("No document open");
+        debug_log("WRN", "No document open");
         return;
     }
 
     dialog = resize_dialog_new(doc);
     if (!dialog) {
-        g_warning("Failed to create resize dialog");
+        debug_log("WRN", "Failed to create resize dialog");
         return;
     }
 
@@ -443,18 +444,18 @@ void on_image_canvas_size(GtkWidget* widget, gpointer data) {
     GtkWindow* parent_window = NULL;
 
     if (!ctx) {
-        g_warning("Invalid application context");
+        debug_log("WRN", "Invalid application context");
         return;
     }
 
     if (!ctx->window || !GTK_IS_WIDGET(ctx->window)) {
-        g_warning("Invalid main window");
+        debug_log("WRN", "Invalid main window");
         return;
     }
 
     doc = ui_get_active_document(ctx);
     if (!doc) {
-        g_warning("No document open");
+        debug_log("WRN", "No document open");
         return;
     }
 
@@ -464,14 +465,14 @@ void on_image_canvas_size(GtkWidget* widget, gpointer data) {
     /* Create and show dialog */
     dialog = canvas_size_dialog_new(doc);
     if (!dialog) {
-        g_warning("Failed to create canvas size dialog");
+        debug_log("WRN", "Failed to create canvas size dialog");
         return;
     }
 
     /* Validate dialog was created properly */
     GtkWindow* dialog_window = canvas_size_dialog_get_window(dialog);
     if (!dialog_window || !GTK_IS_WINDOW(dialog_window)) {
-        g_warning("Dialog window is invalid");
+        debug_log("WRN", "Dialog window is invalid");
         canvas_size_dialog_free(dialog);
         return;
     }
@@ -555,7 +556,7 @@ void on_image_canvas_size(GtkWidget* widget, gpointer data) {
                                            doc);
 
         if (!cmd) {
-            g_warning("Failed to create canvas size command");
+            debug_log("WRN", "Failed to create canvas size command");
             canvas_size_dialog_result_free(result);
             canvas_size_dialog_free(dialog);
             return;
@@ -584,7 +585,7 @@ void on_image_canvas_size(GtkWidget* widget, gpointer data) {
             ui_update_status_bar(ctx, NULL);
             doc->modified = TRUE;
         } else {
-            g_warning("Failed to resize canvas");
+            debug_log("WRN", "Failed to resize canvas");
             command_free(cmd);
         }
 
@@ -606,12 +607,12 @@ void on_image_duplicate(GtkWidget* widget, gpointer data) {
                                                                 "layers_panel");
 
     if (!source_doc) {
-        g_warning("No document open");
+        debug_log("WRN", "No document open");
         return;
     }
 
     if (!source_doc->layers || g_list_length(source_doc->layers) == 0) {
-        g_warning("Document has no layers to duplicate");
+        debug_log("WRN", "Document has no layers to duplicate");
         return;
     }
 
@@ -628,7 +629,7 @@ void on_image_duplicate(GtkWidget* widget, gpointer data) {
     g_free(duplicate_filename);
 
     if (!new_doc) {
-        g_warning("Failed to create duplicate document");
+        debug_log("WRN", "Failed to create duplicate document");
         return;
     }
 
@@ -674,7 +675,7 @@ void on_image_duplicate(GtkWidget* widget, gpointer data) {
                                           LAYER_POSITION_ABOVE_CURRENT, NULL, new_doc);
 
         if (!new_layer) {
-            g_warning("Failed to create duplicate layer: %s", source_layer->name);
+            debug_log("WRN", "Failed to create duplicate layer: %s", source_layer->name);
             continue;
         }
 
@@ -746,14 +747,14 @@ void on_image_fit_active_layer(GtkWidget* widget, gpointer data) {
     gdouble new_resolution = 72.0;
 
     if (!doc) {
-        g_warning("No document open");
+        debug_log("WRN", "No document open");
         return;
     }
 
     /* Get the active/selected layer */
     active_layer = document_get_selected_layer(doc);
     if (!active_layer) {
-        g_warning("No active layer to fit canvas to");
+        debug_log("WRN", "No active layer to fit canvas to");
         return;
     }
 
@@ -762,7 +763,7 @@ void on_image_fit_active_layer(GtkWidget* widget, gpointer data) {
     new_height = active_layer->height;
 
     if (new_width == 0 || new_height == 0) {
-        g_warning("Active layer has invalid dimensions");
+        debug_log("WRN", "Active layer has invalid dimensions");
         return;
     }
 
@@ -787,7 +788,7 @@ void on_image_fit_active_layer(GtkWidget* widget, gpointer data) {
                                           doc);
 
     if (!cmd) {
-        g_warning("Failed to create fit active layer command");
+        debug_log("WRN", "Failed to create fit active layer command");
         return;
     }
 
@@ -824,7 +825,7 @@ void on_image_fit_active_layer(GtkWidget* widget, gpointer data) {
         ui_update_status_bar(ctx, NULL);
         doc->modified = TRUE;
     } else {
-        g_warning("Failed to resize canvas to fit active layer");
+        debug_log("WRN", "Failed to resize canvas to fit active layer");
         command_free(cmd);
     }
 }
@@ -851,12 +852,12 @@ void on_image_fit_all_layers(GtkWidget* widget, gpointer data) {
     gdouble new_resolution = 72.0;
 
     if (!doc) {
-        g_warning("No document open");
+        debug_log("WRN", "No document open");
         return;
     }
 
     if (!doc->layers || g_list_length(doc->layers) == 0) {
-        g_warning("Document has no layers");
+        debug_log("WRN", "Document has no layers");
         return;
     }
 
@@ -896,7 +897,7 @@ void on_image_fit_all_layers(GtkWidget* widget, gpointer data) {
     }
 
     if (!has_layers) {
-        g_warning("No valid layers to fit canvas around");
+        debug_log("WRN", "No valid layers to fit canvas around");
         return;
     }
 
@@ -905,7 +906,7 @@ void on_image_fit_all_layers(GtkWidget* widget, gpointer data) {
     new_height = (guint)(max_y - min_y);
 
     if (new_width == 0 || new_height == 0) {
-        g_warning("Calculated canvas size is invalid");
+        debug_log("WRN", "Calculated canvas size is invalid");
         return;
     }
 
@@ -930,7 +931,7 @@ void on_image_fit_all_layers(GtkWidget* widget, gpointer data) {
                                         doc);
 
     if (!cmd) {
-        g_warning("Failed to create fit all layers command");
+        debug_log("WRN", "Failed to create fit all layers command");
         return;
     }
 
@@ -967,7 +968,7 @@ void on_image_fit_all_layers(GtkWidget* widget, gpointer data) {
         ui_update_status_bar(ctx, NULL);
         doc->modified = TRUE;
     } else {
-        g_warning("Failed to resize canvas to fit all layers");
+        debug_log("WRN", "Failed to resize canvas to fit all layers");
         command_free(cmd);
     }
 }
@@ -985,19 +986,19 @@ void on_image_flip_horizontal(GtkWidget* widget, gpointer data) {
     Command* cmd;
 
     if (!doc) {
-        g_warning("No document open");
+        debug_log("WRN", "No document open");
         return;
     }
 
     if (!doc->layers || g_list_length(doc->layers) == 0) {
-        g_warning("Document has no layers");
+        debug_log("WRN", "Document has no layers");
         return;
     }
 
     /* Create flip horizontal command */
     cmd = command_create_flip_horizontal(doc);
     if (!cmd) {
-        g_warning("Failed to create flip horizontal command");
+        debug_log("WRN", "Failed to create flip horizontal command");
         return;
     }
 
@@ -1035,19 +1036,19 @@ void on_image_flip_vertical(GtkWidget* widget, gpointer data) {
     Command* cmd;
 
     if (!doc) {
-        g_warning("No document open");
+        debug_log("WRN", "No document open");
         return;
     }
 
     if (!doc->layers || g_list_length(doc->layers) == 0) {
-        g_warning("Document has no layers");
+        debug_log("WRN", "Document has no layers");
         return;
     }
 
     /* Create flip vertical command */
     cmd = command_create_flip_vertical(doc);
     if (!cmd) {
-        g_warning("Failed to create flip vertical command");
+        debug_log("WRN", "Failed to create flip vertical command");
         return;
     }
 
@@ -1085,19 +1086,19 @@ void on_image_transpose(GtkWidget* widget, gpointer data) {
     Command* cmd;
 
     if (!doc) {
-        g_warning("No document open");
+        debug_log("WRN", "No document open");
         return;
     }
 
     if (!doc->layers || g_list_length(doc->layers) == 0) {
-        g_warning("Document has no layers");
+        debug_log("WRN", "Document has no layers");
         return;
     }
 
     /* Create transpose command */
     cmd = command_create_transpose(doc);
     if (!cmd) {
-        g_warning("Failed to create transpose command");
+        debug_log("WRN", "Failed to create transpose command");
         return;
     }
 
@@ -1205,7 +1206,7 @@ static cairo_surface_t* rotate_surface_ocular(cairo_surface_t* src_surface,
     g_free(rgba_input);
 
     if (status != OC_STATUS_OK) {
-        g_warning("Rotate preview: Ocular rotate returned error %d", status);
+        debug_log("WRN", "Rotate preview: Ocular rotate returned error %d", status);
         g_free(rgba_output);
         return NULL;
     }
@@ -1428,19 +1429,19 @@ void on_image_merge_visible(GtkWidget* widget, gpointer data) {
     Command* cmd;
 
     if (!doc) {
-        g_warning("No document open");
+        debug_log("WRN", "No document open");
         return;
     }
 
     if (!doc->layers || g_list_length(doc->layers) == 0) {
-        g_warning("Document has no layers");
+        debug_log("WRN", "Document has no layers");
         return;
     }
 
     /* Create merge visible command */
     cmd = command_create_merge_visible(doc);
     if (!cmd) {
-        g_warning("Failed to create merge visible command");
+        debug_log("WRN", "Failed to create merge visible command");
         return;
     }
 
@@ -1481,24 +1482,24 @@ void on_image_flatten(GtkWidget* widget, gpointer data) {
     Command* cmd;
 
     if (!doc) {
-        g_warning("No document open");
+        debug_log("WRN", "No document open");
         return;
     }
 
     if (!doc->layers || g_list_length(doc->layers) == 0) {
-        g_warning("Document has no layers");
+        debug_log("WRN", "Document has no layers");
         return;
     }
 
     if (g_list_length(doc->layers) == 1) {
-        g_warning("Only one layer, nothing to flatten");
+        debug_log("WRN", "Only one layer, nothing to flatten");
         return;
     }
 
     /* Create flatten command */
     cmd = command_create_flatten(doc);
     if (!cmd) {
-        g_warning("Failed to create flatten command");
+        debug_log("WRN", "Failed to create flatten command");
         return;
     }
 
@@ -1539,12 +1540,12 @@ void on_image_crop_to_selection(GtkWidget* widget, gpointer data) {
     Command* cmd;
 
     if (!doc) {
-        g_warning("No document open");
+        debug_log("WRN", "No document open");
         return;
     }
 
     if (!doc->layers || g_list_length(doc->layers) == 0) {
-        g_warning("Document has no layers");
+        debug_log("WRN", "Document has no layers");
         return;
     }
 
@@ -1593,12 +1594,12 @@ void on_image_trim_borders(GtkWidget* widget, gpointer data) {
     Command* cmd;
 
     if (!doc) {
-        g_warning("No document open");
+        debug_log("WRN", "No document open");
         return;
     }
 
     if (!doc->layers || g_list_length(doc->layers) == 0) {
-        g_warning("Document has no layers");
+        debug_log("WRN", "Document has no layers");
         return;
     }
 

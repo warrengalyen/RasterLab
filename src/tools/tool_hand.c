@@ -5,6 +5,7 @@
 #include <gio/gio.h>
 #include <gtk/gtk.h>
 #include <math.h>
+#include "debug_logger.h"
 
 /**
  * Create a cursor from resource
@@ -27,7 +28,7 @@ static GdkCursor* cursor_from_resource(const char* resource_path, GdkCursorType 
                                     &error);
     if (!bytes) {
         if (error) {
-            g_warning("Failed to load cursor resource '%s': %s", resource_path, error->message);
+            debug_log("WRN", "Failed to load cursor resource '%s': %s", resource_path, error->message);
             g_error_free(error);
         }
         return gdk_cursor_new_for_display(display, fallback);
@@ -40,7 +41,7 @@ static GdkCursor* cursor_from_resource(const char* resource_path, GdkCursorType 
 
     if (!pixbuf) {
         if (error) {
-            g_warning("Failed to parse cursor '%s': %s", resource_path, error->message);
+            debug_log("WRN", "Failed to parse cursor '%s': %s", resource_path, error->message);
             g_error_free(error);
         }
         return gdk_cursor_new_for_display(display, fallback);

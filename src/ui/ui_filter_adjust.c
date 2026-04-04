@@ -50,6 +50,7 @@
 #include "ui/ui_filter_utils.h"
 #include "ui/widgets/filter_dialog.h"
 #include <glib.h>
+#include "debug_logger.h"
 
 /* Filter wrapper functions moved to ui_filter_utils.c */
 
@@ -679,28 +680,28 @@ static void on_adjust_gamma(GtkWidget* widget, gpointer data) {
 
     doc = ui_get_active_document(ctx);
     if (!doc) {
-        g_warning("No document open");
+        debug_log("WRN", "No document open");
         return;
     }
 
     /* Get the currently selected layer */
     layer = document_get_selected_layer(doc);
     if (!layer) {
-        g_warning("No layer selected");
+        debug_log("WRN", "No layer selected");
         return;
     }
 
     /* Create gamma dialog */
     dialog = gamma_dialog_new("Gamma Correction");
     if (!dialog) {
-        g_warning("Failed to create gamma dialog");
+        debug_log("WRN", "Failed to create gamma dialog");
         return;
     }
 
     /* Create a copy of the layer for preview */
     temp_layer = ui_filter_utils_create_temp_layer(layer);
     if (!temp_layer) {
-        g_warning("Failed to create temporary layer for preview");
+        debug_log("WRN", "Failed to create temporary layer for preview");
         gamma_dialog_free(dialog);
         return;
     }
@@ -799,28 +800,28 @@ static void on_adjust_curves(GtkWidget* widget, gpointer data) {
 
     doc = ui_get_active_document(ctx);
     if (!doc) {
-        g_warning("No document open");
+        debug_log("WRN", "No document open");
         return;
     }
 
     /* Get the currently selected layer */
     layer = document_get_selected_layer(doc);
     if (!layer) {
-        g_warning("No layer selected");
+        debug_log("WRN", "No layer selected");
         return;
     }
 
     /* Create curves dialog */
     dialog = curves_dialog_new("Curves");
     if (!dialog) {
-        g_warning("Failed to create curves dialog");
+        debug_log("WRN", "Failed to create curves dialog");
         return;
     }
 
     /* Create a copy of the layer for preview */
     temp_layer = ui_filter_utils_create_temp_layer(layer);
     if (!temp_layer) {
-        g_warning("Failed to create temporary layer for preview");
+        debug_log("WRN", "Failed to create temporary layer for preview");
         curves_dialog_free(dialog);
         return;
     }
@@ -972,28 +973,28 @@ static void on_adjust_colorbalance(GtkWidget* widget, gpointer data) {
 
     doc = ui_get_active_document(ctx);
     if (!doc) {
-        g_warning("No document open");
+        debug_log("WRN", "No document open");
         return;
     }
 
     /* Get the currently selected layer */
     layer = document_get_selected_layer(doc);
     if (!layer) {
-        g_warning("No layer selected");
+        debug_log("WRN", "No layer selected");
         return;
     }
 
     /* Create color balance dialog */
     dialog = color_balance_dialog_new("Color Balance");
     if (!dialog) {
-        g_warning("Failed to create color balance dialog");
+        debug_log("WRN", "Failed to create color balance dialog");
         return;
     }
 
     /* Create a copy of the layer for preview */
     temp_layer = ui_filter_utils_create_temp_layer(layer);
     if (!temp_layer) {
-        g_warning("Failed to create temporary layer for preview");
+        debug_log("WRN", "Failed to create temporary layer for preview");
         color_balance_dialog_free(dialog);
         return;
     }
@@ -1093,25 +1094,25 @@ static void on_adjust_channel_mixer(GtkWidget* widget, gpointer data) {
 
     doc = ui_get_active_document(ctx);
     if (!doc) {
-        g_warning("No document open");
+        debug_log("WRN", "No document open");
         return;
     }
 
     layer = document_get_selected_layer(doc);
     if (!layer) {
-        g_warning("No layer selected");
+        debug_log("WRN", "No layer selected");
         return;
     }
 
     dialog = channel_mixer_dialog_new("Channel Mixer");
     if (!dialog) {
-        g_warning("Failed to create channel mixer dialog");
+        debug_log("WRN", "Failed to create channel mixer dialog");
         return;
     }
 
     temp_layer = ui_filter_utils_create_temp_layer(layer);
     if (!temp_layer) {
-        g_warning("Failed to create temporary layer for preview");
+        debug_log("WRN", "Failed to create temporary layer for preview");
         channel_mixer_dialog_free(dialog);
         return;
     }
@@ -2067,20 +2068,20 @@ static void on_adjust_palettize(GtkWidget* widget, gpointer data) {
 
     doc = ui_get_active_document(ctx);
     if (!doc) {
-        g_warning("No document open");
+        debug_log("WRN", "No document open");
         return;
     }
 
     layer = document_get_selected_layer(doc);
     if (!layer) {
-        g_warning("No layer selected");
+        debug_log("WRN", "No layer selected");
         return;
     }
 
     /* Create palettize dialog */
     dialog = palettize_dialog_new("Palettize");
     if (!dialog) {
-        g_warning("Failed to create palettize dialog");
+        debug_log("WRN", "Failed to create palettize dialog");
         return;
     }
 
@@ -2088,7 +2089,7 @@ static void on_adjust_palettize(GtkWidget* widget, gpointer data) {
     temp_layer = layer_new("Temp", layer->width, layer->height, TRUE,
                            LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL, NULL);
     if (!temp_layer) {
-        g_warning("Failed to create temporary layer for preview");
+        debug_log("WRN", "Failed to create temporary layer for preview");
         palettize_dialog_free(dialog);
         return;
     }
@@ -2245,27 +2246,27 @@ static void on_adjust_retinex(GtkWidget* widget, gpointer data) {
 
     doc = ui_get_active_document(ctx);
     if (!doc) {
-        g_warning("No document open");
+        debug_log("WRN", "No document open");
         return;
     }
 
     layer = document_get_selected_layer(doc);
     if (!layer) {
-        g_warning("No layer selected");
+        debug_log("WRN", "No layer selected");
         return;
     }
 
     /* Create retinex dialog */
     dialog = retinex_dialog_new("Retinex");
     if (!dialog) {
-        g_warning("Failed to create retinex dialog");
+        debug_log("WRN", "Failed to create retinex dialog");
         return;
     }
 
     /* Create a copy of the layer for preview */
     temp_layer = ui_filter_utils_create_temp_layer(layer);
     if (!temp_layer) {
-        g_warning("Failed to create temporary layer for preview");
+        debug_log("WRN", "Failed to create temporary layer for preview");
         retinex_dialog_free(dialog);
         return;
     }

@@ -4,6 +4,7 @@
 #include <glib.h>
 #include <gtk/gtk.h>
 #include "i18n.h"
+#include "debug_logger.h"
 
 #if HAVE_LIBHEIF && HAVE_LIBAOM
 
@@ -36,7 +37,7 @@ gboolean avif_options_dialog_show(GtkWindow* parent, SaveOptions* opts, ImageDoc
     builder = gtk_builder_new();
     ui_utils_builder_set_translation_domain(builder);
     if (!gtk_builder_add_from_resource(builder, "/ui/avif_options_dialog.glade", &error)) {
-        g_warning("Failed to load avif_options_dialog.glade: %s", error ? error->message : "Unknown error");
+        debug_log("WRN", "Failed to load avif_options_dialog.glade: %s", error ? error->message : "Unknown error");
         if (error) {
             g_error_free(error);
         }
@@ -46,7 +47,7 @@ gboolean avif_options_dialog_show(GtkWindow* parent, SaveOptions* opts, ImageDoc
 
     dialog = GTK_WIDGET(gtk_builder_get_object(builder, "avif_options_dialog"));
     if (!dialog) {
-        g_warning("Failed to get avif_options_dialog from builder");
+        debug_log("WRN", "Failed to get avif_options_dialog from builder");
         g_object_unref(builder);
         return FALSE;
     }
@@ -67,7 +68,7 @@ gboolean avif_options_dialog_show(GtkWindow* parent, SaveOptions* opts, ImageDoc
     quality_spin = GTK_WIDGET(gtk_builder_get_object(builder, "quality_spin"));
 
     if (!quality_adjustment) {
-        g_warning("Failed to get quality_adjustment from avif_options_dialog");
+        debug_log("WRN", "Failed to get quality_adjustment from avif_options_dialog");
         g_object_unref(builder);
         gtk_widget_destroy(dialog);
         return FALSE;

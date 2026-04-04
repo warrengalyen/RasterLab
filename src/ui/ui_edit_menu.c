@@ -19,6 +19,7 @@
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <glib.h>
 #include <stdint.h>
+#include "debug_logger.h"
 
 
 /* Forward declarations for helper functions */
@@ -1213,7 +1214,7 @@ void on_edit_paste_new_image(GtkWidget* widget, gpointer data) {
     }
     new_doc->tile_grid = tile_grid_create(new_doc->width, new_doc->height, 128);
     if (!new_doc->tile_grid) {
-        g_warning("Failed to create tile grid");
+        debug_log("WRN", "Failed to create tile grid");
         g_object_unref(pixbuf);
         return;
     }
@@ -1224,7 +1225,7 @@ void on_edit_paste_new_image(GtkWidget* widget, gpointer data) {
     }
     new_doc->selection_mask = selection_mask_new(new_doc->width, new_doc->height);
     if (!new_doc->selection_mask) {
-        g_warning("Failed to create selection mask");
+        debug_log("WRN", "Failed to create selection mask");
         g_object_unref(pixbuf);
         return;
     }
@@ -1799,7 +1800,7 @@ void ui_edit_menu_setup(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* acc
         gtk_widget_add_accelerator(ctx->edit_menu_undo, "activate", accel_group,
                                    GDK_KEY_z, GDK_CONTROL_MASK, GTK_ACCEL_VISIBLE);
     } else {
-        g_warning("Failed to get edit_menu_undo from builder");
+        debug_log("WRN", "Failed to get edit_menu_undo from builder");
     }
     if (ctx->edit_menu_redo) {
         /* Connect signal handler */
@@ -1808,7 +1809,7 @@ void ui_edit_menu_setup(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* acc
         gtk_widget_add_accelerator(ctx->edit_menu_redo, "activate", accel_group,
                                    GDK_KEY_y, GDK_CONTROL_MASK, GTK_ACCEL_VISIBLE);
     } else {
-        g_warning("Failed to get edit_menu_redo from builder");
+        debug_log("WRN", "Failed to get edit_menu_redo from builder");
     }
 
     /* Connect Copy, Cut, Paste menu items */

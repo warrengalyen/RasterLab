@@ -17,6 +17,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include "debug_logger.h"
 
 /* Forward declarations */
 typedef struct AppContext AppContext;
@@ -46,7 +47,7 @@ static GdkCursor* create_paintbucket_cursor(void) {
                                     &error);
     if (!bytes) {
         if (error) {
-            g_warning("Failed to load paintbucket cursor resource: %s", error->message);
+            debug_log("WRN", "Failed to load paintbucket cursor resource: %s", error->message);
             g_error_free(error);
         }
         return gdk_cursor_new_for_display(display, GDK_CROSSHAIR);
@@ -63,7 +64,7 @@ static GdkCursor* create_paintbucket_cursor(void) {
 
     if (!pixbuf) {
         if (error) {
-            g_warning("Failed to parse paintbucket cursor: %s", error->message);
+            debug_log("WRN", "Failed to parse paintbucket cursor: %s", error->message);
             g_error_free(error);
         }
         return gdk_cursor_new_for_display(display, GDK_CROSSHAIR);
@@ -296,7 +297,7 @@ static void paint_bucket_flood_fill(cairo_surface_t* surface, struct ImageDocume
     /* Allocate visited array */
     visited = (gboolean*)g_malloc0(width * height * sizeof(gboolean));
     if (!visited) {
-        g_warning("Paint bucket: Failed to allocate visited array");
+        debug_log("WRN", "Paint bucket: Failed to allocate visited array");
         return;
     }
 

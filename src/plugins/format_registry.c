@@ -101,12 +101,12 @@ gboolean format_registry_register(PluginHandle* plugin_handle, ImageFormatPlugin
     ImageFormatHostAPI* host_api;
 
     if (!registry_initialized) {
-        g_warning("Format registry not initialized");
+        debug_log("WRN", "Format registry not initialized");
         return FALSE;
     }
 
     if (!plugin_handle || !plugin) {
-        g_warning("Invalid parameters for format_registry_register");
+        debug_log("WRN", "Invalid parameters for format_registry_register");
         return FALSE;
     }
 
@@ -119,13 +119,13 @@ gboolean format_registry_register(PluginHandle* plugin_handle, ImageFormatPlugin
         /* Initialize plugin */
         debug_log("DBG", "Initializing plugin before registration");
         if (!plugin_loader_init_with_host(plugin_handle, host_api)) {
-            g_warning("Failed to initialize plugin");
+            debug_log("WRN", "Failed to initialize plugin");
             debug_log("ERR", "Plugin registration failed (initialization failed)");
             return FALSE;
         }
         plugin = plugin_loader_get_plugin(plugin_handle);
         if (!plugin) {
-            g_warning("Failed to get plugin after initialization");
+            debug_log("WRN", "Failed to get plugin after initialization");
             return FALSE;
         }
     } else {
@@ -134,13 +134,13 @@ gboolean format_registry_register(PluginHandle* plugin_handle, ImageFormatPlugin
 
     /* Validate plugin callbacks */
     if (!plugin->callbacks.can_load || !plugin->callbacks.load) {
-        g_warning("Plugin missing required load callbacks");
+        debug_log("WRN", "Plugin missing required load callbacks");
         return FALSE;
     }
 
     /* can_save is required for all plugins, but save can be NULL (for read-only plugins) */
     if (!plugin->callbacks.can_save) {
-        g_warning("Plugin missing required can_save callback");
+        debug_log("WRN", "Plugin missing required can_save callback");
         return FALSE;
     }
 
@@ -184,24 +184,24 @@ gboolean format_registry_register_builtin(ImageFormatPlugin* plugin) {
     FormatHandler* handler;
 
     if (!registry_initialized) {
-        g_warning("Format registry not initialized");
+        debug_log("WRN", "Format registry not initialized");
         return FALSE;
     }
 
     if (!plugin) {
-        g_warning("Invalid parameters for format_registry_register_builtin");
+        debug_log("WRN", "Invalid parameters for format_registry_register_builtin");
         return FALSE;
     }
 
     /* Validate plugin callbacks */
     if (!plugin->callbacks.can_load || !plugin->callbacks.load) {
-        g_warning("Plugin missing required load callbacks");
+        debug_log("WRN", "Plugin missing required load callbacks");
         return FALSE;
     }
 
     /* can_save is required for all plugins, but save can be NULL (for read-only plugins) */
     if (!plugin->callbacks.can_save) {
-        g_warning("Plugin doesn't support saving");
+        debug_log("WRN", "Plugin doesn't support saving");
         return FALSE;
     }
 

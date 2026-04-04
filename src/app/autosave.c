@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include "debug_logger.h"
 
 /* Autosave configuration */
 #define AUTOSAVE_INTERVAL_MIN 30
@@ -90,7 +91,7 @@ static gboolean autosave_ensure_directory(void) {
     gboolean success = TRUE;
 
     if (g_mkdir_with_parents(autosave_dir, 0755) != 0) {
-        g_warning("Failed to create autosave directory: %s", autosave_dir);
+        debug_log("WRN", "Failed to create autosave directory: %s", autosave_dir);
         success = FALSE;
     }
 
@@ -272,7 +273,7 @@ static ImageLayer* load_layer(FILE* file) {
 
     /* Validate data size */
     if (data_size != width * height * 4) {
-        g_warning("Invalid layer data size in autosave file");
+        debug_log("WRN", "Invalid layer data size in autosave file");
         g_free(name);
         return NULL;
     }
@@ -350,7 +351,7 @@ gboolean autosave_save_document(ImageDocument* doc) {
     /* Open temporary file */
     FILE* file = g_fopen(temp_path, "wb");
     if (!file) {
-        g_warning("Failed to open autosave file for writing: %s", temp_path);
+        debug_log("WRN", "Failed to open autosave file for writing: %s", temp_path);
         g_free(file_path);
         g_free(temp_path);
         return FALSE;
@@ -441,7 +442,7 @@ gboolean autosave_save_document(ImageDocument* doc) {
 
     /* Atomically rename temp file to final file */
     if (g_rename(temp_path, file_path) != 0) {
-        g_warning("Failed to rename autosave file: %s", file_path);
+        debug_log("WRN", "Failed to rename autosave file: %s", file_path);
         g_unlink(temp_path);
         g_free(file_path);
         g_free(temp_path);
@@ -471,7 +472,7 @@ ImageDocument* autosave_load_document(const gchar* autosave_path) {
     }
 
     if (strcmp(magic, AUTOSAVE_MAGIC) != 0) {
-        g_warning("Invalid autosave file magic");
+        debug_log("WRN", "Invalid autosave file magic");
         fclose(file);
         return NULL;
     }
@@ -484,7 +485,7 @@ ImageDocument* autosave_load_document(const gchar* autosave_path) {
     }
 
     if (version != AUTOSAVE_VERSION) {
-        g_warning("Unsupported autosave file version: %u", version);
+        debug_log("WRN", "Unsupported autosave file version: %u", version);
         fclose(file);
         return NULL;
     }

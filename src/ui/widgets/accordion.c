@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "i18n.h"
+#include "debug_logger.h"
 
 /**
  * Accordion section structure
@@ -147,7 +148,7 @@ AccordionSection* accordion_add_section(Accordion* accordion,
                                (GDestroyNotify)g_object_unref);
         g_object_unref(chevron_pixbuf);
     } else {
-        g_warning("Failed to load chevron.png from resources");
+        debug_log("WRN", "Failed to load chevron.png from resources");
         GtkWidget* caret_image = gtk_label_new(_("▼"));
         gtk_widget_set_halign(caret_image, GTK_ALIGN_END);
         gtk_box_pack_end(GTK_BOX(header_box), caret_image, FALSE, FALSE, 0);

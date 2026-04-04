@@ -3,6 +3,7 @@
 #include "ocular.h"
 #include "ui/filters/filter_utils.h"
 #include <glib.h>
+#include "debug_logger.h"
 
 /**
  * Apply shadow/highlights filter to a layer using Ocular library
@@ -39,7 +40,7 @@ gboolean filter_shadow_highlights_apply(ImageLayer* layer, const gfloat* values,
                                          shadows, midtone_contrast, highlights);
 
     if (status != OC_STATUS_OK) {
-        g_warning("Shadow/Highlights filter: Ocular filter returned error %d", status);
+        debug_log("WRN", "Shadow/Highlights filter: Ocular filter returned error %d", status);
         filter_utils_free_rgb_buffers(&buffers);
         return FALSE;
     }

@@ -2,6 +2,7 @@
 #include "filters.h"
 #include "ocular.h"
 #include <glib.h>
+#include "debug_logger.h"
 
 /**
  * Apply auto white balance filter to a layer using Ocular library
@@ -31,7 +32,7 @@ gboolean filter_auto_whitebalance_apply(ImageLayer* layer) {
     rgb_output = (guchar*)g_malloc(width * height * 3);
 
     if (!rgb_input || !rgb_output) {
-        g_warning("Auto white balance filter: Failed to allocate memory");
+        debug_log("WRN", "Auto white balance filter: Failed to allocate memory");
         g_free(rgb_input);
         g_free(rgb_output);
         return FALSE;
@@ -39,7 +40,7 @@ gboolean filter_auto_whitebalance_apply(ImageLayer* layer) {
 
     /* Convert from Cairo ARGB32 to RGB */
     if (!adjustments_cairo_to_rgb(surface, rgb_input)) {
-        g_warning("Auto white balance filter: Failed to convert surface to RGB");
+        debug_log("WRN", "Auto white balance filter: Failed to convert surface to RGB");
         g_free(rgb_input);
         g_free(rgb_output);
         return FALSE;
@@ -50,7 +51,7 @@ gboolean filter_auto_whitebalance_apply(ImageLayer* layer) {
                                     15, 0.01f, 0.9f, &colorCast);
 
     if (status != OC_STATUS_OK) {
-        g_warning("Auto white balance filter: Ocular filter returned error %d", status);
+        debug_log("WRN", "Auto white balance filter: Ocular filter returned error %d", status);
         g_free(rgb_input);
         g_free(rgb_output);
         return FALSE;
@@ -58,7 +59,7 @@ gboolean filter_auto_whitebalance_apply(ImageLayer* layer) {
 
     /* Convert back from RGB to Cairo ARGB32 */
     if (!adjustments_rgb_to_cairo(surface, rgb_output)) {
-        g_warning("Auto white balance filter: Failed to convert RGB to surface");
+        debug_log("WRN", "Auto white balance filter: Failed to convert RGB to surface");
         g_free(rgb_input);
         g_free(rgb_output);
         return FALSE;

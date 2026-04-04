@@ -215,7 +215,7 @@ gboolean tile_worker_composite_pixels_gpu(ImageDocument* doc,
                 return TRUE; /* GPU compositing successful */
             }
             /* GPU compositing failed, fall through to CPU */
-            g_warning("GPU compositing failed for tile (%d, %d), falling back to CPU", tile_x, tile_y);
+            debug_log("WRN", "GPU compositing failed for tile (%d, %d), falling back to CPU", tile_x, tile_y);
         } else {
             g_debug("GPU compositor exists but is not ready");
         }
@@ -456,7 +456,7 @@ gboolean tile_worker_pool_enqueue(TileWorkerPool* pool,
         tile->pixel_buffer = (uint8_t*)g_malloc0(tile->stride * tile->h);
 
         if (!tile->pixel_buffer) {
-            g_warning("Failed to allocate pixel buffer for tile");
+            debug_log("WRN", "Failed to allocate pixel buffer for tile");
             return FALSE;
         }
     }
@@ -558,7 +558,7 @@ guint tile_worker_pool_process_uploads(TileWorkerPool* pool, void* display_trans
             tile->pending_upload = FALSE;
             count++;
         } else {
-            g_warning("Failed to create Cairo surface for tile (%d, %d)", tile->x, tile->y);
+            debug_log("WRN", "Failed to create Cairo surface for tile (%d, %d)", tile->x, tile->y);
             cairo_surface_destroy(tile->surface);
             tile->surface = NULL;
         }

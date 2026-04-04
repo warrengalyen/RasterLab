@@ -2,6 +2,7 @@
 #include "filters.h"
 #include "ocular.h"
 #include <glib.h>
+#include "debug_logger.h"
 
 /**
  * Apply retinex filter to a layer using Ocular library
@@ -29,7 +30,7 @@ gboolean filter_retinex_apply(ImageLayer* layer, OcRetinexMode mode, gint scale,
     rgb_output = (guchar*)g_malloc(width * height * 3);
 
     if (!rgb_input || !rgb_output) {
-        g_warning("Retinex filter: Failed to allocate memory");
+        debug_log("WRN", "Retinex filter: Failed to allocate memory");
         g_free(rgb_input);
         g_free(rgb_output);
         return FALSE;
@@ -37,7 +38,7 @@ gboolean filter_retinex_apply(ImageLayer* layer, OcRetinexMode mode, gint scale,
 
     /* Convert from Cairo ARGB32 to RGB */
     if (!adjustments_cairo_to_rgb(surface, rgb_input)) {
-        g_warning("Retinex filter: Failed to convert surface to RGB");
+        debug_log("WRN", "Retinex filter: Failed to convert surface to RGB");
         g_free(rgb_input);
         g_free(rgb_output);
         return FALSE;
@@ -48,7 +49,7 @@ gboolean filter_retinex_apply(ImageLayer* layer, OcRetinexMode mode, gint scale,
     status = ocularMultiscaleRetinex(rgb_input, rgb_output, width, height, 3, mode, scale, (float)numScales, (float)dynamic);
 
     if (status != OC_STATUS_OK) {
-        g_warning("Retinex filter: Ocular filter returned error %d", status);
+        debug_log("WRN", "Retinex filter: Ocular filter returned error %d", status);
         g_free(rgb_input);
         g_free(rgb_output);
         return FALSE;
@@ -56,7 +57,7 @@ gboolean filter_retinex_apply(ImageLayer* layer, OcRetinexMode mode, gint scale,
 
     /* Convert back from RGB to Cairo ARGB32 */
     if (!adjustments_rgb_to_cairo(surface, rgb_output)) {
-        g_warning("Retinex filter: Failed to convert RGB to surface");
+        debug_log("WRN", "Retinex filter: Failed to convert RGB to surface");
         g_free(rgb_input);
         g_free(rgb_output);
         return FALSE;

@@ -266,7 +266,7 @@ static PluginError load_heic(ImageDocument* doc, const char* filename) {
     num_images = heif_context_get_number_of_top_level_images(ctx);
     if (num_images <= 0) {
         heif_context_free(ctx);
-        g_warning("HEIC plugin: No top-level images");
+        debug_log("WRN", "HEIC plugin: No top-level images");
         return PLUGIN_ERROR_UNSUPPORTED_FORMAT;
     }
 
@@ -311,7 +311,7 @@ static PluginError load_heic(ImageDocument* doc, const char* filename) {
                                 icc_destroy(profile);
                             }
                         } else {
-                            g_warning("HEIC plugin: Invalid or non-RGB embedded ICC profile; assuming sRGB");
+                            debug_log("WRN", "HEIC plugin: Invalid or non-RGB embedded ICC profile; assuming sRGB");
                         }
                     }
                     g_free(profile_buf);
@@ -345,7 +345,7 @@ static PluginError load_heic(ImageDocument* doc, const char* filename) {
     heif_context_free(ctx);
 
     if (loaded_count == 0 || doc->layers == NULL) {
-        g_warning("HEIC plugin: No decodable image found (incomplete/corrupt streams skipped)");
+        debug_log("WRN", "HEIC plugin: No decodable image found (incomplete/corrupt streams skipped)");
         return PLUGIN_ERROR_UNSUPPORTED_FORMAT;
     }
 
@@ -510,7 +510,7 @@ static PluginError save_heic_impl(ImageDocument* doc, const char* filename, cons
         if (icc_data)
             free(icc_data);
 #endif
-        g_warning("HEIC plugin: No HEVC encoder available (x265 development libraries required)");
+        debug_log("WRN", "HEIC plugin: No HEVC encoder available (x265 development libraries required)");
         return PLUGIN_ERROR_UNSUPPORTED_FEATURE;
     }
 
@@ -588,7 +588,7 @@ static PluginError save_heic_impl(ImageDocument* doc, const char* filename, cons
                 heif_image_handle_release(handle);
             }
             if (err.code != heif_error_Ok) {
-                g_warning("HEIC plugin: Encode error: %s", err.message);
+                debug_log("WRN", "HEIC plugin: Encode error: %s", err.message);
                 ret = PLUGIN_ERROR_FILE_WRITE_ERROR;
                 break;
             }
@@ -657,7 +657,7 @@ static PluginError save_heic_impl(ImageDocument* doc, const char* filename, cons
             heif_image_handle_release(handle);
         }
         if (err.code != heif_error_Ok) {
-            g_warning("HEIC plugin: Encode error: %s", err.message);
+            debug_log("WRN", "HEIC plugin: Encode error: %s", err.message);
             ret = PLUGIN_ERROR_FILE_WRITE_ERROR;
         }
     }
@@ -665,7 +665,7 @@ static PluginError save_heic_impl(ImageDocument* doc, const char* filename, cons
     if (ret == PLUGIN_ERROR_NONE) {
         err = heif_context_write_to_file(ctx, filename);
         if (err.code != heif_error_Ok) {
-            g_warning("HEIC plugin: Write error: %s", err.message);
+            debug_log("WRN", "HEIC plugin: Write error: %s", err.message);
             ret = PLUGIN_ERROR_FILE_WRITE_ERROR;
         }
     }

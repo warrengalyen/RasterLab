@@ -22,6 +22,7 @@
 #include <pango/pango.h>
 #include <stdio.h>
 #include <string.h>
+#include "debug_logger.h"
 
 /* Flag to prevent recursive spin updates when crop link toggle is active */
 static gboolean g_crop_spin_updating = FALSE;
@@ -503,16 +504,16 @@ static GtkWidget* load_panel_from_glade(const gchar* resource_path, const gchar*
     builder = gtk_builder_new();
     ui_utils_builder_set_translation_domain(builder);
     if (!builder) {
-        g_warning("Failed to create GtkBuilder");
+        debug_log("WRN", "Failed to create GtkBuilder");
         return NULL;
     }
 
     /* Try to load the resource */
     gboolean success = gtk_builder_add_from_resource(builder, resource_path, &error);
     if (!success) {
-        g_warning("Failed to load %s", resource_path);
+        debug_log("WRN", "Failed to load %s", resource_path);
         if (error) {
-            g_warning("Error details: domain=%d, code=%d, message=%s",
+            debug_log("WRN", "Error details: domain=%d, code=%d, message=%s",
                       error->domain, error->code, error->message);
             g_error_free(error);
             error = NULL;
@@ -523,7 +524,7 @@ static GtkWidget* load_panel_from_glade(const gchar* resource_path, const gchar*
 
     panel = GTK_WIDGET(gtk_builder_get_object(builder, panel_id));
     if (!panel) {
-        g_warning("Failed to get %s object from builder", panel_id);
+        debug_log("WRN", "Failed to get %s object from builder", panel_id);
         g_object_unref(builder);
         return NULL;
     }
@@ -543,7 +544,7 @@ static GtkWidget* load_panel_from_glade(const gchar* resource_path, const gchar*
     if (size_scale) {
         GtkWidget* widget = GTK_WIDGET(gtk_builder_get_object(builder, size_id));
         if (!widget) {
-            g_warning("Failed to get %s from builder", size_id);
+            debug_log("WRN", "Failed to get %s from builder", size_id);
             *size_scale = NULL;
         } else {
             *size_scale = widget;
@@ -557,7 +558,7 @@ static GtkWidget* load_panel_from_glade(const gchar* resource_path, const gchar*
     if (opacity_scale) {
         GtkWidget* widget = GTK_WIDGET(gtk_builder_get_object(builder, opacity_id));
         if (!widget) {
-            g_warning("Failed to get %s from builder", opacity_id);
+            debug_log("WRN", "Failed to get %s from builder", opacity_id);
             *opacity_scale = NULL;
         } else {
             *opacity_scale = widget;
@@ -573,7 +574,7 @@ static GtkWidget* load_panel_from_glade(const gchar* resource_path, const gchar*
     if (hardness_scale) {
         GtkWidget* widget = GTK_WIDGET(gtk_builder_get_object(builder, hardness_id));
         if (!widget) {
-            g_warning("Failed to get %s from builder", hardness_id);
+            debug_log("WRN", "Failed to get %s from builder", hardness_id);
             *hardness_scale = NULL;
         } else {
             *hardness_scale = widget;
@@ -587,7 +588,7 @@ static GtkWidget* load_panel_from_glade(const gchar* resource_path, const gchar*
     if (flow_scale) {
         GtkWidget* widget = GTK_WIDGET(gtk_builder_get_object(builder, flow_id));
         if (!widget) {
-            g_warning("Failed to get %s from builder", flow_id);
+            debug_log("WRN", "Failed to get %s from builder", flow_id);
             *flow_scale = NULL;
         } else {
             *flow_scale = widget;
@@ -601,7 +602,7 @@ static GtkWidget* load_panel_from_glade(const gchar* resource_path, const gchar*
     if (spacing_scale) {
         GtkWidget* widget = GTK_WIDGET(gtk_builder_get_object(builder, spacing_id));
         if (!widget) {
-            g_warning("Failed to get %s from builder", spacing_id);
+            debug_log("WRN", "Failed to get %s from builder", spacing_id);
             *spacing_scale = NULL;
         } else {
             *spacing_scale = widget;
@@ -1992,7 +1993,7 @@ static void on_crop_apply_clicked(GtkButton* button, gpointer user_data) {
     }
 
     if (!crop_apply_if_active(ctx)) {
-        g_warning("No active crop rectangle to apply");
+        debug_log("WRN", "No active crop rectangle to apply");
     }
 }
 
@@ -2457,7 +2458,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
     ToolOptionsPanel* tool_opts_panel = (ToolOptionsPanel*)g_malloc(sizeof(ToolOptionsPanel));
 
     if (!tool_opts_panel) {
-        g_warning("Failed to allocate ToolOptionsPanel");
+        debug_log("WRN", "Failed to allocate ToolOptionsPanel");
         return NULL;
     }
 
@@ -2536,7 +2537,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
     /* Create container to hold the current panel */
     GtkWidget* container = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
     if (!container) {
-        g_warning("Failed to create tool options container");
+        debug_log("WRN", "Failed to create tool options container");
         g_free(tool_opts_panel);
         return NULL;
     }
@@ -2554,7 +2555,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
         &brush_spacing);
 
     if (!tool_opts_panel->brush_panel) {
-        g_warning("Failed to load brush options panel from Glade");
+        debug_log("WRN", "Failed to load brush options panel from Glade");
         g_object_unref(container);
         g_free(tool_opts_panel);
         return NULL;
@@ -2587,7 +2588,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
         &eraser_spacing);
 
     if (!tool_opts_panel->eraser_panel) {
-        g_warning("Failed to load eraser options panel from Glade");
+        debug_log("WRN", "Failed to load eraser options panel from Glade");
         /* Continue anyway - brush panel is loaded */
     } else {
         /* Add eraser panel to container */
@@ -2686,7 +2687,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
         }
         g_object_unref(pencil_builder);
     } else {
-        g_warning("Failed to load pencil options panel: %s", pencil_error ? pencil_error->message : "Unknown error");
+        debug_log("WRN", "Failed to load pencil options panel: %s", pencil_error ? pencil_error->message : "Unknown error");
         if (pencil_error) {
             g_error_free(pencil_error);
         }
@@ -2773,7 +2774,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
         }
         g_object_unref(paintbucket_builder);
     } else {
-        g_warning("Failed to load paint bucket options panel: %s", paintbucket_error ? paintbucket_error->message : "Unknown error");
+        debug_log("WRN", "Failed to load paint bucket options panel: %s", paintbucket_error ? paintbucket_error->message : "Unknown error");
         if (paintbucket_error) {
             g_error_free(paintbucket_error);
         }
@@ -2839,7 +2840,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
         }
         g_object_unref(color_picker_builder);
     } else {
-        g_warning("Failed to load color picker options panel: %s", color_picker_error ? color_picker_error->message : "Unknown error");
+        debug_log("WRN", "Failed to load color picker options panel: %s", color_picker_error ? color_picker_error->message : "Unknown error");
         if (color_picker_error) {
             g_error_free(color_picker_error);
         }
@@ -2932,7 +2933,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
         }
         g_object_unref(rect_select_builder);
     } else {
-        g_warning("Failed to load rectangular select options panel: %s", rect_select_error ? rect_select_error->message : "Unknown error");
+        debug_log("WRN", "Failed to load rectangular select options panel: %s", rect_select_error ? rect_select_error->message : "Unknown error");
         if (rect_select_error) {
             g_error_free(rect_select_error);
         }
@@ -3022,7 +3023,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
         }
         g_object_unref(ellipse_select_builder);
     } else {
-        g_warning("Failed to load elliptical select options panel: %s", ellipse_select_error ? ellipse_select_error->message : "Unknown error");
+        debug_log("WRN", "Failed to load elliptical select options panel: %s", ellipse_select_error ? ellipse_select_error->message : "Unknown error");
         if (ellipse_select_error) {
             g_error_free(ellipse_select_error);
         }
@@ -3091,7 +3092,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
         }
         g_object_unref(polygon_select_builder);
     } else {
-        g_warning("Failed to load polygon select options panel: %s", polygon_select_error ? polygon_select_error->message : "Unknown error");
+        debug_log("WRN", "Failed to load polygon select options panel: %s", polygon_select_error ? polygon_select_error->message : "Unknown error");
         if (polygon_select_error)
             g_error_free(polygon_select_error);
         if (polygon_select_builder)
@@ -3154,7 +3155,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
         }
         g_object_unref(lasso_select_builder);
     } else {
-        g_warning("Failed to load lasso select options panel: %s", lasso_select_error ? lasso_select_error->message : "Unknown error");
+        debug_log("WRN", "Failed to load lasso select options panel: %s", lasso_select_error ? lasso_select_error->message : "Unknown error");
         if (lasso_select_error)
             g_error_free(lasso_select_error);
         if (lasso_select_builder)
@@ -3251,7 +3252,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
         }
         g_object_unref(magic_wand_builder);
     } else {
-        g_warning("Failed to load magic wand select options panel: %s", magic_wand_error ? magic_wand_error->message : "Unknown error");
+        debug_log("WRN", "Failed to load magic wand select options panel: %s", magic_wand_error ? magic_wand_error->message : "Unknown error");
         if (magic_wand_error)
             g_error_free(magic_wand_error);
         if (magic_wand_builder)
@@ -3381,7 +3382,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
         }
         g_object_unref(crop_builder);
     } else {
-        g_warning("Failed to load crop options panel: %s", crop_error ? crop_error->message : "Unknown error");
+        debug_log("WRN", "Failed to load crop options panel: %s", crop_error ? crop_error->message : "Unknown error");
         if (crop_error)
             g_error_free(crop_error);
         if (crop_builder)
@@ -3427,7 +3428,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
         }
         g_object_unref(move_builder);
     } else {
-        g_warning("Failed to load move options panel: %s", move_error ? move_error->message : "Unknown error");
+        debug_log("WRN", "Failed to load move options panel: %s", move_error ? move_error->message : "Unknown error");
         if (move_error) {
             g_error_free(move_error);
         }
@@ -3575,7 +3576,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
                 gtk_widget_set_no_show_all(tool_opts_panel->text_panel, TRUE);
             }
         } else {
-            g_warning("Failed to load text options panel: %s",
+            debug_log("WRN", "Failed to load text options panel: %s",
                       err ? err->message : "Unknown error");
             if (err)
                 g_error_free(err);

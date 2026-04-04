@@ -8,6 +8,7 @@
 #include <math.h>
 #include <string.h>
 #include "i18n.h"
+#include "debug_logger.h"
 
 /**
  * Canvas size dialog structure
@@ -546,7 +547,7 @@ static void update_preserve_ratio_icon(CanvasSizeDialog* dialog) {
 
     pixbuf = gdk_pixbuf_new_from_resource(icon_resource, &error);
     if (!pixbuf) {
-        g_warning("Failed to load %s: %s", icon_resource, error ? error->message : "Unknown error");
+        debug_log("WRN", "Failed to load %s: %s", icon_resource, error ? error->message : "Unknown error");
         if (error) {
             g_error_free(error);
         }
@@ -591,7 +592,7 @@ static void set_reset_button_icon(GtkButton* button) {
     GError* error = NULL;
     GdkPixbuf* pixbuf = gdk_pixbuf_new_from_resource("/icons/reset.png", &error);
     if (!pixbuf) {
-        g_warning("Failed to load reset.png: %s", error ? error->message : "Unknown error");
+        debug_log("WRN", "Failed to load reset.png: %s", error ? error->message : "Unknown error");
         if (error) {
             g_error_free(error);
         }
@@ -672,7 +673,7 @@ CanvasSizeDialog* canvas_size_dialog_new(ImageDocument* doc) {
     builder = gtk_builder_new();
     ui_utils_builder_set_translation_domain(builder);
     if (!gtk_builder_add_from_resource(builder, "/ui/canvas_size_dialog.glade", &error)) {
-        g_warning("Failed to load canvas_size_dialog.glade: %s", error ? error->message : "Unknown error");
+        debug_log("WRN", "Failed to load canvas_size_dialog.glade: %s", error ? error->message : "Unknown error");
         if (error) {
             g_error_free(error);
         }
@@ -684,7 +685,7 @@ CanvasSizeDialog* canvas_size_dialog_new(ImageDocument* doc) {
     /* Get dialog widget */
     dialog->dialog = GTK_WIDGET(gtk_builder_get_object(builder, "canvas_size_dialog"));
     if (!dialog->dialog) {
-        g_warning("Failed to get canvas_size_dialog from builder");
+        debug_log("WRN", "Failed to get canvas_size_dialog from builder");
         g_object_unref(builder);
         g_free(dialog);
         return NULL;
@@ -728,7 +729,7 @@ CanvasSizeDialog* canvas_size_dialog_new(ImageDocument* doc) {
         !dialog->width_reset_button || !dialog->height_reset_button || !dialog->resolution_reset_button ||
         !dialog->preserve_ratio_toggle || !dialog->dimensions_text || !dialog->aspect_ratio_text ||
         !dialog->anchor_container) {
-        g_warning("Failed to get all widgets from builder");
+        debug_log("WRN", "Failed to get all widgets from builder");
         g_object_unref(builder);
         g_free(dialog);
         return NULL;
@@ -793,10 +794,10 @@ CanvasSizeDialog* canvas_size_dialog_new(ImageDocument* doc) {
                 gtk_widget_show_all(dialog->anchor_container);
             }
         } else {
-            g_warning("Failed to get anchor widget from anchor_position_widget");
+            debug_log("WRN", "Failed to get anchor widget from anchor_position_widget");
         }
     } else {
-        g_warning("Failed to create anchor position widget");
+        debug_log("WRN", "Failed to create anchor position widget");
     }
 
     /* Populate width/height unit combo boxes */
@@ -956,7 +957,7 @@ gint canvas_size_dialog_run(CanvasSizeDialog* dialog, GtkWindow* parent, CanvasS
     }
 
     if (!dialog->dialog || !GTK_IS_WIDGET(dialog->dialog)) {
-        g_warning("Invalid dialog widget");
+        debug_log("WRN", "Invalid dialog widget");
         return GTK_RESPONSE_CANCEL;
     }
 

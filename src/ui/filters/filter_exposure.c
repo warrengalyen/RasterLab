@@ -3,6 +3,7 @@
 #include "ocular.h"
 #include "ui/filters/filter_utils.h"
 #include <glib.h>
+#include "debug_logger.h"
 
 /**
  * Apply exposure filter to a layer using Ocular library
@@ -35,7 +36,7 @@ gboolean filter_exposure_apply(ImageLayer* layer, const gfloat* values, gint num
                                   buffers.width, buffers.height, buffers.stride, exposure);
 
     if (status != OC_STATUS_OK) {
-        g_warning("Exposure filter: Ocular filter returned error %d", status);
+        debug_log("WRN", "Exposure filter: Ocular filter returned error %d", status);
         filter_utils_free_rgb_buffers(&buffers);
         return FALSE;
     }

@@ -168,7 +168,7 @@ UndoJournal* undo_journal_create(struct ImageDocument* doc,
     /* Ensure temporary directory exists */
     gchar* temp_dir_to_check = g_path_get_dirname(journal_path);
     if (!g_file_test(temp_dir_to_check, G_FILE_TEST_IS_DIR)) {
-        g_warning("Temporary directory does not exist: %s", temp_dir_to_check);
+        debug_log("WRN", "Temporary directory does not exist: %s", temp_dir_to_check);
         g_free(temp_dir_to_check);
         g_free(journal_path);
         g_free(journal);
@@ -179,9 +179,9 @@ UndoJournal* undo_journal_create(struct ImageDocument* doc,
     /* Open journal file in append mode (create if doesn't exist) */
     journal->journal_file = open_binary_file(journal_path, "ab+");
     if (!journal->journal_file) {
-        g_warning("Failed to open undo journal file: %s (errno=%d: %s)",
+        debug_log("WRN", "Failed to open undo journal file: %s (errno=%d: %s)",
                   journal_path, errno, strerror(errno));
-        g_warning("Please check that the temporary directory exists and is writable");
+        debug_log("WRN", "Please check that the temporary directory exists and is writable");
         g_free(journal_path);
         g_free(journal);
         return NULL;
@@ -195,7 +195,7 @@ UndoJournal* undo_journal_create(struct ImageDocument* doc,
     /* Validate and recover journal on startup */
     if (journal->total_size > 0) {
         if (!undo_journal_validate_and_recover(journal)) {
-            g_warning("Journal validation failed, starting with empty journal");
+            debug_log("WRN", "Journal validation failed, starting with empty journal");
             journal->total_size = 0;
             fseek(journal->journal_file, 0, SEEK_SET);
         }
@@ -230,7 +230,7 @@ void undo_journal_free(UndoJournal* journal) {
             if (g_unlink(journal->journal_path) != 0) {
                 /* Failed to delete - log warning but continue cleanup */
                 /* On Windows, files may be locked briefly after closing, but this is rare */
-                g_warning("Failed to delete undo journal file: %s (%s)",
+                debug_log("WRN", "Failed to delete undo journal file: %s (%s)",
                           journal->journal_path, strerror(errno));
             }
         }
@@ -379,7 +379,7 @@ gboolean undo_journal_write_tile_command(UndoJournal* journal, Command* cmd) {
 
     /* Verify file handle is valid - reopen if necessary */
     if (ferror(journal->journal_file)) {
-        g_warning("Journal file '%s' is in error state, reopening file",
+        debug_log("WRN", "Journal file '%s' is in error state, reopening file",
                   journal->journal_path ? journal->journal_path : "<unknown>");
 
         /* Close the bad file handle */
@@ -395,9 +395,9 @@ gboolean undo_journal_write_tile_command(UndoJournal* journal, Command* cmd) {
         /* Reopen in append mode */
         journal->journal_file = open_binary_file(journal->journal_path, "ab+");
         if (!journal->journal_file) {
-            g_warning("Failed to reopen journal file '%s': %s (errno=%d)",
+            debug_log("WRN", "Failed to reopen journal file '%s': %s (errno=%d)",
                       journal->journal_path, strerror(errno), errno);
-            g_warning("File exists: %s", file_exists ? "yes" : "no");
+            debug_log("WRN", "File exists: %s", file_exists ? "yes" : "no");
             return FALSE;
         }
 
@@ -468,7 +468,7 @@ gboolean undo_journal_write_tile_command(UndoJournal* journal, Command* cmd) {
     }
 
     if (compressed_size <= 0) {
-        g_warning("LZ4 compression failed");
+        debug_log("WRN", "LZ4 compression failed");
         g_free(uncompressed_buffer);
         g_free(compressed_buffer);
         return FALSE;
@@ -477,7 +477,7 @@ gboolean undo_journal_write_tile_command(UndoJournal* journal, Command* cmd) {
     /* Get current file offset */
     file_offset = ftell(journal->journal_file);
     if (file_offset < 0) {
-        g_warning("Failed to get file position for journal '%s': %s (errno=%d)",
+        debug_log("WRN", "Failed to get file position for journal '%s': %s (errno=%d)",
                   journal->journal_path, strerror(errno), errno);
         g_free(uncompressed_buffer);
         g_free(compressed_buffer);
@@ -502,7 +502,7 @@ gboolean undo_journal_write_tile_command(UndoJournal* journal, Command* cmd) {
     int file_error = ferror(journal->journal_file);
 
     if (header_written != 1) {
-        g_warning("Failed to write undo entry header to '%s': fwrite returned %zu, errno=%d (%s), ferror=%d, file_offset=%lld",
+        debug_log("WRN", "Failed to write undo entry header to '%s': fwrite returned %zu, errno=%d (%s), ferror=%d, file_offset=%lld",
                   journal->journal_path ? journal->journal_path : "<unknown>",
                   header_written, write_errno, strerror(write_errno), file_error,
                   (long long)file_offset);
@@ -517,7 +517,7 @@ gboolean undo_journal_write_tile_command(UndoJournal* journal, Command* cmd) {
     file_error = ferror(journal->journal_file);
 
     if (payload_written != 1) {
-        g_warning("Failed to write compressed undo entry data to '%s': fwrite returned %zu, errno=%d (%s), ferror=%d",
+        debug_log("WRN", "Failed to write compressed undo entry data to '%s': fwrite returned %zu, errno=%d (%s), ferror=%d",
                   journal->journal_path ? journal->journal_path : "<unknown>",
                   payload_written, write_errno, strerror(write_errno), file_error);
         g_free(uncompressed_buffer);
@@ -527,14 +527,14 @@ gboolean undo_journal_write_tile_command(UndoJournal* journal, Command* cmd) {
 
     /* Flush to disk for crash safety */
     if (fflush(journal->journal_file) != 0) {
-        g_warning("Failed to flush journal file '%s': %s (errno=%d)",
+        debug_log("WRN", "Failed to flush journal file '%s': %s (errno=%d)",
                   journal->journal_path, strerror(errno), errno);
     }
 
     /* Update journal size - check for errors */
     long new_pos = ftell(journal->journal_file);
     if (new_pos < 0) {
-        g_warning("ftell() failed for journal '%s': %s (errno=%d)",
+        debug_log("WRN", "ftell() failed for journal '%s': %s (errno=%d)",
                   journal->journal_path, strerror(errno), errno);
         /* Try to continue anyway, using old size + what we just wrote */
         journal->total_size = file_offset + sizeof(header) + compressed_size;
@@ -703,7 +703,7 @@ gboolean undo_journal_read_undo(UndoJournal* journal,
     /* Validate checksum */
     uint64_t computed_checksum = compute_checksum(compressed_buffer, header.compressed_size);
     if (computed_checksum != header.checksum) {
-        g_warning("Undo entry checksum mismatch");
+        debug_log("WRN", "Undo entry checksum mismatch");
         g_free(compressed_buffer);
         return FALSE;
     }
@@ -722,7 +722,7 @@ gboolean undo_journal_read_undo(UndoJournal* journal,
                                             (int)header.uncompressed_size);
 
     if (uncompressed_size != (int)header.uncompressed_size) {
-        g_warning("LZ4 decompression failed or size mismatch");
+        debug_log("WRN", "LZ4 decompression failed or size mismatch");
         g_free(compressed_buffer);
         g_free(uncompressed_buffer);
         return FALSE;
@@ -740,7 +740,7 @@ gboolean undo_journal_read_undo(UndoJournal* journal,
     }
 
     if (!layer) {
-        g_warning("Layer for undo entry no longer exists");
+        debug_log("WRN", "Layer for undo entry no longer exists");
         g_free(compressed_buffer);
         g_free(uncompressed_buffer);
         return FALSE;
@@ -813,7 +813,7 @@ gboolean undo_journal_read_undo(UndoJournal* journal,
      * After reading from the middle of the file, the file pointer is not at EOF.
      * We must restore it to EOF so that subsequent writes append correctly. */
     if (fseek(journal->journal_file, 0, SEEK_END) != 0) {
-        g_warning("Failed to seek back to EOF after undo read: %s (errno=%d)",
+        debug_log("WRN", "Failed to seek back to EOF after undo read: %s (errno=%d)",
                   strerror(errno), errno);
         /* Try to recover by clearing the error state */
         clearerr(journal->journal_file);
@@ -874,7 +874,7 @@ gboolean undo_journal_read_redo(UndoJournal* journal,
     /* Validate checksum */
     uint64_t computed_checksum = compute_checksum(compressed_buffer, header.compressed_size);
     if (computed_checksum != header.checksum) {
-        g_warning("Redo entry checksum mismatch");
+        debug_log("WRN", "Redo entry checksum mismatch");
         g_free(compressed_buffer);
         return FALSE;
     }
@@ -893,7 +893,7 @@ gboolean undo_journal_read_redo(UndoJournal* journal,
                                             (int)header.uncompressed_size);
 
     if (uncompressed_size != (int)header.uncompressed_size) {
-        g_warning("LZ4 decompression failed or size mismatch");
+        debug_log("WRN", "LZ4 decompression failed or size mismatch");
         g_free(compressed_buffer);
         g_free(uncompressed_buffer);
         return FALSE;
@@ -911,7 +911,7 @@ gboolean undo_journal_read_redo(UndoJournal* journal,
     }
 
     if (!layer) {
-        g_warning("Layer for redo entry no longer exists");
+        debug_log("WRN", "Layer for redo entry no longer exists");
         g_free(compressed_buffer);
         g_free(uncompressed_buffer);
         return FALSE;
@@ -984,7 +984,7 @@ gboolean undo_journal_read_redo(UndoJournal* journal,
      * After reading from the middle of the file, the file pointer is not at EOF.
      * We must restore it to EOF so that subsequent writes append correctly. */
     if (fseek(journal->journal_file, 0, SEEK_END) != 0) {
-        g_warning("Failed to seek back to EOF after redo read: %s (errno=%d)",
+        debug_log("WRN", "Failed to seek back to EOF after redo read: %s (errno=%d)",
                   strerror(errno), errno);
         /* Try to recover by clearing the error state */
         clearerr(journal->journal_file);
@@ -1087,7 +1087,7 @@ void undo_journal_clear_all(UndoJournal* journal) {
         }
         journal->journal_file = open_binary_file(journal->journal_path, "ab+");
         if (!journal->journal_file) {
-            g_warning("undo_journal_clear_all: failed to reopen journal %s", journal->journal_path);
+            debug_log("WRN", "undo_journal_clear_all: failed to reopen journal %s", journal->journal_path);
         }
     }
 
@@ -1202,7 +1202,7 @@ gboolean undo_journal_validate_and_recover(UndoJournal* journal) {
         }
         journal->journal_file = open_binary_file(journal->journal_path, "ab+");
         if (!journal->journal_file) {
-            g_warning("Failed to reopen journal in append mode after truncation");
+            debug_log("WRN", "Failed to reopen journal in append mode after truncation");
             return FALSE;
         }
     }
@@ -1301,7 +1301,7 @@ gboolean undo_journal_compact_if_needed(UndoJournal* journal) {
     gchar* temp_path = g_strdup_printf("%s.tmp", journal->journal_path);
     FILE* temp_file = open_binary_file(temp_path, "wb");
     if (!temp_file) {
-        g_warning("Failed to create temporary journal file for compaction");
+        debug_log("WRN", "Failed to create temporary journal file for compaction");
         g_free(temp_path);
         /* Restore original file */
         journal->journal_file = open_binary_file(journal->journal_path, "ab+");
@@ -1313,7 +1313,7 @@ gboolean undo_journal_compact_if_needed(UndoJournal* journal) {
     /* Open original file for reading */
     FILE* old_file = open_binary_file(journal->journal_path, "rb");
     if (!old_file) {
-        g_warning("Failed to open journal file for reading during compaction");
+        debug_log("WRN", "Failed to open journal file for reading during compaction");
         fclose(temp_file);
         g_unlink(temp_path);
         g_free(temp_path);
@@ -1333,7 +1333,7 @@ gboolean undo_journal_compact_if_needed(UndoJournal* journal) {
 
         /* Seek to old entry */
         if (fseek(old_file, (long)old_index->file_offset, SEEK_SET) != 0) {
-            g_warning("Failed to seek to entry during compaction");
+            debug_log("WRN", "Failed to seek to entry during compaction");
             fclose(old_file);
             fclose(temp_file);
             g_unlink(temp_path);
@@ -1347,7 +1347,7 @@ gboolean undo_journal_compact_if_needed(UndoJournal* journal) {
 
         /* Read header */
         if (fread(&header, sizeof(header), 1, old_file) != 1) {
-            g_warning("Failed to read entry header during compaction");
+            debug_log("WRN", "Failed to read entry header during compaction");
             fclose(old_file);
             fclose(temp_file);
             g_unlink(temp_path);
@@ -1362,7 +1362,7 @@ gboolean undo_journal_compact_if_needed(UndoJournal* journal) {
         /* Read compressed payload */
         compressed_buffer = (uint8_t*)g_malloc(header.compressed_size);
         if (!compressed_buffer) {
-            g_warning("Out of memory during compaction");
+            debug_log("WRN", "Out of memory during compaction");
             fclose(old_file);
             fclose(temp_file);
             g_unlink(temp_path);
@@ -1375,7 +1375,7 @@ gboolean undo_journal_compact_if_needed(UndoJournal* journal) {
         }
 
         if (fread(compressed_buffer, header.compressed_size, 1, old_file) != 1) {
-            g_warning("Failed to read entry payload during compaction");
+            debug_log("WRN", "Failed to read entry payload during compaction");
             g_free(compressed_buffer);
             fclose(old_file);
             fclose(temp_file);
@@ -1448,7 +1448,7 @@ gboolean undo_journal_compact_if_needed(UndoJournal* journal) {
     }
 
     if (g_rename(temp_path, journal->journal_path) != 0) {
-        g_warning("Failed to replace journal file after compaction");
+        debug_log("WRN", "Failed to replace journal file after compaction");
         g_unlink(temp_path);
         g_free(temp_path);
         journal->journal_file = open_binary_file(journal->journal_path, "ab+");
@@ -1468,7 +1468,7 @@ gboolean undo_journal_compact_if_needed(UndoJournal* journal) {
     /* Open new journal file */
     journal->journal_file = fopen(journal->journal_path, "ab+");
     if (!journal->journal_file) {
-        g_warning("Failed to reopen journal file after compaction");
+        debug_log("WRN", "Failed to reopen journal file after compaction");
         g_list_free_full(new_undo_indices, (GDestroyNotify)undo_entry_index_free);
         /* Restore old indices (merge back entries_to_keep_list and entries_to_remove_list) */
         journal->undo_indices = g_list_concat(entries_to_keep_list, entries_to_remove_list);

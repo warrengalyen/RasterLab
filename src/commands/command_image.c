@@ -9,6 +9,7 @@
 #include <cairo.h>
 #include <glib.h>
 #include <stdlib.h>
+#include "debug_logger.h"
 
 /**
  * Canvas resize command apply callback (restore to new size)
@@ -46,7 +47,7 @@ static void canvas_resize_command_apply(Command* cmd, struct ImageDocument* doc)
     }
     doc->tile_grid = tile_grid_create(data->new_width, data->new_height, 128);
     if (!doc->tile_grid) {
-        g_warning("Failed to create tile grid after canvas resize redo");
+        debug_log("WRN", "Failed to create tile grid after canvas resize redo");
     }
 
     /* Update drawing area size */
@@ -97,7 +98,7 @@ static void canvas_resize_command_revert(Command* cmd, struct ImageDocument* doc
     }
     doc->tile_grid = tile_grid_create(data->old_width, data->old_height, 128);
     if (!doc->tile_grid) {
-        g_warning("Failed to create tile grid after canvas size undo");
+        debug_log("WRN", "Failed to create tile grid after canvas size undo");
     }
 
     /* Update drawing area size */
@@ -239,7 +240,7 @@ static gboolean flip_layer_impl(struct ImageLayer* layer, OcDirection direction)
     rgba_output = (guchar*)g_malloc(width * height * 4);
 
     if (!rgba_input || !rgba_output) {
-        g_warning("Flip layer: Failed to allocate memory");
+        debug_log("WRN", "Flip layer: Failed to allocate memory");
         g_free(rgba_input);
         g_free(rgba_output);
         return FALSE;
@@ -247,7 +248,7 @@ static gboolean flip_layer_impl(struct ImageLayer* layer, OcDirection direction)
 
     /* Convert from Cairo ARGB32 to RGBA */
     if (!adjustments_cairo_to_rgba(surface, rgba_input)) {
-        g_warning("Flip layer: Failed to convert surface to RGBA");
+        debug_log("WRN", "Flip layer: Failed to convert surface to RGBA");
         g_free(rgba_input);
         g_free(rgba_output);
         return FALSE;
@@ -257,7 +258,7 @@ static gboolean flip_layer_impl(struct ImageLayer* layer, OcDirection direction)
     status = ocularFlipImage(rgba_input, rgba_output, width, height, width * 4, direction);
 
     if (status != OC_STATUS_OK) {
-        g_warning("Flip layer: Ocular flip returned error %d", status);
+        debug_log("WRN", "Flip layer: Ocular flip returned error %d", status);
         g_free(rgba_input);
         g_free(rgba_output);
         return FALSE;
@@ -265,7 +266,7 @@ static gboolean flip_layer_impl(struct ImageLayer* layer, OcDirection direction)
 
     /* Convert back from RGBA to Cairo ARGB32 */
     if (!adjustments_rgba_to_cairo(surface, rgba_output)) {
-        g_warning("Flip layer: Failed to convert RGBA to surface");
+        debug_log("WRN", "Flip layer: Failed to convert RGBA to surface");
         g_free(rgba_input);
         g_free(rgba_output);
         return FALSE;
@@ -317,7 +318,7 @@ static gboolean transpose_layer_impl(struct ImageLayer* layer) {
     rgba_output = (guchar*)g_malloc(new_width * new_height * 4);
 
     if (!rgba_input || !rgba_output) {
-        g_warning("Transpose layer: Failed to allocate memory");
+        debug_log("WRN", "Transpose layer: Failed to allocate memory");
         g_free(rgba_input);
         g_free(rgba_output);
         return FALSE;
@@ -325,7 +326,7 @@ static gboolean transpose_layer_impl(struct ImageLayer* layer) {
 
     /* Convert from Cairo ARGB32 to RGBA */
     if (!adjustments_cairo_to_rgba(old_surface, rgba_input)) {
-        g_warning("Transpose layer: Failed to convert surface to RGBA");
+        debug_log("WRN", "Transpose layer: Failed to convert surface to RGBA");
         g_free(rgba_input);
         g_free(rgba_output);
         return FALSE;
@@ -336,7 +337,7 @@ static gboolean transpose_layer_impl(struct ImageLayer* layer) {
     status = ocularTransposeImage(rgba_input, rgba_output, old_width, old_height, old_width * 4);
 
     if (status != OC_STATUS_OK) {
-        g_warning("Transpose layer: Ocular transpose returned error %d", status);
+        debug_log("WRN", "Transpose layer: Ocular transpose returned error %d", status);
         g_free(rgba_input);
         g_free(rgba_output);
         return FALSE;
@@ -345,7 +346,7 @@ static gboolean transpose_layer_impl(struct ImageLayer* layer) {
     /* Create new surface with swapped dimensions */
     new_surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, new_width, new_height);
     if (!new_surface) {
-        g_warning("Transpose layer: Failed to create new surface");
+        debug_log("WRN", "Transpose layer: Failed to create new surface");
         g_free(rgba_input);
         g_free(rgba_output);
         return FALSE;
@@ -353,7 +354,7 @@ static gboolean transpose_layer_impl(struct ImageLayer* layer) {
 
     /* Convert RGBA output to new Cairo surface */
     if (!adjustments_rgba_to_cairo(new_surface, rgba_output)) {
-        g_warning("Transpose layer: Failed to convert RGBA to new surface");
+        debug_log("WRN", "Transpose layer: Failed to convert RGBA to new surface");
         cairo_surface_destroy(new_surface);
         g_free(rgba_input);
         g_free(rgba_output);
@@ -427,7 +428,7 @@ static gboolean resize_layer_impl(struct ImageLayer* layer, gint new_width, gint
     g_free(rgba_input);
 
     if (status != OC_STATUS_OK) {
-        g_warning("Resize layer: ocularResamplingFilter returned %d", status);
+        debug_log("WRN", "Resize layer: ocularResamplingFilter returned %d", status);
         g_free(rgba_output);
         return FALSE;
     }
@@ -493,7 +494,7 @@ static void image_resize_command_apply(Command* cmd, struct ImageDocument* doc) 
     }
     doc->tile_grid = tile_grid_create(data->new_width, data->new_height, 128);
     if (!doc->tile_grid) {
-        g_warning("Failed to create tile grid after image resize redo");
+        debug_log("WRN", "Failed to create tile grid after image resize redo");
     }
 
     if (doc->drawing_area) {
@@ -551,7 +552,7 @@ static void image_resize_command_revert(Command* cmd, struct ImageDocument* doc)
     }
     doc->tile_grid = tile_grid_create(data->old_width, data->old_height, 128);
     if (!doc->tile_grid) {
-        g_warning("Failed to create tile grid after image resize undo");
+        debug_log("WRN", "Failed to create tile grid after image resize undo");
     }
 
     if (doc->drawing_area) {
@@ -751,7 +752,7 @@ static gboolean rotate_layer_impl(struct ImageLayer* layer,
     g_free(rgba_input);
 
     if (status != OC_STATUS_OK) {
-        g_warning("Rotate layer: Ocular rotate returned error %d", status);
+        debug_log("WRN", "Rotate layer: Ocular rotate returned error %d", status);
         g_free(rgba_output);
         return FALSE;
     }
@@ -863,7 +864,7 @@ static void rotate_command_apply(Command* cmd, struct ImageDocument* doc) {
                                data->fill_r, data->fill_g, data->fill_b,
                                (gint)data->new_width, (gint)data->new_height,
                                (gint)data->old_width, (gint)data->old_height)) {
-            g_warning("Failed to rotate layer: %s", layer->name);
+            debug_log("WRN", "Failed to rotate layer: %s", layer->name);
         }
     }
 
@@ -883,7 +884,7 @@ static void rotate_command_apply(Command* cmd, struct ImageDocument* doc) {
     }
     doc->tile_grid = tile_grid_create(data->new_width, data->new_height, 128);
     if (!doc->tile_grid) {
-        g_warning("Failed to create tile grid after rotate");
+        debug_log("WRN", "Failed to create tile grid after rotate");
     }
 
     document_invalidate_composite(doc);
@@ -947,7 +948,7 @@ static void rotate_command_revert(Command* cmd, struct ImageDocument* doc) {
     }
     doc->tile_grid = tile_grid_create(data->old_width, data->old_height, 128);
     if (!doc->tile_grid) {
-        g_warning("Failed to create tile grid after rotate revert");
+        debug_log("WRN", "Failed to create tile grid after rotate revert");
     }
 
     document_invalidate_composite(doc);
@@ -1109,7 +1110,7 @@ static void flip_command_apply(Command* cmd, struct ImageDocument* doc) {
         layer = (struct ImageLayer*)iter->data;
         if (layer && layer->surface) {
             if (!flip_layer_impl(layer, direction)) {
-                g_warning("Failed to flip layer: %s", layer->name);
+                debug_log("WRN", "Failed to flip layer: %s", layer->name);
             }
         }
     }
@@ -1213,7 +1214,7 @@ static void transpose_command_apply(Command* cmd, struct ImageDocument* doc) {
         layer = (struct ImageLayer*)iter->data;
         if (layer && layer->surface) {
             if (!transpose_layer_impl(layer)) {
-                g_warning("Failed to transpose layer: %s", layer->name);
+                debug_log("WRN", "Failed to transpose layer: %s", layer->name);
             }
         }
     }
@@ -1237,7 +1238,7 @@ static void transpose_command_apply(Command* cmd, struct ImageDocument* doc) {
     }
     doc->tile_grid = tile_grid_create(data->new_width, data->new_height, 128);
     if (!doc->tile_grid) {
-        g_warning("Failed to create tile grid after transpose");
+        debug_log("WRN", "Failed to create tile grid after transpose");
     }
 
     /* Mark composite as needing re-render */
@@ -1318,7 +1319,7 @@ static void transpose_command_revert(Command* cmd, struct ImageDocument* doc) {
     }
     doc->tile_grid = tile_grid_create(data->old_width, data->old_height, 128);
     if (!doc->tile_grid) {
-        g_warning("Failed to create tile grid after transpose revert");
+        debug_log("WRN", "Failed to create tile grid after transpose revert");
     }
 
     /* Mark composite as needing re-render */
@@ -2207,12 +2208,12 @@ Command* command_create_merge_visible(struct ImageDocument* doc) {
     }
 
     if (visible_count == 0) {
-        g_warning("No visible layers to merge");
+        debug_log("WRN", "No visible layers to merge");
         return NULL;
     }
 
     if (visible_count == 1) {
-        g_warning("Only one visible layer, nothing to merge");
+        debug_log("WRN", "Only one visible layer, nothing to merge");
         return NULL;
     }
 
@@ -2351,7 +2352,7 @@ Command* command_create_flatten(struct ImageDocument* doc) {
     }
 
     if (g_list_length(doc->layers) == 1) {
-        g_warning("Only one layer, nothing to flatten");
+        debug_log("WRN", "Only one layer, nothing to flatten");
         return NULL;
     }
 
@@ -2593,7 +2594,7 @@ static void crop_command_apply(Command* cmd, struct ImageDocument* doc) {
         cairo_surface_t* new_surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32,
                                                                   new_width, new_height);
         if (!new_surface) {
-            g_warning("Failed to create cropped surface for layer: %s", layer->name);
+            debug_log("WRN", "Failed to create cropped surface for layer: %s", layer->name);
             continue;
         }
 
@@ -2626,7 +2627,7 @@ crop_apply_common:
     }
     doc->tile_grid = tile_grid_create(data->new_width, data->new_height, 128);
     if (!doc->tile_grid) {
-        g_warning("Failed to create tile grid after crop");
+        debug_log("WRN", "Failed to create tile grid after crop");
     }
 
     /* Update drawing area size */
@@ -2733,7 +2734,7 @@ crop_revert_common:
     }
     doc->tile_grid = tile_grid_create(data->old_width, data->old_height, 128);
     if (!doc->tile_grid) {
-        g_warning("Failed to create tile grid after crop revert");
+        debug_log("WRN", "Failed to create tile grid after crop revert");
     }
 
     /* Update drawing area size */
@@ -2823,17 +2824,17 @@ Command* command_create_crop_to_selection(struct ImageDocument* doc) {
 
     /* Get selection bounds */
     if (!doc->selection_mask || selection_mask_is_empty(doc->selection_mask)) {
-        g_warning("No selection to crop to");
+        debug_log("WRN", "No selection to crop to");
         return NULL;
     }
 
     if (!get_selection_bounds(doc->selection_mask, &sel_x, &sel_y, &sel_width, &sel_height)) {
-        g_warning("Failed to get selection bounds");
+        debug_log("WRN", "Failed to get selection bounds");
         return NULL;
     }
 
     if (sel_width <= 0 || sel_height <= 0) {
-        g_warning("Selection has invalid dimensions");
+        debug_log("WRN", "Selection has invalid dimensions");
         return NULL;
     }
 
@@ -2908,7 +2909,7 @@ Command* command_create_crop_to_rect(struct ImageDocument* doc,
     }
 
     if (w <= 0 || h <= 0) {
-        g_warning("Invalid crop dimensions");
+        debug_log("WRN", "Invalid crop dimensions");
         return NULL;
     }
 
@@ -2929,7 +2930,7 @@ Command* command_create_crop_to_rect(struct ImageDocument* doc,
             h = (guint)(doc->height - y);
         }
         if (w <= 0 || h <= 0) {
-            g_warning("Crop rect outside document bounds");
+            debug_log("WRN", "Crop rect outside document bounds");
             return NULL;
         }
     }
@@ -3081,19 +3082,19 @@ Command* command_create_trim_borders(struct ImageDocument* doc) {
 
     /* Get content bounds (non-transparent area) */
     if (!get_content_bounds(doc, &content_x, &content_y, &content_width, &content_height)) {
-        g_warning("No non-transparent content to trim to");
+        debug_log("WRN", "No non-transparent content to trim to");
         return NULL;
     }
 
     if (content_width <= 0 || content_height <= 0) {
-        g_warning("Content has invalid dimensions");
+        debug_log("WRN", "Content has invalid dimensions");
         return NULL;
     }
 
     /* Check if already trimmed */
     if (content_x == 0 && content_y == 0 &&
         (guint)content_width == doc->width && (guint)content_height == doc->height) {
-        g_warning("Image already trimmed - no transparent borders to remove");
+        debug_log("WRN", "Image already trimmed - no transparent borders to remove");
         return NULL;
     }
 
