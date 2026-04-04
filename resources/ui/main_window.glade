@@ -1725,12 +1725,19 @@
             <property name="visible">True</property>
             <property name="can-focus">False</property>
             <child>
+              <object class="GtkMenuItem" id="tools_menu_show_debug_log">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">View debug log for current session</property>
+                <property name="use-underline">True</property>
+              </object>
+            </child>
+            <child>
               <object class="GtkCheckMenuItem" id="tools_menu_gpu_debug">
                 <property name="visible">True</property>
                 <property name="can-focus">False</property>
                 <property name="label" translatable="yes">Show GPU debug overlay</property>
                 <property name="use-underline">True</property>
-                <property name="active">False</property>
               </object>
             </child>
           </object>

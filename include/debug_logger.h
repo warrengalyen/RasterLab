@@ -8,6 +8,7 @@
 
 #include <stdarg.h>
 #include <stdbool.h>
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -31,6 +32,18 @@ void debug_shutdown(void);
  * @param type 3-letter code (e.g. "DBG", "ERR"); shorter strings are padded, longer are truncated.
  */
 void debug_log(const char* type, const char* fmt, ...);
+
+/**
+ * Flush the session log file so external viewers see recent lines.
+ * No-op if logging is not active.
+ */
+void debug_flush(void);
+
+/**
+ * Copy the UTF-8 path of the current session log (DebugReport_n.log, n in 1..10) into @a buf.
+ * @return false if logging is not active or the path does not fit.
+ */
+bool debug_get_current_log_path(char* buf, size_t buf_size);
 
 #ifdef __cplusplus
 }

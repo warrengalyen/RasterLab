@@ -21,6 +21,68 @@ static void on_tools_menu_settings_activate(GtkMenuItem* item, gpointer user_dat
     }
 }
 
+static void on_tools_menu_show_debug_log_activate(GtkMenuItem* item, gpointer user_data) {
+    (void)item;
+    AppContext* ctx = (AppContext*)user_data;
+    char path[4608];
+
+    if (!ctx || !ctx->window) {
+        return;
+    }
+
+    if (!debug_get_current_log_path(path, sizeof(path))) {
+        GtkWidget* dialog = gtk_message_dialog_new(
+            GTK_WINDOW(ctx->window),
+            GTK_DIALOG_MODAL,
+            GTK_MESSAGE_INFO,
+            GTK_BUTTONS_OK,
+            "%s",
+            _("Debug logging is not active for this session."));
+        gtk_dialog_run(GTK_DIALOG(dialog));
+        gtk_widget_destroy(dialog);
+        return;
+    }
+
+    debug_flush();
+
+    GError* err = NULL;
+    gchar* uri = g_filename_to_uri(path, NULL, &err);
+    if (!uri) {
+        GtkWidget* dialog = gtk_message_dialog_new(
+            GTK_WINDOW(ctx->window),
+            GTK_DIALOG_MODAL,
+            GTK_MESSAGE_WARNING,
+            GTK_BUTTONS_OK,
+            "%s",
+            err ? err->message : _("Could not build a file URI for the debug log."));
+        if (err) {
+            g_error_free(err);
+            err = NULL;
+        }
+        gtk_dialog_run(GTK_DIALOG(dialog));
+        gtk_widget_destroy(dialog);
+        return;
+    }
+
+    if (!gtk_show_uri_on_window(GTK_WINDOW(ctx->window), uri, GDK_CURRENT_TIME, &err)) {
+        GtkWidget* dialog = gtk_message_dialog_new(
+            GTK_WINDOW(ctx->window),
+            GTK_DIALOG_MODAL,
+            GTK_MESSAGE_WARNING,
+            GTK_BUTTONS_OK,
+            "%s\n\n%s",
+            err ? err->message : _("Could not open the debug log."),
+            path);
+        if (err) {
+            g_error_free(err);
+        }
+        gtk_dialog_run(GTK_DIALOG(dialog));
+        gtk_widget_destroy(dialog);
+    }
+
+    g_free(uri);
+}
+
 static void on_tools_menu_gpu_debug_toggled(GtkCheckMenuItem* check_menu_item, gpointer user_data) {
     AppContext* ctx = (AppContext*)user_data;
 
@@ -213,6 +275,11 @@ void ui_tools_menu_setup(GtkBuilder* builder, AppContext* ctx) {
     GtkWidget* tools_menu_settings = GTK_WIDGET(gtk_builder_get_object(builder, "tools_menu_settings"));
     if (tools_menu_settings) {
         g_signal_connect(tools_menu_settings, "activate", G_CALLBACK(on_tools_menu_settings_activate), ctx);
+    }
+
+    GtkWidget* tools_menu_show_debug_log = GTK_WIDGET(gtk_builder_get_object(builder, "tools_menu_show_debug_log"));
+    if (tools_menu_show_debug_log) {
+        g_signal_connect(tools_menu_show_debug_log, "activate", G_CALLBACK(on_tools_menu_show_debug_log_activate), ctx);
     }
 
     GtkWidget* tools_menu_gpu_debug = GTK_WIDGET(gtk_builder_get_object(builder, "tools_menu_gpu_debug"));

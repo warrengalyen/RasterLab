@@ -611,7 +611,7 @@ bool debug_init(const char* app_dir) {
         g_free(resolved_exe);
         return false;
     }
-#endif
+#endif  /* DEBUG_LOGGER_H */
 
     s_logger.file = fopen(path, "w");
     if (!s_logger.file) {
@@ -638,6 +638,33 @@ void debug_shutdown(void) {
     s_logger.log_index = 0;
     s_logger.session_id = 0;
     DEBUG_LOG_UNLOCK();
+}
+
+void debug_flush(void) {
+    DEBUG_LOG_LOCK();
+    if (s_logger.file) {
+        fflush(s_logger.file);
+    }
+    DEBUG_LOG_UNLOCK();
+}
+
+bool debug_get_current_log_path(char* buf, size_t buf_size) {
+    if (!buf || buf_size == 0) {
+        return false;
+    }
+    DEBUG_LOG_LOCK();
+    if (!s_logger.file || s_logger.log_index < 1u || s_logger.log_index > 10u) {
+        DEBUG_LOG_UNLOCK();
+        return false;
+    }
+    unsigned idx = (unsigned)s_logger.log_index;
+#ifdef _WIN32
+    int n = snprintf(buf, buf_size, "%s\\%s%u%s", s_debug_dir, DEBUG_REPORT_PREFIX, idx, DEBUG_REPORT_SUFFIX);
+#else
+    int n = snprintf(buf, buf_size, "%s/%s%u%s", s_debug_dir, DEBUG_REPORT_PREFIX, idx, DEBUG_REPORT_SUFFIX);
+#endif
+    DEBUG_LOG_UNLOCK();
+    return n > 0 && (size_t)n < buf_size;
 }
 
 static void debug_vlog(DebugLoggerState* logger, const char* type, const char* fmt, va_list ap) {
