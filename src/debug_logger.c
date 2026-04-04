@@ -4,6 +4,8 @@
 
 #include "debug_logger.h"
 
+#include "app/settings.h"
+
 #include "plugins/plugin_runtime_deps.h"
 
 #include <errno.h>
@@ -15,9 +17,11 @@
 #include <string.h>
 #include <time.h>
 
+#include "version.h"
+
 #ifdef _WIN32
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
+#ifndef DEBUG_LOGGER_H
+#define DEBUG_LOGGER_H
 #endif
 #include <direct.h>
 #include <intrin.h>
@@ -89,13 +93,12 @@ static void debug_log_unlock(void) {
 #define DEBUG_DIR_NAME "debug"
 #define DEBUG_REPORT_PREFIX "DebugReport_"
 #define DEBUG_REPORT_SUFFIX ".log"
-#define RASTERLAB_VERSION_LINE "1.0.0 (build 152)"
 
 static char s_debug_dir[4096];
 
 /** Single session logger (file + metadata). */
 typedef struct {
-    FILE *file;
+    FILE* file;
     uint32_t log_index;
     uint64_t session_id;
 } DebugLoggerState;
@@ -529,33 +532,33 @@ static void write_header(DebugLoggerState* logger, const char* app_dir) {
     const char* gpu = (HAVE_GLFW) ? "True" : "False";
 
     fprintf(logger->file, "-- RASTERLAB DEBUG LOG #%u --\r\n", logger->log_index);
-    fprintf(logger->file, "Date: %s\r\n", date_buf);
-    fprintf(logger->file, "Time: %s\r\n", time_buf);
-    fprintf(logger->file, "Session ID: %016" PRIx64 "\r\n\r\n", logger->session_id);
+    fprintf(logger->file, "Date: %s\n", date_buf);
+    fprintf(logger->file, "Time: %s\n", time_buf);
+    fprintf(logger->file, "Session ID: %016" PRIx64 "\r\n", logger->session_id);
     fprintf(logger->file, "-- SYSTEM INFORMATION --\r\n");
-    fprintf(logger->file, "OS: %s\r\n", osbuf);
-    fprintf(logger->file, "Processor cores: %d\r\n", get_cpu_core_count());
-    fprintf(logger->file, "Processor features: %s\r\n", cpufeat);
-    fprintf(logger->file, "System RAM: %" PRIu64 " MB\r\n", get_total_ram_mb());
-    fprintf(logger->file, "Max memory available to Rasterlab: %.1f MB (real), %.1f MB (swap)\r\n",
+    fprintf(logger->file, "OS: %s\n", osbuf);
+    fprintf(logger->file, "Processor cores: %d\n", get_cpu_core_count());
+    fprintf(logger->file, "Processor features: %s\n", cpufeat);
+    fprintf(logger->file, "System RAM: %" PRIu64 " MB\n", get_total_ram_mb());
+    fprintf(logger->file, "Max memory available to Rasterlab: %.1f MB (real), %.1f MB (swap)\n",
             real_mb, swap_mb);
-    fprintf(logger->file, "Memory load at startup: %d%%\r\n\r\n", get_memory_usage_percent());
-    fprintf(logger->file, "-- PROGRAM INFORMATION --\r\n\r\n");
-    fprintf(logger->file, "Version: %s\r\n", RASTERLAB_VERSION_LINE);
-    fprintf(logger->file, "Translation active: %s\r\n", trans);
-    fprintf(logger->file, "Language in use: %s\r\n", lang);
-    fprintf(logger->file, "GPU acceleration enabled: %s\r\n\r\n", gpu);
-    fprintf(logger->file, "-- SHARED LIBRARIES --\r\n\r\n");
-    fprintf(logger->file, "zlib: %s\r\n", plugin_status(app_dir, plugin_runtime_deps_zlib_ok));
-    fprintf(logger->file, "libjpeg: %s\r\n", plugin_status(app_dir, plugin_runtime_deps_jpeg_ok));
-    fprintf(logger->file, "libpng: %s\r\n", plugin_status(app_dir, plugin_runtime_deps_png_ok));
-    fprintf(logger->file, "libwebp: %s\r\n", plugin_status(app_dir, plugin_runtime_deps_webp_ok));
-    fprintf(logger->file, "libtiff: %s\r\n", plugin_status(app_dir, plugin_runtime_deps_tiff_ok));
-    fprintf(logger->file, "libde265: %s\r\n", plugin_status(app_dir, plugin_runtime_deps_libde265_ok));
-    fprintf(logger->file, "libaom: %s\r\n", plugin_status(app_dir, plugin_runtime_deps_libaom_ok));
-    fprintf(logger->file, "libheif: %s\r\n", plugin_status(app_dir, plugin_runtime_deps_libheif_ok));
-    fprintf(logger->file, "OpenEXR: %s\r\n", plugin_status(app_dir, plugin_runtime_deps_exr_ok));
-    fprintf(logger->file, "lcms2: %s\r\n", plugin_status(app_dir, plugin_runtime_deps_lcms2_ok));
+    fprintf(logger->file, "Memory load at startup: %d%%\r\n", get_memory_usage_percent());
+    fprintf(logger->file, "-- PROGRAM INFORMATION --\r\n");
+    fprintf(logger->file, "Version: %s\n", RASTERLAB_VERSION_LINE);
+    fprintf(logger->file, "Translation active: %s\n", trans);
+    fprintf(logger->file, "Language in use: %s\n", lang);
+    fprintf(logger->file, "GPU acceleration enabled: %s\r\n", gpu);
+    fprintf(logger->file, "-- SHARED LIBRARIES --\r\n");
+    fprintf(logger->file, "zlib: %s\n", plugin_status(app_dir, plugin_runtime_deps_zlib_ok));
+    fprintf(logger->file, "libjpeg: %s\n", plugin_status(app_dir, plugin_runtime_deps_jpeg_ok));
+    fprintf(logger->file, "libpng: %s\n", plugin_status(app_dir, plugin_runtime_deps_png_ok));
+    fprintf(logger->file, "libwebp: %s\n", plugin_status(app_dir, plugin_runtime_deps_webp_ok));
+    fprintf(logger->file, "libtiff: %s\n", plugin_status(app_dir, plugin_runtime_deps_tiff_ok));
+    fprintf(logger->file, "libde265: %s\n", plugin_status(app_dir, plugin_runtime_deps_libde265_ok));
+    fprintf(logger->file, "libaom: %s\n", plugin_status(app_dir, plugin_runtime_deps_libaom_ok));
+    fprintf(logger->file, "libheif: %s\n", plugin_status(app_dir, plugin_runtime_deps_libheif_ok));
+    fprintf(logger->file, "OpenEXR: %s\n", plugin_status(app_dir, plugin_runtime_deps_exr_ok));
+    fprintf(logger->file, "lcms2: %s\n", plugin_status(app_dir, plugin_runtime_deps_lcms2_ok));
     fprintf(logger->file, "\r\n-- SESSION REPORT --\r\n");
     fflush(logger->file);
 }
@@ -563,28 +566,36 @@ static void write_header(DebugLoggerState* logger, const char* app_dir) {
 bool debug_init(const char* app_dir) {
     memset(&s_logger, 0, sizeof(s_logger));
 
-#ifdef _WIN32
-    char cwd[4096];
-    if (!GetCurrentDirectoryA(sizeof(cwd), cwd)) {
+    /*
+     * Always use <executable_dir>/debug (same notion as settings/plugins).
+     * If the caller passes no path, resolve via settings_get_executable_dir().
+     * mkdir_debug_folder creates the directory when missing.
+     */
+    gchar* resolved_exe = NULL;
+    const char* base_dir = (app_dir && app_dir[0]) ? app_dir : NULL;
+    if (!base_dir) {
+        resolved_exe = settings_get_executable_dir();
+        base_dir = resolved_exe ? (const char*)resolved_exe : NULL;
+    }
+    if (!base_dir || !base_dir[0]) {
+        g_free(resolved_exe);
         return false;
     }
-    if (snprintf(s_debug_dir, sizeof(s_debug_dir), "%s\\%s", cwd, DEBUG_DIR_NAME) >= (int)sizeof(s_debug_dir)) {
+
+#ifdef _WIN32
+    if (snprintf(s_debug_dir, sizeof(s_debug_dir), "%s\\%s", base_dir, DEBUG_DIR_NAME) >= (int)sizeof(s_debug_dir)) {
+        g_free(resolved_exe);
         return false;
     }
 #else
-    if (!getcwd(s_debug_dir, sizeof(s_debug_dir))) {
+    if (snprintf(s_debug_dir, sizeof(s_debug_dir), "%s/%s", base_dir, DEBUG_DIR_NAME) >= (int)sizeof(s_debug_dir)) {
+        g_free(resolved_exe);
         return false;
     }
-    size_t len = strlen(s_debug_dir);
-    if (len + 2u >= sizeof(s_debug_dir)) {
-        return false;
-    }
-    s_debug_dir[len] = '/';
-    s_debug_dir[len + 1u] = '\0';
-    strncat(s_debug_dir, DEBUG_DIR_NAME, sizeof(s_debug_dir) - strlen(s_debug_dir) - 1u);
 #endif
 
     if (mkdir_debug_folder(s_debug_dir) != 0) {
+        g_free(resolved_exe);
         return false;
     }
 
@@ -592,10 +603,12 @@ bool debug_init(const char* app_dir) {
     char path[4600];
 #ifdef _WIN32
     if (snprintf(path, sizeof(path), "%s\\%s%d%s", s_debug_dir, DEBUG_REPORT_PREFIX, next, DEBUG_REPORT_SUFFIX) >= (int)sizeof(path)) {
+        g_free(resolved_exe);
         return false;
     }
 #else
     if (snprintf(path, sizeof(path), "%s/%s%d%s", s_debug_dir, DEBUG_REPORT_PREFIX, next, DEBUG_REPORT_SUFFIX) >= (int)sizeof(path)) {
+        g_free(resolved_exe);
         return false;
     }
 #endif
@@ -603,12 +616,14 @@ bool debug_init(const char* app_dir) {
     s_logger.file = fopen(path, "w");
     if (!s_logger.file) {
         memset(&s_logger, 0, sizeof(s_logger));
+        g_free(resolved_exe);
         return false;
     }
 
     s_logger.log_index = (uint32_t)next;
     s_logger.session_id = debug_mix_session_id();
-    write_header(&s_logger, app_dir);
+    write_header(&s_logger, base_dir);
+    g_free(resolved_exe);
     return true;
 }
 
@@ -644,7 +659,7 @@ static void debug_vlog(DebugLoggerState* logger, const char* type, const char* f
 
     DEBUG_LOG_LOCK();
     if (logger->file) {
-        fprintf(logger->file, "-%s- | %s | %s\r\n", code, tbuf, msg);
+        fprintf(logger->file, "-%s- | %s | %s\n", code, tbuf, msg);
         fflush(logger->file);
     }
     DEBUG_LOG_UNLOCK();
