@@ -1,3 +1,4 @@
+#include "document.h"
 #include "tool_manager.h"
 #include "tool_options.h"
 #include "tools/tool_brush.h"
@@ -233,11 +234,12 @@ gboolean tool_manager_activate(ToolRegistry* registry, ToolType type) {
 
     registry->active_tool = tool;
 
-    /* Update cursor for brush/eraser tools based on current size */
+    /* Update cursor for brush/eraser tools based on current size and active document zoom */
     if (tool->type == TOOL_BRUSH || tool->type == TOOL_ERASER || tool->type == TOOL_PENCIL) {
         ToolOptions* opts = tool_options_get_for_tool(tool->type);
         if (opts) {
-            tool_update_cursor(tool, opts->size);
+            gdouble zoom = (registry->current_doc) ? document_get_zoom(registry->current_doc) : 1.0;
+            tool_update_cursor(tool, opts->size, zoom);
         }
     }
 

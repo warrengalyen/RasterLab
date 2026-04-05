@@ -211,6 +211,7 @@ static gboolean on_drawing_area_button_press(GtkWidget* widget, GdkEventButton* 
 static gboolean on_drawing_area_button_release(GtkWidget* widget, GdkEventButton* event, gpointer user_data);
 static gboolean on_drawing_area_motion_notify(GtkWidget* widget, GdkEventMotion* event, gpointer user_data);
 static gboolean on_drawing_area_enter_notify(GtkWidget* widget, GdkEventCrossing* event, gpointer user_data);
+static void document_refresh_drawing_area_brush_cursor(ImageDocument* doc);
 static gboolean on_drawing_area_leave_notify(GtkWidget* widget, GdkEventCrossing* event, gpointer user_data);
 
 /**
@@ -1164,6 +1165,66 @@ static gboolean on_drawing_area_motion_notify(GtkWidget* widget, GdkEventMotion*
 }
 
 /**
+ * If the paint tool is active and the pointer is over the canvas, rebuild the brush ring cursor
+ * for this document's zoom (e.g. after zoom change while hovering).
+ */
+static void document_refresh_drawing_area_brush_cursor(ImageDocument* doc) {
+    ToolRegistry* tool_registry;
+    Tool* active_tool;
+    GdkWindow* window;
+    gint px, py;
+    GtkAllocation alloc;
+
+    if (!doc || !doc->drawing_area) {
+        return;
+    }
+
+    tool_registry = (ToolRegistry*)g_object_get_data(G_OBJECT(doc->drawing_area), "tool_registry");
+    if (!tool_registry) {
+        return;
+    }
+
+    active_tool = tool_manager_get_active(tool_registry);
+    if (!active_tool) {
+        return;
+    }
+
+    if (active_tool->type != TOOL_BRUSH && active_tool->type != TOOL_ERASER && active_tool->type != TOOL_PENCIL) {
+        return;
+    }
+
+    window = gtk_widget_get_window(doc->drawing_area);
+    if (!window) {
+        return;
+    }
+
+    {
+        GdkDisplay* display = gtk_widget_get_display(doc->drawing_area);
+        GdkSeat* seat = gdk_display_get_default_seat(display);
+        GdkDevice* device = seat ? gdk_seat_get_pointer(seat) : NULL;
+        if (!device) {
+            return;
+        }
+        gdk_window_get_device_position(window, device, &px, &py, NULL);
+    }
+
+    gtk_widget_get_allocation(doc->drawing_area, &alloc);
+    if (px < 0 || py < 0 || px >= alloc.width || py >= alloc.height) {
+        return;
+    }
+
+    {
+        ToolOptions* opts = tool_options_get_for_tool(active_tool->type);
+        gfloat brush_sz = opts ? opts->size : 5.0f;
+        GdkCursor* c = tool_create_brush_cursor(brush_sz, doc->zoom_factor);
+        if (c) {
+            gdk_window_set_cursor(window, c);
+            g_object_unref(c);
+        }
+    }
+}
+
+/**
  * Drawing area enter notify callback - set cursor for active tool
  */
 static gboolean on_drawing_area_enter_notify(GtkWidget* widget, GdkEventCrossing* event, gpointer user_data) {
@@ -1172,6 +1233,7 @@ static gboolean on_drawing_area_enter_notify(GtkWidget* widget, GdkEventCrossing
     Tool* active_tool = NULL;
     GdkWindow* window;
 
+    (void)widget;
     (void)event; /* Unused */
 
     if (!doc || !doc->drawing_area) {
@@ -1189,15 +1251,32 @@ static gboolean on_drawing_area_enter_notify(GtkWidget* widget, GdkEventCrossing
 
     /* Get active tool */
     active_tool = tool_manager_get_active(tool_registry);
-    if (!active_tool || !active_tool->cursor) {
+    if (!active_tool) {
         return FALSE;
     }
 
-    /* Set cursor on drawing area window */
     window = gtk_widget_get_window(doc->drawing_area);
-    if (window) {
-        gdk_window_set_cursor(window, active_tool->cursor);
+    if (!window) {
+        return FALSE;
     }
+
+    /* Brush-like tools: ring diameter follows image brush size times this document's zoom */
+    if (active_tool->type == TOOL_BRUSH || active_tool->type == TOOL_ERASER || active_tool->type == TOOL_PENCIL) {
+        ToolOptions* opts = tool_options_get_for_tool(active_tool->type);
+        gfloat brush_sz = opts ? opts->size : 5.0f;
+        GdkCursor* c = tool_create_brush_cursor(brush_sz, doc->zoom_factor);
+        if (c) {
+            gdk_window_set_cursor(window, c);
+            g_object_unref(c);
+        }
+        return FALSE;
+    }
+
+    if (!active_tool->cursor) {
+        return FALSE;
+    }
+
+    gdk_window_set_cursor(window, active_tool->cursor);
 
     return FALSE;
 }
@@ -2297,6 +2376,9 @@ void document_set_zoom(ImageDocument* doc, gdouble zoom_factor) {
         gtk_widget_queue_draw(doc->ruler_h);
     if (doc->ruler_v && gtk_widget_get_visible(doc->ruler_v))
         gtk_widget_queue_draw(doc->ruler_v);
+
+    /* Brush preview ring must match new zoom if pointer is over the canvas */
+    document_refresh_drawing_area_brush_cursor(doc);
 }
 
 /**

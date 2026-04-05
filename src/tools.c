@@ -69,27 +69,40 @@ void tool_free(Tool* tool) {
     g_free(tool);
 }
 
+/* Max cursor bitmap dimension (GDK/display limits; avoids huge surfaces at extreme zoom) */
+#define TOOL_BRUSH_CURSOR_MAX_PX 512
+
 /**
- * Create a custom brush cursor based on brush size
- * Returns a crosshair cursor for sizes < 7, otherwise a double-ringed circle
+ * Create a custom brush cursor based on brush size (image space) and zoom.
+ * Returns a crosshair for small on-screen sizes, otherwise a double-ringed circle.
  */
-GdkCursor* tool_create_brush_cursor(gfloat brush_size) {
+GdkCursor* tool_create_brush_cursor(gfloat brush_size, gdouble zoom_factor) {
     GdkDisplay* display;
     GdkCursor* cursor;
+    gdouble display_diameter;
 
     display = gdk_display_get_default();
     if (!display) {
         return NULL;
     }
 
-    /* Use crosshair for small brush sizes */
-    if (brush_size < 7.0f) {
+    if (zoom_factor <= 0.0 || zoom_factor > 64.0) {
+        zoom_factor = 1.0;
+    }
+
+    display_diameter = (gdouble)brush_size * zoom_factor;
+
+    /* Use crosshair when the brush would be tiny on screen */
+    if (display_diameter < 7.0) {
         cursor = gdk_cursor_new_for_display(display, GDK_CROSSHAIR);
         return cursor;
     }
 
-    /* Create custom cursor for larger brush sizes */
-    gint size = (gint)(brush_size + 0.5f);
+    /* Create custom cursor for larger on-screen sizes */
+    if (display_diameter > (gdouble)TOOL_BRUSH_CURSOR_MAX_PX) {
+        display_diameter = (gdouble)TOOL_BRUSH_CURSOR_MAX_PX;
+    }
+    gint size = (gint)(display_diameter + 0.5);
     gint cursor_size = size + 8; /* Add padding around the circle */
     gint center = cursor_size / 2;
 
@@ -197,7 +210,7 @@ GdkCursor* tool_create_brush_cursor(gfloat brush_size) {
 /**
  * Update a tool's cursor (for brush/eraser tools that need dynamic cursors)
  */
-void tool_update_cursor(Tool* tool, gfloat brush_size) {
+void tool_update_cursor(Tool* tool, gfloat brush_size, gdouble zoom_factor) {
     GdkDisplay* display;
     GdkCursor* new_cursor;
 
@@ -210,8 +223,8 @@ void tool_update_cursor(Tool* tool, gfloat brush_size) {
         return;
     }
 
-    /* Create new cursor based on brush size */
-    new_cursor = tool_create_brush_cursor(brush_size);
+    /* Create new cursor based on brush size and zoom */
+    new_cursor = tool_create_brush_cursor(brush_size, zoom_factor);
     if (!new_cursor) {
         return;
     }

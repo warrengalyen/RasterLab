@@ -151,32 +151,51 @@ static void on_tool_size_changed(GtkScale* scale, gpointer user_data) {
             Tool* eraser_tool = tool_manager_get(panel->tool_registry, TOOL_ERASER);
             Tool* pencil_tool = tool_manager_get(panel->tool_registry, TOOL_PENCIL);
             Tool* active_tool = tool_manager_get_active(panel->tool_registry);
+            GtkWidget* top = gtk_widget_get_toplevel(panel->panel);
+            gdouble zoom_for_tool_cache = 1.0;
 
-            /* Update cursors for brush, eraser, and pencil tools */
+            if (top) {
+                AppContext* actx = (AppContext*)g_object_get_data(G_OBJECT(top), "app_context");
+                if (actx) {
+                    ImageDocument* adoc = ui_get_active_document(actx);
+                    if (adoc) {
+                        zoom_for_tool_cache = document_get_zoom(adoc);
+                    }
+                }
+            }
+
+            /* Update cached cursors on each tool (uses active document zoom) */
             if (brush_tool) {
-                tool_update_cursor(brush_tool, size);
+                ToolOptions* bo = tool_options_get_for_tool(TOOL_BRUSH);
+                tool_update_cursor(brush_tool, bo ? bo->size : size, zoom_for_tool_cache);
             }
             if (eraser_tool) {
-                tool_update_cursor(eraser_tool, size);
+                ToolOptions* eo = tool_options_get_for_tool(TOOL_ERASER);
+                tool_update_cursor(eraser_tool, eo ? eo->size : size, zoom_for_tool_cache);
             }
             if (pencil_tool) {
-                tool_update_cursor(pencil_tool, size);
+                ToolOptions* po = tool_options_get_for_tool(TOOL_PENCIL);
+                tool_update_cursor(pencil_tool, po ? po->size : size, zoom_for_tool_cache);
             }
 
-            /* Update cursor on drawing areas if brush/eraser/pencil is active */
+            /* Push per-document zoom-sized cursors to each drawing area when a paint tool is active */
             if (active_tool && (active_tool->type == TOOL_BRUSH || active_tool->type == TOOL_ERASER || active_tool->type == TOOL_PENCIL)) {
-                /* Get window to find all documents */
-                GtkWidget* window = gtk_widget_get_toplevel(panel->panel);
-                if (window) {
-                    AppContext* ctx = (AppContext*)g_object_get_data(G_OBJECT(window), "app_context");
+                if (top) {
+                    AppContext* ctx = (AppContext*)g_object_get_data(G_OBJECT(top), "app_context");
                     if (ctx && ctx->documents) {
+                        ToolOptions* ao = tool_options_get_for_tool(active_tool->type);
+                        gfloat active_sz = ao ? ao->size : size;
                         GList* iter;
                         for (iter = ctx->documents; iter; iter = iter->next) {
                             ImageDocument* doc = (ImageDocument*)iter->data;
                             if (doc && doc->drawing_area) {
                                 GdkWindow* gdk_window = gtk_widget_get_window(doc->drawing_area);
-                                if (gdk_window && active_tool->cursor) {
-                                    gdk_window_set_cursor(gdk_window, active_tool->cursor);
+                                if (gdk_window) {
+                                    GdkCursor* c = tool_create_brush_cursor(active_sz, document_get_zoom(doc));
+                                    if (c) {
+                                        gdk_window_set_cursor(gdk_window, c);
+                                        g_object_unref(c);
+                                    }
                                 }
                             }
                         }

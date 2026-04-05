@@ -113,18 +113,21 @@ Tool* tool_new(const gchar* name, ToolType type, GdkCursorType cursor_type, Tool
 void tool_free(Tool* tool);
 
 /**
- * Create a custom brush cursor based on brush size
- * @param brush_size The brush size in pixels
- * @return Newly created GdkCursor, or NULL on failure. Use GDK_CROSSHAIR for sizes < 7
+ * Create a custom brush cursor based on brush size (image pixels) and view zoom.
+ * The ring diameter matches on-screen brush extent: brush_size * zoom_factor.
+ * @param brush_size The brush size in image pixels
+ * @param zoom_factor Document zoom (1.0 = 100%)
+ * @return Newly created GdkCursor, or NULL on failure. Use GDK_CROSSHAIR for small on-screen sizes
  */
-GdkCursor* tool_create_brush_cursor(gfloat brush_size);
+GdkCursor* tool_create_brush_cursor(gfloat brush_size, gdouble zoom_factor);
 
 /**
  * Update a tool's cursor (for brush/eraser tools that need dynamic cursors)
  * @param tool The tool to update
- * @param brush_size The current brush size in pixels
+ * @param brush_size The current brush size in image pixels
+ * @param zoom_factor Document zoom for the on-screen cursor ring (1.0 = 100%)
  */
-void tool_update_cursor(Tool* tool, gfloat brush_size);
+void tool_update_cursor(Tool* tool, gfloat brush_size, gdouble zoom_factor);
 
 /**
  * Create a new tool registry
