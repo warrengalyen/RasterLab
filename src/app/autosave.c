@@ -2,6 +2,8 @@
 #include "document.h"
 #include "render/layer.h"
 #include "render/tile.h"
+#include "io/image_io.h"
+#include "plugins/plugin_rli.h"
 #include <errno.h>
 #include <glib.h>
 #include <glib/gstdio.h>
@@ -15,8 +17,6 @@
 #define AUTOSAVE_INTERVAL_MIN 30
 #define AUTOSAVE_INTERVAL_MAX 2700
 #define AUTOSAVE_INTERVAL_DEFAULT 300   /* Default interval when not set from settings */
-#define AUTOSAVE_MAGIC "IMGAUTOSAVE"    /* Magic string to identify autosave files */
-#define AUTOSAVE_VERSION 1           /* File format version */
 
 /* Internal storage */
 static GHashTable* g_document_map = NULL;   /* Map ImageDocument* -> autosave_id */
@@ -24,33 +24,6 @@ static GHashTable* g_id_map = NULL;         /* Map autosave_id -> ImageDocument*
 static guint g_autosave_timer_id = 0;       /* GTK timer ID */
 static guint g_autosave_interval_seconds = AUTOSAVE_INTERVAL_DEFAULT; /* Current interval (30-2700) */
 static gboolean g_initialized = FALSE;
-
-/**
- * File format structure:
- *
- * Header (fixed size):
- *   - Magic string: "IMGAUTOSAVE" (11 bytes + null terminator = 12 bytes)
- *   - Version: uint32_t (4 bytes)
- *   - Timestamp: time_t (8 bytes)
- *   - Document width: uint32_t (4 bytes)
- *   - Document height: uint32_t (4 bytes)
- *   - Original file path length: uint32_t (4 bytes)
- *   - Original file path: (variable, UTF-8)
- *   - Layer count: uint32_t (4 bytes)
- *
- * For each layer:
- *   - Layer name length: uint32_t (4 bytes)
- *   - Layer name: (variable, UTF-8)
- *   - Layer width: uint32_t (4 bytes)
- *   - Layer height: uint32_t (4 bytes)
- *   - Layer offset_x: int32_t (4 bytes)
- *   - Layer offset_y: int32_t (4 bytes)
- *   - Layer opacity: double (8 bytes)
- *   - Layer visible: uint8_t (1 byte)
- *   - Layer blend_mode: uint32_t (4 bytes)
- *   - Pixel data size: uint32_t (4 bytes) - width * height * 4 (ARGB32)
- *   - Pixel data: (variable, ARGB32 format, BGRA in memory)
- */
 
 /**
  * Generate a unique autosave ID for a document
@@ -100,11 +73,11 @@ static gboolean autosave_ensure_directory(void) {
 }
 
 /**
- * Get autosave file path for a document ID
+ * Get autosave file path (.rli) for a document ID
  */
 static gchar* autosave_get_file_path(const gchar* autosave_id) {
     gchar* autosave_dir = autosave_get_directory();
-    gchar* filename = g_strdup_printf("autosave_%s.imgtmp", autosave_id);
+    gchar* filename = g_strdup_printf("autosave_%s.rli", autosave_id);
     gchar* file_path = g_build_filename(autosave_dir, filename, NULL);
 
     g_free(autosave_dir);
@@ -114,471 +87,125 @@ static gchar* autosave_get_file_path(const gchar* autosave_id) {
 }
 
 /**
- * Write a string to file (length-prefixed)
+ * Get autosave sidecar metadata path (.meta) for a document ID.
+ * The .meta file stores the original file path and other display metadata.
  */
-static gboolean write_string(FILE* file, const gchar* str) {
-    guint32 len = str ? strlen(str) : 0;
+static gchar* autosave_get_meta_path(const gchar* autosave_id) {
+    gchar* autosave_dir = autosave_get_directory();
+    gchar* filename = g_strdup_printf("autosave_%s.meta", autosave_id);
+    gchar* file_path = g_build_filename(autosave_dir, filename, NULL);
 
-    if (fwrite(&len, sizeof(guint32), 1, file) != 1) {
-        return FALSE;
-    }
+    g_free(autosave_dir);
+    g_free(filename);
 
-    if (len > 0 && fwrite(str, 1, len, file) != len) {
-        return FALSE;
-    }
-
-    return TRUE;
+    return file_path;
 }
 
 /**
- * Read a string from file (length-prefixed)
- */
-static gchar* read_string(FILE* file) {
-    guint32 len;
-
-    if (fread(&len, sizeof(guint32), 1, file) != 1) {
-        return NULL;
-    }
-
-    if (len == 0) {
-        return g_strdup("");
-    }
-
-    gchar* str = (gchar*)g_malloc(len + 1);
-    if (fread(str, 1, len, file) != len) {
-        g_free(str);
-        return NULL;
-    }
-
-    str[len] = '\0';
-    return str;
-}
-
-/**
- * Save a layer to file
- */
-static gboolean save_layer(FILE* file, ImageLayer* layer) {
-    gint width, height, stride;
-    guchar* surface_data;
-
-    if (!layer || !layer->surface) {
-        return FALSE;
-    }
-
-    width = cairo_image_surface_get_width(layer->surface);
-    height = cairo_image_surface_get_height(layer->surface);
-    stride = cairo_image_surface_get_stride(layer->surface);
-
-    /* Flush surface to ensure all drawing is complete */
-    cairo_surface_flush(layer->surface);
-    surface_data = cairo_image_surface_get_data(layer->surface);
-
-    if (!surface_data) {
-        return FALSE;
-    }
-
-    /* Write layer metadata */
-    if (!write_string(file, layer->name)) {
-        return FALSE;
-    }
-
-    guint32 w = (guint32)width;
-    guint32 h = (guint32)height;
-    gint32 offset_x = (gint32)layer->offset_x;
-    gint32 offset_y = (gint32)layer->offset_y;
-    gdouble opacity = layer->opacity;
-    guint8 visible = layer->visible ? 1 : 0;
-    guint32 blend_mode = (guint32)layer->blend_mode;
-
-    if (fwrite(&w, sizeof(guint32), 1, file) != 1)
-        return FALSE;
-    if (fwrite(&h, sizeof(guint32), 1, file) != 1)
-        return FALSE;
-    if (fwrite(&offset_x, sizeof(gint32), 1, file) != 1)
-        return FALSE;
-    if (fwrite(&offset_y, sizeof(gint32), 1, file) != 1)
-        return FALSE;
-    if (fwrite(&opacity, sizeof(gdouble), 1, file) != 1)
-        return FALSE;
-    if (fwrite(&visible, sizeof(guint8), 1, file) != 1)
-        return FALSE;
-    if (fwrite(&blend_mode, sizeof(guint32), 1, file) != 1)
-        return FALSE;
-
-    /* Write pixel data */
-    guint32 data_size = width * height * 4; /* ARGB32 = 4 bytes per pixel */
-    if (fwrite(&data_size, sizeof(guint32), 1, file) != 1) {
-        return FALSE;
-    }
-
-    /* Copy pixel data row by row */
-    for (gint y = 0; y < height; y++) {
-        guchar* row = surface_data + y * stride;
-        if (fwrite(row, width * 4, 1, file) != 1) {
-            return FALSE;
-        }
-    }
-
-    return TRUE;
-}
-
-/**
- * Load a layer from file
- */
-static ImageLayer* load_layer(FILE* file) {
-    gchar* name = read_string(file);
-    if (!name) {
-        return NULL;
-    }
-
-    guint32 width, height;
-    gint32 offset_x, offset_y;
-    gdouble opacity;
-    guint8 visible;
-    guint32 blend_mode;
-    guint32 data_size;
-
-    if (fread(&width, sizeof(guint32), 1, file) != 1) {
-        g_free(name);
-        return NULL;
-    }
-    if (fread(&height, sizeof(guint32), 1, file) != 1) {
-        g_free(name);
-        return NULL;
-    }
-    if (fread(&offset_x, sizeof(gint32), 1, file) != 1) {
-        g_free(name);
-        return NULL;
-    }
-    if (fread(&offset_y, sizeof(gint32), 1, file) != 1) {
-        g_free(name);
-        return NULL;
-    }
-    if (fread(&opacity, sizeof(gdouble), 1, file) != 1) {
-        g_free(name);
-        return NULL;
-    }
-    if (fread(&visible, sizeof(guint8), 1, file) != 1) {
-        g_free(name);
-        return NULL;
-    }
-    if (fread(&blend_mode, sizeof(guint32), 1, file) != 1) {
-        g_free(name);
-        return NULL;
-    }
-    if (fread(&data_size, sizeof(guint32), 1, file) != 1) {
-        g_free(name);
-        return NULL;
-    }
-
-    /* Validate data size */
-    if (data_size != width * height * 4) {
-        debug_log("WRN", "Invalid layer data size in autosave file");
-        g_free(name);
-        return NULL;
-    }
-
-    /* Create layer */
-    ImageLayer* layer = layer_new(name, width, height, TRUE,
-                                  LAYER_BACKGROUND_TRANSPARENT, LAYER_POSITION_ABOVE_CURRENT, NULL, NULL);
-    g_free(name);
-
-    if (!layer) {
-        return NULL;
-    }
-
-    /* Set layer properties */
-    layer->offset_x = offset_x;
-    layer->offset_y = offset_y;
-    layer->opacity = opacity;
-    layer->visible = (visible != 0);
-    layer->blend_mode = (BlendMode)blend_mode;
-
-    /* Read pixel data */
-    cairo_surface_flush(layer->surface);
-    guchar* surface_data = cairo_image_surface_get_data(layer->surface);
-    gint stride = cairo_image_surface_get_stride(layer->surface);
-
-    if (!surface_data) {
-        layer_free(layer);
-        return NULL;
-    }
-
-    /* Copy pixel data row by row */
-    for (guint y = 0; y < height; y++) {
-        guchar* row = surface_data + y * stride;
-        if (fread(row, width * 4, 1, file) != 1) {
-            layer_free(layer);
-            return NULL;
-        }
-    }
-
-    cairo_surface_mark_dirty(layer->surface);
-
-    return layer;
-}
-
-/**
- * Save document to autosave file
+ * Save document to autosave file using the RLI format.
+ * A small .meta sidecar file stores the original file path for display in the
+ * recovery dialog.
  */
 gboolean autosave_save_document(ImageDocument* doc) {
     if (!doc || !g_initialized) {
         return FALSE;
     }
 
-    /* Only save if document is dirty */
     if (!doc->modified) {
         return TRUE; /* Not an error, just nothing to save */
     }
 
-    /* Get autosave ID */
     gchar* autosave_id = (gchar*)g_hash_table_lookup(g_document_map, doc);
     if (!autosave_id) {
         return FALSE;
     }
 
-    /* Get file path */
-    gchar* file_path = autosave_get_file_path(autosave_id);
-    gchar* temp_path = g_strdup_printf("%s.tmp", file_path);
-
-    /* Ensure directory exists */
     if (!autosave_ensure_directory()) {
-        g_free(file_path);
-        g_free(temp_path);
         return FALSE;
     }
 
-    /* Open temporary file */
-    FILE* file = g_fopen(temp_path, "wb");
-    if (!file) {
-        debug_log("WRN", "Failed to open autosave file for writing: %s", temp_path);
-        g_free(file_path);
-        g_free(temp_path);
-        return FALSE;
+    gchar* rli_path  = autosave_get_file_path(autosave_id);
+    gchar* meta_path = autosave_get_meta_path(autosave_id);
+
+    /* Write .meta sidecar: one "key=value" line per entry */
+    const gchar* orig = doc->file_path ? doc->file_path : "";
+    gchar* meta_content = g_strdup_printf("original_path=%s\n", orig);
+    if (!g_file_set_contents(meta_path, meta_content, -1, NULL)) {
+        debug_log("WRN", "autosave: failed to write meta file: %s", meta_path);
+    }
+    g_free(meta_content);
+    g_free(meta_path);
+
+    /* Save document data as RLI */
+    PluginError err = PLUGIN_ERROR_NONE;
+    gboolean ok = image_io_save(doc, rli_path, NULL, &err);
+    if (!ok) {
+        debug_log("WRN", "autosave: image_io_save failed (error %d) for %s", (int)err, rli_path);
     }
 
-    /* Write header */
-    gchar magic[12] = AUTOSAVE_MAGIC;
-    magic[11] = '\0';
-    if (fwrite(magic, 12, 1, file) != 1) {
-        fclose(file);
-        g_unlink(temp_path);
-        g_free(file_path);
-        g_free(temp_path);
-        return FALSE;
-    }
-
-    guint32 version = AUTOSAVE_VERSION;
-    time_t timestamp = time(NULL);
-    guint32 width = (guint32)doc->width;
-    guint32 height = (guint32)doc->height;
-
-    if (fwrite(&version, sizeof(guint32), 1, file) != 1) {
-        fclose(file);
-        g_unlink(temp_path);
-        g_free(file_path);
-        g_free(temp_path);
-        return FALSE;
-    }
-
-    if (fwrite(&timestamp, sizeof(time_t), 1, file) != 1) {
-        fclose(file);
-        g_unlink(temp_path);
-        g_free(file_path);
-        g_free(temp_path);
-        return FALSE;
-    }
-
-    if (fwrite(&width, sizeof(guint32), 1, file) != 1) {
-        fclose(file);
-        g_unlink(temp_path);
-        g_free(file_path);
-        g_free(temp_path);
-        return FALSE;
-    }
-
-    if (fwrite(&height, sizeof(guint32), 1, file) != 1) {
-        fclose(file);
-        g_unlink(temp_path);
-        g_free(file_path);
-        g_free(temp_path);
-        return FALSE;
-    }
-
-    /* Write original file path */
-    const gchar* original_path = doc->file_path ? doc->file_path : "";
-    if (!write_string(file, original_path)) {
-        fclose(file);
-        g_unlink(temp_path);
-        g_free(file_path);
-        g_free(temp_path);
-        return FALSE;
-    }
-
-    /* Write layer count */
-    guint layer_count = g_list_length(doc->layers);
-    guint32 layer_count_u32 = (guint32)layer_count;
-    if (fwrite(&layer_count_u32, sizeof(guint32), 1, file) != 1) {
-        fclose(file);
-        g_unlink(temp_path);
-        g_free(file_path);
-        g_free(temp_path);
-        return FALSE;
-    }
-
-    /* Write each layer */
-    for (GList* iter = doc->layers; iter; iter = iter->next) {
-        ImageLayer* layer = (ImageLayer*)iter->data;
-        if (!save_layer(file, layer)) {
-            fclose(file);
-            g_unlink(temp_path);
-            g_free(file_path);
-            g_free(temp_path);
-            return FALSE;
-        }
-    }
-
-    fclose(file);
-
-    /* Atomically rename temp file to final file */
-    if (g_rename(temp_path, file_path) != 0) {
-        debug_log("WRN", "Failed to rename autosave file: %s", file_path);
-        g_unlink(temp_path);
-        g_free(file_path);
-        g_free(temp_path);
-        return FALSE;
-    }
-
-    g_free(file_path);
-    g_free(temp_path);
-
-    return TRUE;
+    g_free(rli_path);
+    return ok;
 }
 
 /**
- * Load document from autosave file
+ * Load a document from an autosave .rli file.
+ * The original file path is restored from the companion .meta sidecar if present.
  */
 ImageDocument* autosave_load_document(const gchar* autosave_path) {
-    FILE* file = g_fopen(autosave_path, "rb");
-    if (!file) {
+    if (!autosave_path) {
         return NULL;
     }
 
-    /* Read and verify magic */
-    gchar magic[12];
-    if (fread(magic, 12, 1, file) != 1) {
-        fclose(file);
-        return NULL;
-    }
-
-    if (strcmp(magic, AUTOSAVE_MAGIC) != 0) {
-        debug_log("WRN", "Invalid autosave file magic");
-        fclose(file);
-        return NULL;
-    }
-
-    /* Read version */
-    guint32 version;
-    if (fread(&version, sizeof(guint32), 1, file) != 1) {
-        fclose(file);
-        return NULL;
-    }
-
-    if (version != AUTOSAVE_VERSION) {
-        debug_log("WRN", "Unsupported autosave file version: %u", version);
-        fclose(file);
-        return NULL;
-    }
-
-    /* Read timestamp */
-    time_t timestamp;
-    if (fread(&timestamp, sizeof(time_t), 1, file) != 1) {
-        fclose(file);
-        return NULL;
-    }
-
-    /* Read document dimensions */
-    guint32 width, height;
-    if (fread(&width, sizeof(guint32), 1, file) != 1) {
-        fclose(file);
-        return NULL;
-    }
-    if (fread(&height, sizeof(guint32), 1, file) != 1) {
-        fclose(file);
-        return NULL;
-    }
-
-    /* Read original file path */
-    gchar* original_path = read_string(file);
-    if (!original_path) {
-        fclose(file);
-        return NULL;
-    }
-
-    /* Read layer count */
-    guint32 layer_count;
-    if (fread(&layer_count, sizeof(guint32), 1, file) != 1) {
-        g_free(original_path);
-        fclose(file);
-        return NULL;
-    }
-
-    /* Create document */
-    gchar* filename = g_path_get_basename(original_path);
-    if (!filename || strlen(filename) == 0) {
-        filename = g_strdup("Recovered");
-    }
-
-    /* Create document with worker pool for on-screen rendering */
-    ImageDocument* doc = document_new(filename, TRUE, 10); /* Default 10 undo levels */
-    g_free(filename);
+    /* Create a minimal document shell; RLI loader fills width/height/layers */
+    gchar* basename = g_path_get_basename(autosave_path);
+    ImageDocument* doc = document_new(basename, TRUE, 10);
+    g_free(basename);
 
     if (!doc) {
-        g_free(original_path);
-        fclose(file);
         return NULL;
     }
 
-    /* Set document properties */
-    doc->width = width;
-    doc->height = height;
-    doc->has_alpha = TRUE; /* Assume alpha for recovered documents */
-    doc->channels = 4;
-    doc->bit_depth = 8;
-
-    if (original_path && strlen(original_path) > 0) {
-        doc->file_path = g_strdup(original_path);
+    /* Load RLI data */
+    PluginError err = PLUGIN_ERROR_NONE;
+    if (!image_io_load(doc, autosave_path, &err, NULL)) {
+        debug_log("WRN", "autosave: failed to load %s (error %d)", autosave_path, (int)err);
+        document_free(doc);
+        return NULL;
     }
-    g_free(original_path);
 
-    /* Create tile grid */
-    doc->tile_grid = tile_grid_create(doc->width, doc->height, 128);
+    /* Restore original file path from .meta sidecar */
+    if (g_str_has_suffix(autosave_path, ".rli")) {
+        gsize base_len = strlen(autosave_path) - 4; /* strip ".rli" */
+        gchar* base    = g_strndup(autosave_path, base_len);
+        gchar* meta_path = g_strdup_printf("%s.meta", base);
+        g_free(base);
 
-    /* Load layers */
-    for (guint32 i = 0; i < layer_count; i++) {
-        ImageLayer* layer = load_layer(file);
-        if (!layer) {
-            /* Failed to load layer - free document and abort */
-            document_free(doc);
-            fclose(file);
-            return NULL;
+        gchar* meta_content = NULL;
+        if (g_file_get_contents(meta_path, &meta_content, NULL, NULL)) {
+            if (g_str_has_prefix(meta_content, "original_path=")) {
+                gchar* orig = meta_content + strlen("original_path=");
+                g_strchomp(orig);
+                if (*orig != '\0') {
+                    g_free(doc->file_path);
+                    doc->file_path = g_strdup(orig);
+                }
+            }
+            g_free(meta_content);
         }
-
-        doc->layers = g_list_append(doc->layers, layer);
+        g_free(meta_path);
     }
 
-    fclose(file);
+    /* Ensure tile grid is present (RLI loader does not create it) */
+    if (!doc->tile_grid && doc->width > 0 && doc->height > 0) {
+        doc->tile_grid = tile_grid_create(doc->width, doc->height, 128);
+    }
 
-    /* Set selected layer to first layer */
+    /* Select first layer */
     if (doc->layers) {
-        ImageLayer* first_layer = (ImageLayer*)g_list_first(doc->layers)->data;
-        document_set_selected_layer(doc, first_layer);
+        document_set_selected_layer(doc, (ImageLayer*)doc->layers->data);
     }
 
-    /* Mark as modified (unsaved) */
     doc->modified = TRUE;
-
-    /* Mark composite as dirty */
     document_invalidate_composite(doc);
 
     return doc;
@@ -588,7 +215,7 @@ ImageDocument* autosave_load_document(const gchar* autosave_path) {
  * Timer callback for periodic autosave
  */
 static gboolean autosave_timer_callback(gpointer user_data) {
-    (void)user_data; /* Unused */
+    (void)user_data; /* Unused */ 
 
     if (!g_initialized || !g_id_map) {
         return TRUE; /* Continue timer */
@@ -658,7 +285,10 @@ void autosave_init(void) {
 }
 
 /**
- * Shutdown autosave system
+ * Shutdown autosave system.
+ * On a clean shutdown the app is not crashing, so there is nothing to recover
+ * on the next launch.  Delete all autosave files so the recovery dialog does
+ * not appear unnecessarily.
  */
 void autosave_shutdown(void) {
     if (!g_initialized) {
@@ -671,17 +301,17 @@ void autosave_shutdown(void) {
         g_autosave_timer_id = 0;
     }
 
-    /* Save all documents one final time */
+    /* Delete all autosave files — this is a clean exit, not a crash */
     if (g_id_map) {
         GHashTableIter iter;
         gpointer key, value;
 
         g_hash_table_iter_init(&iter, g_id_map);
         while (g_hash_table_iter_next(&iter, &key, &value)) {
-            ImageDocument* doc = (ImageDocument*)value;
-            if (doc && doc->modified) {
-                autosave_save_document(doc);
-            }
+            const gchar* autosave_id = (const gchar*)key;
+            gchar* file_path = autosave_get_file_path(autosave_id);
+            autosave_delete_file(file_path);
+            g_free(file_path);
         }
     }
 
@@ -718,7 +348,8 @@ gchar* autosave_register_document(ImageDocument* doc) {
 }
 
 /**
- * Unregister a document from autosave tracking
+ * Unregister a document from autosave tracking and delete its autosave file.
+ * Called when a document tab is closed cleanly — no crash-recovery file is needed.
  */
 void autosave_unregister_document(ImageDocument* doc) {
     if (!doc || !g_initialized) {
@@ -727,145 +358,156 @@ void autosave_unregister_document(ImageDocument* doc) {
 
     gchar* autosave_id = (gchar*)g_hash_table_lookup(g_document_map, doc);
     if (autosave_id) {
-        /* Remove from both maps */
+        /* Delete the autosave file: the document was closed cleanly */
+        gchar* file_path = autosave_get_file_path(autosave_id);
+        autosave_delete_file(file_path);
+        g_free(file_path);
+
         g_hash_table_remove(g_document_map, doc);
         g_hash_table_remove(g_id_map, autosave_id);
     }
 }
 
 /**
- * Delete an autosave file
+ * Delete an autosave file and its companion .meta sidecar (if any).
  */
 void autosave_delete_file(const gchar* autosave_path) {
-    if (autosave_path && g_file_test(autosave_path, G_FILE_TEST_EXISTS)) {
+    if (!autosave_path) {
+        return;
+    }
+
+    if (g_file_test(autosave_path, G_FILE_TEST_EXISTS)) {
         g_unlink(autosave_path);
+    }
+
+    /* Also remove the .meta sidecar */
+    if (g_str_has_suffix(autosave_path, ".rli")) {
+        gsize len    = strlen(autosave_path);
+        gchar* base  = g_strndup(autosave_path, len - 4);
+        gchar* meta  = g_strdup_printf("%s.meta", base);
+        g_free(base);
+        if (g_file_test(meta, G_FILE_TEST_EXISTS)) {
+            g_unlink(meta);
+        }
+        g_free(meta);
     }
 }
 
 /**
- * Scan autosave directory for recovery files
+ * Scan autosave directory for recovery files.
+ * Looks for "autosave_<id>.rli" files with a valid RLI RLIB header.
+ * Companion "autosave_<id>.meta" sidecars supply display metadata.
  */
 GList* autosave_scan_recovery_files(void) {
     GList* recovery_list = NULL;
     gchar* autosave_dir = autosave_get_directory();
-    GDir* dir;
-    const gchar* entry;
-    gchar magic[12];
-    FILE* file;
 
-    /* Check if directory exists */
     if (!g_file_test(autosave_dir, G_FILE_TEST_IS_DIR)) {
         g_free(autosave_dir);
         return NULL;
     }
 
-    dir = g_dir_open(autosave_dir, 0, NULL);
+    GDir* dir = g_dir_open(autosave_dir, 0, NULL);
     if (!dir) {
         g_free(autosave_dir);
         return NULL;
     }
 
-    while ((entry = g_dir_read_name(dir)) != NULL) {
-        /* Check if file matches autosave pattern */
-        if (!g_str_has_prefix(entry, "autosave_") || !g_str_has_suffix(entry, ".imgtmp")) {
+    const gchar* entry_name;
+    while ((entry_name = g_dir_read_name(dir)) != NULL) {
+        if (!g_str_has_prefix(entry_name, "autosave_") || !g_str_has_suffix(entry_name, ".rli")) {
             continue;
         }
 
-        gchar* file_path = g_build_filename(autosave_dir, entry, NULL);
+        gchar* file_path = g_build_filename(autosave_dir, entry_name, NULL);
 
-        /* Try to read header to validate file */
-        file = g_fopen(file_path, "rb");
-        if (!file) {
+        /*
+         * Validate the RLI file by reading the RLIB chunk header and extract
+         * canvas dimensions.  Layout (all little-endian):
+         *   [0..3]   chunk type  (uint32) = RLI_CHUNK_RLIB
+         *   [4..11]  payload len (uint64)
+         *   [12..13] version     (uint16)
+         *   [14..15] flags       (uint16)
+         *   [16..19] canvas_w    (uint32)
+         *   [20..23] canvas_h    (uint32)
+         *   [24..27] layer_count (uint32)
+         */
+        FILE* f = g_fopen(file_path, "rb");
+        if (!f) {
             g_free(file_path);
             continue;
         }
 
-        /* Read magic */
-        if (fread(magic, 12, 1, file) != 1) {
-            fclose(file);
+        guint8 hdr[28];
+        if (fread(hdr, sizeof(hdr), 1, f) != 1) {
+            fclose(f);
+            g_free(file_path);
+            continue;
+        }
+        fclose(f);
+
+        guint32 chunk_type = (guint32)hdr[0] | ((guint32)hdr[1] << 8)
+                           | ((guint32)hdr[2] << 16) | ((guint32)hdr[3] << 24);
+        if (chunk_type != RLI_CHUNK_RLIB) {
             g_free(file_path);
             continue;
         }
 
-        if (strcmp(magic, AUTOSAVE_MAGIC) != 0) {
-            fclose(file);
+        guint32 canvas_w = (guint32)hdr[16] | ((guint32)hdr[17] << 8)
+                         | ((guint32)hdr[18] << 16) | ((guint32)hdr[19] << 24);
+        guint32 canvas_h = (guint32)hdr[20] | ((guint32)hdr[21] << 8)
+                         | ((guint32)hdr[22] << 16) | ((guint32)hdr[23] << 24);
+        guint32 layer_count = (guint32)hdr[24] | ((guint32)hdr[25] << 8)
+                            | ((guint32)hdr[26] << 16) | ((guint32)hdr[27] << 24);
+
+        if (canvas_w == 0 || canvas_h == 0) {
             g_free(file_path);
             continue;
         }
 
-        /* Read version */
-        guint32 version;
-        if (fread(&version, sizeof(guint32), 1, file) != 1) {
-            fclose(file);
-            g_free(file_path);
-            continue;
-        }
-
-        if (version != AUTOSAVE_VERSION) {
-            fclose(file);
-            g_free(file_path);
-            continue;
-        }
-
-        /* Read timestamp */
-        time_t timestamp;
-        if (fread(&timestamp, sizeof(time_t), 1, file) != 1) {
-            fclose(file);
-            g_free(file_path);
-            continue;
-        }
-
-        /* Read dimensions */
-        guint32 width, height;
-        if (fread(&width, sizeof(guint32), 1, file) != 1) {
-            fclose(file);
-            g_free(file_path);
-            continue;
-        }
-        if (fread(&height, sizeof(guint32), 1, file) != 1) {
-            fclose(file);
-            g_free(file_path);
-            continue;
-        }
-
-        /* Read original path */
-        gchar* original_path = read_string(file);
-        fclose(file);
-
-        /* Create recovery entry */
-        AutosaveRecoveryEntry* entry = g_malloc(sizeof(AutosaveRecoveryEntry));
-        entry->autosave_path = file_path;
-        entry->original_path = original_path ? original_path : g_strdup("");
-        entry->timestamp = timestamp;
-        entry->width = width;
-        entry->height = height;
-
-        /* Count layers by reading through file */
-        file = g_fopen(file_path, "rb");
-        if (file) {
-            /* Skip header */
-            fseek(file, 12 + sizeof(guint32) + sizeof(time_t) + sizeof(guint32) * 2, SEEK_SET);
-
-            /* Skip original path */
-            guint32 path_len;
-            if (fread(&path_len, sizeof(guint32), 1, file) == 1 && path_len > 0) {
-                fseek(file, path_len, SEEK_CUR);
+        /* Extract timestamp embedded in the autosave ID: "autosave_<hash>_<ts>.rli" */
+        time_t timestamp = 0;
+        {
+            /* Strip "autosave_" prefix and ".rli" suffix to get the ID */
+            gsize name_len = strlen(entry_name);
+            gchar* id = g_strndup(entry_name + 9, name_len - 9 - 4);
+            const gchar* us = strrchr(id, '_');
+            if (us) {
+                timestamp = (time_t)g_ascii_strtoll(us + 1, NULL, 10);
             }
-
-            /* Read layer count */
-            guint32 layer_count = 0;
-            if (fread(&layer_count, sizeof(guint32), 1, file) == 1) {
-                entry->layer_count = layer_count;
-            } else {
-                entry->layer_count = 0;
-            }
-
-            fclose(file);
-        } else {
-            entry->layer_count = 0;
+            g_free(id);
         }
 
-        recovery_list = g_list_prepend(recovery_list, entry);
+        /* Read original file path from companion .meta sidecar */
+        gchar* original_path = g_strdup("");
+        {
+            gsize fp_len   = strlen(file_path);
+            gchar* base    = g_strndup(file_path, fp_len - 4);
+            gchar* meta_fp = g_strdup_printf("%s.meta", base);
+            g_free(base);
+
+            gchar* meta_content = NULL;
+            if (g_file_get_contents(meta_fp, &meta_content, NULL, NULL)) {
+                if (g_str_has_prefix(meta_content, "original_path=")) {
+                    gchar* orig = meta_content + strlen("original_path=");
+                    g_strchomp(orig);
+                    g_free(original_path);
+                    original_path = g_strdup(orig);
+                }
+                g_free(meta_content);
+            }
+            g_free(meta_fp);
+        }
+
+        AutosaveRecoveryEntry* rec = g_malloc(sizeof(AutosaveRecoveryEntry));
+        rec->autosave_path = file_path;
+        rec->original_path = original_path;
+        rec->timestamp     = timestamp;
+        rec->width         = canvas_w;
+        rec->height        = canvas_h;
+        rec->layer_count   = layer_count;
+
+        recovery_list = g_list_prepend(recovery_list, rec);
     }
 
     g_dir_close(dir);
@@ -873,7 +515,6 @@ GList* autosave_scan_recovery_files(void) {
 
     /* Sort by timestamp (most recent first) */
     recovery_list = g_list_sort(recovery_list, (GCompareFunc)autosave_compare_recovery_entries);
-
     return recovery_list;
 }
 

@@ -1306,6 +1306,19 @@ if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/openexr/CMakeLists
     set(OPENEXR_BUILD_DIR "${CMAKE_BINARY_DIR}/openexr_build")
     set(OPENEXR_INSTALL_DIR "${CMAKE_BINARY_DIR}/openexr_install")
 
+    # MinGW: bundled OpenEXR sets CMAKE_DEBUG_POSTFIX to "_d" (OpenEXRSetup.cmake).
+    # Installed DLLs/import libs use libOpenEXR-4_0[_d].dll / .dll.a (not OpenEXR-4_0.dll).
+    set(OPENEXR_MINGW_LIB_POSTFIX "")
+    # Imath API segment in libImath-<api> (bundled via OpenEXR FetchContent; bump when upgrading).
+    set(IMATH_VERSION_API "3_2")
+    if(MINGW)
+        string(TOUPPER "${CMAKE_BUILD_TYPE}" _openexr_rl_bt)
+        if(_openexr_rl_bt STREQUAL "DEBUG")
+            set(OPENEXR_MINGW_LIB_POSTFIX "_d")
+        endif()
+        unset(_openexr_rl_bt)
+    endif()
+
     if(WIN32)
         set(OPENEXR_DLL_PREFIX "${OPENEXR_INSTALL_DIR}/bin")
         set(OPENEXR_LIB_PREFIX "${OPENEXR_INSTALL_DIR}/lib")
@@ -1373,6 +1386,19 @@ if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/openexr/CMakeLists
     file(MAKE_DIRECTORY "${OPENEXR_INSTALL_DIR}/include/OpenEXR")
     file(MAKE_DIRECTORY "${OPENEXR_INSTALL_DIR}/include/Imath")
 
+    # Makefile generators need explicit outputs or they try to add a rule for IMPORTED_IMPLIB paths.
+    set(_openexr_ep_extra "")
+    if(MINGW)
+        set(_openexr_ep_extra
+            BUILD_BYPRODUCTS
+                "${OPENEXR_INSTALL_DIR}/lib/libIex-${OPENEXR_VERSION_API}${OPENEXR_MINGW_LIB_POSTFIX}.dll.a"
+                "${OPENEXR_INSTALL_DIR}/lib/libIlmThread-${OPENEXR_VERSION_API}${OPENEXR_MINGW_LIB_POSTFIX}.dll.a"
+                "${OPENEXR_INSTALL_DIR}/lib/libOpenEXRCore-${OPENEXR_VERSION_API}${OPENEXR_MINGW_LIB_POSTFIX}.dll.a"
+                "${OPENEXR_INSTALL_DIR}/lib/libOpenEXR-${OPENEXR_VERSION_API}${OPENEXR_MINGW_LIB_POSTFIX}.dll.a"
+                "${OPENEXR_INSTALL_DIR}/lib/libImath-${IMATH_VERSION_API}${OPENEXR_MINGW_LIB_POSTFIX}.dll.a"
+        )
+    endif()
+
     ExternalProject_Add(
         openexr_external
         SOURCE_DIR "${CMAKE_SOURCE_DIR}/lib/openexr"
@@ -1380,7 +1406,9 @@ if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/openexr/CMakeLists
         INSTALL_DIR "${OPENEXR_INSTALL_DIR}"
         CMAKE_ARGS ${OPENEXR_CMAKE_ARGS}
         BUILD_ALWAYS FALSE
+        ${_openexr_ep_extra}
     )
+    unset(_openexr_ep_extra)
 
     # include/, include/OpenEXR/, and include/Imath/ needed for openexr.h and its transitive includes
     set(OPENEXR_INCLUDE_DIRS
@@ -1393,7 +1421,7 @@ if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/openexr/CMakeLists
     set(OPENEXR_MAIN_LIB_NAME "OpenEXR-${OPENEXR_VERSION_API}")
     set(OPENEXR_MAIN_IMPLIB_NAME "OpenEXR-${OPENEXR_VERSION_API}.lib")
     if(MINGW)
-        set(OPENEXR_MAIN_IMPLIB_NAME "libOpenEXR-${OPENEXR_VERSION_API}.dll.a")
+        set(OPENEXR_MAIN_IMPLIB_NAME "libOpenEXR-${OPENEXR_VERSION_API}${OPENEXR_MINGW_LIB_POSTFIX}.dll.a")
     endif()
 
     add_library(OpenEXR::OpenEXR SHARED IMPORTED GLOBAL)
@@ -1401,10 +1429,17 @@ if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/openexr/CMakeLists
         INTERFACE_INCLUDE_DIRECTORIES "${OPENEXR_INCLUDE_DIRS}"
     )
     if(WIN32)
-        set_target_properties(OpenEXR::OpenEXR PROPERTIES
-            IMPORTED_LOCATION "${OPENEXR_DLL_PREFIX}/OpenEXR-${OPENEXR_VERSION_API}${CMAKE_SHARED_LIBRARY_SUFFIX}"
-            IMPORTED_IMPLIB "${OPENEXR_LIB_PREFIX}/${OPENEXR_MAIN_IMPLIB_NAME}"
-        )
+        if(MINGW)
+            set_target_properties(OpenEXR::OpenEXR PROPERTIES
+                IMPORTED_LOCATION "${OPENEXR_DLL_PREFIX}/libOpenEXR-${OPENEXR_VERSION_API}${OPENEXR_MINGW_LIB_POSTFIX}${CMAKE_SHARED_LIBRARY_SUFFIX}"
+                IMPORTED_IMPLIB "${OPENEXR_LIB_PREFIX}/${OPENEXR_MAIN_IMPLIB_NAME}"
+            )
+        else()
+            set_target_properties(OpenEXR::OpenEXR PROPERTIES
+                IMPORTED_LOCATION "${OPENEXR_DLL_PREFIX}/OpenEXR-${OPENEXR_VERSION_API}${CMAKE_SHARED_LIBRARY_SUFFIX}"
+                IMPORTED_IMPLIB "${OPENEXR_LIB_PREFIX}/${OPENEXR_MAIN_IMPLIB_NAME}"
+            )
+        endif()
     else()
         set_target_properties(OpenEXR::OpenEXR PROPERTIES
             IMPORTED_LOCATION "${OPENEXR_LIB_PREFIX}/libOpenEXR-${OPENEXR_VERSION_API}${CMAKE_SHARED_LIBRARY_SUFFIX}"
@@ -1415,7 +1450,7 @@ if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/openexr/CMakeLists
     set(OPENEXR_CORE_LIB_NAME "OpenEXRCore-${OPENEXR_VERSION_API}")
     set(OPENEXR_CORE_IMPLIB_NAME "OpenEXRCore-${OPENEXR_VERSION_API}.lib")
     if(MINGW)
-        set(OPENEXR_CORE_IMPLIB_NAME "libOpenEXRCore-${OPENEXR_VERSION_API}.dll.a")
+        set(OPENEXR_CORE_IMPLIB_NAME "libOpenEXRCore-${OPENEXR_VERSION_API}${OPENEXR_MINGW_LIB_POSTFIX}.dll.a")
     endif()
     add_library(OpenEXR::OpenEXRCore SHARED IMPORTED GLOBAL)
     set_target_properties(OpenEXR::OpenEXRCore PROPERTIES
@@ -1423,7 +1458,7 @@ if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/openexr/CMakeLists
     )
     if(WIN32)
         set_target_properties(OpenEXR::OpenEXRCore PROPERTIES
-            IMPORTED_LOCATION "${OPENEXR_DLL_PREFIX}/lib${OPENEXR_CORE_LIB_NAME}${CMAKE_SHARED_LIBRARY_SUFFIX}"
+            IMPORTED_LOCATION "${OPENEXR_DLL_PREFIX}/lib${OPENEXR_CORE_LIB_NAME}${OPENEXR_MINGW_LIB_POSTFIX}${CMAKE_SHARED_LIBRARY_SUFFIX}"
             IMPORTED_IMPLIB "${OPENEXR_LIB_PREFIX}/${OPENEXR_CORE_IMPLIB_NAME}"
         )
     else()

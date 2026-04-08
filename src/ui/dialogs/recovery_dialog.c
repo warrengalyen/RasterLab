@@ -1,19 +1,41 @@
 #include "ui/dialogs/recovery_dialog.h"
 #include "app/autosave.h"
 #include "document.h"
+#include "i18n.h"
 #include "ui.h"
 #include "ui/layers_panel.h"
+#include "ui/ui_file_menu.h"
 #include "ui/ui_utils.h"
 #include <glib.h>
 #include <gtk/gtk.h>
 #include <string.h>
 #include <time.h>
-#include "i18n.h"
-
 
 /* Forward declarations */
 static void on_recovery_dialog_response(GtkDialog* dialog, gint response_id, gpointer user_data);
-static void on_tab_close_button_clicked(GtkButton* button, gpointer user_data);
+static void on_recovery_checkbox_toggled(GtkCellRendererToggle* renderer, gchar* path_str,
+                                         gpointer user_data);
+
+/**
+ * Toggle the checked state of a recovery entry row.
+ * GTK's GtkCellRendererToggle emits "toggled" but does NOT update the model;
+ * the application must do it manually.
+ */
+static void on_recovery_checkbox_toggled(GtkCellRendererToggle* renderer, gchar* path_str,
+                                         gpointer user_data) {
+    (void)renderer;
+    GtkListStore* store = GTK_LIST_STORE(user_data);
+    GtkTreeIter iter;
+    GtkTreePath* path = gtk_tree_path_new_from_string(path_str);
+
+    if (gtk_tree_model_get_iter(GTK_TREE_MODEL(store), &iter, path)) {
+        gboolean current = FALSE;
+        gtk_tree_model_get(GTK_TREE_MODEL(store), &iter, 0, &current, -1);
+        gtk_list_store_set(store, &iter, 0, !current, -1);
+    }
+
+    gtk_tree_path_free(path);
+}
 
 /**
  * Show recovery dialog for autosave files
@@ -70,8 +92,10 @@ void recovery_dialog_show(AppContext* ctx) {
     GtkCellRenderer* renderer;
     GtkTreeViewColumn* column;
 
-    /* Checkbox column */
+    /* Checkbox column — must connect "toggled" to update the model; GTK cell
+     * renderer toggles do NOT flip the model value automatically. */
     renderer = gtk_cell_renderer_toggle_new();
+    g_signal_connect(renderer, "toggled", G_CALLBACK(on_recovery_checkbox_toggled), store);
     column = gtk_tree_view_column_new_with_attributes("", renderer, "active", 0, NULL);
     gtk_tree_view_append_column(GTK_TREE_VIEW(tree_view), column);
 
@@ -166,77 +190,90 @@ static void on_recovery_dialog_response(GtkDialog* dialog, gint response_id, gpo
                 /* Load document from autosave */
                 ImageDocument* doc = autosave_load_document(entry->autosave_path);
                 if (doc) {
-                    /* Create UI tab for recovered document */
+                    /* Determine display name */
                     gchar* filename = g_path_get_basename(entry->original_path);
                     if (!filename || strlen(filename) == 0) {
                         g_free(filename);
                         filename = g_strdup_printf("Recovered %ld", (long)entry->timestamp);
                     }
 
-                    /* Set filename in document */
                     g_free(doc->filename);
                     doc->filename = g_strdup(filename);
+                    g_free(filename);
 
-                    /* Create drawing area and tab */
-                    GtkWidget* page_content = document_create_drawing_area(doc);
-                    if (page_content) {
-                        /* Create tab label */
-                        GtkWidget* tab_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
-                        gtk_container_set_border_width(GTK_CONTAINER(tab_hbox), 0);
+                    /* Create the drawing area hierarchy (sets doc->scrolled_window,
+                     * doc->canvas_container, doc->viewport, doc->drawing_area, etc.) */
+                    document_create_drawing_area(doc);
 
-                        GtkWidget* tab_label = gtk_label_new(filename);
-                        gtk_box_pack_start(GTK_BOX(tab_hbox), tab_label, FALSE, FALSE, 0);
-
-                        GtkWidget* close_button = gtk_button_new();
-                        gtk_button_set_relief(GTK_BUTTON(close_button), GTK_RELIEF_NONE);
-                        gtk_widget_set_focus_on_click(close_button, FALSE);
-                        gtk_widget_set_size_request(close_button, 20, 20);
-                        GtkWidget* close_image = gtk_image_new_from_icon_name("window-close-symbolic",
-                                                                              GTK_ICON_SIZE_BUTTON);
-                        gtk_button_set_image(GTK_BUTTON(close_button), close_image);
-                        g_signal_connect(close_button, "clicked",
-                                         G_CALLBACK(on_tab_close_button_clicked), doc);
-                        gtk_box_pack_start(GTK_BOX(tab_hbox), close_button, FALSE, FALSE, 0);
-
-                        gtk_widget_show_all(tab_hbox);
-                        gtk_widget_show_all(page_content);
-
-                        /* Add page to notebook */
-                        gint page_num = gtk_notebook_append_page(GTK_NOTEBOOK(ctx->notebook),
-                                                                 page_content, tab_hbox);
-                        gtk_notebook_set_current_page(GTK_NOTEBOOK(ctx->notebook), page_num);
-
-                        /* Store references */
-                        g_object_set_data(G_OBJECT(close_button), "tab_label", tab_label);
-                        g_object_set_data(G_OBJECT(close_button), "app_context", ctx);
-
-                        if (doc && doc->drawing_area) {
-                            g_object_set_data(G_OBJECT(doc->drawing_area), "app_context", ctx);
-                            if (ctx->tool_registry) {
-                                g_object_set_data(G_OBJECT(doc->drawing_area), "tool_registry", ctx->tool_registry);
-                            }
-                            if (ctx->layers_panel) {
-                                g_object_set_data(G_OBJECT(doc->drawing_area), "layers_panel", ctx->layers_panel);
-                            }
+                    /* Wire up per-widget context references used by tool and draw handlers */
+                    if (doc->drawing_area) {
+                        g_object_set_data(G_OBJECT(doc->drawing_area), "app_context", ctx);
+                        if (ctx->tool_registry) {
+                            g_object_set_data(G_OBJECT(doc->drawing_area), "tool_registry",
+                                              ctx->tool_registry);
                         }
-
-                        /* Add document to list */
-                        ctx->documents = g_list_append(ctx->documents, doc);
-
-                        /* Register for autosave */
-                        autosave_register_document(doc);
-
-                        /* Update UI */
-                        ui_update_window_title(ctx, NULL);
-                        ui_update_status_bar(ctx, doc);
-
-                        /* Update layers panel */
                         if (ctx->layers_panel) {
-                            layers_panel_update(ctx->layers_panel, doc);
+                            g_object_set_data(G_OBJECT(doc->drawing_area), "layers_panel",
+                                              ctx->layers_panel);
                         }
+
+                        /* Update drawing area size to match the actual document dimensions.
+                         * document_create_drawing_area() starts at a hardcoded 800×600;
+                         * without this the canvas clips incorrectly and can paint over
+                         * adjacent UI panels. */
+                        gdouble zoom = (doc->zoom_factor > 0.0) ? doc->zoom_factor : 1.0;
+                        gint display_w = (gint)(doc->width * zoom);
+                        gint display_h = (gint)(doc->height * zoom);
+                        if (display_w < 1)
+                            display_w = (gint)doc->width;
+                        if (display_h < 1)
+                            display_h = (gint)doc->height;
+                        gtk_widget_set_size_request(doc->drawing_area, display_w, display_h);
                     }
 
-                    g_free(filename);
+                    /* Apply canvas background colour to the viewport via CSS */
+                    if (doc->viewport) {
+                        gdouble r_val, g_val, b_val;
+                        ui_get_canvas_background_color(ctx, &r_val, &g_val, &b_val);
+                        guint r = (guint)(r_val * 255.0);
+                        guint g = (guint)(g_val * 255.0);
+                        guint b = (guint)(b_val * 255.0);
+
+                        GtkCssProvider* provider = gtk_css_provider_new();
+                        g_object_set_data_full(G_OBJECT(doc->viewport), "canvas_bg_provider",
+                                               provider, g_object_unref);
+                        GtkStyleContext* sc = gtk_widget_get_style_context(doc->viewport);
+                        gtk_style_context_add_provider(sc, GTK_STYLE_PROVIDER(provider),
+                                                       GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+                        gchar* css = g_strdup_printf(
+                            "#canvas-viewport { background-color: rgb(%u, %u, %u); }", r, g, b);
+                        gtk_css_provider_load_from_data(provider, css, -1, NULL);
+                        g_free(css);
+                    }
+
+                    /* Set up drag-and-drop file opening on the viewport */
+                    ui_file_menu_setup_viewport_drag_drop(doc, ctx);
+
+                    /* Add the tab using the standard path (handles rulers, label, close
+                     * button, and adds to ctx->documents BEFORE the notebook append so
+                     * the switch-page signal fires with the document already registered) */
+                    ui_add_document_to_notebook(ctx, doc);
+
+                    /* Point the active tool at the newly recovered document */
+                    if (ctx->tool_registry) {
+                        ctx->tool_registry->current_doc = doc;
+                    }
+
+                    /* Register for future autosave */
+                    autosave_register_document(doc);
+
+                    /* Refresh UI */
+                    ui_update_window_title(ctx, NULL);
+                    ui_update_status_bar(ctx, doc);
+
+                    if (ctx->layers_panel) {
+                        layers_panel_update(ctx->layers_panel, doc);
+                    }
                 }
             }
 
@@ -254,17 +291,4 @@ static void on_recovery_dialog_response(GtkDialog* dialog, gint response_id, gpo
     autosave_free_recovery_list(recovery_files);
 
     gtk_widget_destroy(GTK_WIDGET(dialog));
-}
-
-/**
- * Tab close button click handler (forward declaration needed for signal connection)
- */
-static void on_tab_close_button_clicked(GtkButton* button, gpointer user_data) {
-    ImageDocument* doc = (ImageDocument*)user_data;
-    AppContext* ctx = (AppContext*)g_object_get_data(G_OBJECT(button), "app_context");
-
-    if (ctx && doc) {
-        /* Use the UI function to close the document tab */
-        ui_close_document_tab(ctx, doc);
-    }
 }

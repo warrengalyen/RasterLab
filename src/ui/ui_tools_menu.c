@@ -3,13 +3,13 @@
  */
 #include "ui/ui_tools_menu.h"
 #include "app/settings.h"
+#include "debug_logger.h"
 #include "document.h"
 #include "i18n.h"
 #include "ui.h"
 #include "ui/dialogs/settings_dialog.h"
 #include <glib.h>
 #include <gtk/gtk.h>
-#include "debug_logger.h"
 
 #define RL_LOCALE_KEY "rl-locale"
 
