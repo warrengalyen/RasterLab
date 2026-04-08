@@ -1329,6 +1329,20 @@ if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/openexr/CMakeLists
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON
     )
 
+    # MinGW + shared OpenEXR: explicit template instantiations (e.g. TypedAttribute::value)
+    # must end up in the DLL export table. Upstream leaves IMF_EXPORT_TEMPLATE_INSTANCE
+    # empty on MinGW; exporting all symbols avoids undefined references when linking
+    # website/examples without patching vendored sources.
+    # OpenEXRCoreTest links internal C APIs (internal_huf_*, exrcore_ensure_*) that are
+    # not exported from OpenEXRCore.dll on PE/MinGW; skip upstream library tests only.
+    if(MINGW)
+        list(APPEND OPENEXR_CMAKE_ARGS
+            -DOPENEXR_USE_DEFAULT_VISIBILITY=ON
+            "-DCMAKE_SHARED_LINKER_FLAGS=-Wl,--export-all-symbols"
+            -DOPENEXR_TEST_LIBRARIES=OFF
+        )
+    endif()
+
     if(CMAKE_SIZEOF_VOID_P EQUAL 8)
         list(APPEND OPENEXR_CMAKE_ARGS -DCMAKE_SYSTEM_PROCESSOR=${CMAKE_SYSTEM_PROCESSOR})
     else()
