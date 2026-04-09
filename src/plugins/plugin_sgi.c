@@ -1,4 +1,14 @@
 /*
+ * This file is part of RasterLab
+ * Copyright (c) 2026 Warren Galyen
+ * All rights reserved.
+ *
+ * This software is provided as freeware for personal and commercial use.
+ * Redistribution, modification, or reverse engineering is not permitted.
+ * See LICENSE.txt for full terms.
+ */
+
+/*
  * SGI (Silicon Graphics) image format plugin
  * Supports .rgb, .rgba, .sgi, .bw (and .int, .inta) - IRIS image file format.
  * Specification: Paul Bourke / SGI Image File Format (magic 474, big-endian).
