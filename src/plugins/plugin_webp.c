@@ -463,7 +463,7 @@ static PluginError save_webp(ImageDocument* doc, const char* filename, const Sav
     guchar* surface_data;
     int surface_stride;
     uint8_t* rgba_data = NULL;
-    uint8_t* webp_data = NULL;
+    const uint8_t* webp_data = NULL;
     size_t webp_size;
     FILE* outfile;
     WebPSaveOptions* webp_opts = NULL;
