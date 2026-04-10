@@ -38,3 +38,6 @@
 [submodule "lib/unity"]
 	path = lib/unity
 	url = https://github.com/ThrowTheSwitch/Unity.git
+[submodule "lib/libjxl"]
+	path = lib/libjxl
+	url = https://github.com/libjxl/libjxl

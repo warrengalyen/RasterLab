@@ -1,11 +1,17 @@
 cmake_minimum_required(VERSION 3.10)
 project(RasterLab C)
 
+# C++ toolchain (used by ExternalProject builds such as libjxl); keeps CMAKE_CXX_COMPILER defined for subprojects
+enable_language(CXX)
+
 # Option: build only the application, use system libs (skip building libjpeg, libpng, libtiff, libwebp, libheif, libde265, libaom, zlib, openexr from lib/)
-option(RASTERLAB_APP_ONLY "Only build the application; skip building libraries in lib/ (use system libjpeg, libpng, libtiff, libwebp, libheif, libde265, libaom, zlib, openexr)" OFF)
+option(RASTERLAB_APP_ONLY "Only build the application; skip building libraries in lib/ (use system libjpeg, libpng, libtiff, libwebp, libheif, libde265, libaom, zlib, openexr, libjxl)" OFF)
 if(RASTERLAB_APP_ONLY)
     message(STATUS "RASTERLAB_APP_ONLY=ON: skipping build of lib/ deps, using system libraries")
 endif()
+
+# libjxl: default to a smaller shared library on 64-bit x86 (fewer SIMD backends, MinSizeRel, strip on MinGW)
+option(RASTERLAB_LIBJXL_SMALL "Prefer smaller libjxl (fewer Highway targets on x86_64, MinSizeRel when not Debug, strip MinGW DLL)" ON)
 
 # PkgConfig needed early when using system libs (APP_ONLY or missing submodules)
 find_package(PkgConfig REQUIRED)
@@ -1601,6 +1607,207 @@ if(LCMS2_FOUND)
     set(HAVE_LCMS2 1)
 else()
     set(HAVE_LCMS2 0)
+endif()
+
+# ---------------------------------------------------------------------------
+# JPEG XL (libjxl) — shared library via ExternalProject (requires C++ toolchain)
+# Uses Little CMS: bundled lcms2 install dir, or system lcms2 (CMAKE_PREFIX_PATH).
+# ---------------------------------------------------------------------------
+set(LIBJXL_FOUND FALSE)
+set(LIBJXL_TARGET "")
+
+if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/libjxl/CMakeLists.txt" AND HAVE_LCMS2)
+    set(_libjxl_lcms_prefix "")
+    if(DEFINED LCMS2_INSTALL_DIR)
+        set(_libjxl_lcms_prefix "${LCMS2_INSTALL_DIR}")
+    elseif(LCMS2_FOUND)
+        find_path(_rl_lcms2_include_dir NAMES lcms2.h PATHS ${LCMS2_INCLUDE_DIRS} NO_DEFAULT_PATH)
+        if(NOT _rl_lcms2_include_dir)
+            find_path(_rl_lcms2_include_dir NAMES lcms2.h)
+        endif()
+        if(_rl_lcms2_include_dir)
+            get_filename_component(_libjxl_lcms_prefix "${_rl_lcms2_include_dir}" DIRECTORY)
+        endif()
+    endif()
+    if(NOT _libjxl_lcms_prefix)
+        message(WARNING "libjxl: could not determine lcms2 install prefix. Skipping libjxl build.")
+    else()
+        message(STATUS "libjxl submodule found, building from source as shared library")
+
+        set(LIBJXL_BUILD_DIR "${CMAKE_BINARY_DIR}/libjxl_build")
+        set(LIBJXL_INSTALL_DIR "${CMAKE_BINARY_DIR}/libjxl_install")
+        # Stub install tree so INTERFACE_INCLUDE_DIRECTORIES on IMPORTED targets exists at configure time
+        file(MAKE_DIRECTORY "${LIBJXL_INSTALL_DIR}/include/jxl")
+
+        # Smaller libjxl: avoid compiling every Highway CPU variant (upstream notes each adds binary size)
+        set(_libjxl_bt ${CMAKE_BUILD_TYPE})
+        if(RASTERLAB_LIBJXL_SMALL AND NOT _libjxl_bt STREQUAL "Debug")
+            set(_libjxl_bt "MinSizeRel")
+        endif()
+
+        if(WIN32)
+            set(LIBJXL_DLL_PATH "${LIBJXL_INSTALL_DIR}/bin/libjxl.dll")
+            set(LIBJXL_CMS_DLL_PATH "${LIBJXL_INSTALL_DIR}/bin/libjxl_cms.dll")
+            set(LIBJXL_THREADS_DLL_PATH "${LIBJXL_INSTALL_DIR}/bin/libjxl_threads.dll")
+            if(MINGW)
+                set(LIBJXL_IMPLIB_PATH "${LIBJXL_INSTALL_DIR}/lib/libjxl.dll.a")
+                set(LIBJXL_CMS_IMPLIB_PATH "${LIBJXL_INSTALL_DIR}/lib/libjxl_cms.dll.a")
+                set(LIBJXL_THREADS_IMPLIB_PATH "${LIBJXL_INSTALL_DIR}/lib/libjxl_threads.dll.a")
+            else()
+                set(LIBJXL_IMPLIB_PATH "${LIBJXL_INSTALL_DIR}/lib/jxl.lib")
+                set(LIBJXL_CMS_IMPLIB_PATH "${LIBJXL_INSTALL_DIR}/lib/jxl_cms.lib")
+                set(LIBJXL_THREADS_IMPLIB_PATH "${LIBJXL_INSTALL_DIR}/lib/jxl_threads.lib")
+            endif()
+        else()
+            set(LIBJXL_LIB_PATH "${LIBJXL_INSTALL_DIR}/lib/libjxl${CMAKE_SHARED_LIBRARY_SUFFIX}")
+            set(LIBJXL_CMS_LIB_PATH "${LIBJXL_INSTALL_DIR}/lib/libjxl_cms${CMAKE_SHARED_LIBRARY_SUFFIX}")
+            set(LIBJXL_THREADS_LIB_PATH "${LIBJXL_INSTALL_DIR}/lib/libjxl_threads${CMAKE_SHARED_LIBRARY_SUFFIX}")
+        endif()
+
+        set(LIBJXL_CMAKE_ARGS
+            -DCMAKE_INSTALL_PREFIX=${LIBJXL_INSTALL_DIR}
+            -DCMAKE_BUILD_TYPE=${_libjxl_bt}
+            -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
+            -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
+            -DBUILD_SHARED_LIBS=ON
+            -DBUILD_TESTING=OFF
+            -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+            -DJPEGXL_ENABLE_SKCMS=OFF
+            -DJPEGXL_FORCE_SYSTEM_LCMS2=ON
+            -DCMAKE_PREFIX_PATH=${_libjxl_lcms_prefix}
+            -DJPEGXL_ENABLE_TOOLS=OFF
+            -DJPEGXL_ENABLE_DEVTOOLS=OFF
+            -DJPEGXL_ENABLE_BENCHMARK=OFF
+            -DJPEGXL_ENABLE_EXAMPLES=OFF
+            -DJPEGXL_ENABLE_DOXYGEN=OFF
+            -DJPEGXL_ENABLE_MANPAGES=OFF
+            -DJPEGXL_ENABLE_JNI=OFF
+            -DJPEGXL_ENABLE_SJPEG=OFF
+            -DJPEGXL_ENABLE_OPENEXR=OFF
+            -DJPEGXL_ENABLE_FUZZERS=OFF
+            -DJPEGXL_ENABLE_TCMALLOC=OFF
+        )
+
+        # 64-bit x86: drop AVX-512, ARM, POWER, RISC-V, WASM, IBM Z, etc. (keep SCALAR + SSE2/4 + AVX2)
+        if(RASTERLAB_LIBJXL_SMALL AND CMAKE_SIZEOF_VOID_P EQUAL 8 AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(AMD64|amd64|x86_64|X86_64)$")
+            foreach(_libjxl_hwy IN ITEMS
+                    AVX3 AVX3_DL AVX3_SPR AVX3_ZEN4
+                    NEON NEON_BF16 NEON_WITHOUT_AES
+                    PPC8 PPC9 PPC10
+                    RVV
+                    SVE SVE_256 SVE2 SVE2_128
+                    WASM WASM_EMU256
+                    Z14 Z15)
+                list(APPEND LIBJXL_CMAKE_ARGS "-DJPEGXL_ENABLE_HWY_${_libjxl_hwy}=OFF")
+            endforeach()
+            message(STATUS "libjxl: RASTERLAB_LIBJXL_SMALL=ON — reduced Highway targets for typical x86_64 desktop")
+        elseif(RASTERLAB_LIBJXL_SMALL)
+            message(STATUS "libjxl: RASTERLAB_LIBJXL_SMALL=ON — Highway target trimming skipped (not x86_64)")
+        endif()
+
+        # Strip symbols from the DLL (large savings vs unstripped Release)
+        if(RASTERLAB_LIBJXL_SMALL AND MINGW AND NOT _libjxl_bt STREQUAL "Debug")
+            list(APPEND LIBJXL_CMAKE_ARGS "-DCMAKE_SHARED_LINKER_FLAGS=-Wl,-s")
+        endif()
+
+        set(LIBJXL_DEPENDS "")
+        if(TARGET lcms2_external)
+            list(APPEND LIBJXL_DEPENDS lcms2_external)
+        endif()
+
+        if(LIBJXL_DEPENDS)
+            ExternalProject_Add(
+                libjxl_external
+                SOURCE_DIR "${CMAKE_SOURCE_DIR}/lib/libjxl"
+                BINARY_DIR "${LIBJXL_BUILD_DIR}"
+                INSTALL_DIR "${LIBJXL_INSTALL_DIR}"
+                CMAKE_ARGS ${LIBJXL_CMAKE_ARGS}
+                BUILD_ALWAYS FALSE
+                DEPENDS ${LIBJXL_DEPENDS}
+            )
+        else()
+            ExternalProject_Add(
+                libjxl_external
+                SOURCE_DIR "${CMAKE_SOURCE_DIR}/lib/libjxl"
+                BINARY_DIR "${LIBJXL_BUILD_DIR}"
+                INSTALL_DIR "${LIBJXL_INSTALL_DIR}"
+                CMAKE_ARGS ${LIBJXL_CMAKE_ARGS}
+                BUILD_ALWAYS FALSE
+            )
+        endif()
+
+        set(LIBJXL_INCLUDE_DIRS "${LIBJXL_INSTALL_DIR}/include")
+
+        add_library(jpegxl SHARED IMPORTED GLOBAL)
+        add_library(jpegxl_cms SHARED IMPORTED GLOBAL)
+        add_library(jpegxl_threads SHARED IMPORTED GLOBAL)
+
+        if(WIN32)
+            set_target_properties(jpegxl PROPERTIES
+                INTERFACE_INCLUDE_DIRECTORIES "${LIBJXL_INCLUDE_DIRS}"
+                IMPORTED_LOCATION "${LIBJXL_DLL_PATH}"
+                IMPORTED_IMPLIB "${LIBJXL_IMPLIB_PATH}"
+            )
+            set_target_properties(jpegxl_cms PROPERTIES
+                INTERFACE_INCLUDE_DIRECTORIES "${LIBJXL_INCLUDE_DIRS}"
+                IMPORTED_LOCATION "${LIBJXL_CMS_DLL_PATH}"
+                IMPORTED_IMPLIB "${LIBJXL_CMS_IMPLIB_PATH}"
+            )
+            set_target_properties(jpegxl_threads PROPERTIES
+                INTERFACE_INCLUDE_DIRECTORIES "${LIBJXL_INCLUDE_DIRS}"
+                IMPORTED_LOCATION "${LIBJXL_THREADS_DLL_PATH}"
+                IMPORTED_IMPLIB "${LIBJXL_THREADS_IMPLIB_PATH}"
+            )
+            add_custom_command(TARGET libjxl_external POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different "${LIBJXL_DLL_PATH}" "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/"
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different "${LIBJXL_CMS_DLL_PATH}" "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/"
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different "${LIBJXL_THREADS_DLL_PATH}" "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/"
+                COMMENT "Copying libjxl DLLs to bin directory"
+            )
+        else()
+            set_target_properties(jpegxl PROPERTIES
+                INTERFACE_INCLUDE_DIRECTORIES "${LIBJXL_INCLUDE_DIRS}"
+                IMPORTED_LOCATION "${LIBJXL_LIB_PATH}"
+            )
+            set_target_properties(jpegxl_cms PROPERTIES
+                INTERFACE_INCLUDE_DIRECTORIES "${LIBJXL_INCLUDE_DIRS}"
+                IMPORTED_LOCATION "${LIBJXL_CMS_LIB_PATH}"
+            )
+            set_target_properties(jpegxl_threads PROPERTIES
+                INTERFACE_INCLUDE_DIRECTORIES "${LIBJXL_INCLUDE_DIRS}"
+                IMPORTED_LOCATION "${LIBJXL_THREADS_LIB_PATH}"
+            )
+            add_custom_command(TARGET libjxl_external POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different "${LIBJXL_LIB_PATH}" "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/"
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different "${LIBJXL_CMS_LIB_PATH}" "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/"
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different "${LIBJXL_THREADS_LIB_PATH}" "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/"
+                COMMENT "Copying libjxl shared libraries to bin directory"
+            )
+        endif()
+
+        set(LIBJXL_FOUND TRUE)
+        set(LIBJXL_TARGET jpegxl)
+        message(STATUS "libjxl install dir: ${LIBJXL_INSTALL_DIR}")
+    endif()
+else()
+    if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/libjxl/CMakeLists.txt" AND NOT HAVE_LCMS2)
+        message(STATUS "libjxl: lcms2 not available; skipping bundled libjxl (JPEG XL needs lcms2 when skcms is disabled)")
+    endif()
+    if(RASTERLAB_APP_ONLY OR NOT EXISTS "${CMAKE_SOURCE_DIR}/lib/libjxl/CMakeLists.txt")
+        message(STATUS "libjxl submodule not built from source, trying pkg-config libjxl")
+        pkg_check_modules(LIBJXL libjxl)
+        if(LIBJXL_FOUND)
+            include_directories(${LIBJXL_INCLUDE_DIRS})
+        endif()
+    endif()
+endif()
+
+if(LIBJXL_FOUND)
+    set(HAVE_LIBJXL 1)
+else()
+    set(HAVE_LIBJXL 0)
 endif()
 
 # Find GTK3, GdkPixbuf, libxml2, and LZ4 using pkg-config
