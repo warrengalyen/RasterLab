@@ -26,6 +26,7 @@ A full-featured image editor written in C.
 | Kodak Photo CD | `.pcd` | Read only | All resolutions |
 | High Efficiency Image Format | `.heic`, `.heif` | Read, Write | RGB, RGBA; multiframe |
 | OpenEXR | `.exr` | Read only | HDR; RGB, RGBA; Y/RY/BY (luminance+chroma) with optional 2×2 subsampling; Y-only grayscale; scanline and tiled storage |
+| JPEG XL | `.jxl` | Read, Write | RGB, RGBA |
 
 ## Features
 
