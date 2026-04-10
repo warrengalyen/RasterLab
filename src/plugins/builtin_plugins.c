@@ -32,6 +32,7 @@
 #include "plugins/plugin_sgi.h"
 #include "plugins/plugin_tga.h"
 #include "plugins/plugin_tiff.h"
+#include "plugins/plugin_jxl.h"
 #include "plugins/plugin_webp.h"
 #include "plugins/plugin_xbm.h"
 #include "plugins/plugin_xpm.h"
@@ -68,6 +69,7 @@ void builtin_plugins_register(void) {
     ImageFormatPlugin pcd_plugin;
     ImageFormatPlugin heic_plugin;
     ImageFormatPlugin avif_plugin;
+    ImageFormatPlugin jxl_plugin;
     ImageFormatPlugin exr_plugin;
     ImageFormatPlugin rli_plugin;
 
@@ -355,6 +357,24 @@ void builtin_plugins_register(void) {
     }
 #else
     debug_log("DBG", "AVIF plugin not available (requires HAVE_LIBHEIF and HAVE_LIBAOM)");
+#endif
+
+    /* Register JPEG XL plugin (using libjxl) */
+#ifdef HAVE_LIBJXL
+    debug_log("DBG", "Registering built-in JPEG XL plugin");
+    if (!plugin_runtime_deps_jxl_ok(app_dir)) {
+        debug_log("WRN", "Skipping JXL plugin: libjxl shared libraries not found in application directory");
+    } else if (plugin_init_jxl(host_api, &jxl_plugin)) {
+        if (format_registry_register_builtin(&jxl_plugin)) {
+            debug_log("DBG", "Successfully registered JPEG XL plugin");
+        } else {
+            debug_log("ERR", "Failed to register JPEG XL plugin with format registry");
+        }
+    } else {
+        debug_log("ERR", "Failed to initialize JPEG XL plugin (libjxl may not be available)");
+    }
+#else
+    debug_log("DBG", "JPEG XL plugin not available (HAVE_LIBJXL not defined)");
 #endif
 
     /* Register EXR plugin (OpenEXR) */

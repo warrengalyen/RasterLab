@@ -28,6 +28,7 @@ gboolean plugin_runtime_deps_png_ok(const gchar* app_dir);
 gboolean plugin_runtime_deps_webp_ok(const gchar* app_dir);
 gboolean plugin_runtime_deps_tiff_ok(const gchar* app_dir);
 gboolean plugin_runtime_deps_heic_ok(const gchar* app_dir);
+gboolean plugin_runtime_deps_jxl_ok(const gchar* app_dir);
 gboolean plugin_runtime_deps_exr_ok(const gchar* app_dir);
 
 /**

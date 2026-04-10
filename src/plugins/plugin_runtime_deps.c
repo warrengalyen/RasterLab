@@ -103,6 +103,12 @@ plugin_runtime_deps_heic_ok(const gchar* app_dir) {
     return any_file_exists_in_dir(app_dir, heif_alt, G_N_ELEMENTS(heif_alt));
 }
 
+gboolean
+plugin_runtime_deps_jxl_ok(const gchar* app_dir) {
+    static const gchar* req[] = {"libjxl.dll", "libjxl_cms.dll", "libjxl_threads.dll"};
+    return all_files_exist_in_dir(app_dir, req, G_N_ELEMENTS(req));
+}
+
 static gboolean
 win_dir_name_matches_shared_lib(const gchar* name) {
     return g_str_has_suffix(name, ".dll");
@@ -345,6 +351,13 @@ plugin_runtime_deps_heic_ok(const gchar* app_dir) {
     }
     g_dir_close(d);
     return found;
+}
+
+gboolean
+plugin_runtime_deps_jxl_ok(const gchar* app_dir) {
+    return unix_dir_has_shlib_prefix(app_dir, "libjxl")
+        && unix_dir_has_shlib_prefix(app_dir, "libjxl_cms")
+        && unix_dir_has_shlib_prefix(app_dir, "libjxl_threads");
 }
 
 /* libOpenEXR-*.so is a prefix of libOpenEXRCore-*; detect Imf (GCC-style lib* names) */

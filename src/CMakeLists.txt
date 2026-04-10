@@ -80,6 +80,7 @@ set(SOURCES
     plugins/plugin_fits.c
     plugins/plugin_dicom.c
     plugins/plugin_exr.c
+    plugins/plugin_jxl.c
     plugins/plugin_webp.c
     plugins/plugin_heic.c
     plugins/plugin_avif.c
@@ -137,6 +138,7 @@ set(SOURCES
     ui/dialogs/formats/png_options_dialog.c
     ui/dialogs/formats/heic_options_dialog.c
     ui/dialogs/formats/avif_options_dialog.c
+    ui/dialogs/formats/jxl_options_dialog.c
     ui/dialogs/formats/tiff_options_dialog.c
     ui/dialogs/formats/webp_options_dialog.c
     ui/dialogs/gamma_dialog.c
