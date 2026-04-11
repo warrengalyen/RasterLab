@@ -1657,6 +1657,7 @@ ImageDocument* document_new(const gchar* filename, gboolean create_worker_pool, 
     /* Initialize undo thumbnail worker (disabled by default — zero overhead until a
      * history panel enables it by setting undo_thumbnails_enabled = TRUE). */
     doc->undo_thumbnails_enabled = TRUE;
+    doc->initial_thumbnail = NULL;
     doc->thumbnail_thread_pool = g_thread_pool_new(thumbnail_worker_func,
                                                    doc,
                                                    1,     /* max 1 worker thread */
@@ -1768,6 +1769,11 @@ void document_free(ImageDocument* doc) {
         doc->thumbnail_completion_queue = NULL;
     }
     g_mutex_clear(&doc->thumbnail_completion_mutex);
+
+    if (doc->initial_thumbnail) {
+        cairo_surface_destroy(doc->initial_thumbnail);
+        doc->initial_thumbnail = NULL;
+    }
 
     /* Shutdown Cairo-safe worker pool before freeing document */
     if (doc->tile_worker_pool) {
@@ -2305,6 +2311,9 @@ gboolean document_init_rendering_structures(ImageDocument* doc) {
     return TRUE;
 }
 
+/* Forward declaration — defined later in this file after document_push_undo_command helpers */
+static void thumbnail_task_fill_snapshots(ThumbnailTask* task, ImageDocument* doc);
+
 /**
  * Load an image from file into the document using the plugin system
  */
@@ -2313,6 +2322,12 @@ gboolean document_load_image_from_file(ImageDocument* doc, const gchar* file_pat
 
     if (!doc || !file_path) {
         return FALSE;
+    }
+
+    /* Discard any stale initial thumbnail from a previous load */
+    if (doc->initial_thumbnail) {
+        cairo_surface_destroy(doc->initial_thumbnail);
+        doc->initial_thumbnail = NULL;
     }
 
     /* Free old layers if exists */
@@ -2464,6 +2479,127 @@ gdouble document_get_ruler_dpi(ImageDocument* doc) {
 }
 
 /**
+ * Populate a ThumbnailTask's snapshot array from the document's current visible
+ * layer caches.  Called on the main thread; does only nearest-neighbor reads.
+ */
+static void thumbnail_task_fill_snapshots(ThumbnailTask* task, ImageDocument* doc) {
+    if (doc->width <= 0 || doc->height <= 0) {
+        return;
+    }
+
+    gdouble scale_x = (gdouble)UNDO_THUMB_SIZE / doc->width;
+    gdouble scale_y = (gdouble)UNDO_THUMB_SIZE / doc->height;
+    gdouble scale = (scale_x < scale_y) ? scale_x : scale_y;
+
+    gboolean first_visible = TRUE;
+    GList* iter;
+    for (iter = doc->layers; iter; iter = iter->next) {
+        ImageLayer* layer = (ImageLayer*)iter->data;
+
+        if (!layer || !layer->visible || layer->opacity <= 0.0) {
+            continue;
+        }
+
+        /*
+         * Always read from layer->surface — the authoritative pixel store that
+         * every drawing tool writes to directly (pencil_draw_line, eraser, fill,
+         * brush all pass layer->surface as their target).  Using cache_surface
+         * is unreliable here: it is rebuilt asynchronously by the compositor and
+         * can reflect a PREVIOUS draw cycle's state if a compositor run happened
+         * to occur between the last tool stroke and the undo-push, causing every
+         * snapshot from the second command onwards to look identical to the first.
+         * Applying opacity manually is cheap at thumbnail scale (52×52 pixels).
+         */
+        if (!layer->surface) {
+            continue; /* no usable surface for this layer */
+        }
+
+        cairo_surface_t* src_surf = layer->surface;
+        gboolean apply_opacity = TRUE;
+
+        cairo_surface_flush(src_surf);
+
+        uint8_t* src = cairo_image_surface_get_data(src_surf);
+        if (!src) {
+            continue;
+        }
+
+        gint src_stride = cairo_image_surface_get_stride(src_surf);
+        gint src_w = cairo_image_surface_get_width(src_surf);
+        gint src_h = cairo_image_surface_get_height(src_surf);
+
+        ThumbnailLayerSnapshot* snap = g_new0(ThumbnailLayerSnapshot, 1);
+        snap->pixels = (uint8_t*)g_malloc((gsize)(UNDO_THUMB_SIZE * UNDO_THUMB_SIZE * 4));
+        snap->blend_mode = first_visible ? (gint)BLEND_MODE_NORMAL : (gint)layer->blend_mode;
+        first_visible = FALSE;
+
+        /* Pre-compute opacity byte for the manual-apply path */
+        guint32 opa = apply_opacity ? (guint32)(layer->opacity * 255.0 + 0.5) : 255u;
+        if (opa > 255u)
+            opa = 255u;
+
+        uint32_t* dst_px = (uint32_t*)snap->pixels;
+        for (gint dy = 0; dy < UNDO_THUMB_SIZE; dy++) {
+            for (gint dx = 0; dx < UNDO_THUMB_SIZE; dx++) {
+                gint sx = (gint)((gdouble)dx / scale) - layer->offset_x;
+                gint sy = (gint)((gdouble)dy / scale) - layer->offset_y;
+                if (sx < 0 || sy < 0 || sx >= src_w || sy >= src_h) {
+                    dst_px[dy * UNDO_THUMB_SIZE + dx] = 0u;
+                } else {
+                    uint32_t pixel =
+                        ((const uint32_t*)(src + (gsize)sy * (gsize)src_stride))[sx];
+                    if (apply_opacity && opa < 255u) {
+                        /* Premultiplied ARGB: scale every channel by opacity */
+                        guint32 a = (((pixel >> 24) & 0xFFu) * opa) / 255u;
+                        guint32 r = (((pixel >> 16) & 0xFFu) * opa) / 255u;
+                        guint32 g = (((pixel >> 8) & 0xFFu) * opa) / 255u;
+                        guint32 b = ((pixel & 0xFFu) * opa) / 255u;
+                        pixel = (a << 24) | (r << 16) | (g << 8) | b;
+                    }
+                    dst_px[dy * UNDO_THUMB_SIZE + dx] = pixel;
+                }
+            }
+        }
+
+        g_ptr_array_add(task->snapshots, snap);
+    }
+}
+
+/**
+ * Queue an async task to generate the "Original image" thumbnail.
+ * Discards any previous initial_thumbnail so Revert produces a fresh one.
+ * Must be called on the main thread after the document layers are ready.
+ */
+void document_queue_initial_thumbnail(ImageDocument* doc) {
+    if (!doc) {
+        return;
+    }
+
+    if (!doc->undo_thumbnails_enabled || !doc->thumbnail_thread_pool) {
+        return;
+    }
+
+    /* Discard stale surface from any previous load */
+    if (doc->initial_thumbnail) {
+        cairo_surface_destroy(doc->initial_thumbnail);
+        doc->initial_thumbnail = NULL;
+    }
+
+    ThumbnailTask* init_task = g_new0(ThumbnailTask, 1);
+    g_mutex_init(&init_task->mutex);
+    init_task->cmd = NULL;
+    init_task->is_initial = TRUE;
+    init_task->thumb_w = UNDO_THUMB_SIZE;
+    init_task->thumb_h = UNDO_THUMB_SIZE;
+    init_task->snapshots = g_ptr_array_new_with_free_func(
+        (GDestroyNotify)thumbnail_layer_snapshot_free);
+    thumbnail_task_fill_snapshots(init_task, doc);
+    debug_log("DBG", "Initial thumbnail queued (%u layer snapshot(s))",
+              init_task->snapshots->len);
+    g_thread_pool_push(doc->thumbnail_thread_pool, init_task, NULL);
+}
+
+/**
  * Push a command to the undo stack.
  * If undo thumbnail generation is enabled, schedules async thumbnail generation
  * before pushing — the push itself is never blocked.
@@ -2480,74 +2616,30 @@ void document_push_undo_command(ImageDocument* doc, Command* cmd) {
     }
 
     if (doc->undo_thumbnails_enabled && doc->thumbnail_thread_pool) {
+        /* Thumbnail for this command (captures state after the command is applied) */
         ThumbnailTask* task = g_new0(ThumbnailTask, 1);
         g_mutex_init(&task->mutex);
         task->cmd = cmd;
+        task->is_initial = FALSE;
         task->thumb_w = UNDO_THUMB_SIZE;
         task->thumb_h = UNDO_THUMB_SIZE;
         task->snapshots = g_ptr_array_new_with_free_func(
             (GDestroyNotify)thumbnail_layer_snapshot_free);
         task->result_pixels = NULL;
-
-        if (doc->width > 0 && doc->height > 0) {
-            gdouble scale_x = (gdouble)UNDO_THUMB_SIZE / doc->width;
-            gdouble scale_y = (gdouble)UNDO_THUMB_SIZE / doc->height;
-            gdouble scale = (scale_x < scale_y) ? scale_x : scale_y;
-
-            gboolean first_visible = TRUE;
-            GList* iter;
-            for (iter = doc->layers; iter; iter = iter->next) {
-                ImageLayer* layer = (ImageLayer*)iter->data;
-
-                /* Skip invisible / zero-opacity / dirty-cache layers.
-                 * Dirty-cache layers are skipped to avoid forcing a full-resolution
-                 * cache rebuild on the main thread. */
-                if (!layer || !layer->visible || layer->opacity <= 0.0 || layer->cache_dirty || !layer->cache_surface) {
-                    continue;
-                }
-
-                /* Ensure pixel data is readable from the main thread */
-                cairo_surface_flush(layer->cache_surface);
-
-                uint8_t* src = cairo_image_surface_get_data(layer->cache_surface);
-                if (!src) {
-                    continue;
-                }
-
-                gint src_stride = cairo_image_surface_get_stride(layer->cache_surface);
-                gint src_w = (gint)layer->width;
-                gint src_h = (gint)layer->height;
-
-                ThumbnailLayerSnapshot* snap = g_new0(ThumbnailLayerSnapshot, 1);
-                snap->pixels = (uint8_t*)g_malloc((gsize)(UNDO_THUMB_SIZE * UNDO_THUMB_SIZE * 4));
-                /* First visible layer forces NORMAL — blend modes are only meaningful
-                 * against a non-transparent backdrop, matching tile_worker.c behaviour. */
-                snap->blend_mode = first_visible ? (gint)BLEND_MODE_NORMAL : (gint)layer->blend_mode;
-                first_visible = FALSE;
-
-                /* Nearest-neighbor pre-scale: only UNDO_THUMB_SIZE² reads per layer */
-                uint32_t* dst_px = (uint32_t*)snap->pixels;
-                for (gint dy = 0; dy < UNDO_THUMB_SIZE; dy++) {
-                    for (gint dx = 0; dx < UNDO_THUMB_SIZE; dx++) {
-                        gint sx = (gint)((gdouble)dx / scale) - layer->offset_x;
-                        gint sy = (gint)((gdouble)dy / scale) - layer->offset_y;
-                        if (sx < 0 || sy < 0 || sx >= src_w || sy >= src_h) {
-                            dst_px[dy * UNDO_THUMB_SIZE + dx] = 0u;
-                        } else {
-                            dst_px[dy * UNDO_THUMB_SIZE + dx] =
-                                ((const uint32_t*)(src + (gsize)sy * (gsize)src_stride))[sx];
-                        }
-                    }
-                }
-
-                g_ptr_array_add(task->snapshots, snap);
-            }
-        }
+        thumbnail_task_fill_snapshots(task, doc);
 
         cmd->thumbnail_task = task;
         debug_log("DBG", "Thumbnail queued for '%s' (%u layer snapshot(s))",
                   cmd->name ? cmd->name : "?", task->snapshots->len);
         g_thread_pool_push(doc->thumbnail_thread_pool, task, NULL);
+    }
+
+    /* Capture active layer name as the command subtitle for the history dialog */
+    if (!cmd->subtitle) {
+        ImageLayer* active = document_get_active_layer(doc);
+        if (active && active->name) {
+            cmd->subtitle = g_strdup(active->name);
+        }
     }
 
     command_stack_push(doc->undo_stack, cmd);
@@ -2585,8 +2677,8 @@ void document_process_thumbnail_completions(ImageDocument* doc) {
         g_mutex_lock(&task->mutex);
         Command* cmd = task->cmd;
 
-        if (cmd && task->result_pixels) {
-            /* Create the Cairo surface on the main thread (Cairo-safe) */
+        if (task->result_pixels) {
+            /* Create Cairo surface on the main thread (Cairo-safe) */
             cairo_surface_t* surf = cairo_image_surface_create(
                 CAIRO_FORMAT_ARGB32, task->thumb_w, task->thumb_h);
 
@@ -2599,15 +2691,36 @@ void document_process_thumbnail_completions(ImageDocument* doc) {
                            (gsize)(task->thumb_w * 4));
                 }
                 cairo_surface_mark_dirty(surf);
-                command_set_thumbnail(cmd, surf); /* takes ownership */
-                debug_log("DBG", "Thumbnail ready for '%s' (%dx%d)",
-                          cmd->name ? cmd->name : "?", task->thumb_w, task->thumb_h);
+
+                if (task->is_initial) {
+                    /* Deliver to document's "Original image" slot */
+                    if (doc->initial_thumbnail) {
+                        cairo_surface_destroy(doc->initial_thumbnail);
+                    }
+                    doc->initial_thumbnail = surf;
+                    debug_log("DBG", "Initial thumbnail ready (%dx%d)", task->thumb_w, task->thumb_h);
+                } else if (cmd) {
+                    command_set_thumbnail(cmd, surf); /* takes ownership */
+                    debug_log("DBG", "Thumbnail ready for '%s' (%dx%d)",
+                              cmd->name ? cmd->name : "?", task->thumb_w, task->thumb_h);
+                    cmd->thumbnail_task = NULL;
+                } else {
+                    cairo_surface_destroy(surf); /* cancelled task — discard */
+                }
             } else {
-                debug_log("WRN", "Thumbnail surface creation failed for '%s'",
-                          cmd->name ? cmd->name : "?");
+                if (task->is_initial) {
+                    debug_log("WRN", "Initial thumbnail surface creation failed");
+                } else {
+                    debug_log("WRN", "Thumbnail surface creation failed for '%s'",
+                              cmd ? cmd->name : "?");
+                }
                 cairo_surface_destroy(surf);
+                if (cmd) {
+                    cmd->thumbnail_task = NULL;
+                }
             }
-            cmd->thumbnail_task = NULL;
+        } else if (cmd) {
+            cmd->thumbnail_task = NULL; /* cancelled — clear the task pointer */
         }
 
         g_mutex_unlock(&task->mutex);

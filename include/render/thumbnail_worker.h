@@ -53,6 +53,9 @@ typedef struct ThumbnailTask {
     gint       thumb_w;       /* Output width in pixels (always UNDO_THUMB_SIZE) */
     gint       thumb_h;       /* Output height in pixels (always UNDO_THUMB_SIZE) */
     uint8_t*   result_pixels; /* Set by worker on completion. Owned by task. */
+    gboolean   is_initial;    /* TRUE → represents the pre-command "Original image" state;
+                               * cmd is NULL but task is not cancelled. Result delivered to
+                               * ImageDocument.initial_thumbnail instead of cmd->thumbnail. */
 } ThumbnailTask;
 
 /** Maximum dimension of undo history thumbnails */

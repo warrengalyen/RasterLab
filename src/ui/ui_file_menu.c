@@ -169,6 +169,9 @@ gboolean ui_file_menu_open_path_as_new_document(AppContext* ctx, const gchar* fi
 
     document_invalidate_composite(doc);
 
+    /* Capture the unmodified image state for the undo history "Original image" entry */
+    document_queue_initial_thumbnail(doc);
+
     if (doc->drawing_area) {
         gint display_width = (gint)(doc->width * doc->zoom_factor);
         gint display_height = (gint)(doc->height * doc->zoom_factor);

@@ -97,6 +97,7 @@ typedef void (*CommandDestroyFunc)(Command* cmd);
  */
 typedef struct _Command {
     gchar* name;                    /* Human-readable command name */
+    gchar* subtitle;                /* Optional context line (e.g. active layer name); shown in history dialog */
     CommandType type;               /* Command type */
     CommandApplyFunc apply;         /* Apply callback */
     CommandRevertFunc revert;       /* Revert callback */

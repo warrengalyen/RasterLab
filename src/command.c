@@ -40,6 +40,7 @@ Command* command_new(const gchar* name,
 
     cmd = (Command*)g_malloc(sizeof(Command));
     cmd->name = g_strdup(name);
+    cmd->subtitle = NULL;
     cmd->type = type;
     cmd->apply = apply;
     cmd->revert = revert;
@@ -81,6 +82,7 @@ void command_free(Command* cmd) {
     }
 
     g_free(cmd->name);
+    g_free(cmd->subtitle);
     g_free(cmd);
 }
 

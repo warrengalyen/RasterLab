@@ -1,4 +1,5 @@
-#layers_list {
+#layers_list,
+#undo_history_list {
     border: 1px solid #d5d0cc;
 }
 

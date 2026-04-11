@@ -50,9 +50,10 @@ void thumbnail_worker_func(gpointer data, gpointer user_data) {
         return;
     }
 
-    /* Check for cancellation before starting work */
+    /* Check for cancellation before starting work.
+     * is_initial tasks have cmd==NULL by design; they are NOT cancelled. */
     g_mutex_lock(&task->mutex);
-    gboolean cancelled = (task->cmd == NULL);
+    gboolean cancelled = (task->cmd == NULL && !task->is_initial);
     g_mutex_unlock(&task->mutex);
 
     if (cancelled) {

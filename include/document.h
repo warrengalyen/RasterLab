@@ -261,6 +261,9 @@ typedef struct ImageDocument {
     GThreadPool*  thumbnail_thread_pool;       /* Single worker thread for thumbnail compositing */
     GQueue*       thumbnail_completion_queue;  /* Finished tasks awaiting Cairo surface creation */
     GMutex        thumbnail_completion_mutex;  /* Protects thumbnail_completion_queue */
+    cairo_surface_t* initial_thumbnail;        /* 52×52 snapshot of document before any commands;
+                                               * set asynchronously on first document_push_undo_command;
+                                               * used as the "Original image" row in the history dialog */
 } ImageDocument;
 
 /**
@@ -552,6 +555,15 @@ void document_push_undo_command(ImageDocument* doc, Command* cmd);
  * @param doc The document
  */
 void document_process_thumbnail_completions(ImageDocument* doc);
+
+/**
+ * Queue an asynchronous task to generate the "Original image" thumbnail for
+ * the undo history dialog.  Call this once after an image has been fully
+ * loaded into @doc (layers populated, rendering structures initialised).
+ * Safe to call on Revert — discards any previous initial_thumbnail first.
+ * @param doc The document
+ */
+void document_queue_initial_thumbnail(ImageDocument* doc);
 
 /**
  * Check if undo is available

@@ -9,10 +9,11 @@
  */
 
 #include "ui/ui_edit_menu.h"
-#include "i18n.h"
 #include "command.h"
 #include "commands/command_layer.h"
+#include "debug_logger.h"
 #include "document.h"
+#include "i18n.h"
 #include "render/blend.h"
 #include "render/compositor.h"
 #include "render/dirty.h"
@@ -23,14 +24,13 @@
 #include "selection/selection_render.h"
 #include "ui.h"
 #include "ui/dialogs/fill_dialog.h"
+#include "ui/dialogs/undo_history_dialog.h"
 #include "ui/layers_panel.h"
 #include "ui/ui_utils.h"
 #include <cairo/cairo.h>
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <glib.h>
 #include <stdint.h>
-#include "debug_logger.h"
-
 
 /* Forward declarations for helper functions */
 static cairo_surface_t* extract_pixels_for_copy(ImageDocument* doc, ImageLayer* layer);
@@ -233,6 +233,39 @@ void on_edit_redo(GtkWidget* widget, gpointer data) {
     }
 
     /* Update menu state and window title */
+    ui_update_menu_and_button_states(ctx);
+    ui_update_window_title(ctx, NULL);
+}
+
+/**
+ * Edit > Undo history callback
+ */
+static void on_edit_undo_history(GtkWidget* widget, gpointer data) {
+    (void)widget;
+
+    AppContext* ctx = (AppContext*)data;
+    if (!ctx) {
+        return;
+    }
+
+    ImageDocument* doc = ui_get_active_document(ctx);
+    if (!doc) {
+        return;
+    }
+
+    /* Flush any completed thumbnail tasks so the dialog sees current thumbnails */
+    document_process_thumbnail_completions(doc);
+
+    undo_history_dialog_show(GTK_WINDOW(ctx->window), doc);
+
+    /* After navigation, sync layers panel, menu state, and canvas */
+    document_invalidate_composite(doc);
+
+    LayersPanel* layers_panel2 = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window), "layers_panel");
+    if (layers_panel2) {
+        layers_panel_update(layers_panel2, doc);
+    }
+
     ui_update_menu_and_button_states(ctx);
     ui_update_window_title(ctx, NULL);
 }
@@ -1815,6 +1848,13 @@ void ui_edit_menu_setup(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* acc
                                    GDK_KEY_y, GDK_CONTROL_MASK, GTK_ACCEL_VISIBLE);
     } else {
         debug_log("WRN", "Failed to get edit_menu_redo from builder");
+    }
+    ctx->edit_menu_undo_history = GTK_WIDGET(gtk_builder_get_object(builder, "edit_menu_undo_history"));
+    if (ctx->edit_menu_undo_history) {
+        g_signal_connect(ctx->edit_menu_undo_history, "activate",
+                         G_CALLBACK(on_edit_undo_history), ctx);
+    } else {
+        debug_log("WRN", "Failed to get edit_menu_undo_history from builder");
     }
 
     /* Connect Copy, Cut, Paste menu items */

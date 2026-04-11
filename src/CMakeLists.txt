@@ -152,6 +152,7 @@ set(SOURCES
     ui/dialogs/rotate_dialog.c
     ui/dialogs/save_options_dialog.c
     ui/dialogs/selection_radius_dialog.c
+    ui/dialogs/undo_history_dialog.c
     ui/filters/filter_auto_contrast.c
     ui/filters/filter_auto_gamma.c
     ui/filters/filter_auto_level.c

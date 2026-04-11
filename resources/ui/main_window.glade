@@ -365,6 +365,13 @@
       </object>
     </child>
     <child>
+      <object class="GtkMenuItem" id="edit_menu_undo_history">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Undo history...</property>
+      </object>
+    </child>
+    <child>
       <object class="GtkSeparatorMenuItem" id="edit_menu_separator">
         <property name="visible">True</property>
         <property name="can-focus">False</property>

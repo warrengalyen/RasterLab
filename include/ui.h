@@ -66,6 +66,7 @@ struct _AppContext {
     GtkWidget* layer_panel_context_flatten;
     GtkWidget* edit_menu_undo;            /* Edit > Undo menu item */
     GtkWidget* edit_menu_redo;            /* Edit > Redo menu item */
+    GtkWidget* edit_menu_undo_history;    /* Edit > Undo history... menu item */
     GtkWidget* edit_menu_copy;
     GtkWidget* edit_menu_cut;
     GtkWidget* edit_menu_paste;
