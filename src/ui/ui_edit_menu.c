@@ -856,8 +856,7 @@ void on_edit_cut(GtkWidget* widget, gpointer data) {
     /* Finalize command and push to undo stack */
     if (command_finalize_draw(cmd)) {
         command_execute(cmd, doc);
-        command_stack_push(doc->undo_stack, cmd);
-        command_stack_clear(doc->redo_stack); /* Clear redo stack */
+        document_push_undo_command(doc, cmd);
     } else {
         command_free(cmd);
     }
@@ -997,8 +996,7 @@ void on_edit_clear(GtkWidget* widget, gpointer data) {
     /* Finalize command and push to undo stack */
     if (command_finalize_draw(cmd)) {
         command_execute(cmd, doc);
-        command_stack_push(doc->undo_stack, cmd);
-        command_stack_clear(doc->redo_stack); /* Clear redo stack */
+        document_push_undo_command(doc, cmd);
     } else {
         command_free(cmd);
     }
@@ -1142,8 +1140,7 @@ void on_edit_paste(GtkWidget* widget, gpointer data) {
     cmd = command_create_paste(doc, new_layer);
     if (cmd) {
         command_execute(cmd, doc);
-        command_stack_push(doc->undo_stack, cmd);
-        command_stack_clear(doc->redo_stack); /* Clear redo stack */
+        document_push_undo_command(doc, cmd);
     }
 
     /* Update UI */
@@ -1546,10 +1543,9 @@ void on_edit_cut_merged(GtkWidget* widget, gpointer data) {
     /* Push all commands to undo stack (in reverse order so top layer is undone first) */
     for (GList* l = commands; l; l = l->next) {
         Command* cmd_to_push = (Command*)l->data;
-        command_stack_push(doc->undo_stack, cmd_to_push);
+        document_push_undo_command(doc, cmd_to_push);
     }
-    g_list_free(commands);                /* Free list, but not commands (they're on the stack now) */
-    command_stack_clear(doc->redo_stack); /* Clear redo stack */
+    g_list_free(commands); /* Free list, but not commands (they're on the stack now) */
 
     /* Invalidate document composite */
     document_invalidate_composite(doc);
@@ -1685,8 +1681,7 @@ static void on_edit_fill(GtkWidget* widget, gpointer data) {
 
     if (command_finalize_draw(cmd)) {
         command_execute(cmd, doc);
-        command_stack_push(doc->undo_stack, cmd);
-        command_stack_clear(doc->redo_stack);
+        document_push_undo_command(doc, cmd);
     } else {
         command_free(cmd);
     }

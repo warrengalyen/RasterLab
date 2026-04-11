@@ -325,14 +325,7 @@ gboolean ui_filter_utils_apply_with_command(AppContext* ctx,
         gdouble processing_time = (gdouble)(current_time - start_time) / 1000000.0;
 
         command_finalize_draw(cmd);
-        if (doc->undo_stack) {
-            command_stack_push(doc->undo_stack, cmd);
-            if (doc->redo_stack) {
-                command_stack_clear(doc->redo_stack);
-            }
-        } else {
-            command_free(cmd);
-        }
+        document_push_undo_command(doc, cmd);
         layer_invalidate_cache(layer);
         doc->modified = TRUE;
         document_invalidate_composite(doc);

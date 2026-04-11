@@ -16,17 +16,12 @@
  * Commit a completed selection operation to the undo stack
  */
 gboolean selection_undo_commit_operation(ImageDocument* doc, Command* cmd) {
-    if (!doc || !cmd || !doc->undo_stack) {
+    if (!doc || !cmd) {
         return FALSE;
     }
 
-    /* Push to undo stack */
-    command_stack_push(doc->undo_stack, cmd);
-
-    /* Clear redo stack (new operation branch) */
-    if (doc->redo_stack) {
-        command_stack_clear(doc->redo_stack);
-    }
+    /* Push to undo stack (also clears redo stack) */
+    document_push_undo_command(doc, cmd);
 
     /* Clear redo stack in undo journal if present */
     if (doc->undo_journal) {

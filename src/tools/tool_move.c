@@ -735,18 +735,12 @@ static void move_tool_mouse_up(Tool* tool, struct ImageDocument* doc, MouseEvent
                 state->active_layer->offset_y);
         }
 
-        if (cmd && doc->undo_stack) {
-            command_stack_push(doc->undo_stack, cmd);
-            // printf("Move tool: move command pushed to undo stack\n");
+        if (cmd) {
+            document_push_undo_command(doc, cmd);
 
             /* Execute command to apply it (clears selection, etc.) */
             /* This is needed because commands are not auto-executed when pushed */
             command_execute(cmd, doc);
-
-            /* Clear redo stack since new action performed */
-            if (doc->redo_stack) {
-                command_stack_clear(doc->redo_stack);
-            }
 
             /* Update UI */
             ctx = (AppContext*)tool->app_context;

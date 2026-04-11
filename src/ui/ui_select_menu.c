@@ -72,11 +72,8 @@ void on_select_all(GtkMenuItem* menu_item, gpointer user_data) {
 
     /* Commit transaction and get command */
     Command* cmd = selection_undo_transaction_commit(transaction);
-    if (cmd && doc->undo_stack) {
-        command_stack_push(doc->undo_stack, cmd);
-        if (doc->redo_stack) {
-            command_stack_clear(doc->redo_stack);
-        }
+    if (cmd) {
+        document_push_undo_command(doc, cmd);
         command_execute(cmd, doc);
         document_invalidate_composite(doc);
         if (doc->drawing_area) {
@@ -84,8 +81,6 @@ void on_select_all(GtkMenuItem* menu_item, gpointer user_data) {
         }
         /* Update menu to show the new undo command */
         ui_update_menu_and_button_states(ctx);
-    } else if (cmd) {
-        command_free(cmd);
     }
 }
 
@@ -150,11 +145,8 @@ void on_select_none(GtkMenuItem* menu_item, gpointer user_data) {
 
     /* Commit transaction and get command */
     Command* cmd = selection_undo_transaction_commit(transaction);
-    if (cmd && doc->undo_stack) {
-        command_stack_push(doc->undo_stack, cmd);
-        if (doc->redo_stack) {
-            command_stack_clear(doc->redo_stack);
-        }
+    if (cmd) {
+        document_push_undo_command(doc, cmd);
         command_execute(cmd, doc);
         document_invalidate_composite(doc);
         if (doc->drawing_area) {
@@ -162,8 +154,6 @@ void on_select_none(GtkMenuItem* menu_item, gpointer user_data) {
         }
         /* Update menu to show the new undo command */
         ui_update_menu_and_button_states(ctx);
-    } else if (cmd) {
-        command_free(cmd);
     }
 }
 
@@ -297,11 +287,8 @@ void on_select_invert(GtkMenuItem* menu_item, gpointer user_data) {
 
     /* Commit transaction and get command */
     Command* cmd = selection_undo_transaction_commit(transaction);
-    if (cmd && doc->undo_stack) {
-        command_stack_push(doc->undo_stack, cmd);
-        if (doc->redo_stack) {
-            command_stack_clear(doc->redo_stack);
-        }
+    if (cmd) {
+        document_push_undo_command(doc, cmd);
         command_execute(cmd, doc);
         document_invalidate_composite(doc);
         if (doc->drawing_area) {
@@ -309,8 +296,6 @@ void on_select_invert(GtkMenuItem* menu_item, gpointer user_data) {
         }
         /* Update menu to show the new undo command */
         ui_update_menu_and_button_states(ctx);
-    } else if (cmd) {
-        command_free(cmd);
     }
 }
 
@@ -450,13 +435,8 @@ static void execute_select_radius_operation(AppContext* ctx,
             if (success) {
                 /* Commit transaction and get command */
                 Command* cmd = selection_undo_transaction_commit(transaction);
-                if (cmd && doc->undo_stack) {
-                    command_stack_push(doc->undo_stack, cmd);
-                    if (doc->redo_stack) {
-                        command_stack_clear(doc->redo_stack);
-                    }
-                } else if (cmd) {
-                    command_free(cmd);
+                if (cmd) {
+                    document_push_undo_command(doc, cmd);
                 }
 
                 /* Mark document as modified */

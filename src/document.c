@@ -9,8 +9,8 @@
  */
 
 #include "document.h"
-#include "i18n.h"
 #include "app/settings.h"
+#include "i18n.h"
 #if HAVE_LCMS2
 #include "color_manager.h"
 #include "color_manager/display_profile.h"
@@ -18,12 +18,14 @@
 #include <gdk/gdk.h>
 #endif
 #include "command.h"
+#include "debug_logger.h"
 #include "io/image_io.h"
 #include "render/compositor.h"
 #include "render/gpu_compositor.h"
 #include "render/layer.h"
 #include "render/render_utils.h"
 #include "render/text_layer.h"
+#include "render/thumbnail_worker.h"
 #include "render/tile.h"
 #include "render/tile_thread_pool.h"
 #include "render/tile_worker.h"
@@ -34,13 +36,13 @@
 #include "tools.h"
 #include "tools/tool_colorpicker.h"
 #include "tools/tool_crop.h"
-#include "tools/tool_text.h"
 #include "tools/tool_ellipse_select.h"
 #include "tools/tool_lasso_select.h"
 #include "tools/tool_magic_wand_select.h"
 #include "tools/tool_move.h"
 #include "tools/tool_polygon_select.h"
 #include "tools/tool_rect_select.h"
+#include "tools/tool_text.h"
 #include "ui.h"
 #include "ui/layers_panel.h"
 #include "ui/widgets/canvas_ruler.h"
@@ -50,7 +52,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "debug_logger.h"
 
 /* Forward declarations */
 static void on_scroll_adjustment_changed(GtkAdjustment* adjustment, gpointer user_data);
@@ -374,6 +375,10 @@ static gboolean on_drawing_area_draw(GtkWidget* widget, cairo_t* cr, gpointer us
             g_debug("Uploaded %u tiles to Cairo surfaces", uploaded);
         }
     }
+
+    /* Process completed undo thumbnail tasks from the low-priority worker thread.
+       Workers have pre-composited raw ARGB pixels; we now create Cairo surfaces. */
+    document_process_thumbnail_completions(doc);
 
     /* Poll completed tiles from legacy thread pool (if enabled) */
     if (doc->tile_thread_pool) {
@@ -1054,8 +1059,8 @@ static gboolean on_drawing_area_button_press(GtkWidget* widget, GdkEventButton* 
 
     /* Convert to image coordinates */
     widget_to_image_coords(doc, event->x, event->y, &tool_event.x, &tool_event.y);
-    tool_event.button      = event->button;
-    tool_event.state       = event->state;
+    tool_event.button = event->button;
+    tool_event.state = event->state;
     tool_event.click_count = (event->type == GDK_2BUTTON_PRESS) ? 2 : 1;
 
     /* Call tool handler */
@@ -1649,6 +1654,20 @@ ImageDocument* document_new(const gchar* filename, gboolean create_worker_pool, 
     doc->redo_stack = command_stack_new(undo_levels > 0 ? undo_levels : 0);
     doc->undo_journal = NULL; /* Will be created when settings are available */
 
+    /* Initialize undo thumbnail worker (disabled by default — zero overhead until a
+     * history panel enables it by setting undo_thumbnails_enabled = TRUE). */
+    doc->undo_thumbnails_enabled = TRUE;
+    doc->thumbnail_thread_pool = g_thread_pool_new(thumbnail_worker_func,
+                                                   doc,
+                                                   1,     /* max 1 worker thread */
+                                                   FALSE, /* not exclusive */
+                                                   NULL);
+    doc->thumbnail_completion_queue = g_queue_new();
+    g_mutex_init(&doc->thumbnail_completion_mutex);
+    debug_log("DBG", "Undo thumbnails: %s (pool=%s)",
+              doc->undo_thumbnails_enabled ? "ENABLED" : "DISABLED",
+              doc->thumbnail_thread_pool ? "OK" : "FAILED");
+
     return doc;
 }
 
@@ -1729,6 +1748,26 @@ void document_free(ImageDocument* doc) {
         tile_grid_free(doc->tile_grid);
         doc->tile_grid = NULL;
     }
+
+    /* Shutdown thumbnail worker pool — wait for any in-flight tasks to complete.
+     * Tasks that complete after the undo stacks are cleared will find task->cmd == NULL
+     * (cancelled) and skip delivery safely. */
+    if (doc->thumbnail_thread_pool) {
+        debug_log("DBG", "Shutting down thumbnail worker pool...");
+        g_thread_pool_free(doc->thumbnail_thread_pool, FALSE, TRUE);
+        doc->thumbnail_thread_pool = NULL;
+    }
+
+    /* Drain and discard any unprocessed thumbnail completions */
+    if (doc->thumbnail_completion_queue) {
+        ThumbnailTask* task;
+        while ((task = (ThumbnailTask*)g_queue_pop_head(doc->thumbnail_completion_queue)) != NULL) {
+            thumbnail_task_free(task);
+        }
+        g_queue_free(doc->thumbnail_completion_queue);
+        doc->thumbnail_completion_queue = NULL;
+    }
+    g_mutex_clear(&doc->thumbnail_completion_mutex);
 
     /* Shutdown Cairo-safe worker pool before freeing document */
     if (doc->tile_worker_pool) {
@@ -2422,6 +2461,160 @@ gdouble document_get_ruler_dpi(ImageDocument* doc) {
     if (!doc || doc->ruler_dpi <= 0.0)
         return RULER_DPI_DEFAULT;
     return doc->ruler_dpi;
+}
+
+/**
+ * Push a command to the undo stack.
+ * If undo thumbnail generation is enabled, schedules async thumbnail generation
+ * before pushing — the push itself is never blocked.
+ */
+void document_push_undo_command(ImageDocument* doc, Command* cmd) {
+    if (!doc || !cmd) {
+        return;
+    }
+
+    /* if the undo stack was never created, free the command rather than leak it */
+    if (!doc->undo_stack) {
+        command_free(cmd);
+        return;
+    }
+
+    if (doc->undo_thumbnails_enabled && doc->thumbnail_thread_pool) {
+        ThumbnailTask* task = g_new0(ThumbnailTask, 1);
+        g_mutex_init(&task->mutex);
+        task->cmd = cmd;
+        task->thumb_w = UNDO_THUMB_SIZE;
+        task->thumb_h = UNDO_THUMB_SIZE;
+        task->snapshots = g_ptr_array_new_with_free_func(
+            (GDestroyNotify)thumbnail_layer_snapshot_free);
+        task->result_pixels = NULL;
+
+        if (doc->width > 0 && doc->height > 0) {
+            gdouble scale_x = (gdouble)UNDO_THUMB_SIZE / doc->width;
+            gdouble scale_y = (gdouble)UNDO_THUMB_SIZE / doc->height;
+            gdouble scale = (scale_x < scale_y) ? scale_x : scale_y;
+
+            gboolean first_visible = TRUE;
+            GList* iter;
+            for (iter = doc->layers; iter; iter = iter->next) {
+                ImageLayer* layer = (ImageLayer*)iter->data;
+
+                /* Skip invisible / zero-opacity / dirty-cache layers.
+                 * Dirty-cache layers are skipped to avoid forcing a full-resolution
+                 * cache rebuild on the main thread. */
+                if (!layer || !layer->visible || layer->opacity <= 0.0 || layer->cache_dirty || !layer->cache_surface) {
+                    continue;
+                }
+
+                /* Ensure pixel data is readable from the main thread */
+                cairo_surface_flush(layer->cache_surface);
+
+                uint8_t* src = cairo_image_surface_get_data(layer->cache_surface);
+                if (!src) {
+                    continue;
+                }
+
+                gint src_stride = cairo_image_surface_get_stride(layer->cache_surface);
+                gint src_w = (gint)layer->width;
+                gint src_h = (gint)layer->height;
+
+                ThumbnailLayerSnapshot* snap = g_new0(ThumbnailLayerSnapshot, 1);
+                snap->pixels = (uint8_t*)g_malloc((gsize)(UNDO_THUMB_SIZE * UNDO_THUMB_SIZE * 4));
+                /* First visible layer forces NORMAL — blend modes are only meaningful
+                 * against a non-transparent backdrop, matching tile_worker.c behaviour. */
+                snap->blend_mode = first_visible ? (gint)BLEND_MODE_NORMAL : (gint)layer->blend_mode;
+                first_visible = FALSE;
+
+                /* Nearest-neighbor pre-scale: only UNDO_THUMB_SIZE² reads per layer */
+                uint32_t* dst_px = (uint32_t*)snap->pixels;
+                for (gint dy = 0; dy < UNDO_THUMB_SIZE; dy++) {
+                    for (gint dx = 0; dx < UNDO_THUMB_SIZE; dx++) {
+                        gint sx = (gint)((gdouble)dx / scale) - layer->offset_x;
+                        gint sy = (gint)((gdouble)dy / scale) - layer->offset_y;
+                        if (sx < 0 || sy < 0 || sx >= src_w || sy >= src_h) {
+                            dst_px[dy * UNDO_THUMB_SIZE + dx] = 0u;
+                        } else {
+                            dst_px[dy * UNDO_THUMB_SIZE + dx] =
+                                ((const uint32_t*)(src + (gsize)sy * (gsize)src_stride))[sx];
+                        }
+                    }
+                }
+
+                g_ptr_array_add(task->snapshots, snap);
+            }
+        }
+
+        cmd->thumbnail_task = task;
+        debug_log("DBG", "Thumbnail queued for '%s' (%u layer snapshot(s))",
+                  cmd->name ? cmd->name : "?", task->snapshots->len);
+        g_thread_pool_push(doc->thumbnail_thread_pool, task, NULL);
+    }
+
+    command_stack_push(doc->undo_stack, cmd);
+    command_stack_clear(doc->redo_stack);
+}
+
+/**
+ * Process completed thumbnail tasks from the worker thread.
+ * Creates Cairo surfaces on the main thread and sets them on their commands.
+ * Call this from the draw handler alongside tile_worker_pool_process_uploads.
+ */
+void document_process_thumbnail_completions(ImageDocument* doc) {
+    GQueue* to_process;
+
+    if (!doc || !doc->thumbnail_completion_queue) {
+        return;
+    }
+
+    /* Swap queue under lock to minimise lock hold time */
+    g_mutex_lock(&doc->thumbnail_completion_mutex);
+    if (g_queue_is_empty(doc->thumbnail_completion_queue)) {
+        g_mutex_unlock(&doc->thumbnail_completion_mutex);
+        return;
+    }
+    to_process = doc->thumbnail_completion_queue;
+    doc->thumbnail_completion_queue = g_queue_new();
+    g_mutex_unlock(&doc->thumbnail_completion_mutex);
+
+    while (!g_queue_is_empty(to_process)) {
+        ThumbnailTask* task = (ThumbnailTask*)g_queue_pop_head(to_process);
+        if (!task) {
+            continue;
+        }
+
+        g_mutex_lock(&task->mutex);
+        Command* cmd = task->cmd;
+
+        if (cmd && task->result_pixels) {
+            /* Create the Cairo surface on the main thread (Cairo-safe) */
+            cairo_surface_t* surf = cairo_image_surface_create(
+                CAIRO_FORMAT_ARGB32, task->thumb_w, task->thumb_h);
+
+            if (cairo_surface_status(surf) == CAIRO_STATUS_SUCCESS) {
+                gint stride = cairo_image_surface_get_stride(surf);
+                uint8_t* surf_data = cairo_image_surface_get_data(surf);
+                for (gint y = 0; y < task->thumb_h; y++) {
+                    memcpy(surf_data + (gsize)y * (gsize)stride,
+                           task->result_pixels + (gsize)y * (gsize)(task->thumb_w * 4),
+                           (gsize)(task->thumb_w * 4));
+                }
+                cairo_surface_mark_dirty(surf);
+                command_set_thumbnail(cmd, surf); /* takes ownership */
+                debug_log("DBG", "Thumbnail ready for '%s' (%dx%d)",
+                          cmd->name ? cmd->name : "?", task->thumb_w, task->thumb_h);
+            } else {
+                debug_log("WRN", "Thumbnail surface creation failed for '%s'",
+                          cmd->name ? cmd->name : "?");
+                cairo_surface_destroy(surf);
+            }
+            cmd->thumbnail_task = NULL;
+        }
+
+        g_mutex_unlock(&task->mutex);
+        thumbnail_task_free(task);
+    }
+
+    g_queue_free(to_process);
 }
 
 /**

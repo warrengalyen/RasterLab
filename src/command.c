@@ -15,6 +15,7 @@
 #include "render/compositor.h"
 #include "render/dirty.h"
 #include "render/layer.h"
+#include "render/thumbnail_worker.h"
 #include "render/tile.h"
 #include "selection/selection_mask.h"
 #include "selection/selection_render.h"
@@ -45,6 +46,8 @@ Command* command_new(const gchar* name,
     cmd->destroy = destroy;
     cmd->user_data = NULL;
     cmd->document = NULL;
+    cmd->thumbnail = NULL;
+    cmd->thumbnail_task = NULL;
 
     return cmd;
 }
@@ -62,8 +65,39 @@ void command_free(Command* cmd) {
         cmd->destroy(cmd);
     }
 
+    /* Cancel any in-flight thumbnail generation.
+     * The worker checks task->cmd under the mutex; NULLing it here prevents
+     * the worker from writing to this (soon-to-be-freed) command. */
+    if (cmd->thumbnail_task) {
+        g_mutex_lock(&cmd->thumbnail_task->mutex);
+        cmd->thumbnail_task->cmd = NULL;
+        g_mutex_unlock(&cmd->thumbnail_task->mutex);
+        cmd->thumbnail_task = NULL;
+    }
+
+    if (cmd->thumbnail) {
+        cairo_surface_destroy(cmd->thumbnail);
+        cmd->thumbnail = NULL;
+    }
+
     g_free(cmd->name);
     g_free(cmd);
+}
+
+/**
+ * Set (or replace) the thumbnail on a command, taking ownership of the surface.
+ */
+void command_set_thumbnail(Command* cmd, cairo_surface_t* surf) {
+    if (!cmd) {
+        if (surf) {
+            cairo_surface_destroy(surf);
+        }
+        return;
+    }
+    if (cmd->thumbnail) {
+        cairo_surface_destroy(cmd->thumbnail);
+    }
+    cmd->thumbnail = surf; /* takes ownership */
 }
 
 /**

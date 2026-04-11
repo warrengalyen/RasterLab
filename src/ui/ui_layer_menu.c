@@ -432,15 +432,8 @@ void on_layer_new(GtkWidget* widget, gpointer data) {
 
             /* Create undo command */
             cmd = command_create_layer_add(doc, new_layer);
-            if (cmd && doc->undo_stack) {
-                command_stack_push(doc->undo_stack, cmd);
-
-                /* Clear redo stack */
-                if (doc->redo_stack) {
-                    command_stack_clear(doc->redo_stack);
-                }
-            } else if (cmd) {
-                command_free(cmd);
+            if (cmd) {
+                document_push_undo_command(doc, cmd);
             }
 
             /* Update layers panel */
@@ -506,16 +499,7 @@ void on_layer_delete(GtkWidget* widget, gpointer data) {
     command_execute(cmd, doc);
 
     /* Push to undo stack */
-    if (doc->undo_stack) {
-        command_stack_push(doc->undo_stack, cmd);
-
-        /* Clear redo stack */
-        if (doc->redo_stack) {
-            command_stack_clear(doc->redo_stack);
-        }
-    } else {
-        command_free(cmd);
-    }
+    document_push_undo_command(doc, cmd);
 
     /* Update layers panel */
     if (layers_panel) {
@@ -565,13 +549,8 @@ void on_layer_duplicate(GtkWidget* widget, gpointer data) {
     if (dup_layer) {
         /* Create undo command */
         cmd = command_create_layer_duplicate(doc, selected_layer, dup_layer);
-        if (cmd && doc->undo_stack) {
-            command_stack_push(doc->undo_stack, cmd);
-
-            /* Clear redo stack */
-            if (doc->redo_stack) {
-                command_stack_clear(doc->redo_stack);
-            }
+        if (cmd) {
+            document_push_undo_command(doc, cmd);
         } else if (cmd) {
             command_free(cmd);
         }
@@ -625,14 +604,7 @@ void on_layer_merge_up(GtkWidget* widget, gpointer data) {
 
     command_execute(cmd, doc);
 
-    if (doc->undo_stack) {
-        command_stack_push(doc->undo_stack, cmd);
-        if (doc->redo_stack) {
-            command_stack_clear(doc->redo_stack);
-        }
-    } else {
-        command_free(cmd);
-    }
+    document_push_undo_command(doc, cmd);
 
     if (layers_panel) {
         layers_panel_update(layers_panel, doc);
@@ -678,14 +650,7 @@ void on_layer_merge_down(GtkWidget* widget, gpointer data) {
 
     command_execute(cmd, doc);
 
-    if (doc->undo_stack) {
-        command_stack_push(doc->undo_stack, cmd);
-        if (doc->redo_stack) {
-            command_stack_clear(doc->redo_stack);
-        }
-    } else {
-        command_free(cmd);
-    }
+    document_push_undo_command(doc, cmd);
 
     if (layers_panel) {
         layers_panel_update(layers_panel, doc);
@@ -735,16 +700,7 @@ void on_layer_move_up(GtkWidget* widget, gpointer data) {
     command_execute(cmd, doc);
 
     /* Push to undo stack */
-    if (doc->undo_stack) {
-        command_stack_push(doc->undo_stack, cmd);
-
-        /* Clear redo stack */
-        if (doc->redo_stack) {
-            command_stack_clear(doc->redo_stack);
-        }
-    } else {
-        command_free(cmd);
-    }
+    document_push_undo_command(doc, cmd);
 
     /* Update layers panel */
     if (layers_panel) {
@@ -795,16 +751,7 @@ void on_layer_move_down(GtkWidget* widget, gpointer data) {
     command_execute(cmd, doc);
 
     /* Push to undo stack */
-    if (doc->undo_stack) {
-        command_stack_push(doc->undo_stack, cmd);
-
-        /* Clear redo stack */
-        if (doc->redo_stack) {
-            command_stack_clear(doc->redo_stack);
-        }
-    } else {
-        command_free(cmd);
-    }
+    document_push_undo_command(doc, cmd);
 
     /* Update layers panel */
     if (layers_panel) {
@@ -922,13 +869,7 @@ void on_layer_order_move_top(GtkWidget* widget, gpointer data) {
     if (!cmd)
         return;
     command_execute(cmd, doc);
-    if (doc->undo_stack) {
-        command_stack_push(doc->undo_stack, cmd);
-        if (doc->redo_stack)
-            command_stack_clear(doc->redo_stack);
-    } else {
-        command_free(cmd);
-    }
+    document_push_undo_command(doc, cmd);
     if (layers_panel)
         layers_panel_update(layers_panel, doc);
     ui_update_menu_and_button_states(ctx);
@@ -969,13 +910,7 @@ void on_layer_order_move_bottom(GtkWidget* widget, gpointer data) {
     if (!cmd)
         return;
     command_execute(cmd, doc);
-    if (doc->undo_stack) {
-        command_stack_push(doc->undo_stack, cmd);
-        if (doc->redo_stack)
-            command_stack_clear(doc->redo_stack);
-    } else {
-        command_free(cmd);
-    }
+    document_push_undo_command(doc, cmd);
     if (layers_panel)
         layers_panel_update(layers_panel, doc);
     ui_update_menu_and_button_states(ctx);
@@ -1062,13 +997,7 @@ void layer_visibility_toggle_execute(AppContext* ctx, ImageDocument* doc, ImageL
         return;
 
     command_execute(cmd, doc);
-    if (doc->undo_stack) {
-        command_stack_push(doc->undo_stack, cmd);
-        if (doc->redo_stack)
-            command_stack_clear(doc->redo_stack);
-    } else {
-        command_free(cmd);
-    }
+    document_push_undo_command(doc, cmd);
 
     layers_panel = (LayersPanel*)g_object_get_data(G_OBJECT(ctx->window), "layers_panel");
     if (layers_panel)
@@ -1115,13 +1044,7 @@ void on_layer_visibility_show_only(GtkWidget* widget, gpointer data) {
     if (!cmd)
         return;
     command_execute(cmd, doc);
-    if (doc->undo_stack) {
-        command_stack_push(doc->undo_stack, cmd);
-        if (doc->redo_stack)
-            command_stack_clear(doc->redo_stack);
-    } else {
-        command_free(cmd);
-    }
+    document_push_undo_command(doc, cmd);
     if (layers_panel)
         layers_panel_update(layers_panel, doc);
     ui_update_menu_and_button_states(ctx);
@@ -1147,13 +1070,7 @@ void on_layer_visibility_hide_only(GtkWidget* widget, gpointer data) {
     if (!cmd)
         return;
     command_execute(cmd, doc);
-    if (doc->undo_stack) {
-        command_stack_push(doc->undo_stack, cmd);
-        if (doc->redo_stack)
-            command_stack_clear(doc->redo_stack);
-    } else {
-        command_free(cmd);
-    }
+    document_push_undo_command(doc, cmd);
     if (layers_panel)
         layers_panel_update(layers_panel, doc);
     ui_update_menu_and_button_states(ctx);
@@ -1175,13 +1092,7 @@ void on_layer_visibility_show_all(GtkWidget* widget, gpointer data) {
     if (!cmd)
         return;
     command_execute(cmd, doc);
-    if (doc->undo_stack) {
-        command_stack_push(doc->undo_stack, cmd);
-        if (doc->redo_stack)
-            command_stack_clear(doc->redo_stack);
-    } else {
-        command_free(cmd);
-    }
+    document_push_undo_command(doc, cmd);
     if (layers_panel)
         layers_panel_update(layers_panel, doc);
     ui_update_menu_and_button_states(ctx);
@@ -1203,13 +1114,7 @@ void on_layer_visibility_hide_all(GtkWidget* widget, gpointer data) {
     if (!cmd)
         return;
     command_execute(cmd, doc);
-    if (doc->undo_stack) {
-        command_stack_push(doc->undo_stack, cmd);
-        if (doc->redo_stack)
-            command_stack_clear(doc->redo_stack);
-    } else {
-        command_free(cmd);
-    }
+    document_push_undo_command(doc, cmd);
     if (layers_panel)
         layers_panel_update(layers_panel, doc);
     ui_update_menu_and_button_states(ctx);
@@ -1302,13 +1207,7 @@ void on_layer_rasterize_text(GtkWidget* widget, gpointer data) {
     if (!cmd)
         return;
 
-    if (doc->undo_stack) {
-        command_stack_push(doc->undo_stack, cmd);
-        if (doc->redo_stack)
-            command_stack_clear(doc->redo_stack);
-    } else {
-        command_free(cmd);
-    }
+    document_push_undo_command(doc, cmd);
 
     /* Clean up text-tool overlay state
      *

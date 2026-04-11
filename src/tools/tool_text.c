@@ -68,13 +68,11 @@ static void text_tool_queue_full(ImageDocument* doc) {
 static void text_tool_push_command(ImageDocument* doc, Command* cmd) {
     if (!cmd)
         return;
-    if (!doc || !doc->undo_stack) {
+    if (!doc) {
         command_free(cmd);
         return;
     }
-    command_stack_push(doc->undo_stack, cmd);
-    if (doc->redo_stack)
-        command_stack_clear(doc->redo_stack);
+    document_push_undo_command(doc, cmd);
     doc->modified = TRUE;
 
     if (doc->drawing_area) {

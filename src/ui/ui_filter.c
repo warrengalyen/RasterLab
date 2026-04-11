@@ -176,16 +176,7 @@ gboolean ui_apply_layer_filter(AppContext* ctx,
     processing_time = stop_processing_timer(start_time);
 
     /* Push command to undo stack */
-    if (doc->undo_stack) {
-        command_stack_push(doc->undo_stack, cmd);
-
-        /* Clear redo stack */
-        if (doc->redo_stack) {
-            command_stack_clear(doc->redo_stack);
-        }
-    } else {
-        command_free(cmd);
-    }
+    document_push_undo_command(doc, cmd);
 
     /* Invalidate layer cache */
     layer_invalidate_cache(layer);
@@ -307,16 +298,7 @@ gboolean ui_apply_layer_filter_with_value(AppContext* ctx,
     processing_time = stop_processing_timer(start_time);
 
     /* Push command to undo stack */
-    if (doc->undo_stack) {
-        command_stack_push(doc->undo_stack, cmd);
-
-        /* Clear redo stack */
-        if (doc->redo_stack) {
-            command_stack_clear(doc->redo_stack);
-        }
-    } else {
-        command_free(cmd);
-    }
+    document_push_undo_command(doc, cmd);
 
     /* Invalidate layer cache */
     layer_invalidate_cache(layer);

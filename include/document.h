@@ -20,6 +20,7 @@
 
 /* Forward declarations */
 typedef struct _CommandStack CommandStack;
+typedef struct _Command Command;
 struct ImageDocument; /* Forward declaration for circular deps */
 struct MipmapPyramid;
 typedef struct MipmapPyramid MipmapPyramid;
@@ -35,6 +36,10 @@ typedef struct TileThreadPool TileThreadPool;
 
 struct TileWorkerPool;
 typedef struct TileWorkerPool TileWorkerPool;
+
+/* Forward declaration for thumbnail worker pool */
+struct ThumbnailTask;
+typedef struct ThumbnailTask ThumbnailTask;
 
 /* Forward declaration for GPU compositor */
 struct GPUCompositor;
@@ -247,6 +252,15 @@ typedef struct ImageDocument {
     CommandStack* undo_stack;  /* Stack of undoable commands (legacy, for non-pixel ops) */
     CommandStack* redo_stack;  /* Stack of redoable commands (legacy, for non-pixel ops) */
     UndoJournal* undo_journal; /* Disk-backed undo journal (for pixel operations) */
+
+    /* Undo history thumbnail generation (async, low-priority worker thread).
+     * When undo_thumbnails_enabled is FALSE (default) the thumbnail system is
+     * completely inactive — zero overhead on existing undo performance.
+     * Enable by setting undo_thumbnails_enabled = TRUE before the history panel opens. */
+    gboolean      undo_thumbnails_enabled;     /* Master switch; default FALSE */
+    GThreadPool*  thumbnail_thread_pool;       /* Single worker thread for thumbnail compositing */
+    GQueue*       thumbnail_completion_queue;  /* Finished tasks awaiting Cairo surface creation */
+    GMutex        thumbnail_completion_mutex;  /* Protects thumbnail_completion_queue */
 } ImageDocument;
 
 /**
@@ -520,6 +534,24 @@ void document_content_snapshot_free(DocumentContentSnapshot* snap);
  * @return TRUE on success
  */
 gboolean document_content_snapshot_apply(ImageDocument* doc, const DocumentContentSnapshot* snap);
+
+/**
+ * Push a command to the undo stack (replacing direct command_stack_push calls).
+ * Clears the redo stack. If undo_thumbnails_enabled is TRUE, schedules async
+ * thumbnail generation before pushing — the undo commit itself is never blocked.
+ * @param doc The document
+ * @param cmd The command to push (ownership transferred to undo stack)
+ */
+void document_push_undo_command(ImageDocument* doc, Command* cmd);
+
+/**
+ * Process completed thumbnail tasks from the worker thread.
+ * Creates cairo_surface_t thumbnails on the main thread and stores them on
+ * their respective commands. Call this from the draw handler alongside
+ * tile_worker_pool_process_uploads.
+ * @param doc The document
+ */
+void document_process_thumbnail_completions(ImageDocument* doc);
 
 /**
  * Check if undo is available

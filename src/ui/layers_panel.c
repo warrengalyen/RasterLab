@@ -582,13 +582,10 @@ ImageLayer* layers_panel_import_path_into_document(LayersPanel* layers_panel, Im
         document_set_selected_layer(doc, new_layer);
         document_invalidate_composite(doc);
 
-        if (doc->undo_stack) {
+        {
             Command* cmd = command_create_layer_add(doc, new_layer);
             if (cmd) {
-                command_stack_push(doc->undo_stack, cmd);
-                if (doc->redo_stack) {
-                    command_stack_clear(doc->redo_stack);
-                }
+                document_push_undo_command(doc, cmd);
             }
         }
 

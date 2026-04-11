@@ -561,11 +561,7 @@ static void on_file_revert(GtkMenuItem* menu_item, gpointer user_data) {
         return;
     }
 
-    if (doc->undo_stack) {
-        command_stack_push(doc->undo_stack, cmd);
-    } else {
-        command_free(cmd);
-    }
+    document_push_undo_command(doc, cmd);
 
     document_mark_saved(doc);
     autosave_mark_saved(doc);

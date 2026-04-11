@@ -1977,14 +1977,7 @@ gboolean crop_apply_if_active(AppContext* ctx) {
 
     command_execute(cmd, doc);
 
-    if (doc->undo_stack) {
-        command_stack_push(doc->undo_stack, cmd);
-        if (doc->redo_stack) {
-            command_stack_clear(doc->redo_stack);
-        }
-    } else {
-        command_free(cmd);
-    }
+    document_push_undo_command(doc, cmd);
 
     tool_crop_reset(crop_tool);
 

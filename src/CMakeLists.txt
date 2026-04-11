@@ -94,6 +94,7 @@ set(SOURCES
     render/mipmap.c
     render/render_utils.c
     render/text_layer.c
+    render/thumbnail_worker.c
     render/tile.c
     render/tile_thread_pool.c
     render/tile_worker.c

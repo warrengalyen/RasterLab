@@ -21,6 +21,7 @@
 typedef struct _Command Command;
 struct ImageDocument;
 struct ImageLayer;
+struct ThumbnailTask; /* Opaque forward declaration; full type in render/thumbnail_worker.h */
 
 /**
  * Command type enumeration
@@ -102,6 +103,14 @@ typedef struct _Command {
     CommandDestroyFunc destroy;     /* Cleanup callback */
     gpointer user_data;             /* Command-specific data */
     struct ImageDocument* document; /* Associated document */
+
+    /* Undo history thumbnail (52×52 ARGB32 Cairo surface).
+     * NULL until async generation completes; freed in command_free. */
+    cairo_surface_t* thumbnail;
+
+    /* Non-NULL while async thumbnail generation is in flight.
+     * command_free NULLs task->cmd under the task mutex to cancel delivery. */
+    struct ThumbnailTask* thumbnail_task;
 } Command;
 
 /**
@@ -359,5 +368,14 @@ void composite_layers_onto_surface(cairo_surface_t* target, struct ImageDocument
  * Used for merge down/up operations.
  */
 void composite_layer_onto_layer(struct ImageLayer* target, struct ImageLayer* source);
+
+/**
+ * Set (or replace) the thumbnail on a command.
+ * Takes ownership of surf — the caller must NOT destroy it afterwards.
+ * Any previously stored thumbnail is destroyed first.
+ * @param cmd  The command to update
+ * @param surf The new thumbnail surface (may be NULL to clear)
+ */
+void command_set_thumbnail(Command* cmd, cairo_surface_t* surf);
 
 #endif /* COMMAND_H */

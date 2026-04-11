@@ -620,13 +620,8 @@ static void pencil_tool_mouse_up(Tool* tool, struct ImageDocument* doc,
     }
 
     /* Push command to undo stack */
-    if (cmd && doc->undo_stack) {
-        command_stack_push(doc->undo_stack, cmd);
-
-        /* Clear redo stack */
-        if (doc->redo_stack) {
-            command_stack_clear(doc->redo_stack);
-        }
+    if (cmd) {
+        document_push_undo_command(doc, cmd);
 
         /* Update UI */
         ctx = (AppContext*)tool->app_context;
@@ -634,9 +629,6 @@ static void pencil_tool_mouse_up(Tool* tool, struct ImageDocument* doc,
             ui_update_menu_and_button_states(ctx);
             ui_update_window_title(ctx, NULL);
         }
-    } else if (cmd) {
-        /* No undo stack, free the command */
-        command_free(cmd);
     }
 
     /* Mark document as modified */
