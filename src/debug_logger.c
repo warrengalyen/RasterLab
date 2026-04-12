@@ -27,6 +27,7 @@
 #include <string.h>
 #include <time.h>
 
+#include "build_version.h"
 #include "version.h"
 
 #ifdef _WIN32
@@ -554,7 +555,11 @@ static void write_header(DebugLoggerState* logger, const char* app_dir) {
             real_mb, swap_mb);
     fprintf(logger->file, "Memory load at startup: %d%%\r\n", get_memory_usage_percent());
     fprintf(logger->file, "-- PROGRAM INFORMATION --\r\n");
+#if RASTERLAB_BUILD_NUMBER != 0
+    fprintf(logger->file, "Version: %s (build %d)\n", RASTERLAB_VERSION_LINE, RASTERLAB_BUILD_NUMBER);
+#else
     fprintf(logger->file, "Version: %s\n", RASTERLAB_VERSION_LINE);
+#endif
     fprintf(logger->file, "Translation active: %s\n", trans);
     fprintf(logger->file, "Language in use: %s\n", lang);
     fprintf(logger->file, "GPU acceleration enabled: %s\r\n", gpu);

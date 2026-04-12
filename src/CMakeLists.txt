@@ -287,6 +287,31 @@ endif()
 # Create the executable
 add_executable(rasterlab ${SOURCES})
 
+# Monotonic build number (stored under cmake/; incremented on each rasterlab link)
+set(RASTERLAB_BUILD_NUMBER_FILE "${CMAKE_SOURCE_DIR}/cmake/build_number.txt")
+set(RASTERLAB_BUILD_VERSION_HEADER "${CMAKE_CURRENT_BINARY_DIR}/build_version.h")
+# Placeholder so the first compile finds the header before PRE_BUILD runs (generator-dependent ordering)
+if(NOT EXISTS "${RASTERLAB_BUILD_VERSION_HEADER}")
+    file(WRITE "${RASTERLAB_BUILD_VERSION_HEADER}"
+"#ifndef RASTERLAB_BUILD_VERSION_H
+#define RASTERLAB_BUILD_VERSION_H
+#define RASTERLAB_BUILD_NUMBER 0
+#define RASTERLAB_BUILD_NUMBER_STR \"0\"
+#endif /* RASTERLAB_BUILD_VERSION_H */
+")
+endif()
+add_custom_command(
+    TARGET rasterlab
+    PRE_BUILD
+    COMMAND ${CMAKE_COMMAND}
+        -D "BUILD_NUMBER_FILE=${RASTERLAB_BUILD_NUMBER_FILE}"
+        -D "BUILD_VERSION_HEADER=${RASTERLAB_BUILD_VERSION_HEADER}"
+        -P "${CMAKE_SOURCE_DIR}/cmake/BumpBuildNumber.cmake"
+    COMMENT "Bump build number"
+    VERBATIM
+)
+target_include_directories(rasterlab PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
+
 target_compile_definitions(rasterlab PRIVATE GETTEXT_PACKAGE="rasterlab")
 target_compile_definitions(rasterlab PRIVATE "LOCALEDIR=\"${CMAKE_INSTALL_FULL_LOCALEDIR}\"")
 
