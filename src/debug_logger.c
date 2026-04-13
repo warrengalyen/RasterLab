@@ -200,6 +200,8 @@ static int debug_get_next_index(void) {
     if (h == INVALID_HANDLE_VALUE) {
         return 1;
     }
+    FILETIME newest_ft = {0, 0};
+    int newest_idx = 0;
     do {
         if (!(ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
             int idx = parse_report_index(ffd.cFileName);
@@ -207,6 +209,10 @@ static int debug_get_next_index(void) {
                 present[idx] = 1;
                 if (idx > max_index) {
                     max_index = idx;
+                }
+                if (CompareFileTime(&ffd.ftLastWriteTime, &newest_ft) > 0) {
+                    newest_ft = ffd.ftLastWriteTime;
+                    newest_idx = idx;
                 }
             }
         }
@@ -217,6 +223,8 @@ static int debug_get_next_index(void) {
     if (!d) {
         return 1;
     }
+    time_t newest_mtime = 0;
+    int newest_idx = 0;
     struct dirent* ent;
     while ((ent = readdir(d)) != NULL) {
         int idx = parse_report_index(ent->d_name);
@@ -224,6 +232,13 @@ static int debug_get_next_index(void) {
             present[idx] = 1;
             if (idx > max_index) {
                 max_index = idx;
+            }
+            char epath[4096];
+            snprintf(epath, sizeof(epath), "%s/%s", s_debug_dir, ent->d_name);
+            struct stat st;
+            if (stat(epath, &st) == 0 && st.st_mtime > newest_mtime) {
+                newest_mtime = st.st_mtime;
+                newest_idx = idx;
             }
         }
     }
@@ -235,11 +250,11 @@ static int debug_get_next_index(void) {
             return i;
         }
     }
-    /* All ten slots occupied — overwrite using previous rotation rule */
-    if (max_index <= 0) {
+    /* All ten slots occupied — advance past the most-recently-written slot. */
+    if (newest_idx <= 0) {
         return 1;
     }
-    return (max_index % 10) + 1;
+    return (newest_idx % 10) + 1;
 }
 
 static void get_os_string(char* buf, size_t buf_sz) {
@@ -626,7 +641,7 @@ bool debug_init(const char* app_dir) {
         g_free(resolved_exe);
         return false;
     }
-#endif  /* DEBUG_LOGGER_H */
+#endif /* DEBUG_LOGGER_H */
 
     s_logger.file = fopen(path, "w");
     if (!s_logger.file) {
