@@ -160,6 +160,63 @@ void on_view_show_rulers(GtkCheckMenuItem* check_menu_item, gpointer data) {
     }
 }
 
+typedef struct {
+    AppContext* ctx;
+    GtkWidget* snap_to_canvas;
+    GtkWidget* snap_to_centerlines;
+    GtkWidget* snap_to_layers;
+} ViewMenuSnapData;
+
+static void view_menu_snap_apply_submenu_sensitive(ViewMenuSnapData* sd) {
+    if (!sd || !sd->ctx || !sd->ctx->settings) {
+        return;
+    }
+    gboolean master = settings_get_mouse_snap(sd->ctx->settings);
+    if (sd->snap_to_canvas) {
+        gtk_widget_set_sensitive(sd->snap_to_canvas, master);
+    }
+    if (sd->snap_to_centerlines) {
+        gtk_widget_set_sensitive(sd->snap_to_centerlines, master);
+    }
+    if (sd->snap_to_layers) {
+        gtk_widget_set_sensitive(sd->snap_to_layers, master);
+    }
+}
+
+void on_view_snap(GtkCheckMenuItem* check_menu_item, gpointer data) {
+    ViewMenuSnapData* sd = (ViewMenuSnapData*)data;
+    if (!sd || !sd->ctx || !sd->ctx->settings) {
+        return;
+    }
+    gboolean active = gtk_check_menu_item_get_active(check_menu_item);
+    settings_set_mouse_snap(sd->ctx->settings, active);
+    view_menu_snap_apply_submenu_sensitive(sd);
+}
+
+void on_view_snap_to_canvas(GtkCheckMenuItem* check_menu_item, gpointer data) {
+    AppContext* ctx = (AppContext*)data;
+    if (!ctx || !ctx->settings) {
+        return;
+    }
+    settings_set_mouse_snap_to_canvas_edges(ctx->settings, gtk_check_menu_item_get_active(check_menu_item));
+}
+
+void on_view_snap_to_centerlines(GtkCheckMenuItem* check_menu_item, gpointer data) {
+    AppContext* ctx = (AppContext*)data;
+    if (!ctx || !ctx->settings) {
+        return;
+    }
+    settings_set_mouse_snap_to_centerlines(ctx->settings, gtk_check_menu_item_get_active(check_menu_item));
+}
+
+void on_view_snap_to_layers(GtkCheckMenuItem* check_menu_item, gpointer data) {
+    AppContext* ctx = (AppContext*)data;
+    if (!ctx || !ctx->settings) {
+        return;
+    }
+    settings_set_mouse_snap_to_layers(ctx->settings, gtk_check_menu_item_get_active(check_menu_item));
+}
+
 /**
  * Helper function for zoom to specific level callbacks
  */
@@ -410,6 +467,34 @@ void ui_view_menu_setup(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* acc
             gboolean show_rulers = settings_get_show_rulers(ctx->settings);
             gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(view_menu_show_rulers), show_rulers);
         }
+    }
+
+    /* View > Snap (mouse settings) */
+    GtkWidget* view_menu_snap = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_snap"));
+    GtkWidget* view_menu_snap_to_canvas = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_snap_to_canvas"));
+    GtkWidget* view_menu_snap_to_centerlines = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_snap_to_centerlines"));
+    GtkWidget* view_menu_snap_to_layers = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_snap_to_layers"));
+    if (view_menu_snap && view_menu_snap_to_canvas && view_menu_snap_to_centerlines && view_menu_snap_to_layers && ctx->settings) {
+        ViewMenuSnapData* snap_data = g_new0(ViewMenuSnapData, 1);
+        snap_data->ctx = ctx;
+        snap_data->snap_to_canvas = view_menu_snap_to_canvas;
+        snap_data->snap_to_centerlines = view_menu_snap_to_centerlines;
+        snap_data->snap_to_layers = view_menu_snap_to_layers;
+        g_object_set_data_full(G_OBJECT(view_menu_snap), "view_menu_snap_data", snap_data, g_free);
+
+        g_signal_connect(view_menu_snap, "toggled", G_CALLBACK(on_view_snap), snap_data);
+        g_signal_connect(view_menu_snap_to_canvas, "toggled", G_CALLBACK(on_view_snap_to_canvas), ctx);
+        g_signal_connect(view_menu_snap_to_centerlines, "toggled", G_CALLBACK(on_view_snap_to_centerlines), ctx);
+        g_signal_connect(view_menu_snap_to_layers, "toggled", G_CALLBACK(on_view_snap_to_layers), ctx);
+
+        gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(view_menu_snap), settings_get_mouse_snap(ctx->settings));
+        gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(view_menu_snap_to_canvas),
+                                       settings_get_mouse_snap_to_canvas_edges(ctx->settings));
+        gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(view_menu_snap_to_centerlines),
+                                       settings_get_mouse_snap_to_centerlines(ctx->settings));
+        gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(view_menu_snap_to_layers),
+                                       settings_get_mouse_snap_to_layers(ctx->settings));
+        view_menu_snap_apply_submenu_sensitive(snap_data);
     }
 
     /* Connect zoom level menu items */

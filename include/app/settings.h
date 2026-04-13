@@ -104,6 +104,11 @@ typedef struct {
 
     /* Mouse: snap distance in pixels when snapping to guides/edges (1-255, default 8) */
     gint mouse_snap_distance;
+    /* Mouse: snap toggles (View menu; persisted under <mouse/>) */
+    gboolean mouse_snap;                   /* Master snap enable (default TRUE) */
+    gboolean mouse_snap_to_canvas_edges;   /* Snap to document/canvas edges (default TRUE) */
+    gboolean mouse_snap_to_centerlines;    /* Snap to centerlines / rule-of-thirds (default TRUE) */
+    gboolean mouse_snap_to_layers;         /* Snap to other layers' bounds (default FALSE) */
 } Settings;
 
 /**
@@ -445,5 +450,21 @@ const gchar* settings_get_interface_locale(Settings* settings);
 /** Mouse snap distance in pixels (1-255, default 8). */
 void settings_set_mouse_snap_distance(Settings* settings, gint distance);
 gint settings_get_mouse_snap_distance(Settings* settings);
+
+/** Master snap (when FALSE, snapping is off regardless of sub-options). Default TRUE. */
+void settings_set_mouse_snap(Settings* settings, gboolean enabled);
+gboolean settings_get_mouse_snap(Settings* settings);
+
+/** Snap to canvas / document edges. Default TRUE. */
+void settings_set_mouse_snap_to_canvas_edges(Settings* settings, gboolean enabled);
+gboolean settings_get_mouse_snap_to_canvas_edges(Settings* settings);
+
+/** Snap to centerlines (e.g. canvas center, guides). Default TRUE. */
+void settings_set_mouse_snap_to_centerlines(Settings* settings, gboolean enabled);
+gboolean settings_get_mouse_snap_to_centerlines(Settings* settings);
+
+/** Snap to other layers' bounds. Default FALSE. */
+void settings_set_mouse_snap_to_layers(Settings* settings, gboolean enabled);
+gboolean settings_get_mouse_snap_to_layers(Settings* settings);
 
 #endif /* SETTINGS_H */

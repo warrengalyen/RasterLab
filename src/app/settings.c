@@ -133,6 +133,10 @@ static Settings* settings_create_default(void) {
     settings->interface_locale = g_strdup(DEFAULT_INTERFACE_LOCALE);
 
     settings->mouse_snap_distance = DEFAULT_MOUSE_SNAP_DISTANCE;
+    settings->mouse_snap = TRUE;
+    settings->mouse_snap_to_canvas_edges = TRUE;
+    settings->mouse_snap_to_centerlines = TRUE;
+    settings->mouse_snap_to_layers = FALSE;
 
     return settings;
 }
@@ -191,6 +195,19 @@ static gdouble parse_double_attr(xmlNode* node, const char* attr_name, gdouble d
  * Parse "R,G,B" string (0-255) into 0.0-1.0 doubles. Returns TRUE if parsed successfully.
  */
 static gboolean parse_rgb_string(const char* str, gdouble* r, gdouble* g, gdouble* b);
+
+/**
+ * Parse a boolean value from XML attribute ("true" / "false")
+ */
+static gboolean parse_bool_attr(xmlNode* node, const char* attr_name, gboolean default_value) {
+    xmlChar* attr = xmlGetProp(node, (const xmlChar*)attr_name);
+    if (!attr) {
+        return default_value;
+    }
+    gboolean v = (xmlStrcmp(attr, (const xmlChar*)"true") == 0);
+    xmlFree(attr);
+    return v;
+}
 
 /**
  * Parse an integer value from XML attribute
@@ -807,27 +824,90 @@ static void settings_save_view(xmlTextWriterPtr writer, Settings* settings) {
 }
 
 /**
- * Load mouse settings from XML (<mouse snap_distance="…"/>)
+ * Find first direct child element with the given tag name (libxml2).
+ */
+static xmlNode* settings_xml_child_element_named(xmlNode* parent, const char* name) {
+    if (!parent || !name) {
+        return NULL;
+    }
+    for (xmlNode* cur = parent->children; cur; cur = cur->next) {
+        if (cur->type == XML_ELEMENT_NODE && xmlStrcmp(cur->name, (const xmlChar*)name) == 0) {
+            return cur;
+        }
+    }
+    return NULL;
+}
+
+/**
+ * Read a mouse setting: prefer child `<name value="…"/>`, else legacy attribute on `<mouse name="…"/>`.
+ */
+static gint settings_read_mouse_int(xmlNode* mouse_node, const char* name, gint default_value) {
+    xmlNode* child = settings_xml_child_element_named(mouse_node, name);
+    if (child) {
+        return parse_int_attr(child, "value", default_value);
+    }
+    return parse_int_attr(mouse_node, name, default_value);
+}
+
+static gboolean settings_read_mouse_bool(xmlNode* mouse_node, const char* name, gboolean default_value) {
+    xmlNode* child = settings_xml_child_element_named(mouse_node, name);
+    if (child) {
+        return parse_bool_attr(child, "value", default_value);
+    }
+    return parse_bool_attr(mouse_node, name, default_value);
+}
+
+/**
+ * Load mouse settings from XML (same nested style as view: child elements with value="…").
+ * Legacy: attributes on a single empty mouse element are still accepted.
  */
 static void settings_load_mouse(Settings* settings, xmlNode* mouse_node) {
     if (!settings || !mouse_node) {
         return;
     }
-    gint d = parse_int_attr(mouse_node, "snap_distance", DEFAULT_MOUSE_SNAP_DISTANCE);
-    settings_set_mouse_snap_distance(settings, d);
+    settings_set_mouse_snap_distance(settings, settings_read_mouse_int(mouse_node, "snap_distance", DEFAULT_MOUSE_SNAP_DISTANCE));
+    settings_set_mouse_snap(settings, settings_read_mouse_bool(mouse_node, "snap", TRUE));
+    settings_set_mouse_snap_to_canvas_edges(settings, settings_read_mouse_bool(mouse_node, "snap_to_canvas_edges", TRUE));
+    settings_set_mouse_snap_to_centerlines(settings, settings_read_mouse_bool(mouse_node, "snap_to_centerlines", TRUE));
+    settings_set_mouse_snap_to_layers(settings, settings_read_mouse_bool(mouse_node, "snap_to_layers", FALSE));
 }
 
 /**
- * Save mouse settings to XML
+ * Save mouse settings to XML (nested elements with value="…", like view)
  */
 static void settings_save_mouse(xmlTextWriterPtr writer, Settings* settings) {
     if (!writer || !settings) {
         return;
     }
     gchar buf[16];
-    g_snprintf(buf, sizeof(buf), "%d", settings_get_mouse_snap_distance(settings));
+
     xmlTextWriterStartElement(writer, (const xmlChar*)"mouse");
-    xmlTextWriterWriteAttribute(writer, (const xmlChar*)"snap_distance", (const xmlChar*)buf);
+
+    g_snprintf(buf, sizeof(buf), "%d", settings_get_mouse_snap_distance(settings));
+    xmlTextWriterStartElement(writer, (const xmlChar*)"snap_distance");
+    xmlTextWriterWriteAttribute(writer, (const xmlChar*)"value", (const xmlChar*)buf);
+    xmlTextWriterEndElement(writer); /* snap_distance */
+
+    xmlTextWriterStartElement(writer, (const xmlChar*)"snap");
+    xmlTextWriterWriteAttribute(writer, (const xmlChar*)"value",
+                                (const xmlChar*)(settings_get_mouse_snap(settings) ? "true" : "false"));
+    xmlTextWriterEndElement(writer); /* snap */
+
+    xmlTextWriterStartElement(writer, (const xmlChar*)"snap_to_canvas_edges");
+    xmlTextWriterWriteAttribute(writer, (const xmlChar*)"value",
+                                (const xmlChar*)(settings_get_mouse_snap_to_canvas_edges(settings) ? "true" : "false"));
+    xmlTextWriterEndElement(writer); /* snap_to_canvas_edges */
+
+    xmlTextWriterStartElement(writer, (const xmlChar*)"snap_to_centerlines");
+    xmlTextWriterWriteAttribute(writer, (const xmlChar*)"value",
+                                (const xmlChar*)(settings_get_mouse_snap_to_centerlines(settings) ? "true" : "false"));
+    xmlTextWriterEndElement(writer); /* snap_to_centerlines */
+
+    xmlTextWriterStartElement(writer, (const xmlChar*)"snap_to_layers");
+    xmlTextWriterWriteAttribute(writer, (const xmlChar*)"value",
+                                (const xmlChar*)(settings_get_mouse_snap_to_layers(settings) ? "true" : "false"));
+    xmlTextWriterEndElement(writer); /* snap_to_layers */
+
     xmlTextWriterEndElement(writer); /* mouse */
 }
 
@@ -1592,6 +1672,62 @@ gint settings_get_mouse_snap_distance(Settings* settings) {
         return DEFAULT_MOUSE_SNAP_DISTANCE;
     }
     return settings->mouse_snap_distance;
+}
+
+void settings_set_mouse_snap(Settings* settings, gboolean enabled) {
+    if (!settings) {
+        return;
+    }
+    settings->mouse_snap = enabled ? TRUE : FALSE;
+}
+
+gboolean settings_get_mouse_snap(Settings* settings) {
+    if (!settings) {
+        return TRUE;
+    }
+    return settings->mouse_snap;
+}
+
+void settings_set_mouse_snap_to_canvas_edges(Settings* settings, gboolean enabled) {
+    if (!settings) {
+        return;
+    }
+    settings->mouse_snap_to_canvas_edges = enabled ? TRUE : FALSE;
+}
+
+gboolean settings_get_mouse_snap_to_canvas_edges(Settings* settings) {
+    if (!settings) {
+        return TRUE;
+    }
+    return settings->mouse_snap_to_canvas_edges;
+}
+
+void settings_set_mouse_snap_to_centerlines(Settings* settings, gboolean enabled) {
+    if (!settings) {
+        return;
+    }
+    settings->mouse_snap_to_centerlines = enabled ? TRUE : FALSE;
+}
+
+gboolean settings_get_mouse_snap_to_centerlines(Settings* settings) {
+    if (!settings) {
+        return TRUE;
+    }
+    return settings->mouse_snap_to_centerlines;
+}
+
+void settings_set_mouse_snap_to_layers(Settings* settings, gboolean enabled) {
+    if (!settings) {
+        return;
+    }
+    settings->mouse_snap_to_layers = enabled ? TRUE : FALSE;
+}
+
+gboolean settings_get_mouse_snap_to_layers(Settings* settings) {
+    if (!settings) {
+        return FALSE;
+    }
+    return settings->mouse_snap_to_layers;
 }
 
 /**
