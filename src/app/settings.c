@@ -40,6 +40,7 @@
 #define DEFAULT_WORKER_THREADS 4                   /* Number of worker threads */
 #define DEFAULT_FILE_RECOVERY_INTERVAL_SECONDS 300 /* File recovery save interval (30-2700) */
 #define DEFAULT_GPU_ACCELERATION TRUE              /* GPU acceleration enabled by default */
+#define DEFAULT_SHOW_SMART_GUIDES TRUE             /* View > Show smart guides on by default */
 #define DEFAULT_INTERFACE_LOCALE "en_US"
 #define DEFAULT_MOUSE_SNAP_DISTANCE 8
 #define MIN_MOUSE_SNAP_DISTANCE 1
@@ -95,6 +96,7 @@ static Settings* settings_create_default(void) {
     settings->worker_threads = DEFAULT_WORKER_THREADS;
     settings->file_recovery_interval_seconds = DEFAULT_FILE_RECOVERY_INTERVAL_SECONDS;
     settings->show_layer_edges = TRUE; /* Show layer edges by default */
+    settings->show_smart_guides = DEFAULT_SHOW_SMART_GUIDES;
     settings->show_statusbar = TRUE;   /* Show status bar by default */
     settings->show_rulers = TRUE;      /* Show canvas rulers by default */
     settings->show_gpu_stats = FALSE;  /* Hide GPU stats by default */
@@ -747,6 +749,18 @@ static void settings_load_view(Settings* settings, xmlNode* view_node) {
                 xmlFree(value_attr);
             }
         }
+        /* Load show_smart_guides setting (enabled unless value explicitly false) */
+        else if (xmlStrcmp(cur->name, (const xmlChar*)"show_smart_guides") == 0) {
+            xmlChar* value_attr = xmlGetProp(cur, (const xmlChar*)"value");
+            if (value_attr) {
+                if (xmlStrcmp(value_attr, (const xmlChar*)"false") == 0) {
+                    settings->show_smart_guides = FALSE;
+                } else {
+                    settings->show_smart_guides = TRUE;
+                }
+                xmlFree(value_attr);
+            }
+        }
         /* Load show_statusbar setting */
         else if (xmlStrcmp(cur->name, (const xmlChar*)"show_statusbar") == 0) {
             xmlChar* value_attr = xmlGetProp(cur, (const xmlChar*)"value");
@@ -801,6 +815,12 @@ static void settings_save_view(xmlTextWriterPtr writer, Settings* settings) {
     xmlTextWriterWriteAttribute(writer, (const xmlChar*)"value",
                                 (const xmlChar*)(settings->show_layer_edges ? "true" : "false"));
     xmlTextWriterEndElement(writer); /* show_layer_edges */
+
+    /* Save show_smart_guides setting */
+    xmlTextWriterStartElement(writer, (const xmlChar*)"show_smart_guides");
+    xmlTextWriterWriteAttribute(writer, (const xmlChar*)"value",
+                                (const xmlChar*)(settings->show_smart_guides ? "true" : "false"));
+    xmlTextWriterEndElement(writer); /* show_smart_guides */
 
     /* Save show_statusbar setting */
     xmlTextWriterStartElement(writer, (const xmlChar*)"show_statusbar");
@@ -1592,6 +1612,20 @@ void settings_set_show_layer_edges(Settings* settings, gboolean show) {
         return;
     }
     settings->show_layer_edges = show;
+}
+
+void settings_set_show_smart_guides(Settings* settings, gboolean show) {
+    if (!settings) {
+        return;
+    }
+    settings->show_smart_guides = show ? TRUE : FALSE;
+}
+
+gboolean settings_get_show_smart_guides(Settings* settings) {
+    if (!settings) {
+        return DEFAULT_SHOW_SMART_GUIDES;
+    }
+    return settings->show_smart_guides;
 }
 
 /**

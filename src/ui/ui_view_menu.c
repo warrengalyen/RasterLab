@@ -105,6 +105,29 @@ void on_view_show_layer_edges(GtkCheckMenuItem* check_menu_item, gpointer data) 
 }
 
 /**
+ * View > Show smart guides callback
+ */
+void on_view_show_smart_guides(GtkCheckMenuItem* check_menu_item, gpointer data) {
+    AppContext* ctx = (AppContext*)data;
+
+    if (!ctx || !ctx->settings) {
+        return;
+    }
+
+    gboolean active = gtk_check_menu_item_get_active(check_menu_item);
+    settings_set_show_smart_guides(ctx->settings, active);
+
+    if (ctx->documents) {
+        for (GList* iter = ctx->documents; iter; iter = iter->next) {
+            ImageDocument* doc = (ImageDocument*)iter->data;
+            if (doc && doc->viewport) {
+                gtk_widget_queue_draw(doc->viewport);
+            }
+        }
+    }
+}
+
+/**
  * View > Show Statusbar callback
  */
 void on_view_show_statusbar(GtkCheckMenuItem* check_menu_item, gpointer data) {
@@ -398,6 +421,7 @@ void ui_view_menu_setup(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* acc
     ctx->view_menu_zoom_fit = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom_fit"));
     ctx->view_menu_zoom = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_zoom"));
     GtkWidget* view_menu_show_layer_edges = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_show_layer_edges"));
+    GtkWidget* view_menu_show_smart_guides = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_show_smart_guides"));
     GtkWidget* view_menu_show_statusbar = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_show_statusbar"));
     GtkWidget* view_menu_show_rulers = GTK_WIDGET(gtk_builder_get_object(builder, "view_menu_show_rulers"));
 
@@ -440,6 +464,14 @@ void ui_view_menu_setup(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* acc
             gboolean show_edges = settings_get_show_layer_edges(ctx->settings);
             gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(view_menu_show_layer_edges), show_edges);
         }
+    }
+    if (view_menu_show_smart_guides) {
+        /* Apply saved state before connecting toggled so default/enabled startup does not desync */
+        if (ctx->settings) {
+            gboolean show_guides = settings_get_show_smart_guides(ctx->settings);
+            gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(view_menu_show_smart_guides), show_guides);
+        }
+        g_signal_connect(view_menu_show_smart_guides, "toggled", G_CALLBACK(on_view_show_smart_guides), ctx);
     }
     if (view_menu_show_statusbar) {
         g_signal_connect(view_menu_show_statusbar, "toggled", G_CALLBACK(on_view_show_statusbar), ctx);

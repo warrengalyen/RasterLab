@@ -63,6 +63,7 @@ typedef struct {
 
     /* View settings */
     gboolean show_layer_edges; /* Show outline when moving layers (default TRUE) */
+    gboolean show_smart_guides; /* Show smart alignment guides (default: enabled) */
     gboolean show_statusbar;   /* Show status bar (default TRUE) */
     gboolean show_rulers;      /* Show canvas rulers (default TRUE) */
     gboolean show_gpu_stats;   /* Show GPU compositor statistics overlay (default FALSE) */
@@ -302,6 +303,20 @@ void settings_set_show_layer_edges(Settings* settings, gboolean show);
  * @return TRUE if layer edges should be shown when moving
  */
 gboolean settings_get_show_layer_edges(Settings* settings);
+
+/**
+ * Set show smart guides setting
+ * @param settings The settings structure
+ * @param show TRUE to show smart guides, FALSE to hide
+ */
+void settings_set_show_smart_guides(Settings* settings, gboolean show);
+
+/**
+ * Get show smart guides setting
+ * @param settings The settings structure
+ * @return TRUE if smart guides should be shown (default when @a settings is NULL: enabled)
+ */
+gboolean settings_get_show_smart_guides(Settings* settings);
 
 /**
  * Set show status bar setting

@@ -1914,6 +1914,15 @@
       </object>
     </child>
     <child>
+      <object class="GtkCheckMenuItem" id="view_menu_show_smart_guides">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Show smart guides</property>
+        <property name="use-underline">True</property>
+        <property name="active">True</property>
+      </object>
+    </child>
+    <child>
       <object class="GtkSeparatorMenuItem" id="view_menu_separator2">
         <property name="visible">True</property>
         <property name="can-focus">False</property>
