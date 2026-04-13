@@ -204,6 +204,13 @@ static gboolean settings_dialog_apply_and_save(GtkDialog* dialog, AppContext* ct
         settings_set_gpu_acceleration_enabled(ctx->settings, gtk_toggle_button_get_active(gpu_check));
     }
 
+    /* Mouse: snap distance (1-255 px) */
+    GtkAdjustment* snap_adj = GTK_ADJUSTMENT(gtk_builder_get_object(builder, "snap_distance_adjustment"));
+    if (snap_adj) {
+        gint snap_px = (gint)gtk_adjustment_get_value(snap_adj);
+        settings_set_mouse_snap_distance(ctx->settings, snap_px);
+    }
+
     /* Checkerboard: grid size (0=Small, 1=Medium, 2=Large) */
     GtkComboBox* grid_size_combo = GTK_COMBO_BOX(gtk_builder_get_object(builder, "transparency_grid_size_combo"));
     if (grid_size_combo) {
@@ -679,6 +686,11 @@ void settings_dialog_show(AppContext* ctx) {
             if (cms_page && cms_label) {
                 set_tab_icon_label(notebook, cms_page, cms_label, "/icons/settings-cms.png");
             }
+            GtkWidget* mouse_page = GTK_WIDGET(gtk_builder_get_object(builder, "mouse_tab_content_box"));
+            GtkWidget* mouse_label = GTK_WIDGET(gtk_builder_get_object(builder, "mouse_tab_label"));
+            if (mouse_page && mouse_label) {
+                set_tab_icon_label(notebook, mouse_page, mouse_label, "/icons/settings-mouse.png");
+            }
         }
     }
 
@@ -779,6 +791,7 @@ void settings_dialog_show(AppContext* ctx) {
     ui_utils_replace_builder_spin_with_vertical(builder, "threads_spin");
     ui_utils_replace_builder_spin_with_vertical(builder, "recent_files_max_spin");
     ui_utils_replace_builder_spin_with_vertical(builder, "file_recovery_interval_spin");
+    ui_utils_replace_builder_spin_with_vertical(builder, "mouse_snap_distance_spin");
 
     /* Undo limit: settings use 1-100 */
     GtkAdjustment* undo_adj = GTK_ADJUSTMENT(gtk_builder_get_object(builder, "undo_limit_adjustment"));
@@ -825,6 +838,13 @@ void settings_dialog_show(AppContext* ctx) {
     if (recovery_adj) {
         gint sec = settings_get_file_recovery_interval_seconds(ctx->settings);
         gtk_adjustment_set_value(recovery_adj, (gdouble)sec);
+    }
+
+    /* Mouse snap distance: 1-255 (glade adjustment + spin) */
+    GtkAdjustment* snap_adj = GTK_ADJUSTMENT(gtk_builder_get_object(builder, "snap_distance_adjustment"));
+    if (snap_adj) {
+        gint snap_px = settings_get_mouse_snap_distance(ctx->settings);
+        gtk_adjustment_set_value(snap_adj, (gdouble)snap_px);
     }
 
     /* Renderer combobox: populate with available GPUs; disable if none */

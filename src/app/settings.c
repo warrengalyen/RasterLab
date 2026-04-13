@@ -41,6 +41,9 @@
 #define DEFAULT_FILE_RECOVERY_INTERVAL_SECONDS 300 /* File recovery save interval (30-2700) */
 #define DEFAULT_GPU_ACCELERATION TRUE              /* GPU acceleration enabled by default */
 #define DEFAULT_INTERFACE_LOCALE "en_US"
+#define DEFAULT_MOUSE_SNAP_DISTANCE 8
+#define MIN_MOUSE_SNAP_DISTANCE 1
+#define MAX_MOUSE_SNAP_DISTANCE 255
 
 /* Default tool option values */
 #define DEFAULT_TOOL_SIZE 5.0f              /* 5px brush size */
@@ -128,6 +131,8 @@ static Settings* settings_create_default(void) {
     settings->cm_display_profiles = NULL;
 
     settings->interface_locale = g_strdup(DEFAULT_INTERFACE_LOCALE);
+
+    settings->mouse_snap_distance = DEFAULT_MOUSE_SNAP_DISTANCE;
 
     return settings;
 }
@@ -363,6 +368,9 @@ static void settings_load_color_management(Settings* settings, xmlNode* color_ma
  */
 static void settings_save_color_management(xmlTextWriterPtr writer, Settings* settings);
 
+static void settings_load_mouse(Settings* settings, xmlNode* mouse_node);
+static void settings_save_mouse(xmlTextWriterPtr writer, Settings* settings);
+
 /**
  * Load recent files from XML
  * Stores RecentFile* entries in Settings->recent_files (includes path and timestamp)
@@ -468,6 +476,8 @@ Settings* settings_load(const char* app_dir) {
             settings_load_performance(settings, cur);
         } else if (xmlStrcmp(cur->name, (const xmlChar*)"view") == 0) {
             settings_load_view(settings, cur);
+        } else if (xmlStrcmp(cur->name, (const xmlChar*)"mouse") == 0) {
+            settings_load_mouse(settings, cur);
         } else if (xmlStrcmp(cur->name, (const xmlChar*)"tone_mapping") == 0) {
             settings_load_tone_mapping(settings, cur);
         } else if (xmlStrcmp(cur->name, (const xmlChar*)"advanced") == 0) {
@@ -797,6 +807,31 @@ static void settings_save_view(xmlTextWriterPtr writer, Settings* settings) {
 }
 
 /**
+ * Load mouse settings from XML (<mouse snap_distance="…"/>)
+ */
+static void settings_load_mouse(Settings* settings, xmlNode* mouse_node) {
+    if (!settings || !mouse_node) {
+        return;
+    }
+    gint d = parse_int_attr(mouse_node, "snap_distance", DEFAULT_MOUSE_SNAP_DISTANCE);
+    settings_set_mouse_snap_distance(settings, d);
+}
+
+/**
+ * Save mouse settings to XML
+ */
+static void settings_save_mouse(xmlTextWriterPtr writer, Settings* settings) {
+    if (!writer || !settings) {
+        return;
+    }
+    gchar buf[16];
+    g_snprintf(buf, sizeof(buf), "%d", settings_get_mouse_snap_distance(settings));
+    xmlTextWriterStartElement(writer, (const xmlChar*)"mouse");
+    xmlTextWriterWriteAttribute(writer, (const xmlChar*)"snap_distance", (const xmlChar*)buf);
+    xmlTextWriterEndElement(writer); /* mouse */
+}
+
+/**
  * Save UI settings to XML (canvas background + checkerboard under <ui>)
  */
 static void settings_save_ui(xmlTextWriterPtr writer, Settings* settings) {
@@ -1020,6 +1055,9 @@ gboolean settings_save(Settings* settings, const char* app_dir) {
 
     /* Write view settings */
     settings_save_view(writer, settings);
+
+    /* Mouse settings (snap distance, etc.) */
+    settings_save_mouse(writer, settings);
 
     /* Write tone mapping settings */
     settings_save_tone_mapping(writer, settings);
@@ -1534,6 +1572,26 @@ void settings_set_show_gpu_stats(Settings* settings, gboolean show) {
         return;
     }
     settings->show_gpu_stats = show;
+}
+
+void settings_set_mouse_snap_distance(Settings* settings, gint distance) {
+    if (!settings) {
+        return;
+    }
+    if (distance < MIN_MOUSE_SNAP_DISTANCE) {
+        distance = MIN_MOUSE_SNAP_DISTANCE;
+    }
+    if (distance > MAX_MOUSE_SNAP_DISTANCE) {
+        distance = MAX_MOUSE_SNAP_DISTANCE;
+    }
+    settings->mouse_snap_distance = distance;
+}
+
+gint settings_get_mouse_snap_distance(Settings* settings) {
+    if (!settings) {
+        return DEFAULT_MOUSE_SNAP_DISTANCE;
+    }
+    return settings->mouse_snap_distance;
 }
 
 /**

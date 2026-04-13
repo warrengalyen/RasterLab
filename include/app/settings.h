@@ -101,6 +101,9 @@ typedef struct {
 
     /* UI language: gettext locale tag (e.g. es_ES); default en_US */
     gchar* interface_locale;
+
+    /* Mouse: snap distance in pixels when snapping to guides/edges (1-255, default 8) */
+    gint mouse_snap_distance;
 } Settings;
 
 /**
@@ -438,5 +441,9 @@ const gchar* settings_get_cm_display_profile(Settings* settings, const gchar* di
 void settings_set_interface_locale(Settings* settings, const gchar* locale);
 /** Locale tag for the UI (default en_US). Caller must not free. */
 const gchar* settings_get_interface_locale(Settings* settings);
+
+/** Mouse snap distance in pixels (1-255, default 8). */
+void settings_set_mouse_snap_distance(Settings* settings, gint distance);
+gint settings_get_mouse_snap_distance(Settings* settings);
 
 #endif /* SETTINGS_H */
