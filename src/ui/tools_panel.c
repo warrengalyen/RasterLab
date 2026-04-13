@@ -618,6 +618,15 @@ gboolean tools_panel_on_window_key_press(GtkWidget* widget, GdkEventKey* event, 
         }
     }
 
+    /* Don't steal bare keys when any text-input widget has keyboard focus
+     * (e.g. inline layer-name editor, crop-panel entries, search fields). */
+    {
+        GtkWidget* _kbfocus = gtk_window_get_focus(GTK_WINDOW(ctx->window));
+        if (_kbfocus && GTK_IS_EDITABLE(_kbfocus)) {
+            return FALSE;
+        }
+    }
+
     /* Get the modifier state, ignoring lock keys (Caps Lock, Num Lock) */
     GdkModifierType modifiers = event->state & gtk_accelerator_get_default_mod_mask();
 

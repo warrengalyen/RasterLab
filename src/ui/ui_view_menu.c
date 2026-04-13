@@ -258,6 +258,14 @@ static gboolean on_window_key_press_for_zoom(GtkWidget* widget, GdkEventKey* eve
             return FALSE;
     }
 
+    /* Don't steal digit/shift-numpad keys when any text-input widget has keyboard focus. */
+    {
+        GtkWidget* _kbfocus = (ctx && ctx->window) ? gtk_window_get_focus(GTK_WINDOW(ctx->window)) : NULL;
+        if (_kbfocus && GTK_IS_EDITABLE(_kbfocus)) {
+            return FALSE;
+        }
+    }
+
     /* Get the modifier state, ignoring lock keys (Caps Lock, Num Lock) */
     GdkModifierType modifiers = event->state & gtk_accelerator_get_default_mod_mask();
 
