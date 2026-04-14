@@ -16,6 +16,19 @@ option(RASTERLAB_LIBJXL_SMALL "Prefer smaller libjxl (fewer Highway targets on x
 # libaom: smaller DLL for AVIF via libheif (still image; no aomenc/WebM/SVT-AVX2 extras)
 option(RASTERLAB_LIBAOM_SMALL "Prefer smaller libaom (trim optional SIMD; strip MinGW DLL on Release)" ON)
 
+# OpenEXR: smaller DLLs (skip tests/docs/website tooling; MinSizeRel when not Debug; strip MinGW)
+option(RASTERLAB_OPENEXR_SMALL "Prefer smaller OpenEXR/Iex/IlmThread/OpenEXRCore/Imath (MinSizeRel when not Debug; strip MinGW)" ON)
+
+# Bundled ExternalProject libs under lib/: always optimized (not RasterLab Debug), so no debug DLLs / *_d postfixes.
+set(RASTERLAB_THIRDPARTY_BUILD_TYPE "Release" CACHE STRING "CMake build type for bundled ExternalProject libraries (Release or MinSizeRel; not the app CMAKE_BUILD_TYPE)")
+string(TOUPPER "${RASTERLAB_THIRDPARTY_BUILD_TYPE}" _rasterlab_tp_bt_upper)
+if(_rasterlab_tp_bt_upper STREQUAL "DEBUG")
+    message(WARNING "RASTERLAB_THIRDPARTY_BUILD_TYPE=Debug is unsupported for bundled libs; forcing Release")
+    set(RASTERLAB_THIRDPARTY_BUILD_TYPE "Release" CACHE STRING "CMake build type for bundled ExternalProject libraries (Release or MinSizeRel; not the app CMAKE_BUILD_TYPE)" FORCE)
+endif()
+unset(_rasterlab_tp_bt_upper)
+message(STATUS "Bundled libraries (ExternalProject) build type: ${RASTERLAB_THIRDPARTY_BUILD_TYPE} (RasterLab app: ${CMAKE_BUILD_TYPE})")
+
 # PkgConfig needed early when using system libs (APP_ONLY or missing submodules)
 find_package(PkgConfig REQUIRED)
 
@@ -78,7 +91,7 @@ if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/libjpeg/CMakeLists
     # Only build shared library, not static
     set(LIBJPEG_CMAKE_ARGS
         -DCMAKE_INSTALL_PREFIX=${LIBJPEG_INSTALL_DIR}
-        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+        -DCMAKE_BUILD_TYPE=${RASTERLAB_THIRDPARTY_BUILD_TYPE}
         -DENABLE_SHARED=ON
         -DENABLE_STATIC=OFF
         -DWITH_JPEG8=ON
@@ -220,7 +233,7 @@ if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/zlib/CMakeLists.tx
     # Only build shared library, not static
     set(ZLIB_CMAKE_ARGS
         -DCMAKE_INSTALL_PREFIX=${ZLIB_INSTALL_DIR}
-        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+        -DCMAKE_BUILD_TYPE=${RASTERLAB_THIRDPARTY_BUILD_TYPE}
         -DBUILD_SHARED_LIBS=ON
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON
     )
@@ -354,7 +367,7 @@ if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/libpng/CMakeLists.
     # Only build shared library, not static
     set(LIBPNG_CMAKE_ARGS
         -DCMAKE_INSTALL_PREFIX=${LIBPNG_INSTALL_DIR}
-        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+        -DCMAKE_BUILD_TYPE=${RASTERLAB_THIRDPARTY_BUILD_TYPE}
         -DPNG_SHARED=ON
         -DPNG_STATIC=OFF
         -DPNG_TESTS=OFF
@@ -558,7 +571,7 @@ if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/libwebp/CMakeLists
     # Only build shared library, not static
     set(LIBWEBP_CMAKE_ARGS
         -DCMAKE_INSTALL_PREFIX=${LIBWEBP_INSTALL_DIR}
-        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+        -DCMAKE_BUILD_TYPE=${RASTERLAB_THIRDPARTY_BUILD_TYPE}
         -DBUILD_SHARED_LIBS=ON
         -DWEBP_BUILD_ANIM_UTILS=OFF
         -DWEBP_BUILD_CWEBP=OFF
@@ -765,7 +778,7 @@ if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/libtiff/CMakeLists
     # Only build shared library, not static
     set(LIBTIFF_CMAKE_ARGS
         -DCMAKE_INSTALL_PREFIX=${LIBTIFF_INSTALL_DIR}
-        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+        -DCMAKE_BUILD_TYPE=${RASTERLAB_THIRDPARTY_BUILD_TYPE}
         -DBUILD_SHARED_LIBS=ON
         -Dtiff-tools=OFF
         -Dtiff-tests=OFF
@@ -964,7 +977,7 @@ if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/libde265/CMakeList
     
     set(LIBDE265_CMAKE_ARGS
         -DCMAKE_INSTALL_PREFIX=${LIBDE265_INSTALL_DIR}
-        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+        -DCMAKE_BUILD_TYPE=${RASTERLAB_THIRDPARTY_BUILD_TYPE}
         -DBUILD_SHARED_LIBS=ON
         -DENABLE_DECODER=ON
         -DENABLE_ENCODER=OFF
@@ -1026,7 +1039,7 @@ if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/libaom/CMakeLists.
 
     set(LIBAOM_CMAKE_ARGS
         -DCMAKE_INSTALL_PREFIX=${LIBAOM_INSTALL_DIR}
-        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+        -DCMAKE_BUILD_TYPE=${RASTERLAB_THIRDPARTY_BUILD_TYPE}
         -DBUILD_SHARED_LIBS=ON
         -DENABLE_TESTS=OFF
         -DENABLE_EXAMPLES=OFF
@@ -1046,7 +1059,7 @@ if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/libaom/CMakeLists.
             -DENABLE_AVX512=OFF
             -DENABLE_MMX=OFF
         )
-        string(TOUPPER "${CMAKE_BUILD_TYPE}" _libaom_rl_bt)
+        string(TOUPPER "${RASTERLAB_THIRDPARTY_BUILD_TYPE}" _libaom_rl_bt)
         if(MINGW AND NOT _libaom_rl_bt STREQUAL "DEBUG")
             list(APPEND LIBAOM_CMAKE_ARGS "-DCMAKE_SHARED_LINKER_FLAGS=-Wl,-s")
         endif()
@@ -1106,7 +1119,7 @@ if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/libheif/CMakeLists
     # Configure CMake arguments for libheif (minimal codecs: HEIC via libde265+x265, AVIF via libaom; smaller DLL)
     set(LIBHEIF_CMAKE_ARGS
         -DCMAKE_INSTALL_PREFIX=${LIBHEIF_INSTALL_DIR}
-        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+        -DCMAKE_BUILD_TYPE=${RASTERLAB_THIRDPARTY_BUILD_TYPE}
         -DBUILD_SHARED_LIBS=ON
         -DWITH_EXAMPLES=OFF
         -DWITH_EXAMPLE_HEIF_THUMB=OFF
@@ -1360,18 +1373,10 @@ if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/openexr/CMakeLists
     set(OPENEXR_BUILD_DIR "${CMAKE_BINARY_DIR}/openexr_build")
     set(OPENEXR_INSTALL_DIR "${CMAKE_BINARY_DIR}/openexr_install")
 
-    # MinGW: bundled OpenEXR sets CMAKE_DEBUG_POSTFIX to "_d" (OpenEXRSetup.cmake).
-    # Installed DLLs/import libs use libOpenEXR-4_0[_d].dll / .dll.a (not OpenEXR-4_0.dll).
+    # Bundled OpenEXR is built with RASTERLAB_THIRDPARTY_BUILD_TYPE (not app Debug), so no CMAKE_DEBUG_POSTFIX _d.
     set(OPENEXR_MINGW_LIB_POSTFIX "")
     # Imath API segment in libImath-<api> (bundled via OpenEXR FetchContent; bump when upgrading).
     set(IMATH_VERSION_API "3_2")
-    if(MINGW)
-        string(TOUPPER "${CMAKE_BUILD_TYPE}" _openexr_rl_bt)
-        if(_openexr_rl_bt STREQUAL "DEBUG")
-            set(OPENEXR_MINGW_LIB_POSTFIX "_d")
-        endif()
-        unset(_openexr_rl_bt)
-    endif()
 
     if(WIN32)
         set(OPENEXR_DLL_PREFIX "${OPENEXR_INSTALL_DIR}/bin")
@@ -1380,21 +1385,35 @@ if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/openexr/CMakeLists
         set(OPENEXR_LIB_PREFIX "${OPENEXR_INSTALL_DIR}/lib")
     endif()
 
+    # Smaller install: MinSizeRel when RASTERLAB_OPENEXR_SMALL (base type from RASTERLAB_THIRDPARTY_BUILD_TYPE)
+    set(_openexr_bt "${RASTERLAB_THIRDPARTY_BUILD_TYPE}")
+    if(RASTERLAB_OPENEXR_SMALL AND NOT _openexr_bt STREQUAL "Debug")
+        set(_openexr_bt "MinSizeRel")
+    endif()
+
     set(OPENEXR_CMAKE_ARGS
         -DCMAKE_INSTALL_PREFIX=${OPENEXR_INSTALL_DIR}
-        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+        -DCMAKE_BUILD_TYPE=${_openexr_bt}
         -DBUILD_SHARED_LIBS=ON
+        -DBUILD_TESTING=OFF
         -DOPENEXR_BUILD_LIBS=ON
         -DOPENEXR_BUILD_TOOLS=OFF
         -DOPENEXR_BUILD_EXAMPLES=OFF
+        -DOPENEXR_BUILD_PYTHON=OFF
         -DOPENEXR_INSTALL=ON
         -DOPENEXR_INSTALL_TOOLS=OFF
         -DOPENEXR_INSTALL_PKG_CONFIG=OFF
+        -DOPENEXR_INSTALL_DOCS=OFF
+        -DBUILD_WEBSITE=OFF
+        -DOPENEXR_TEST_LIBRARIES=OFF
+        -DOPENEXR_TEST_TOOLS=OFF
+        -DOPENEXR_TEST_PYTHON=OFF
         -DOPENEXR_FORCE_INTERNAL_IMATH=ON
         -DOPENEXR_FORCE_INTERNAL_DEFLATE=ON
         -DOPENEXR_FORCE_INTERNAL_OPENJPH=ON
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON
     )
+    unset(_openexr_bt)
 
     # MinGW + shared OpenEXR: explicit template instantiations (e.g. TypedAttribute::value)
     # must end up in the DLL export table. Upstream leaves IMF_EXPORT_TEMPLATE_INSTANCE
@@ -1403,11 +1422,20 @@ if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/openexr/CMakeLists
     # OpenEXRCoreTest links internal C APIs (internal_huf_*, exrcore_ensure_*) that are
     # not exported from OpenEXRCore.dll on PE/MinGW; skip upstream library tests only.
     if(MINGW)
-        list(APPEND OPENEXR_CMAKE_ARGS
-            -DOPENEXR_USE_DEFAULT_VISIBILITY=ON
-            "-DCMAKE_SHARED_LINKER_FLAGS=-Wl,--export-all-symbols"
-            -DOPENEXR_TEST_LIBRARIES=OFF
-        )
+        if(RASTERLAB_OPENEXR_SMALL)
+            # --export-all-symbols: required for C++ templates on MinGW; -s strips debug/syms from DLLs
+            list(APPEND OPENEXR_CMAKE_ARGS
+                -DOPENEXR_USE_DEFAULT_VISIBILITY=ON
+                "-DCMAKE_SHARED_LINKER_FLAGS=-Wl,--export-all-symbols -Wl,-s"
+            )
+            message(STATUS "OpenEXR: RASTERLAB_OPENEXR_SMALL=ON — MinSizeRel (when not Debug), tests/docs off, strip MinGW DLLs")
+        else()
+            list(APPEND OPENEXR_CMAKE_ARGS
+                -DOPENEXR_USE_DEFAULT_VISIBILITY=ON
+                "-DCMAKE_SHARED_LINKER_FLAGS=-Wl,--export-all-symbols"
+                -DOPENEXR_TEST_LIBRARIES=OFF
+            )
+        endif()
     endif()
 
     if(CMAKE_SIZEOF_VOID_P EQUAL 8)
@@ -1582,7 +1610,7 @@ if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/lcms/CMakeLists.tx
 
     set(LCMS2_CMAKE_ARGS
         -DCMAKE_INSTALL_PREFIX=${LCMS2_INSTALL_DIR}
-        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+        -DCMAKE_BUILD_TYPE=${RASTERLAB_THIRDPARTY_BUILD_TYPE}
         -DLCMS2_BUILD_SHARED=ON
         -DLCMS2_BUILD_STATIC=OFF
         -DLCMS2_BUILD_TOOLS=OFF
@@ -1688,7 +1716,7 @@ if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/libjxl/CMakeLists.
         file(MAKE_DIRECTORY "${LIBJXL_INSTALL_DIR}/include/jxl")
 
         # Smaller libjxl: avoid compiling every Highway CPU variant (upstream notes each adds binary size)
-        set(_libjxl_bt ${CMAKE_BUILD_TYPE})
+        set(_libjxl_bt "${RASTERLAB_THIRDPARTY_BUILD_TYPE}")
         if(RASTERLAB_LIBJXL_SMALL AND NOT _libjxl_bt STREQUAL "Debug")
             set(_libjxl_bt "MinSizeRel")
         endif()
