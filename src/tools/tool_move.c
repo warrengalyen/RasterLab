@@ -361,6 +361,11 @@ typedef struct {
     struct ImageLayer* original_layer;  /* Original layer before extraction (for clearing) */
     struct ImageLayer* extracted_layer; /* Extracted layer (for command creation) */
     cairo_surface_t* original_snapshot; /* Snapshot of original layer BEFORE extraction (for undo) */
+    /* Snap / smart-guide state (updated each mouse_move, cleared on mouse_up) */
+    gboolean snap_guide_h; /* Horizontal guide line active */
+    gboolean snap_guide_v; /* Vertical guide line active */
+    gint snap_guide_h_pos; /* Document-space Y coordinate of horizontal guide */
+    gint snap_guide_v_pos; /* Document-space X coordinate of vertical guide */
 } MoveToolState;
 
 /**
@@ -435,6 +440,255 @@ static struct ImageLayer* find_layer_at_point(struct ImageDocument* doc, gint do
     }
 
     return NULL;
+}
+
+/**
+ * Try snapping a single axis value.
+ *
+ * For each target T the function checks whether the layer's leading edge,
+ * trailing edge, or (optionally) center lies within @snap_dist of T.
+ * The @allow_center array is parallel to @targets: allow_center[i]==TRUE
+ * enables center-to-T snapping for targets[i].  Center snap should only be
+ * enabled for *center-line* targets (canvas midpoint, another layer's center)
+ * so that a large layer's center does not accidentally snap to a canvas edge.
+ *
+ * Within each target, trailing/center use <= so they beat an equidistant
+ * leading-edge hit (intentional alignment wins over coincidence).
+ * Across different targets, strict < is used so the first (highest-priority)
+ * target in the array wins all ties.
+ *
+ * @param pos           Leading edge of the moving layer on this axis
+ * @param size          Extent of the moving layer on this axis
+ * @param targets       Array of snap target positions (document space)
+ * @param allow_center  Parallel boolean array: TRUE enables center snap for that target
+ * @param n_targets     Number of entries in @targets / @allow_center
+ * @param snap_dist     Maximum pixel distance to trigger a snap
+ * @param snapped_out   Receives the adjusted leading-edge position when snapping
+ * @param guide_out     Receives the winning target T (where the guide line draws)
+ * @return              TRUE if a snap was found, FALSE otherwise
+ */
+static gboolean snap_axis(gint pos, gint size,
+                          const gint* targets, const gboolean* allow_center,
+                          gint n_targets, gint snap_dist,
+                          gint* snapped_out, gint* guide_out) {
+    gint best_delta = snap_dist + 1; /* one beyond threshold — no snap yet */
+    gint best_snapped = pos;
+    gint best_guide = 0;
+
+    for (gint i = 0; i < n_targets; i++) {
+        gint T = targets[i];
+        gint td = snap_dist + 1; /* best d for this T */
+        gint ts = pos;           /* best snapped pos for this T */
+
+        /* Leading edge → T */
+        gint d = pos - T;
+        if (d < 0)
+            d = -d;
+        if (d < td) {
+            td = d;
+            ts = T;
+        }
+
+        /* Trailing edge → T (preferred over leading within this T) */
+        d = (pos + size) - T;
+        if (d < 0)
+            d = -d;
+        if (d <= td) {
+            td = d;
+            ts = T - size;
+        }
+
+        /* Center → T — only for explicit center-line targets so that a wide
+         * layer's center does not accidentally lock to a canvas edge. */
+        if (allow_center[i]) {
+            d = (pos + size / 2) - T;
+            if (d < 0)
+                d = -d;
+            if (d <= td) {
+                td = d;
+                ts = T - size / 2;
+            }
+        }
+
+        /* Strict < across targets: first (highest-priority) target wins ties */
+        if (td < best_delta) {
+            best_delta = td;
+            best_snapped = ts;
+            best_guide = T;
+        }
+    }
+
+    if (best_delta <= snap_dist) {
+        if (snapped_out)
+            *snapped_out = best_snapped;
+        if (guide_out)
+            *guide_out = best_guide;
+        return TRUE;
+    }
+    return FALSE;
+}
+
+/**
+ * Apply magnetic snapping to the proposed layer position.
+ * Reads snap settings from the document's AppContext and updates guide state
+ * in @state.  Works for both raster and text layers.
+ *
+ * @param doc       Active document
+ * @param state     Move tool state (guide fields written here)
+ * @param new_x     Proposed X (leading edge, document space) — may be adjusted
+ * @param new_y     Proposed Y (leading edge, document space) — may be adjusted
+ * @param layer_w   Width of moving layer in document space
+ * @param layer_h   Height of moving layer in document space
+ * @param out_x     Snapped X written here
+ * @param out_y     Snapped Y written here
+ */
+static void compute_snap(struct ImageDocument* doc, MoveToolState* state,
+                         gint new_x, gint new_y,
+                         gint layer_w, gint layer_h,
+                         gint* out_x, gint* out_y) {
+    /* Retrieve settings */
+    AppContext* ctx = (AppContext*)g_object_get_data(G_OBJECT(doc->drawing_area), "app_context");
+    Settings* settings = ctx ? ctx->settings : NULL;
+
+    state->snap_guide_h = FALSE;
+    state->snap_guide_v = FALSE;
+
+    if (!settings || !settings_get_mouse_snap(settings)) {
+        *out_x = new_x;
+        *out_y = new_y;
+        return;
+    }
+
+    gint snap_dist = settings_get_mouse_snap_distance(settings);
+    gboolean to_canvas = settings_get_mouse_snap_to_canvas_edges(settings);
+    gboolean to_centerlines = settings_get_mouse_snap_to_centerlines(settings);
+    gboolean to_layers = settings_get_mouse_snap_to_layers(settings);
+
+    /* Build X and Y target arrays with parallel allow_center flags.
+     *
+     * Priority order within ties (first entry wins on equal distance):
+     *   1. Canvas edges         — NO centre snap.  Evaluated first so that an
+     *                             edge-to-edge tie beats a coincidental
+     *                             trailing/leading-edge-to-centreline tie.
+     *   2. Canvas centre-lines  — centre snap allowed.  Wins only when d < any
+     *                             canvas-edge d (e.g. exact centre alignment).
+     *   3. Other-layer edges    — NO centre snap.
+     *   4. Other-layer centres  — centre snap allowed.
+     *
+     * max per-axis: 2 edges + 1 centreline + n_layers*(2 edges + 1 centre) = 3 + 3*n_layers */
+    guint n_layers = doc->layers ? g_list_length(doc->layers) : 0;
+    gint max_targets = 3 + (gint)(n_layers * 3) + 1;
+    gint* x_targets = g_new(gint, max_targets);
+    gint* y_targets = g_new(gint, max_targets);
+    gboolean* x_allow_center = g_new(gboolean, max_targets);
+    gboolean* y_allow_center = g_new(gboolean, max_targets);
+    gint nx = 0, ny = 0;
+
+#define ADD_X(val, cen)             \
+    do {                            \
+        x_targets[nx] = (val);      \
+        x_allow_center[nx] = (cen); \
+        nx++;                       \
+    } while (0)
+#define ADD_Y(val, cen)             \
+    do {                            \
+        y_targets[ny] = (val);      \
+        y_allow_center[ny] = (cen); \
+        ny++;                       \
+    } while (0)
+
+    /* 1. Canvas edges (centre snap disabled) — wins ties against centrelines */
+    if (to_canvas) {
+        ADD_X(0, FALSE);
+        ADD_X((gint)doc->width, FALSE);
+        ADD_Y(0, FALSE);
+        ADD_Y((gint)doc->height, FALSE);
+    }
+
+    /* 2. Canvas centre-lines (centre snap enabled) */
+    if (to_centerlines) {
+        ADD_X((gint)doc->width / 2, TRUE);
+        ADD_Y((gint)doc->height / 2, TRUE);
+    }
+
+    /* 3+4. Other visible layers */
+    if (to_layers && doc->layers) {
+        /* Pass A: layer edges (centre snap disabled) */
+        for (GList* iter = doc->layers; iter; iter = iter->next) {
+            struct ImageLayer* lyr = (struct ImageLayer*)iter->data;
+            if (!lyr || !lyr->visible || lyr == state->active_layer)
+                continue;
+            gint lx, ly, lw, lh;
+            if (lyr->layer_type == LAYER_TYPE_TEXT && lyr->text_data) {
+                TextLayer* tl = (TextLayer*)lyr->text_data;
+                lx = (gint)tl->box_x + lyr->offset_x;
+                ly = (gint)tl->box_y + lyr->offset_y;
+                lw = (gint)tl->box_width;
+                lh = (gint)tl->box_height;
+            } else {
+                lx = lyr->offset_x;
+                ly = lyr->offset_y;
+                lw = (gint)lyr->width;
+                lh = (gint)lyr->height;
+            }
+            ADD_X(lx,      FALSE);
+            ADD_X(lx + lw, FALSE);
+            ADD_Y(ly,      FALSE);
+            ADD_Y(ly + lh, FALSE);
+        }
+
+        /* Pass B: layer centres (centre snap enabled) */
+        if (to_centerlines) {
+            for (GList* iter = doc->layers; iter; iter = iter->next) {
+                struct ImageLayer* lyr = (struct ImageLayer*)iter->data;
+                if (!lyr || !lyr->visible || lyr == state->active_layer)
+                    continue;
+                gint lx, ly, lw, lh;
+                if (lyr->layer_type == LAYER_TYPE_TEXT && lyr->text_data) {
+                    TextLayer* tl = (TextLayer*)lyr->text_data;
+                    lx = (gint)tl->box_x + lyr->offset_x;
+                    ly = (gint)tl->box_y + lyr->offset_y;
+                    lw = (gint)tl->box_width;
+                    lh = (gint)tl->box_height;
+                } else {
+                    lx = lyr->offset_x;
+                    ly = lyr->offset_y;
+                    lw = (gint)lyr->width;
+                    lh = (gint)lyr->height;
+                }
+                ADD_X(lx + lw / 2, TRUE);
+                ADD_Y(ly + lh / 2, TRUE);
+            }
+        }
+    }
+
+#undef ADD_X
+#undef ADD_Y
+
+    /* Snap each axis.  Use the boolean return value — not a position comparison
+     * — to gate the guide, so the guide stays visible even when the layer is
+     * already sitting exactly on a snap target. */
+    gint snapped_x = new_x, guide_x = 0;
+    gint snapped_y = new_y, guide_y = 0;
+    gboolean x_snapped = snap_axis(new_x, layer_w, x_targets, x_allow_center, nx, snap_dist, &snapped_x, &guide_x);
+    gboolean y_snapped = snap_axis(new_y, layer_h, y_targets, y_allow_center, ny, snap_dist, &snapped_y, &guide_y);
+
+    if (x_snapped) {
+        state->snap_guide_v = TRUE;
+        state->snap_guide_v_pos = guide_x;
+    }
+    if (y_snapped) {
+        state->snap_guide_h = TRUE;
+        state->snap_guide_h_pos = guide_y;
+    }
+
+    g_free(x_targets);
+    g_free(y_targets);
+    g_free(x_allow_center);
+    g_free(y_allow_center);
+
+    *out_x = snapped_x;
+    *out_y = snapped_y;
 }
 
 /**
@@ -614,6 +868,19 @@ static void move_tool_mouse_move(Tool* tool, struct ImageDocument* doc, MouseEve
     new_x = state->initial_offset_x + (gint)(delta_doc_x + 0.5);
     new_y = state->initial_offset_y + (gint)(delta_doc_y + 0.5);
 
+    /* Determine layer size for snapping (text vs raster) */
+    gint snap_layer_w, snap_layer_h;
+    if (state->active_layer->layer_type == LAYER_TYPE_TEXT &&
+        state->active_layer->text_data) {
+        TextLayer* tl_snap = (TextLayer*)state->active_layer->text_data;
+        snap_layer_w = (gint)tl_snap->box_width;
+        snap_layer_h = (gint)tl_snap->box_height;
+    } else {
+        snap_layer_w = (gint)state->active_layer->width;
+        snap_layer_h = (gint)state->active_layer->height;
+    }
+    compute_snap(doc, state, new_x, new_y, snap_layer_w, snap_layer_h, &new_x, &new_y);
+
     /* Get old position (from last update) */
     old_x = state->last_offset_x;
     old_y = state->last_offset_y;
@@ -770,6 +1037,8 @@ static void move_tool_mouse_up(Tool* tool, struct ImageDocument* doc, MouseEvent
     state->active_layer = NULL;
     state->original_layer = NULL;
     state->extracted_layer = NULL;
+    state->snap_guide_h = FALSE;
+    state->snap_guide_v = FALSE;
 
     /* Clear the outline overlay by redrawing viewport */
     if (doc->viewport) {
@@ -791,11 +1060,7 @@ void tool_move_draw_preview(struct ImageDocument* doc, cairo_t* cr, gdouble zoom
         return;
     }
 
-    /* Check if layer edges should be shown (from settings) */
     ctx = (AppContext*)g_object_get_data(G_OBJECT(doc->drawing_area), "app_context");
-    if (ctx && ctx->settings && !settings_get_show_layer_edges(ctx->settings)) {
-        return; /* Setting is disabled, don't draw outline */
-    }
 
     tool_registry = (ToolRegistry*)g_object_get_data(G_OBJECT(doc->drawing_area), "tool_registry");
     if (!tool_registry) {
@@ -809,16 +1074,22 @@ void tool_move_draw_preview(struct ImageDocument* doc, cairo_t* cr, gdouble zoom
 
     state = (MoveToolState*)active_tool->user_data;
 
-    /* Only draw outline when dragging */
     if (!state->is_dragging || !state->active_layer) {
+        return;
+    }
+
+    /* Determine which things need drawing before touching Cairo */
+    gboolean draw_outline = ctx && ctx->settings && settings_get_show_layer_edges(ctx->settings);
+    gboolean draw_guides = ctx && ctx->settings && settings_get_show_smart_guides(ctx->settings);
+
+    if (!draw_outline && !draw_guides) {
         return;
     }
 
     /* Save Cairo state */
     cairo_save(cr);
 
-    /* Draw outline around layer bounds.
-     * Text layers store their position in box_x/y rather than offset_x/y. */
+    /* Resolve layer bounds — text layers store position in box_x/y. */
     gint layer_x, layer_y, layer_w, layer_h;
     if (state->active_layer->layer_type == LAYER_TYPE_TEXT &&
         state->active_layer->text_data) {
@@ -839,25 +1110,52 @@ void tool_move_draw_preview(struct ImageDocument* doc, cairo_t* cr, gdouble zoom
         cairo_scale(cr, zoom, zoom);
     }
 
-    /* Disable antialiasing for crisp, solid lines at full opacity */
     cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
-
-    /* Use CAIRO_OPERATOR_OVER to composite on top */
     cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
 
-    /* Draw outline: white line with black stroke for maximum visibility */
-    /* Rectangle shows exact layer bounds (x, y, width, height) */
-    cairo_rectangle(cr, layer_x, layer_y, layer_w, layer_h);
+    /* Layer outline (only when Show Layer Edges is enabled) */
+    if (draw_outline) {
+        cairo_rectangle(cr, layer_x, layer_y, layer_w, layer_h);
+        cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
+        cairo_set_line_width(cr, 3.0 / zoom);
+        cairo_stroke_preserve(cr);
+        cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+        cairo_set_line_width(cr, 1.0 / zoom);
+        cairo_stroke(cr);
+    }
 
-    /* Draw black outer stroke (3px wide) using RGB (no alpha channel) */
-    cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
-    cairo_set_line_width(cr, 3.0 / zoom);
-    cairo_stroke_preserve(cr);
+    /* Smart guides (only when Show Smart Guides is enabled, independent of Show Layer Edges) */
+    if (draw_guides && (state->snap_guide_h || state->snap_guide_v)) {
+        /* Extend guide lines to cover the full layer extent, including any portion
+         * that lies outside the canvas — matching how the layer outline itself is drawn. */
+        gint ext_x_min = layer_x < 0 ? layer_x : 0;
+        gint ext_x_max = (layer_x + layer_w) > (gint)doc->width ? (layer_x + layer_w) : (gint)doc->width;
+        gint ext_y_min = layer_y < 0 ? layer_y : 0;
+        gint ext_y_max = (layer_y + layer_h) > (gint)doc->height ? (layer_y + layer_h) : (gint)doc->height;
 
-    /* Draw white inner stroke (1px wide) using RGB (no alpha channel) */
-    cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
-    cairo_set_line_width(cr, 1.0 / zoom);
-    cairo_stroke(cr);
+        if (state->snap_guide_v) {
+            gdouble gx = (gdouble)state->snap_guide_v_pos;
+            cairo_move_to(cr, gx, ext_y_min);
+            cairo_line_to(cr, gx, ext_y_max);
+            cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
+            cairo_set_line_width(cr, 3.0 / zoom);
+            cairo_stroke_preserve(cr);
+            cairo_set_source_rgba(cr, 0.0, 0.502, 1.0, 1.0); /* #0080FF */
+            cairo_set_line_width(cr, 1.0 / zoom);
+            cairo_stroke(cr);
+        }
+        if (state->snap_guide_h) {
+            gdouble gy = (gdouble)state->snap_guide_h_pos;
+            cairo_move_to(cr, ext_x_min, gy);
+            cairo_line_to(cr, ext_x_max, gy);
+            cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
+            cairo_set_line_width(cr, 3.0 / zoom);
+            cairo_stroke_preserve(cr);
+            cairo_set_source_rgba(cr, 0.0, 0.502, 1.0, 1.0); /* #0080FF */
+            cairo_set_line_width(cr, 1.0 / zoom);
+            cairo_stroke(cr);
+        }
+    }
 
     cairo_restore(cr);
 }
