@@ -1080,7 +1080,7 @@ if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/libheif/CMakeLists
         set(LIBHEIF_LIB_PATH "${LIBHEIF_INSTALL_DIR}/lib/${LIBHEIF_LIB_NAME}")
     endif()
     
-    # Configure CMake arguments for libheif (minimal build: no examples, tests, docs)
+    # Configure CMake arguments for libheif (minimal codecs: HEIC via libde265+x265, AVIF via libaom; smaller DLL)
     set(LIBHEIF_CMAKE_ARGS
         -DCMAKE_INSTALL_PREFIX=${LIBHEIF_INSTALL_DIR}
         -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
@@ -1092,6 +1092,26 @@ if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/libheif/CMakeLists
         -DBUILD_DOCUMENTATION=OFF
         -DBUILD_TESTING=OFF
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+        -DENABLE_PLUGIN_LOADING=OFF
+        -DENABLE_EXPERIMENTAL_FEATURES=OFF
+        -DWITH_X264=OFF
+        -DWITH_DAV1D=OFF
+        -DWITH_RAV1E=OFF
+        -DWITH_SvtEnc=OFF
+        -DWITH_JPEG_DECODER=OFF
+        -DWITH_JPEG_ENCODER=OFF
+        -DWITH_UNCOMPRESSED_CODEC=OFF
+        -DWITH_KVAZAAR=OFF
+        -DWITH_OpenJPEG_DECODER=OFF
+        -DWITH_OpenJPEG_ENCODER=OFF
+        -DWITH_FFMPEG_DECODER=OFF
+        -DWITH_OpenH264_DECODER=OFF
+        -DWITH_UVG266=OFF
+        -DWITH_VVDEC=OFF
+        -DWITH_VVENC=OFF
+        -DWITH_REDUCED_VISIBILITY=ON
+        -DWITH_HEADER_COMPRESSION=OFF
+        -DWITH_FUZZERS=OFF
     )
     
     # Pass zlib to libheif if building from source
@@ -1122,7 +1142,7 @@ if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/libheif/CMakeLists
         )
     endif()
 
-    # Pass libaom to libheif for AVIF support (decoder only)
+    # Pass libaom to libheif for AVIF support (decode + encode)
     if(LIBAOM_FOUND AND LIBAOM_TARGET AND TARGET libaom_external)
         list(APPEND LIBHEIF_CMAKE_PREFIX_PATH ${LIBAOM_INSTALL_DIR})
         list(APPEND LIBHEIF_CMAKE_ARGS
@@ -1131,6 +1151,11 @@ if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/libheif/CMakeLists
             -DWITH_AOM_DECODER_PLUGIN=OFF
         )
     endif()
+    # So libheif can find x265 (HEIC encode) and other MSYS2 packages when not built in-tree
+    if(DEFINED ENV{MINGW_PREFIX} AND NOT "$ENV{MINGW_PREFIX}" STREQUAL "")
+        list(APPEND LIBHEIF_CMAKE_PREFIX_PATH "$ENV{MINGW_PREFIX}")
+    endif()
+
     if(LIBHEIF_CMAKE_PREFIX_PATH)
         list(APPEND LIBHEIF_CMAKE_ARGS -DCMAKE_PREFIX_PATH="${LIBHEIF_CMAKE_PREFIX_PATH}")
     endif()
