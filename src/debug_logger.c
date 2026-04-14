@@ -584,6 +584,7 @@ static void write_header(DebugLoggerState* logger, const char* app_dir) {
     fprintf(logger->file, "libpng: %s\n", plugin_status(app_dir, plugin_runtime_deps_png_ok));
     fprintf(logger->file, "libwebp: %s\n", plugin_status(app_dir, plugin_runtime_deps_webp_ok));
     fprintf(logger->file, "libtiff: %s\n", plugin_status(app_dir, plugin_runtime_deps_tiff_ok));
+    fprintf(logger->file, "libjxl: %s\n", plugin_status(app_dir, plugin_runtime_deps_jxl_ok));
     fprintf(logger->file, "libde265: %s\n", plugin_status(app_dir, plugin_runtime_deps_libde265_ok));
     fprintf(logger->file, "libaom: %s\n", plugin_status(app_dir, plugin_runtime_deps_libaom_ok));
     fprintf(logger->file, "libheif: %s\n", plugin_status(app_dir, plugin_runtime_deps_libheif_ok));
