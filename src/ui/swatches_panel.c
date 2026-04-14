@@ -495,8 +495,8 @@ GtkWidget* swatches_panel_create(AppContext* ctx) {
                 g_object_ref(swatches_builder);
                 g_object_set_data_full(G_OBJECT(ctx->window), "swatches_builder", swatches_builder, g_object_unref);
             }
-            /* Ensure swatches panel content expands vertically */
-            gtk_widget_set_vexpand(swatches_panel, TRUE);
+            /* Height follows swatches content; do not stretch the section in the accordion */
+            gtk_widget_set_vexpand(swatches_panel, FALSE);
             gtk_widget_set_hexpand(swatches_panel, TRUE);
 
             /* Get swatches_recent_colors_box and create recent colors widget */
@@ -692,6 +692,10 @@ GtkWidget* swatches_panel_create(AppContext* ctx) {
                     gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(swatches_scroll),
                                                    GTK_POLICY_AUTOMATIC,
                                                    GTK_POLICY_AUTOMATIC);
+
+                    /* Size the scrolled window to the swatches widget's natural height (no extra empty area) */
+                    gtk_scrolled_window_set_propagate_natural_height(GTK_SCROLLED_WINDOW(swatches_scroll), TRUE);
+                    gtk_widget_set_vexpand(swatches_scroll, FALSE);
 
                     /* Add widget to scrolled window */
                     gtk_container_add(GTK_CONTAINER(swatches_scroll), GTK_WIDGET(swatches_widget));
