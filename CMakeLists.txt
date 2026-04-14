@@ -13,6 +13,9 @@ endif()
 # libjxl: default to a smaller shared library on 64-bit x86 (fewer SIMD backends, MinSizeRel, strip on MinGW)
 option(RASTERLAB_LIBJXL_SMALL "Prefer smaller libjxl (fewer Highway targets on x86_64, MinSizeRel when not Debug, strip MinGW DLL)" ON)
 
+# libaom: smaller DLL for AVIF via libheif (still image; no aomenc/WebM/SVT-AVX2 extras)
+option(RASTERLAB_LIBAOM_SMALL "Prefer smaller libaom (trim optional SIMD; strip MinGW DLL on Release)" ON)
+
 # PkgConfig needed early when using system libs (APP_ONLY or missing submodules)
 find_package(PkgConfig REQUIRED)
 
@@ -1029,7 +1032,27 @@ if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/libaom/CMakeLists.
         -DENABLE_EXAMPLES=OFF
         -DENABLE_TOOLS=OFF
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+        # Docs / test data not needed for RasterLab (smaller configure + no doxygen)
+        -DENABLE_DOCS=OFF
+        -DENABLE_TESTDATA=OFF
+        # No third-party SVT-AV1 AVX2 helpers in tree (smaller + avoids extra license)
+        -DCONFIG_SVT_AV1=0
+        # WebM muxing only used by aomenc/aomdec; libheif uses the codec API only
+        -DCONFIG_WEBM_IO=0
     )
+    if(RASTERLAB_LIBAOM_SMALL)
+        # Fewer x86 SIMD variants (smaller binary; AVX2 remains for typical desktop CPUs)
+        list(APPEND LIBAOM_CMAKE_ARGS
+            -DENABLE_AVX512=OFF
+            -DENABLE_MMX=OFF
+        )
+        string(TOUPPER "${CMAKE_BUILD_TYPE}" _libaom_rl_bt)
+        if(MINGW AND NOT _libaom_rl_bt STREQUAL "DEBUG")
+            list(APPEND LIBAOM_CMAKE_ARGS "-DCMAKE_SHARED_LINKER_FLAGS=-Wl,-s")
+        endif()
+        unset(_libaom_rl_bt)
+        message(STATUS "libaom: RASTERLAB_LIBAOM_SMALL=ON — CONFIG_SVT_AV1/WebM IO off, AVX512/MMX off, strip on MinGW Release")
+    endif()
 
     ExternalProject_Add(
         libaom_external
