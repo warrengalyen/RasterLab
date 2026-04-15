@@ -133,6 +133,7 @@ static Settings* settings_create_default(void) {
     settings->cm_display_profiles = NULL;
 
     settings->interface_locale = g_strdup(DEFAULT_INTERFACE_LOCALE);
+    settings->help_online_base_url = NULL;
 
     settings->mouse_snap_distance = DEFAULT_MOUSE_SNAP_DISTANCE;
     settings->mouse_snap = TRUE;
@@ -719,6 +720,13 @@ static void settings_load_ui(Settings* settings, xmlNode* ui_node) {
                 settings_set_interface_locale(settings, s);
                 xmlFree(value_attr);
             }
+        } else if (xmlStrcmp(cur->name, (const xmlChar*)"help_online_base_url") == 0) {
+            xmlChar* value_attr = xmlGetProp(cur, (const xmlChar*)"value");
+            if (value_attr) {
+                const char* s = (const char*)value_attr;
+                settings_set_help_online_base_url(settings, s[0] ? s : NULL);
+                xmlFree(value_attr);
+            }
         }
     }
 }
@@ -995,6 +1003,14 @@ static void settings_save_ui(xmlTextWriterPtr writer, Settings* settings) {
         (const xmlChar*)settings_get_interface_locale(settings));
     xmlTextWriterEndElement(writer);
 
+    xmlTextWriterStartElement(writer, (const xmlChar*)"help_online_base_url");
+    {
+        const gchar* h = settings_get_help_online_base_url(settings);
+        xmlTextWriterWriteAttribute(writer, (const xmlChar*)"value",
+                                    (const xmlChar*)(h && h[0] ? h : ""));
+    }
+    xmlTextWriterEndElement(writer);
+
     xmlTextWriterEndElement(writer); /* ui */
 }
 
@@ -1225,6 +1241,7 @@ void settings_free(Settings* settings) {
     }
 
     g_free(settings->interface_locale);
+    g_free(settings->help_online_base_url);
 
     g_free(settings);
 }
@@ -2443,4 +2460,19 @@ const gchar* settings_get_interface_locale(Settings* settings) {
         return DEFAULT_INTERFACE_LOCALE;
     }
     return settings->interface_locale;
+}
+
+void settings_set_help_online_base_url(Settings* settings, const gchar* url) {
+    if (!settings) {
+        return;
+    }
+    g_free(settings->help_online_base_url);
+    settings->help_online_base_url = (url && url[0]) ? g_strdup(url) : NULL;
+}
+
+const gchar* settings_get_help_online_base_url(Settings* settings) {
+    if (!settings || !settings->help_online_base_url || !settings->help_online_base_url[0]) {
+        return NULL;
+    }
+    return settings->help_online_base_url;
 }

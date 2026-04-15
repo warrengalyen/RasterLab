@@ -69,6 +69,7 @@
     <file preprocess="to-pixdata">icons/lock.png</file>
     <file preprocess="to-pixdata">icons/unlock.png</file>
     <file compressed="true" alias="app-icon">icons/rasterlab-icon.ico</file>
+    <file compressed="true">icons/rasterlab-logo.png</file>
     <file>cursors/zoom_cursor.cur</file>
     <file>cursors/rect_select_cursor.cur</file>
     <file>cursors/elliptical_select_cursor.cur</file>
@@ -107,6 +108,7 @@
     <file>ui/fill_dialog.glade</file>
     <file>ui/hdr_image_dialog.glade</file>
     <file>ui/settings_dialog.glade</file>
+    <file>ui/about_dialog.glade</file>
     <file>ui/main_window.glade</file>
     <file>css/app.css</file>
   </gresource>

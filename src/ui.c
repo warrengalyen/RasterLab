@@ -48,6 +48,7 @@
 #include "ui/ui_image_menu.h"
 #include "ui/ui_layer_menu.h"
 #include "ui/ui_select_menu.h"
+#include "ui/ui_help_menu.h"
 #include "ui/ui_tools_menu.h"
 #include "ui/ui_utils.h"
 #include "ui/ui_view_menu.h"
@@ -571,6 +572,7 @@ AppContext* ui_create_main_window(Settings* initial_settings) {
     setup_adjust_menu(builder, ctx);
     setup_effects_menu(builder, ctx);
     ui_tools_menu_setup(builder, ctx);
+    ui_help_menu_setup(builder, ctx);
 
     /* ==== TOP PANEL: Tool Options ==== */
     ctx->tool_options_panel = create_tool_options_panel();

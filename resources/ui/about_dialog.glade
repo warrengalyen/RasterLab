@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- GtkAboutDialog: static copy; version + optional (build N) set in ui_help_menu.c -->
+<interface>
+  <requires lib="gtk+" version="3.24"/>
+  <object class="GtkAboutDialog" id="help_about_dialog">
+    <property name="can-focus">False</property>
+    <property name="modal">True</property>
+    <property name="window-position">center-on-parent</property>
+    <property name="type-hint">dialog</property>
+    <property name="program-name">RasterLab</property>
+    <property name="comments" translatable="yes">A full-featured image editor for raster graphics.</property>
+    <property name="license-type">lgpl-3-0</property>
+    <property name="copyright" translatable="yes">Copyright (c) 2025-2026 Warren Galyen</property>
+  </object>
+</interface>

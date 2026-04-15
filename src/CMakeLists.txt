@@ -250,6 +250,7 @@ set(SOURCES
     ui/ui_image_menu.c
     ui/ui_layer_menu.c
     ui/ui_select_menu.c
+    ui/ui_help_menu.c
     ui/ui_tools_menu.c
     ui/ui_utils.c
     ui/ui_view_menu.c
@@ -287,7 +288,7 @@ endif()
 # Create the executable
 add_executable(rasterlab ${SOURCES})
 
-# Monotonic build number (stored under cmake/; incremented on each rasterlab link)
+# Build number
 set(RASTERLAB_BUILD_NUMBER_FILE "${CMAKE_SOURCE_DIR}/cmake/build_number.txt")
 set(RASTERLAB_BUILD_VERSION_HEADER "${CMAKE_CURRENT_BINARY_DIR}/build_version.h")
 # Placeholder so the first compile finds the header before PRE_BUILD runs (generator-dependent ordering)
@@ -311,6 +312,14 @@ add_custom_command(
     VERBATIM
 )
 target_include_directories(rasterlab PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
+
+# Copy end-user PHP help (includes shared sidebar) next to the executable
+add_custom_command(TARGET rasterlab POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_SOURCE_DIR}/help"
+        "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/help"
+    COMMENT "Copying help/ to output directory"
+)
 
 target_compile_definitions(rasterlab PRIVATE GETTEXT_PACKAGE="rasterlab")
 target_compile_definitions(rasterlab PRIVATE "LOCALEDIR=\"${CMAKE_INSTALL_FULL_LOCALEDIR}\"")

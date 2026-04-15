@@ -29,7 +29,7 @@ typedef enum {
 typedef enum {
     CM_MODE_SYSTEM_PROFILE = 0, /* Use current system profile for each display (default) */
     CM_MODE_CUSTOM_PROFILE = 1, /* Use custom ICC/ICM profile per display */
-    CM_MODE_NONE = 2           /* Turn off display color management (no transform; small performance gain) */
+    CM_MODE_NONE = 2            /* Turn off display color management (no transform; small performance gain) */
 } ColorManagementMode;
 
 /**
@@ -62,11 +62,11 @@ typedef struct {
     gint file_recovery_interval_seconds;
 
     /* View settings */
-    gboolean show_layer_edges; /* Show outline when moving layers (default TRUE) */
+    gboolean show_layer_edges;  /* Show outline when moving layers (default TRUE) */
     gboolean show_smart_guides; /* Show smart alignment guides (default: enabled) */
-    gboolean show_statusbar;   /* Show status bar (default TRUE) */
-    gboolean show_rulers;      /* Show canvas rulers (default TRUE) */
-    gboolean show_gpu_stats;   /* Show GPU compositor statistics overlay (default FALSE) */
+    gboolean show_statusbar;    /* Show status bar (default TRUE) */
+    gboolean show_rulers;       /* Show canvas rulers (default TRUE) */
+    gboolean show_gpu_stats;    /* Show GPU compositor statistics overlay (default FALSE) */
 
     /* Alpha (transparency) checkerboard: 0=Small (8px), 1=Medium (16px), 2=Large (32px), default 1 */
     gint alpha_check_size;
@@ -103,13 +103,16 @@ typedef struct {
     /* UI language: gettext locale tag (e.g. es_ES); default en_US */
     gchar* interface_locale;
 
+    /* Optional HTTPS base URL for the user guide mirror */
+    gchar* help_online_base_url;
+
     /* Mouse: snap distance in pixels when snapping to guides/edges (1-255, default 8) */
     gint mouse_snap_distance;
     /* Mouse: snap toggles (View menu; persisted under <mouse/>) */
-    gboolean mouse_snap;                   /* Master snap enable (default TRUE) */
-    gboolean mouse_snap_to_canvas_edges;   /* Snap to document/canvas edges (default TRUE) */
-    gboolean mouse_snap_to_centerlines;    /* Snap to centerlines / rule-of-thirds (default TRUE) */
-    gboolean mouse_snap_to_layers;         /* Snap to other layers' bounds (default FALSE) */
+    gboolean mouse_snap;                 /* Master snap enable (default TRUE) */
+    gboolean mouse_snap_to_canvas_edges; /* Snap to document/canvas edges (default TRUE) */
+    gboolean mouse_snap_to_centerlines;  /* Snap to centerlines / rule-of-thirds (default TRUE) */
+    gboolean mouse_snap_to_layers;       /* Snap to other layers' bounds (default FALSE) */
 } Settings;
 
 /**
@@ -461,6 +464,10 @@ const gchar* settings_get_cm_display_profile(Settings* settings, const gchar* di
 void settings_set_interface_locale(Settings* settings, const gchar* locale);
 /** Locale tag for the UI (default en_US). Caller must not free. */
 const gchar* settings_get_interface_locale(Settings* settings);
+
+/** Optional online user guide base URL */
+void settings_set_help_online_base_url(Settings* settings, const gchar* url);
+const gchar* settings_get_help_online_base_url(Settings* settings);
 
 /** Mouse snap distance in pixels (1-255, default 8). */
 void settings_set_mouse_snap_distance(Settings* settings, gint distance);
