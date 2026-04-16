@@ -99,12 +99,73 @@ typedef struct {
     double opacity;  /* [0.0, 1.0] */
 } GradientTransparencyStop;
 
+/* -------------------------------------------------------------------------
+ * UI Preview texture
+ * ---------------------------------------------------------------------- */
+
+/**
+ * Dimensions of the precomputed UI preview texture.
+ * Adjust these constants to resize all gradient swatches application-wide.
+ */
+#define GRADIENT_PREVIEW_WIDTH  198
+#define GRADIENT_PREVIEW_HEIGHT  44
+
+/**
+ * Precomputed RGBA8 preview texture for a gradient.
+ *
+ * Pixels are stored row-major, top-to-bottom, with 4 bytes per pixel in
+ * RGBA order (straight, non-premultiplied alpha).  The stride is always
+ * width * 4 bytes (tightly packed, no padding).
+ *
+ * gradient_preview_get() generates this lazily on the first call and after
+ * every gradient_preview_invalidate() call.
+ */
+typedef struct {
+    int      width;           /* GRADIENT_PREVIEW_WIDTH  at build time */
+    int      height;          /* GRADIENT_PREVIEW_HEIGHT at build time */
+    uint8_t* pixels;          /* width * height * 4 bytes, RGBA8 */
+} GradientPreview;
+
+/* -------------------------------------------------------------------------
+ * LUT (Look-Up Table) cache
+ * ---------------------------------------------------------------------- */
+
+/**
+ * Default number of entries used when gradient_lut_build() is called with
+ * resolution == 0.  512 entries gives ~0.2% positional error while keeping
+ * the table to 8 KiB (512 x 4 channels x 4 bytes).
+ */
+#define GRADIENT_LUT_DEFAULT_RESOLUTION 512
+
+/**
+ * Precomputed RGBA look-up table for a gradient.
+ *
+ * Entries are packed as interleaved floats: [R0,G0,B0,A0, R1,G1,B1,A1, ...]
+ * covering evenly-spaced positions from 0.0 to 1.0 inclusive.  All component
+ * values are in [0.0f, 1.0f].
+ *
+ * gradient_lut_evaluate() performs linear interpolation between adjacent
+ * entries, so sub-resolution accuracy is preserved.
+ *
+ * The LUT is not thread-safe: do not call gradient_lut_build() or
+ * gradient_lut_invalidate() concurrently with gradient_lut_evaluate().
+ */
+typedef struct {
+    int    resolution; /* number of table entries; always >= 2 */
+    float* entries;    /* resolution x 4 floats: R, G, B, A per entry */
+} GradientLUT;
+
 /**
  * A single named gradient.
  *
  * segments is the primary representation used for evaluation.
  * transparency_stops (if non-NULL) is an optional Photoshop-specific overlay
  * whose alpha is multiplied into the evaluated color during rendering.
+ *
+ * Both cache subsystems (LUT and preview) are managed by their respective
+ * gradient_lut_*() / gradient_preview_*() functions.  Call gradient_invalidate()
+ * to flush both when gradient data has been edited.  All cache fields should
+ * be treated as opaque by callers.
  */
 typedef struct {
     char* name;
@@ -116,6 +177,15 @@ typedef struct {
     GradientTransparencyStop* transparency_stops;
 
     int smoothness; /* [0, 4096], preserved from GRD for round-tripping */
+
+    /* --- LUT cache (managed by gradient_lut_*()) --- */
+    GradientLUT* lut;            /* precomputed float table; NULL = not yet built */
+    bool         lut_dirty;      /* true = rebuild required on next evaluate */
+    int          lut_resolution; /* 0 = use GRADIENT_LUT_DEFAULT_RESOLUTION */
+
+    /* --- UI preview cache (managed by gradient_preview_*()) --- */
+    GradientPreview* preview;       /* RGBA8 swatch texture; NULL = not yet built */
+    bool             preview_dirty; /* true = rebuild required on next get */
 } GradientDef;
 
 /**
@@ -168,7 +238,125 @@ void gradient_def_free(GradientDef* def);
  * Positions outside [0.0, 1.0] are clamped to the nearest endpoint.
  */
 void gradient_evaluate(const GradientDef* def, double position,
-                       double* out_r, double* out_g, double* out_b, double* out_a);
+                        double* out_r, double* out_g, double* out_b, double* out_a);
+
+/* -------------------------------------------------------------------------
+ * LUT cache API
+ * ---------------------------------------------------------------------- */
+
+/**
+ * Build (or rebuild) the precomputed LUT for a gradient.
+ *
+ * Calls gradient_evaluate() for each of the @p resolution evenly-spaced
+ * positions and stores the results as packed floats.  Any previously cached
+ * LUT is freed before the new one is allocated.
+ *
+ * @param def        Gradient to build the LUT for (must not be NULL)
+ * @param resolution Number of table entries.  Pass 0 to use
+ *                   GRADIENT_LUT_DEFAULT_RESOLUTION.  Values < 2 are clamped
+ *                   to 2; values > 65536 are clamped to 65536.
+ * @return true on success, false on out-of-memory.
+ */
+bool gradient_lut_build(GradientDef* def, int resolution);
+
+/**
+ * Mark the LUT cache as dirty and free the currently cached table.
+ *
+ * The next call to gradient_lut_evaluate() will rebuild the LUT lazily using
+ * the resolution stored in def->lut_resolution (or GRADIENT_LUT_DEFAULT_RESOLUTION
+ * if that is 0).  Call this whenever gradient data (segments, transparency
+ * stops) has been modified after the LUT was last built.
+ *
+ * Safe to call when no LUT has been built yet.
+ *
+ * @param def  Gradient to invalidate (must not be NULL)
+ */
+void gradient_lut_invalidate(GradientDef* def);
+
+/**
+ * Set the desired LUT resolution and mark the LUT dirty for a lazy rebuild.
+ *
+ * The new resolution takes effect on the next gradient_lut_evaluate() call.
+ * Pass 0 to reset to GRADIENT_LUT_DEFAULT_RESOLUTION.
+ *
+ * @param def        Gradient to configure (must not be NULL)
+ * @param resolution Desired number of table entries [0, 65536]
+ */
+void gradient_lut_set_resolution(GradientDef* def, int resolution);
+
+/**
+ * Evaluate a gradient using its precomputed LUT with linear interpolation
+ * between adjacent entries.
+ *
+ * The LUT is built lazily on the first call and after every
+ * gradient_lut_invalidate() call.  If the lazy build fails (out-of-memory)
+ * the function falls back to gradient_evaluate() transparently.
+ *
+ * @param def       Gradient to evaluate (must not be NULL)
+ * @param position  Normalized position in [0.0, 1.0]
+ * @param out_r     Output red   [0.0, 1.0]
+ * @param out_g     Output green [0.0, 1.0]
+ * @param out_b     Output blue  [0.0, 1.0]
+ * @param out_a     Output alpha [0.0, 1.0]
+ */
+void gradient_lut_evaluate(const GradientDef* def, double position,
+                             double* out_r, double* out_g, double* out_b, double* out_a);
+
+/* -------------------------------------------------------------------------
+ * UI Preview cache API
+ * ---------------------------------------------------------------------- */
+
+/**
+ * Build (or rebuild) the UI preview texture for a gradient.
+ *
+ * Rasterizes the gradient into a GRADIENT_PREVIEW_WIDTH x GRADIENT_PREVIEW_HEIGHT
+ * RGBA8 image by evaluating the gradient (via the LUT) at each column and
+ * replicating that color across all rows.  Any existing preview is freed first.
+ *
+ * Prefer gradient_preview_get() for normal use; call this directly only when
+ * an eager up-front build is needed.
+ *
+ * @param def  Gradient to build the preview for (must not be NULL)
+ * @return true on success, false on out-of-memory.
+ */
+bool gradient_preview_build(GradientDef* def);
+
+/**
+ * Mark the preview cache as dirty and free the current pixel buffer.
+ *
+ * The next call to gradient_preview_get() will regenerate the texture.
+ * Safe to call when no preview has been built yet.
+ *
+ * @param def  Gradient to invalidate (must not be NULL)
+ */
+void gradient_preview_invalidate(GradientDef* def);
+
+/**
+ * Return the cached preview texture, building it lazily if necessary.
+ *
+ * On the first call and after every gradient_preview_invalidate() call the
+ * texture is generated automatically.  Returns NULL only if the build fails
+ * due to out-of-memory.
+ *
+ * @param def  Gradient whose preview is requested (must not be NULL)
+ * @return Pointer to the owned GradientPreview, or NULL on build failure.
+ *         The pointer remains valid until the next invalidate or free.
+ */
+const GradientPreview* gradient_preview_get(GradientDef* def);
+
+/* -------------------------------------------------------------------------
+ * Compound invalidation
+ * ---------------------------------------------------------------------- */
+
+/**
+ * Invalidate both the LUT cache and the UI preview cache in one call.
+ *
+ * Call this whenever gradient data (segments, transparency stops) has been
+ * edited so that both caches are scheduled for a lazy rebuild on next use.
+ *
+ * @param def  Gradient to invalidate (must not be NULL)
+ */
+void gradient_invalidate(GradientDef* def);
 
 #ifdef __cplusplus
 }
