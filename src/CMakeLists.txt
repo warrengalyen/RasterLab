@@ -54,6 +54,10 @@ set(SOURCES
     document_revert_diff.c
     i18n.c
     filters/filters.c
+    gradient.c
+    io/gradient_io.c
+    io/gradient_ggr.c
+    io/gradient_grd.c
     io/image_io.c
     main.c
     panels.c
