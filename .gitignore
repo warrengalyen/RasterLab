@@ -11,5 +11,6 @@ dist/
 
 scripts/
 debug/
+help/
 .env
 *.log
