@@ -35,7 +35,7 @@ typedef enum {
 
 /**
  * Load a gradient file and return an allocated GradientSet.
- * The format is determined from the file extension (.ggr or .grd).
+ * The format is determined from the file extension (.ggr, .grd, .rgr, or .svg).
  *
  * @param filename   Path to the gradient file
  * @param error_out  Optional pointer to receive the error code (may be NULL)
@@ -46,7 +46,7 @@ GradientSet* gradient_io_load(const char* filename, GradientIOError* error_out);
 
 /**
  * Save a GradientSet to a file.
- * The format is determined from the file extension (.ggr or .grd).
+ * The format is determined from the file extension (.ggr, .grd, .rgr, or .svg).
  * For .ggr only the first gradient in the set is written (GGR is single-gradient).
  *
  * @param set        Gradient set to save (must not be NULL)
@@ -62,7 +62,7 @@ gboolean gradient_io_save(const GradientSet* set, const char* filename,
  * This is a fast extension-only check; it does not read the file.
  *
  * @param filename   File path to check
- * @return TRUE if the extension is .ggr or .grd (case-insensitive)
+ * @return TRUE if the extension is a supported gradient format (case-insensitive)
  */
 gboolean gradient_io_is_supported(const char* filename);
 

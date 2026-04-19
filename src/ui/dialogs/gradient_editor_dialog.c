@@ -13,7 +13,7 @@
  * Uses layout from resources/ui/gradient_editor_dialog.glade
  *
  * Collection tab  – scrollable list of gradient swatches read from
- *                   <app_dir>/gradients/  (.ggr and .grd files)
+ *                   <app_dir>/gradients/  (.ggr, .grd, .rgr, .svg)
  * Editor tab      – large preview bar + detail info for the selected gradient
  */
 
@@ -64,14 +64,14 @@ typedef struct {
     double opacity; /* [0,1] opacity (1.0 = fully opaque) */
 } TransStop;
 
-#define NODE_HALF    6   /* half-width of node body (pixels either side of centre) */
-#define NODE_CAP_H   7   /* height of the triangular cap at the top of each node   */
-#define NODE_RECT_H  14  /* height of the coloured rectangle body of each node     */
+#define NODE_HALF 6 /* half-width of node body (pixels either side of centre) */
+#define NODE_CAP_H 7 /* height of the triangular cap at the top of each node   */
+#define NODE_RECT_H 14 /* height of the coloured rectangle body of each node     */
 /* NODE_BAR_PAD must be >= NODE_HALF + 2 so the node outline (0.5 px each side)
  * clears the bar's own 1 px border (inner edge at x=1, right edge at x=w-1). */
-#define NODE_BAR_PAD 8   /* margin each side: keeps end-nodes inside the border    */
+#define NODE_BAR_PAD 8 /* margin each side: keeps end-nodes inside the border    */
 /* Derived bar height: border (1) + cap (NODE_CAP_H) + rect (NODE_RECT_H) + border (1) */
-#define NODE_BAR_H   (1 + NODE_CAP_H + NODE_RECT_H + 1)
+#define NODE_BAR_H (1 + NODE_CAP_H + NODE_RECT_H + 1)
 
 /* Dialog-level state stored as GObject data on the dialog widget */
 typedef struct {
@@ -85,26 +85,26 @@ typedef struct {
     /* Glade widgets we need to update on selection change */
     GtkWidget* notebook;
     GtkWidget* editor_preview;
-    GtkWidget* node_bar;          /* GtkDrawingArea for colour stop handles */
-    GtkWidget* trans_bar;         /* GtkDrawingArea for transparency stop handles */
-    GtkWidget* collection_list;   /* GtkListBox in the Collection tab */
+    GtkWidget* node_bar;        /* GtkDrawingArea for colour stop handles */
+    GtkWidget* trans_bar;       /* GtkDrawingArea for transparency stop handles */
+    GtkWidget* collection_list; /* GtkListBox in the Collection tab */
 
     /* Gradient options widgets */
-    GtkWidget* name_entry;           /* GtkEntry: gradient_name_entry */
-    GtkWidget* gamma_blend_checkbox; /* GtkCheckButton: gamma_blend_checkbox */
+    GtkWidget* name_entry;             /* GtkEntry: gradient_name_entry */
+    GtkWidget* gamma_blend_checkbox;   /* GtkCheckButton: gamma_blend_checkbox */
     GtkWidget* equally_space_checkbox; /* GtkCheckButton: equally_space_checkbox */
 
     /* Node options section */
-    GtkWidget*          node_options_separator; /* shown only when a node is selected */
-    GtkWidget*          node_options_label;     /* "node options:" heading */
-    GtkWidget*          node_options_box;       /* outer row of option columns */
-    GtkWidget*          node_color_box;         /* colour column (hidden for trans stops) */
-    GtkWidget*          node_color_btn;         /* colour swatch button */
-    GtkAdjustment*      opacity_adj;            /* shared by opacity scale + spin */
-    GtkAdjustment*      location_adj;           /* shared by location scale + spin */
-    VerticalSpinButton* opacity_spin;           /* spin next to opacity scale */
-    VerticalSpinButton* location_spin;          /* spin next to location scale */
-    gboolean            updating_node_ui;       /* suppress feedback loops */
+    GtkWidget* node_options_separator; /* shown only when a node is selected */
+    GtkWidget* node_options_label;     /* "node options:" heading */
+    GtkWidget* node_options_box;       /* outer row of option columns */
+    GtkWidget* node_color_box;         /* colour column (hidden for trans stops) */
+    GtkWidget* node_color_btn;         /* colour swatch button */
+    GtkAdjustment* opacity_adj;        /* shared by opacity scale + spin */
+    GtkAdjustment* location_adj;       /* shared by location scale + spin */
+    VerticalSpinButton* opacity_spin;  /* spin next to opacity scale */
+    VerticalSpinButton* location_spin; /* spin next to location scale */
+    gboolean updating_node_ui;         /* suppress feedback loops */
 
     /* Colour stop bar state */
     int selected_node; /* index into collect_nodes result; -1 = none */
@@ -114,11 +114,11 @@ typedef struct {
     int drag_node_idx; /* which node is being dragged; -1 = none */
 
     /* Transparency stop bar state */
-    int      selected_trans_node; /* index into collect_trans_nodes; -1 = none */
-    int      hover_trans_node;    /* hovered transparency node index; -1 = none */
-    int      hover_trans_x;       /* hover x for empty space indicator; -1 = none */
-    gboolean trans_dragging;      /* TRUE while dragging a transparency node */
-    int      drag_trans_idx;      /* dragging transparency node index; -1 = none */
+    int selected_trans_node; /* index into collect_trans_nodes; -1 = none */
+    int hover_trans_node;    /* hovered transparency node index; -1 = none */
+    int hover_trans_x;       /* hover x for empty space indicator; -1 = none */
+    gboolean trans_dragging; /* TRUE while dragging a transparency node */
+    int drag_trans_idx;      /* dragging transparency node index; -1 = none */
 } DialogData;
 
 /* -------------------------------------------------------------------------
@@ -215,35 +215,39 @@ typedef struct {
  * positions always stay sorted, and *stop_idx_ptr is updated to the stop's
  * new index.  Only the [0,1] range is enforced; no neighbour clamping. */
 static void node_bar_move_stop(GradientDef* def, int* stop_idx_ptr, double new_pos) {
-    if (!def || def->num_segments < 1) return;
-    int N   = def->num_segments;
+    if (!def || def->num_segments < 1)
+        return;
+    int N = def->num_segments;
     int idx = *stop_idx_ptr;
 
-    if (new_pos < 0.0) new_pos = 0.0;
-    if (new_pos > 1.0) new_pos = 1.0;
+    if (new_pos < 0.0)
+        new_pos = 0.0;
+    if (new_pos > 1.0)
+        new_pos = 1.0;
 
     /* Extract all N+1 boundary stops into a flat array */
     ColorStopRec* stops =
         (ColorStopRec*)malloc((size_t)(N + 1) * sizeof(ColorStopRec));
-    if (!stops) return;
+    if (!stops)
+        return;
 
     stops[0].pos = def->segments[0].left_pos;
-    stops[0].r   = def->segments[0].left_r;
-    stops[0].g   = def->segments[0].left_g;
-    stops[0].b   = def->segments[0].left_b;
-    stops[0].a   = def->segments[0].left_a;
+    stops[0].r = def->segments[0].left_r;
+    stops[0].g = def->segments[0].left_g;
+    stops[0].b = def->segments[0].left_b;
+    stops[0].a = def->segments[0].left_a;
     for (int i = 1; i < N; i++) {
         stops[i].pos = def->segments[i - 1].right_pos;
-        stops[i].r   = def->segments[i - 1].right_r;
-        stops[i].g   = def->segments[i - 1].right_g;
-        stops[i].b   = def->segments[i - 1].right_b;
-        stops[i].a   = def->segments[i - 1].right_a;
+        stops[i].r = def->segments[i - 1].right_r;
+        stops[i].g = def->segments[i - 1].right_g;
+        stops[i].b = def->segments[i - 1].right_b;
+        stops[i].a = def->segments[i - 1].right_a;
     }
     stops[N].pos = def->segments[N - 1].right_pos;
-    stops[N].r   = def->segments[N - 1].right_r;
-    stops[N].g   = def->segments[N - 1].right_g;
-    stops[N].b   = def->segments[N - 1].right_b;
-    stops[N].a   = def->segments[N - 1].right_a;
+    stops[N].r = def->segments[N - 1].right_r;
+    stops[N].g = def->segments[N - 1].right_g;
+    stops[N].b = def->segments[N - 1].right_b;
+    stops[N].a = def->segments[N - 1].right_a;
 
     /* Save dragged stop's colour for later identification */
     double drag_r = stops[idx].r, drag_g = stops[idx].g;
@@ -279,17 +283,17 @@ static void node_bar_move_stop(GradientDef* def, int* stop_idx_ptr, double new_p
 
     /* Rebuild segments from the sorted stops */
     for (int i = 0; i < N; i++) {
-        def->segments[i].left_pos  = stops[i].pos;
-        def->segments[i].left_r    = stops[i].r;
-        def->segments[i].left_g    = stops[i].g;
-        def->segments[i].left_b    = stops[i].b;
-        def->segments[i].left_a    = stops[i].a;
+        def->segments[i].left_pos = stops[i].pos;
+        def->segments[i].left_r = stops[i].r;
+        def->segments[i].left_g = stops[i].g;
+        def->segments[i].left_b = stops[i].b;
+        def->segments[i].left_a = stops[i].a;
         def->segments[i].right_pos = stops[i + 1].pos;
-        def->segments[i].right_r   = stops[i + 1].r;
-        def->segments[i].right_g   = stops[i + 1].g;
-        def->segments[i].right_b   = stops[i + 1].b;
-        def->segments[i].right_a   = stops[i + 1].a;
-        def->segments[i].midpoint  =
+        def->segments[i].right_r = stops[i + 1].r;
+        def->segments[i].right_g = stops[i + 1].g;
+        def->segments[i].right_b = stops[i + 1].b;
+        def->segments[i].right_a = stops[i + 1].a;
+        def->segments[i].midpoint =
             stops[i].pos + 0.5 * (stops[i + 1].pos - stops[i].pos);
     }
 
@@ -400,22 +404,25 @@ static void node_bar_remove_stop(GradientDef* def, int stop_idx, int total_stops
  * ---------------------------------------------------------------------- */
 
 static GArray* collect_trans_nodes(const GradientDef* def) {
-    if (!def || def->num_transparency_stops < 1) return NULL;
+    if (!def || def->num_transparency_stops < 1)
+        return NULL;
     GArray* arr = g_array_new(FALSE, FALSE, sizeof(TransStop));
     for (int i = 0; i < def->num_transparency_stops; i++) {
-        TransStop ts = { def->transparency_stops[i].position,
-                         def->transparency_stops[i].opacity };
+        TransStop ts = {def->transparency_stops[i].position,
+                        def->transparency_stops[i].opacity};
         g_array_append_val(arr, ts);
     }
     return arr;
 }
 
 static int find_trans_node_at_x(GArray* nodes, int x, int w) {
-    if (!nodes || w < 2) return -1;
+    if (!nodes || w < 2)
+        return -1;
     for (guint i = 0; i < nodes->len; i++) {
         TransStop* ts = &g_array_index(nodes, TransStop, i);
         int nx = pos_to_x(ts->pos, w);
-        if (abs(x - nx) <= NODE_HALF + 2) return (int)i;
+        if (abs(x - nx) <= NODE_HALF + 2)
+            return (int)i;
     }
     return -1;
 }
@@ -424,12 +431,15 @@ static int find_trans_node_at_x(GArray* nodes, int x, int w) {
 /* Move transparency stop *idx_ptr to new_pos, reordering adjacent stops when
  * crossed.  *idx_ptr is updated to the stop's new index. */
 static void trans_bar_move_stop(GradientDef* def, int* idx_ptr, double new_pos) {
-    if (!def || !def->transparency_stops || def->num_transparency_stops < 1) return;
+    if (!def || !def->transparency_stops || def->num_transparency_stops < 1)
+        return;
     int idx = *idx_ptr;
-    int N   = def->num_transparency_stops;
+    int N = def->num_transparency_stops;
 
-    if (new_pos < 0.0) new_pos = 0.0;
-    if (new_pos > 1.0) new_pos = 1.0;
+    if (new_pos < 0.0)
+        new_pos = 0.0;
+    if (new_pos > 1.0)
+        new_pos = 1.0;
 
     def->transparency_stops[idx].position = new_pos;
 
@@ -437,18 +447,18 @@ static void trans_bar_move_stop(GradientDef* def, int* idx_ptr, double new_pos) 
     while (idx > 0 &&
            def->transparency_stops[idx].position <
                def->transparency_stops[idx - 1].position) {
-        GradientTransparencyStop tmp    = def->transparency_stops[idx];
-        def->transparency_stops[idx]   = def->transparency_stops[idx - 1];
-        def->transparency_stops[idx-1] = tmp;
+        GradientTransparencyStop tmp = def->transparency_stops[idx];
+        def->transparency_stops[idx] = def->transparency_stops[idx - 1];
+        def->transparency_stops[idx - 1] = tmp;
         idx--;
     }
     /* Bubble right while out of order */
     while (idx < N - 1 &&
            def->transparency_stops[idx].position >
                def->transparency_stops[idx + 1].position) {
-        GradientTransparencyStop tmp    = def->transparency_stops[idx];
-        def->transparency_stops[idx]   = def->transparency_stops[idx + 1];
-        def->transparency_stops[idx+1] = tmp;
+        GradientTransparencyStop tmp = def->transparency_stops[idx];
+        def->transparency_stops[idx] = def->transparency_stops[idx + 1];
+        def->transparency_stops[idx + 1] = tmp;
         idx++;
     }
 
@@ -459,28 +469,33 @@ static void trans_bar_move_stop(GradientDef* def, int* idx_ptr, double new_pos) 
 /* Insert a new transparency stop at pos, interpolating opacity from neighbours.
  * Creates the first stop when the gradient has no transparency_stops array yet. */
 static void trans_bar_add_stop(GradientDef* def, double pos) {
-    if (!def) return;
+    if (!def)
+        return;
 
     /* Bootstrap: allocate the very first transparency stop */
     if (!def->transparency_stops) {
         GradientTransparencyStop* ns =
             (GradientTransparencyStop*)malloc(sizeof(GradientTransparencyStop));
-        if (!ns) return;
+        if (!ns)
+            return;
         ns->position = pos;
-        ns->opacity  = 1.0;
+        ns->opacity = 1.0;
         ns->midpoint = pos;
-        def->transparency_stops     = ns;
+        def->transparency_stops = ns;
         def->num_transparency_stops = 1;
         gradient_invalidate(def);
         return;
     }
 
-    int N   = def->num_transparency_stops;
+    int N = def->num_transparency_stops;
 
     /* Find sorted insert position */
     int ins = N;
     for (int i = 0; i < N; i++) {
-        if (pos < def->transparency_stops[i].position) { ins = i; break; }
+        if (pos < def->transparency_stops[i].position) {
+            ins = i;
+            break;
+        }
     }
 
     /* Interpolate opacity from neighbours */
@@ -494,7 +509,7 @@ static void trans_bar_add_stop(GradientDef* def, double pos) {
             GradientTransparencyStop* L = &def->transparency_stops[ins - 1];
             GradientTransparencyStop* R = &def->transparency_stops[ins];
             double span = R->position - L->position;
-            double t    = (span > 1e-9) ? (pos - L->position) / span : 0.5;
+            double t = (span > 1e-9) ? (pos - L->position) / span : 0.5;
             opacity = L->opacity + t * (R->opacity - L->opacity);
         }
     }
@@ -502,7 +517,8 @@ static void trans_bar_add_stop(GradientDef* def, double pos) {
     /* Grow the stops array */
     GradientTransparencyStop* ns = (GradientTransparencyStop*)realloc(
         def->transparency_stops, (size_t)(N + 1) * sizeof(GradientTransparencyStop));
-    if (!ns) return;
+    if (!ns)
+        return;
     def->transparency_stops = ns;
 
     /* Shift right and insert */
@@ -511,7 +527,7 @@ static void trans_bar_add_stop(GradientDef* def, double pos) {
                 (size_t)(N - ins) * sizeof(GradientTransparencyStop));
     }
     def->transparency_stops[ins].position = pos;
-    def->transparency_stops[ins].opacity  = opacity;
+    def->transparency_stops[ins].opacity = opacity;
     def->transparency_stops[ins].midpoint = pos;
     def->num_transparency_stops = N + 1;
     gradient_invalidate(def);
@@ -519,8 +535,10 @@ static void trans_bar_add_stop(GradientDef* def, double pos) {
 
 /* Remove an interior transparency stop; keeps at least 2 stops. */
 static void trans_bar_remove_stop(GradientDef* def, int idx) {
-    if (!def || def->num_transparency_stops <= 2) return;
-    if (idx <= 0 || idx >= def->num_transparency_stops - 1) return;
+    if (!def || def->num_transparency_stops <= 2)
+        return;
+    if (idx <= 0 || idx >= def->num_transparency_stops - 1)
+        return;
     int N = def->num_transparency_stops;
     memmove(&def->transparency_stops[idx], &def->transparency_stops[idx + 1],
             (size_t)(N - idx - 1) * sizeof(GradientTransparencyStop));
@@ -529,7 +547,7 @@ static void trans_bar_remove_stop(GradientDef* def, int idx) {
 }
 
 static void get_node_color(const GradientDef* def, int idx,
-                            double* r, double* g, double* b) {
+                           double* r, double* g, double* b) {
     int N = def->num_segments;
     if (idx <= 0) {
         *r = def->segments[0].left_r;
@@ -547,7 +565,7 @@ static void get_node_color(const GradientDef* def, int idx,
 }
 
 static void set_node_color(GradientDef* def, int idx,
-                            double r, double g, double b) {
+                           double r, double g, double b) {
     int N = def->num_segments;
     if (idx <= 0) {
         def->segments[0].left_r = r;
@@ -570,8 +588,10 @@ static void set_node_color(GradientDef* def, int idx,
 
 static double get_node_opacity(const GradientDef* def, int idx) {
     int N = def->num_segments;
-    if (idx <= 0)  return def->segments[0].left_a;
-    if (idx >= N)  return def->segments[N - 1].right_a;
+    if (idx <= 0)
+        return def->segments[0].left_a;
+    if (idx >= N)
+        return def->segments[N - 1].right_a;
     return def->segments[idx - 1].right_a;
 }
 
@@ -591,11 +611,12 @@ static void set_node_opacity(GradientDef* def, int idx, double opacity) {
 /* Refresh all node-option widgets to match the current selection.
  * Safe to call with no selection – hides the entire options section. */
 static void update_node_options_ui(DialogData* dd) {
-    if (!dd) return;
+    if (!dd)
+        return;
 
     gboolean has_color = (dd->selected != NULL && dd->selected_node >= 0);
     gboolean has_trans = (dd->selected != NULL && dd->selected_trans_node >= 0);
-    gboolean has_any   = (has_color || has_trans);
+    gboolean has_any = (has_color || has_trans);
 
     if (dd->node_options_separator)
         gtk_widget_set_visible(dd->node_options_separator, has_any);
@@ -610,11 +631,12 @@ static void update_node_options_ui(DialogData* dd) {
     if (dd->node_color_box)
         gtk_widget_set_visible(dd->node_color_box, has_color);
 
-    if (!has_any) return;
+    if (!has_any)
+        return;
 
     dd->updating_node_ui = TRUE;
 
-    double opacity  = 1.0;
+    double opacity = 1.0;
     double location = 0.0;
 
     if (has_color) {
@@ -640,7 +662,7 @@ static void update_node_options_ui(DialogData* dd) {
         if (nodes) {
             if (dd->selected_trans_node < (int)nodes->len) {
                 TransStop* ts = &g_array_index(nodes, TransStop, dd->selected_trans_node);
-                opacity  = ts->opacity;
+                opacity = ts->opacity;
                 location = ts->pos;
             }
             g_array_free(nodes, TRUE);
@@ -861,7 +883,7 @@ static gboolean on_node_bar_draw(GtkWidget* widget, cairo_t* cr, gpointer user_d
 
     /* Blue position indicator: shown when pointer is in empty bar space */
     if (dd && dd->selected && dd->hover_node < 0 && dd->hover_x >= 0 && !dd->dragging) {
-        double r  = (double)h * 0.25;  /* ~half bar height diameter */
+        double r = (double)h * 0.25; /* ~half bar height diameter */
         double cy = (double)h * 0.5;
         cairo_save(cr);
         cairo_rectangle(cr, 1.0, 1.0, (double)(w - 2), (double)(h - 2));
@@ -967,7 +989,7 @@ static gboolean on_node_bar_motion(GtkWidget* widget,
         int new_hover_x = (idx < 0) ? (int)event->x : -1;
         if (idx != dd->hover_node || new_hover_x != dd->hover_x) {
             dd->hover_node = idx;
-            dd->hover_x    = new_hover_x;
+            dd->hover_x = new_hover_x;
             gtk_widget_queue_draw(widget);
         }
     }
@@ -981,7 +1003,7 @@ static gboolean on_node_bar_leave(GtkWidget* widget,
     DialogData* dd = (DialogData*)user_data;
     if (dd && (dd->hover_node != -1 || dd->hover_x != -1)) {
         dd->hover_node = -1;
-        dd->hover_x    = -1;
+        dd->hover_x = -1;
         gtk_widget_queue_draw(widget);
     }
     return FALSE;
@@ -1020,13 +1042,14 @@ static gboolean on_node_bar_button_release(GtkWidget* widget,
  */
 static void draw_trans_node_handle(cairo_t* cr, int x, int bar_h,
                                    double opacity, gboolean highlighted) {
-    double pad    = ((double)bar_h - (double)(NODE_CAP_H + NODE_RECT_H)) * 0.5;
-    if (pad < 1.0) pad = 1.0;
-    double top_y  = pad;
+    double pad = ((double)bar_h - (double)(NODE_CAP_H + NODE_RECT_H)) * 0.5;
+    if (pad < 1.0)
+        pad = 1.0;
+    double top_y = pad;
     double base_y = top_y + (double)NODE_RECT_H;
-    double tip_y  = base_y + (double)NODE_CAP_H;
-    double xl     = (double)(x - NODE_HALF);
-    double xr     = (double)(x + NODE_HALF);
+    double tip_y = base_y + (double)NODE_CAP_H;
+    double xl = (double)(x - NODE_HALF);
+    double xr = (double)(x + NODE_HALF);
 
     /* --- Rectangle body (grayscale opacity) ----------------------------- */
     cairo_rectangle(cr, xl, top_y, xr - xl, base_y - top_y);
@@ -1034,8 +1057,8 @@ static void draw_trans_node_handle(cairo_t* cr, int x, int bar_h,
     cairo_fill(cr);
 
     /* --- Triangle cap (tip points DOWN) --------------------------------- */
-    cairo_move_to(cr, xl,        base_y);
-    cairo_line_to(cr, xr,        base_y);
+    cairo_move_to(cr, xl, base_y);
+    cairo_line_to(cr, xr, base_y);
     cairo_line_to(cr, (double)x, tip_y);
     cairo_close_path(cr);
     if (highlighted)
@@ -1045,11 +1068,11 @@ static void draw_trans_node_handle(cairo_t* cr, int x, int bar_h,
     cairo_fill(cr);
 
     /* --- Pentagon outline ---------------------------------------------- */
-    cairo_move_to(cr, xl,        top_y);
-    cairo_line_to(cr, xr,        top_y);
-    cairo_line_to(cr, xr,        base_y);
+    cairo_move_to(cr, xl, top_y);
+    cairo_line_to(cr, xr, top_y);
+    cairo_line_to(cr, xr, base_y);
     cairo_line_to(cr, (double)x, tip_y);
-    cairo_line_to(cr, xl,        base_y);
+    cairo_line_to(cr, xl, base_y);
     cairo_close_path(cr);
     cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.85);
     cairo_set_line_width(cr, 1.0);
@@ -1076,10 +1099,10 @@ static gboolean on_trans_bar_draw(GtkWidget* widget, cairo_t* cr, gpointer user_
         GArray* nodes = collect_trans_nodes(dd->selected);
         if (nodes) {
             for (guint i = 0; i < nodes->len; i++) {
-                TransStop* ts   = &g_array_index(nodes, TransStop, i);
-                int x           = pos_to_x(ts->pos, w);
+                TransStop* ts = &g_array_index(nodes, TransStop, i);
+                int x = pos_to_x(ts->pos, w);
                 gboolean active = (dd->selected_trans_node == (int)i ||
-                                   dd->hover_trans_node    == (int)i);
+                                   dd->hover_trans_node == (int)i);
                 draw_trans_node_handle(cr, x, h, ts->opacity, active);
             }
             g_array_free(nodes, TRUE);
@@ -1089,7 +1112,7 @@ static gboolean on_trans_bar_draw(GtkWidget* widget, cairo_t* cr, gpointer user_
     /* Blue position indicator when hovering over empty bar space */
     if (dd && dd->selected &&
         dd->hover_trans_node < 0 && dd->hover_trans_x >= 0 && !dd->trans_dragging) {
-        double r  = (double)h * 0.25;
+        double r = (double)h * 0.25;
         double cy = (double)h * 0.5;
         cairo_save(cr);
         cairo_rectangle(cr, 1.0, 1.0, (double)(w - 2), (double)(h - 2));
@@ -1108,23 +1131,26 @@ static gboolean on_trans_bar_draw(GtkWidget* widget, cairo_t* cr, gpointer user_
     return TRUE;
 }
 
-static gboolean on_trans_bar_button_press(GtkWidget*      widget,
+static gboolean on_trans_bar_button_press(GtkWidget* widget,
                                           GdkEventButton* event,
-                                          gpointer        user_data) {
+                                          gpointer user_data) {
     DialogData* dd = (DialogData*)user_data;
-    if (!dd || !dd->selected) return FALSE;
+    if (!dd || !dd->selected)
+        return FALSE;
 
     int w = gtk_widget_get_allocated_width(widget);
-    if (w < 2) return FALSE;
+    if (w < 2)
+        return FALSE;
 
-    int    click_x = (int)event->x;
-    double pos     = x_to_pos(click_x, w);
+    int click_x = (int)event->x;
+    double pos = x_to_pos(click_x, w);
 
     /* collect_trans_nodes returns NULL when there are no stops yet; that's fine */
     GArray* nodes = collect_trans_nodes(dd->selected);
-    int node_idx  = nodes ? find_trans_node_at_x(nodes, click_x, w) : -1;
-    int total     = nodes ? (int)nodes->len : 0;
-    if (nodes) g_array_free(nodes, TRUE);
+    int node_idx = nodes ? find_trans_node_at_x(nodes, click_x, w) : -1;
+    int total = nodes ? (int)nodes->len : 0;
+    if (nodes)
+        g_array_free(nodes, TRUE);
 
     /* Clicking the transparency bar deselects any colour-stop selection */
     dd->selected_node = -1;
@@ -1132,8 +1158,8 @@ static gboolean on_trans_bar_button_press(GtkWidget*      widget,
     if (event->button == GDK_BUTTON_PRIMARY) {
         if (node_idx >= 0) {
             dd->selected_trans_node = node_idx;
-            dd->trans_dragging      = TRUE;
-            dd->drag_trans_idx      = node_idx;
+            dd->trans_dragging = TRUE;
+            dd->drag_trans_idx = node_idx;
         } else {
             trans_bar_add_stop(dd->selected, pos);
             GArray* updated = collect_trans_nodes(dd->selected);
@@ -1157,11 +1183,12 @@ static gboolean on_trans_bar_button_press(GtkWidget*      widget,
     return TRUE;
 }
 
-static gboolean on_trans_bar_motion(GtkWidget*      widget,
+static gboolean on_trans_bar_motion(GtkWidget* widget,
                                     GdkEventMotion* event,
-                                    gpointer        user_data) {
+                                    gpointer user_data) {
     DialogData* dd = (DialogData*)user_data;
-    if (!dd || !dd->selected) return FALSE;
+    if (!dd || !dd->selected)
+        return FALSE;
 
     int w = gtk_widget_get_allocated_width(widget);
 
@@ -1180,12 +1207,13 @@ static gboolean on_trans_bar_motion(GtkWidget*      widget,
     } else {
         GArray* nodes = collect_trans_nodes(dd->selected);
         int idx = nodes ? find_trans_node_at_x(nodes, (int)event->x, w) : -1;
-        if (nodes) g_array_free(nodes, TRUE);
+        if (nodes)
+            g_array_free(nodes, TRUE);
 
         int new_hover_x = (idx < 0) ? (int)event->x : -1;
         if (idx != dd->hover_trans_node || new_hover_x != dd->hover_trans_x) {
             dd->hover_trans_node = idx;
-            dd->hover_trans_x    = new_hover_x;
+            dd->hover_trans_x = new_hover_x;
             gtk_widget_queue_draw(widget);
         }
     }
@@ -1199,15 +1227,15 @@ static gboolean on_trans_bar_leave(GtkWidget* widget,
     DialogData* dd = (DialogData*)user_data;
     if (dd && (dd->hover_trans_node != -1 || dd->hover_trans_x != -1)) {
         dd->hover_trans_node = -1;
-        dd->hover_trans_x    = -1;
+        dd->hover_trans_x = -1;
         gtk_widget_queue_draw(widget);
     }
     return FALSE;
 }
 
-static gboolean on_trans_bar_button_release(GtkWidget*      widget,
-                                             GdkEventButton* event,
-                                             gpointer        user_data) {
+static gboolean on_trans_bar_button_release(GtkWidget* widget,
+                                            GdkEventButton* event,
+                                            gpointer user_data) {
     (void)widget;
     (void)event;
     DialogData* dd = (DialogData*)user_data;
@@ -1225,10 +1253,12 @@ static gboolean on_trans_bar_button_release(GtkWidget*      widget,
 /* Colour-swatch button clicked: open colour chooser and apply to stop */
 static void on_node_color_btn_clicked(GtkButton* button, gpointer user_data) {
     DialogData* dd = (DialogData*)user_data;
-    if (!dd || !dd->selected || dd->selected_node < 0) return;
+    if (!dd || !dd->selected || dd->selected_node < 0)
+        return;
 
     GtkWidget* top = gtk_widget_get_toplevel(GTK_WIDGET(button));
-    if (!top || !GTK_IS_WINDOW(top)) return;
+    if (!top || !GTK_IS_WINDOW(top))
+        return;
 
     double r, g, b;
     get_node_color(dd->selected, dd->selected_node, &r, &g, &b);
@@ -1248,45 +1278,52 @@ static void on_node_color_btn_clicked(GtkButton* button, gpointer user_data) {
     update_color_button_appearance(GTK_WIDGET(button), &new_rgba);
 
     gtk_widget_queue_draw(dd->editor_preview);
-    if (dd->node_bar) gtk_widget_queue_draw(dd->node_bar);
+    if (dd->node_bar)
+        gtk_widget_queue_draw(dd->node_bar);
 }
 
 /* Opacity adjustment changed: apply to selected colour or transparency stop */
 static void on_opacity_adj_changed(GtkAdjustment* adj, gpointer user_data) {
     DialogData* dd = (DialogData*)user_data;
-    if (!dd || !dd->selected || dd->updating_node_ui) return;
+    if (!dd || !dd->selected || dd->updating_node_ui)
+        return;
 
     double opacity = gtk_adjustment_get_value(adj) / 100.0;
 
     if (dd->selected_node >= 0) {
         set_node_opacity(dd->selected, dd->selected_node, opacity);
         gtk_widget_queue_draw(dd->editor_preview);
-        if (dd->node_bar) gtk_widget_queue_draw(dd->node_bar);
+        if (dd->node_bar)
+            gtk_widget_queue_draw(dd->node_bar);
     } else if (dd->selected_trans_node >= 0 &&
                dd->selected->transparency_stops &&
                dd->selected_trans_node < dd->selected->num_transparency_stops) {
         dd->selected->transparency_stops[dd->selected_trans_node].opacity = opacity;
         gradient_invalidate(dd->selected);
         gtk_widget_queue_draw(dd->editor_preview);
-        if (dd->trans_bar) gtk_widget_queue_draw(dd->trans_bar);
+        if (dd->trans_bar)
+            gtk_widget_queue_draw(dd->trans_bar);
     }
 }
 
 /* Location adjustment changed: move selected stop along the gradient */
 static void on_location_adj_changed(GtkAdjustment* adj, gpointer user_data) {
     DialogData* dd = (DialogData*)user_data;
-    if (!dd || !dd->selected || dd->updating_node_ui) return;
+    if (!dd || !dd->selected || dd->updating_node_ui)
+        return;
 
     double pos = gtk_adjustment_get_value(adj) / 100.0;
 
     if (dd->selected_node >= 0) {
         node_bar_move_stop(dd->selected, &dd->selected_node, pos);
         gtk_widget_queue_draw(dd->editor_preview);
-        if (dd->node_bar) gtk_widget_queue_draw(dd->node_bar);
+        if (dd->node_bar)
+            gtk_widget_queue_draw(dd->node_bar);
     } else if (dd->selected_trans_node >= 0) {
         trans_bar_move_stop(dd->selected, &dd->selected_trans_node, pos);
         gtk_widget_queue_draw(dd->editor_preview);
-        if (dd->trans_bar) gtk_widget_queue_draw(dd->trans_bar);
+        if (dd->trans_bar)
+            gtk_widget_queue_draw(dd->trans_bar);
     }
 }
 
@@ -1300,7 +1337,8 @@ static void update_editor_tab(DialogData* dd, GradientDef* def, const gchar* sou
 /* Gradient name entry changed: keep def->name in sync */
 static void on_name_entry_changed(GtkEditable* editable, gpointer user_data) {
     DialogData* dd = (DialogData*)user_data;
-    if (!dd || !dd->selected || dd->updating_node_ui) return;
+    if (!dd || !dd->selected || dd->updating_node_ui)
+        return;
 
     const gchar* text = gtk_entry_get_text(GTK_ENTRY(editable));
     g_free(dd->selected->name);
@@ -1310,7 +1348,8 @@ static void on_name_entry_changed(GtkEditable* editable, gpointer user_data) {
 /* Gamma blend checkbox toggled: enable/disable linear-light blending */
 static void on_gamma_blend_toggled(GtkToggleButton* button, gpointer user_data) {
     DialogData* dd = (DialogData*)user_data;
-    if (!dd || !dd->selected || dd->updating_node_ui) return;
+    if (!dd || !dd->selected || dd->updating_node_ui)
+        return;
 
     dd->selected->gamma_blend = gtk_toggle_button_get_active(button);
     gradient_invalidate(dd->selected);
@@ -1320,8 +1359,10 @@ static void on_gamma_blend_toggled(GtkToggleButton* button, gpointer user_data) 
 /* Equally space checkbox toggled: redistribute all nodes evenly, then uncheck */
 static void on_equally_space_toggled(GtkToggleButton* button, gpointer user_data) {
     DialogData* dd = (DialogData*)user_data;
-    if (!dd || !dd->selected) return;
-    if (!gtk_toggle_button_get_active(button)) return;
+    if (!dd || !dd->selected)
+        return;
+    if (!gtk_toggle_button_get_active(button))
+        return;
 
     GradientDef* def = dd->selected;
 
@@ -1344,17 +1385,17 @@ static void on_equally_space_toggled(GtkToggleButton* button, gpointer user_data
                 stops[i].pos = (double)i / (double)N;
 
             for (int i = 0; i < N; i++) {
-                def->segments[i].left_pos  = stops[i].pos;
+                def->segments[i].left_pos = stops[i].pos;
                 def->segments[i].right_pos = stops[i + 1].pos;
-                def->segments[i].midpoint  = (stops[i].pos + stops[i + 1].pos) * 0.5;
-                def->segments[i].left_r    = stops[i].r;
-                def->segments[i].left_g    = stops[i].g;
-                def->segments[i].left_b    = stops[i].b;
-                def->segments[i].left_a    = stops[i].a;
-                def->segments[i].right_r   = stops[i + 1].r;
-                def->segments[i].right_g   = stops[i + 1].g;
-                def->segments[i].right_b   = stops[i + 1].b;
-                def->segments[i].right_a   = stops[i + 1].a;
+                def->segments[i].midpoint = (stops[i].pos + stops[i + 1].pos) * 0.5;
+                def->segments[i].left_r = stops[i].r;
+                def->segments[i].left_g = stops[i].g;
+                def->segments[i].left_b = stops[i].b;
+                def->segments[i].left_a = stops[i].a;
+                def->segments[i].right_r = stops[i + 1].r;
+                def->segments[i].right_g = stops[i + 1].g;
+                def->segments[i].right_b = stops[i + 1].b;
+                def->segments[i].right_a = stops[i + 1].a;
             }
             free(stops);
         }
@@ -1374,8 +1415,10 @@ static void on_equally_space_toggled(GtkToggleButton* button, gpointer user_data
 
     gradient_invalidate(def);
     gtk_widget_queue_draw(dd->editor_preview);
-    if (dd->node_bar)  gtk_widget_queue_draw(dd->node_bar);
-    if (dd->trans_bar) gtk_widget_queue_draw(dd->trans_bar);
+    if (dd->node_bar)
+        gtk_widget_queue_draw(dd->node_bar);
+    if (dd->trans_bar)
+        gtk_widget_queue_draw(dd->trans_bar);
     update_node_options_ui(dd);
 
     /* Auto-uncheck: this is a one-shot action */
@@ -1388,7 +1431,8 @@ static void on_equally_space_toggled(GtkToggleButton* button, gpointer user_data
 static void on_save_collection_btn_clicked(GtkButton* button, gpointer user_data) {
     (void)button;
     DialogData* dd = (DialogData*)user_data;
-    if (!dd || !dd->selected) return;
+    if (!dd || !dd->selected)
+        return;
 
     GtkWidget* top = gtk_widget_get_toplevel(GTK_WIDGET(button));
     GtkWindow* parent_win = GTK_IS_WINDOW(top) ? GTK_WINDOW(top) : NULL;
@@ -1420,16 +1464,16 @@ static void on_save_collection_btn_clicked(GtkButton* button, gpointer user_data
     gchar* sanitized = g_strdup(name);
     for (gchar* p = sanitized; *p; p++) {
         if (*p == '/' || *p == '\\' || *p == ':' || *p == '*' ||
-            *p == '?' || *p == '"'  || *p == '<' || *p == '>' || *p == '|')
+            *p == '?' || *p == '"' || *p == '<' || *p == '>' || *p == '|')
             *p = '_';
     }
 
     /* Build path: <app_dir>/gradients/<name>.rgr */
     const gchar* app_dir = dd->app_dir ? dd->app_dir : ".";
-    gchar* dir_path  = g_build_filename(app_dir, "gradients", NULL);
+    gchar* dir_path = g_build_filename(app_dir, "gradients", NULL);
     g_mkdir_with_parents(dir_path, 0755);
-    gchar* rgr_name  = g_strdup_printf("%s.rgr", sanitized);
-    gchar* filepath  = g_build_filename(dir_path, rgr_name, NULL);
+    gchar* rgr_name = g_strdup_printf("%s.rgr", sanitized);
+    gchar* filepath = g_build_filename(dir_path, rgr_name, NULL);
     g_free(rgr_name);
     g_free(dir_path);
     g_free(sanitized);
@@ -1450,7 +1494,7 @@ static void on_save_collection_btn_clicked(GtkButton* button, gpointer user_data
     }
 
     /* Save using a stack-allocated set that borrows the gradient pointer */
-    GradientSet tmp_set = { 1, dd->selected };
+    GradientSet tmp_set = {1, dd->selected};
     GradientIOError io_err = GRADIENT_IO_ERROR_NONE;
     gboolean ok = gradient_io_save(&tmp_set, filepath, &io_err);
 
@@ -1478,7 +1522,8 @@ static void on_save_collection_btn_clicked(GtkButton* button, gpointer user_data
 static void on_import_btn_clicked(GtkButton* button, gpointer user_data) {
     (void)button;
     DialogData* dd = (DialogData*)user_data;
-    if (!dd) return;
+    if (!dd)
+        return;
 
     GtkWidget* top = gtk_widget_get_toplevel(GTK_WIDGET(button));
     GtkWindow* parent_win = GTK_IS_WINDOW(top) ? GTK_WINDOW(top) : NULL;
@@ -1487,17 +1532,19 @@ static void on_import_btn_clicked(GtkButton* button, gpointer user_data) {
         "Import Gradient File", parent_win,
         GTK_FILE_CHOOSER_ACTION_OPEN,
         "_Cancel", GTK_RESPONSE_CANCEL,
-        "_Open",   GTK_RESPONSE_ACCEPT,
+        "_Open", GTK_RESPONSE_ACCEPT,
         NULL);
 
     GtkFileFilter* grad_filter = gtk_file_filter_new();
-    gtk_file_filter_set_name(grad_filter, "Gradient files (*.ggr, *.grd, *.rgr)");
+    gtk_file_filter_set_name(grad_filter, "Gradient files (*.ggr, *.grd, *.rgr, *.svg)");
     gtk_file_filter_add_pattern(grad_filter, "*.ggr");
     gtk_file_filter_add_pattern(grad_filter, "*.GGR");
     gtk_file_filter_add_pattern(grad_filter, "*.grd");
     gtk_file_filter_add_pattern(grad_filter, "*.GRD");
     gtk_file_filter_add_pattern(grad_filter, "*.rgr");
     gtk_file_filter_add_pattern(grad_filter, "*.RGR");
+    gtk_file_filter_add_pattern(grad_filter, "*.svg");
+    gtk_file_filter_add_pattern(grad_filter, "*.SVG");
     gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dlg), grad_filter);
 
     GtkFileFilter* all_filter = gtk_file_filter_new();
@@ -1525,19 +1572,21 @@ static void on_import_btn_clicked(GtkButton* button, gpointer user_data) {
             gradient_io_get_error_message(io_err, filename));
         gtk_dialog_run(GTK_DIALOG(err));
         gtk_widget_destroy(err);
-        if (gs) gradient_set_free(gs);
+        if (gs)
+            gradient_set_free(gs);
         g_free(filename);
         return;
     }
 
     /* Wrap in a GradEntry so the set is properly owned */
-    GradEntry* entry   = g_new0(GradEntry, 1);
-    entry->set         = gs;
-    entry->filepath    = filename; /* ownership transferred */
-    gchar* base        = g_path_get_basename(filename);
-    gchar* dot         = strrchr(base, '.');
-    if (dot) *dot      = '\0';
-    entry->basename    = base;
+    GradEntry* entry = g_new0(GradEntry, 1);
+    entry->set = gs;
+    entry->filepath = filename; /* ownership transferred */
+    gchar* base = g_path_get_basename(filename);
+    gchar* dot = strrchr(base, '.');
+    if (dot)
+        *dot = '\0';
+    entry->basename = base;
 
     g_ptr_array_add(dd->entries, entry);
 
@@ -1550,7 +1599,8 @@ static void on_import_btn_clicked(GtkButton* button, gpointer user_data) {
 static void on_export_btn_clicked(GtkButton* button, gpointer user_data) {
     (void)button;
     DialogData* dd = (DialogData*)user_data;
-    if (!dd || !dd->selected) return;
+    if (!dd || !dd->selected)
+        return;
 
     GtkWidget* top = gtk_widget_get_toplevel(GTK_WIDGET(button));
     GtkWindow* parent_win = GTK_IS_WINDOW(top) ? GTK_WINDOW(top) : NULL;
@@ -1559,7 +1609,7 @@ static void on_export_btn_clicked(GtkButton* button, gpointer user_data) {
         "Export Gradient File", parent_win,
         GTK_FILE_CHOOSER_ACTION_SAVE,
         "_Cancel", GTK_RESPONSE_CANCEL,
-        "_Save",   GTK_RESPONSE_ACCEPT,
+        "_Save", GTK_RESPONSE_ACCEPT,
         NULL);
     gtk_file_chooser_set_do_overwrite_confirmation(GTK_FILE_CHOOSER(dlg), TRUE);
 
@@ -1579,6 +1629,11 @@ static void on_export_btn_clicked(GtkButton* button, gpointer user_data) {
     gtk_file_filter_add_pattern(ggr_filter, "*.ggr");
     gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dlg), ggr_filter);
 
+    GtkFileFilter* svg_filter = gtk_file_filter_new();
+    gtk_file_filter_set_name(svg_filter, "SVG Gradient (*.svg)");
+    gtk_file_filter_add_pattern(svg_filter, "*.svg");
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dlg), svg_filter);
+
     GtkFileFilter* all_filter = gtk_file_filter_new();
     gtk_file_filter_set_name(all_filter, "All files");
     gtk_file_filter_add_pattern(all_filter, "*");
@@ -1593,7 +1648,7 @@ static void on_export_btn_clicked(GtkButton* button, gpointer user_data) {
     gchar* filepath = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dlg));
     gtk_widget_destroy(dlg);
 
-    GradientSet tmp_set = { 1, dd->selected };
+    GradientSet tmp_set = {1, dd->selected};
     GradientIOError io_err = GRADIENT_IO_ERROR_NONE;
     gboolean ok = gradient_io_save(&tmp_set, filepath, &io_err);
 
@@ -1619,16 +1674,16 @@ static void update_editor_tab(DialogData* dd, GradientDef* def, const gchar* sou
     dd->selected_source = (gchar*)source; /* borrowed */
 
     dd->selected_node = -1;
-    dd->hover_node    = -1;
-    dd->hover_x       = -1;
-    dd->dragging      = FALSE;
+    dd->hover_node = -1;
+    dd->hover_x = -1;
+    dd->dragging = FALSE;
     dd->drag_node_idx = -1;
 
     dd->selected_trans_node = -1;
-    dd->hover_trans_node    = -1;
-    dd->hover_trans_x       = -1;
-    dd->trans_dragging      = FALSE;
-    dd->drag_trans_idx      = -1;
+    dd->hover_trans_node = -1;
+    dd->hover_trans_x = -1;
+    dd->trans_dragging = FALSE;
+    dd->drag_trans_idx = -1;
 
     gtk_widget_queue_draw(dd->editor_preview);
     if (dd->node_bar)
@@ -1813,14 +1868,17 @@ static void populate_collection_list(DialogData* dd, GtkWidget* list_box) {
 static void on_edit_gradient_btn_clicked(GtkButton* button, gpointer user_data) {
     (void)button;
     DialogData* dd = (DialogData*)user_data;
-    if (!dd || !dd->collection_list) return;
+    if (!dd || !dd->collection_list)
+        return;
 
     GtkListBoxRow* row =
         gtk_list_box_get_selected_row(GTK_LIST_BOX(dd->collection_list));
-    if (!row) return;
+    if (!row)
+        return;
 
     RowData* rd = (RowData*)g_object_get_data(G_OBJECT(row), "row-data");
-    if (!rd) return;
+    if (!rd)
+        return;
 
     update_editor_tab(dd, rd->def, rd->source);
     gtk_notebook_set_current_page(GTK_NOTEBOOK(dd->notebook), 1);
@@ -1830,11 +1888,13 @@ static void on_edit_gradient_btn_clicked(GtkButton* button, gpointer user_data) 
 static void on_new_gradient_btn_clicked(GtkButton* button, gpointer user_data) {
     (void)button;
     DialogData* dd = (DialogData*)user_data;
-    if (!dd) return;
+    if (!dd)
+        return;
 
     /* Allocate a GradientSet with one slot */
     GradientSet* set = gradient_set_new(1);
-    if (!set) return;
+    if (!set)
+        return;
 
     GradientDef* def = &set->gradients[0];
     def->name = g_strdup("New Gradient");
@@ -1847,27 +1907,27 @@ static void on_new_gradient_btn_clicked(GtkButton* button, gpointer user_data) {
         return;
     }
     GradientSegment* seg = &def->segments[0];
-    seg->left_pos   = 0.0;
-    seg->midpoint   = 0.5;
-    seg->right_pos  = 1.0;
-    seg->left_r     = 1.0;  /* white */
-    seg->left_g     = 1.0;
-    seg->left_b     = 1.0;
-    seg->left_a     = 1.0;
-    seg->right_r    = 0.0;  /* black */
-    seg->right_g    = 0.0;
-    seg->right_b    = 0.0;
-    seg->right_a    = 1.0;
-    seg->blend_mode  = GRADIENT_BLEND_LINEAR;
+    seg->left_pos = 0.0;
+    seg->midpoint = 0.5;
+    seg->right_pos = 1.0;
+    seg->left_r = 1.0; /* white */
+    seg->left_g = 1.0;
+    seg->left_b = 1.0;
+    seg->left_a = 1.0;
+    seg->right_r = 0.0; /* black */
+    seg->right_g = 0.0;
+    seg->right_b = 0.0;
+    seg->right_a = 1.0;
+    seg->blend_mode = GRADIENT_BLEND_LINEAR;
     seg->color_space = GRADIENT_COLOR_RGB;
-    seg->left_type   = GRADIENT_ENDPOINT_FIXED;
-    seg->right_type  = GRADIENT_ENDPOINT_FIXED;
+    seg->left_type = GRADIENT_ENDPOINT_FIXED;
+    seg->right_type = GRADIENT_ENDPOINT_FIXED;
 
     /* Create a GradEntry to own the set */
-    GradEntry* entry  = g_new0(GradEntry, 1);
-    entry->set        = set;
-    entry->filepath   = g_strdup("(unsaved)");
-    entry->basename   = g_strdup("New Gradient");
+    GradEntry* entry = g_new0(GradEntry, 1);
+    entry->set = set;
+    entry->filepath = g_strdup("(unsaved)");
+    entry->basename = g_strdup("New Gradient");
     g_ptr_array_add(dd->entries, entry);
 
     /* Open in editor */
@@ -1914,61 +1974,61 @@ void gradient_editor_dialog_show(AppContext* ctx) {
     }
 
     /* Collect widget references */
-    GtkWidget* notebook       = GTK_WIDGET(gtk_builder_get_object(builder, "gradient_editor_notebook"));
-    GtkWidget* list_box       = GTK_WIDGET(gtk_builder_get_object(builder, "gradient_collection_list"));
+    GtkWidget* notebook = GTK_WIDGET(gtk_builder_get_object(builder, "gradient_editor_notebook"));
+    GtkWidget* list_box = GTK_WIDGET(gtk_builder_get_object(builder, "gradient_collection_list"));
     GtkWidget* editor_preview = GTK_WIDGET(gtk_builder_get_object(builder, "gradient_editor_preview"));
-    GtkWidget* node_bar       = GTK_WIDGET(gtk_builder_get_object(builder, "gradient_node_bar"));
-    GtkWidget* trans_bar      = GTK_WIDGET(gtk_builder_get_object(builder, "gradient_trans_bar"));
-    GtkWidget* close_btn      = GTK_WIDGET(gtk_builder_get_object(builder, "gradient_editor_close_btn"));
-    GtkWidget* ok_btn         = GTK_WIDGET(gtk_builder_get_object(builder, "gradient_editor_cancel_btn"));
-    GtkWidget* edit_grad_btn  = GTK_WIDGET(gtk_builder_get_object(builder, "edit_gradient_btn"));
-    GtkWidget* new_grad_btn   = GTK_WIDGET(gtk_builder_get_object(builder, "new_gradient_btn"));
+    GtkWidget* node_bar = GTK_WIDGET(gtk_builder_get_object(builder, "gradient_node_bar"));
+    GtkWidget* trans_bar = GTK_WIDGET(gtk_builder_get_object(builder, "gradient_trans_bar"));
+    GtkWidget* close_btn = GTK_WIDGET(gtk_builder_get_object(builder, "gradient_editor_close_btn"));
+    GtkWidget* ok_btn = GTK_WIDGET(gtk_builder_get_object(builder, "gradient_editor_cancel_btn"));
+    GtkWidget* edit_grad_btn = GTK_WIDGET(gtk_builder_get_object(builder, "edit_gradient_btn"));
+    GtkWidget* new_grad_btn = GTK_WIDGET(gtk_builder_get_object(builder, "new_gradient_btn"));
 
     /* Gradient options widgets */
-    GtkWidget* name_entry         = GTK_WIDGET(gtk_builder_get_object(builder, "gradient_name_entry"));
-    GtkWidget* gamma_blend_cb     = GTK_WIDGET(gtk_builder_get_object(builder, "gamma_blend_checkbox"));
-    GtkWidget* equally_space_cb   = GTK_WIDGET(gtk_builder_get_object(builder, "equally_space_checkbox"));
+    GtkWidget* name_entry = GTK_WIDGET(gtk_builder_get_object(builder, "gradient_name_entry"));
+    GtkWidget* gamma_blend_cb = GTK_WIDGET(gtk_builder_get_object(builder, "gamma_blend_checkbox"));
+    GtkWidget* equally_space_cb = GTK_WIDGET(gtk_builder_get_object(builder, "equally_space_checkbox"));
     GtkWidget* save_collection_btn = GTK_WIDGET(gtk_builder_get_object(builder, "save_collection_btn"));
-    GtkWidget* import_btn         = GTK_WIDGET(gtk_builder_get_object(builder, "import_btn"));
-    GtkWidget* export_btn         = GTK_WIDGET(gtk_builder_get_object(builder, "export_btn"));
+    GtkWidget* import_btn = GTK_WIDGET(gtk_builder_get_object(builder, "import_btn"));
+    GtkWidget* export_btn = GTK_WIDGET(gtk_builder_get_object(builder, "export_btn"));
 
     /* Node options widgets */
-    GtkWidget* node_options_sep   = GTK_WIDGET(gtk_builder_get_object(builder, "node_options_separator"));
-    GtkWidget* node_options_lbl   = GTK_WIDGET(gtk_builder_get_object(builder, "node_options_label"));
-    GtkWidget* node_options_box   = GTK_WIDGET(gtk_builder_get_object(builder, "node_options_box"));
-    GtkWidget* node_color_box     = GTK_WIDGET(gtk_builder_get_object(builder, "node_color_box"));
-    GtkWidget* node_color_btn     = GTK_WIDGET(gtk_builder_get_object(builder, "gradient_editor_node_color_btn"));
-    GtkAdjustment* opacity_adj    = GTK_ADJUSTMENT(gtk_builder_get_object(builder, "opacity_adjustment"));
-    GtkAdjustment* location_adj   = GTK_ADJUSTMENT(gtk_builder_get_object(builder, "location_adjustment"));
+    GtkWidget* node_options_sep = GTK_WIDGET(gtk_builder_get_object(builder, "node_options_separator"));
+    GtkWidget* node_options_lbl = GTK_WIDGET(gtk_builder_get_object(builder, "node_options_label"));
+    GtkWidget* node_options_box = GTK_WIDGET(gtk_builder_get_object(builder, "node_options_box"));
+    GtkWidget* node_color_box = GTK_WIDGET(gtk_builder_get_object(builder, "node_color_box"));
+    GtkWidget* node_color_btn = GTK_WIDGET(gtk_builder_get_object(builder, "gradient_editor_node_color_btn"));
+    GtkAdjustment* opacity_adj = GTK_ADJUSTMENT(gtk_builder_get_object(builder, "opacity_adjustment"));
+    GtkAdjustment* location_adj = GTK_ADJUSTMENT(gtk_builder_get_object(builder, "location_adjustment"));
 
     /* Build dialog data */
     DialogData* dd = g_new0(DialogData, 1);
     dd->entries = g_ptr_array_new_with_free_func(grad_entry_free);
     dd->selected = NULL;
-    dd->selected_node       = -1;
-    dd->hover_node          = -1;
-    dd->hover_x             = -1;
-    dd->drag_node_idx       = -1;
+    dd->selected_node = -1;
+    dd->hover_node = -1;
+    dd->hover_x = -1;
+    dd->drag_node_idx = -1;
     dd->selected_trans_node = -1;
-    dd->hover_trans_node    = -1;
-    dd->hover_trans_x       = -1;
-    dd->drag_trans_idx      = -1;
-    dd->app_dir             = ctx->app_dir;
-    dd->notebook            = notebook;
-    dd->editor_preview      = editor_preview;
-    dd->node_bar            = node_bar;
-    dd->trans_bar           = trans_bar;
-    dd->collection_list     = list_box;
-    dd->name_entry          = name_entry;
-    dd->gamma_blend_checkbox   = gamma_blend_cb;
+    dd->hover_trans_node = -1;
+    dd->hover_trans_x = -1;
+    dd->drag_trans_idx = -1;
+    dd->app_dir = ctx->app_dir;
+    dd->notebook = notebook;
+    dd->editor_preview = editor_preview;
+    dd->node_bar = node_bar;
+    dd->trans_bar = trans_bar;
+    dd->collection_list = list_box;
+    dd->name_entry = name_entry;
+    dd->gamma_blend_checkbox = gamma_blend_cb;
     dd->equally_space_checkbox = equally_space_cb;
     dd->node_options_separator = node_options_sep;
-    dd->node_options_label     = node_options_lbl;
-    dd->node_options_box       = node_options_box;
-    dd->node_color_box         = node_color_box;
-    dd->node_color_btn         = node_color_btn;
-    dd->opacity_adj            = opacity_adj;
-    dd->location_adj           = location_adj;
+    dd->node_options_label = node_options_lbl;
+    dd->node_options_box = node_options_box;
+    dd->node_color_box = node_color_box;
+    dd->node_color_btn = node_color_btn;
+    dd->opacity_adj = opacity_adj;
+    dd->location_adj = location_adj;
 
     /* Wrap each GtkScale with a VerticalSpinButton to its right */
     {
@@ -2028,30 +2088,30 @@ void gradient_editor_dialog_show(AppContext* ctx) {
     populate_collection_list(dd, list_box);
 
     /* Wire signals */
-    g_signal_connect(list_box,        "row-selected", G_CALLBACK(on_collection_row_selected),   dd);
-    g_signal_connect(editor_preview,  "draw",         G_CALLBACK(on_editor_preview_draw),       dd);
-    g_signal_connect(close_btn,       "clicked",      G_CALLBACK(gtk_widget_destroy),           dialog);
+    g_signal_connect(list_box, "row-selected", G_CALLBACK(on_collection_row_selected), dd);
+    g_signal_connect(editor_preview, "draw", G_CALLBACK(on_editor_preview_draw), dd);
+    g_signal_connect(close_btn, "clicked", G_CALLBACK(gtk_widget_destroy), dialog);
     if (ok_btn)
-        g_signal_connect(ok_btn,      "clicked",      G_CALLBACK(gtk_widget_destroy),           dialog);
+        g_signal_connect(ok_btn, "clicked", G_CALLBACK(gtk_widget_destroy), dialog);
     if (edit_grad_btn)
-        g_signal_connect(edit_grad_btn, "clicked",    G_CALLBACK(on_edit_gradient_btn_clicked), dd);
+        g_signal_connect(edit_grad_btn, "clicked", G_CALLBACK(on_edit_gradient_btn_clicked), dd);
     if (new_grad_btn)
-        g_signal_connect(new_grad_btn,  "clicked",    G_CALLBACK(on_new_gradient_btn_clicked),  dd);
-    g_signal_connect(dialog,          "destroy",      G_CALLBACK(on_dialog_destroy),            NULL);
+        g_signal_connect(new_grad_btn, "clicked", G_CALLBACK(on_new_gradient_btn_clicked), dd);
+    g_signal_connect(dialog, "destroy", G_CALLBACK(on_dialog_destroy), NULL);
 
     /* Gradient options signals */
     if (name_entry)
-        g_signal_connect(name_entry,        "changed", G_CALLBACK(on_name_entry_changed),          dd);
+        g_signal_connect(name_entry, "changed", G_CALLBACK(on_name_entry_changed), dd);
     if (gamma_blend_cb)
-        g_signal_connect(gamma_blend_cb,    "toggled", G_CALLBACK(on_gamma_blend_toggled),          dd);
+        g_signal_connect(gamma_blend_cb, "toggled", G_CALLBACK(on_gamma_blend_toggled), dd);
     if (equally_space_cb)
-        g_signal_connect(equally_space_cb,  "toggled", G_CALLBACK(on_equally_space_toggled),        dd);
+        g_signal_connect(equally_space_cb, "toggled", G_CALLBACK(on_equally_space_toggled), dd);
     if (save_collection_btn)
         g_signal_connect(save_collection_btn, "clicked", G_CALLBACK(on_save_collection_btn_clicked), dd);
     if (import_btn)
-        g_signal_connect(import_btn,  "clicked", G_CALLBACK(on_import_btn_clicked),  dd);
+        g_signal_connect(import_btn, "clicked", G_CALLBACK(on_import_btn_clicked), dd);
     if (export_btn)
-        g_signal_connect(export_btn,  "clicked", G_CALLBACK(on_export_btn_clicked),  dd);
+        g_signal_connect(export_btn, "clicked", G_CALLBACK(on_export_btn_clicked), dd);
 
     /* Colour stop node bar: draw + mouse input */
     if (node_bar) {
@@ -2060,12 +2120,12 @@ void gradient_editor_dialog_show(AppContext* ctx) {
                                   GDK_BUTTON_RELEASE_MASK |
                                   GDK_POINTER_MOTION_MASK |
                                   GDK_LEAVE_NOTIFY_MASK);
-        g_signal_connect(node_bar, "realize",              G_CALLBACK(on_node_bar_realize),         NULL);
-        g_signal_connect(node_bar, "draw",                 G_CALLBACK(on_node_bar_draw),            dd);
-        g_signal_connect(node_bar, "button-press-event",   G_CALLBACK(on_node_bar_button_press),    dd);
-        g_signal_connect(node_bar, "button-release-event", G_CALLBACK(on_node_bar_button_release),  dd);
-        g_signal_connect(node_bar, "motion-notify-event",  G_CALLBACK(on_node_bar_motion),          dd);
-        g_signal_connect(node_bar, "leave-notify-event",   G_CALLBACK(on_node_bar_leave),           dd);
+        g_signal_connect(node_bar, "realize", G_CALLBACK(on_node_bar_realize), NULL);
+        g_signal_connect(node_bar, "draw", G_CALLBACK(on_node_bar_draw), dd);
+        g_signal_connect(node_bar, "button-press-event", G_CALLBACK(on_node_bar_button_press), dd);
+        g_signal_connect(node_bar, "button-release-event", G_CALLBACK(on_node_bar_button_release), dd);
+        g_signal_connect(node_bar, "motion-notify-event", G_CALLBACK(on_node_bar_motion), dd);
+        g_signal_connect(node_bar, "leave-notify-event", G_CALLBACK(on_node_bar_leave), dd);
     }
 
     /* Transparency stop bar: draw + mouse input */
@@ -2075,12 +2135,12 @@ void gradient_editor_dialog_show(AppContext* ctx) {
                                   GDK_BUTTON_RELEASE_MASK |
                                   GDK_POINTER_MOTION_MASK |
                                   GDK_LEAVE_NOTIFY_MASK);
-        g_signal_connect(trans_bar, "realize",              G_CALLBACK(on_node_bar_realize),          NULL);
-        g_signal_connect(trans_bar, "draw",                 G_CALLBACK(on_trans_bar_draw),            dd);
-        g_signal_connect(trans_bar, "button-press-event",   G_CALLBACK(on_trans_bar_button_press),    dd);
-        g_signal_connect(trans_bar, "button-release-event", G_CALLBACK(on_trans_bar_button_release),  dd);
-        g_signal_connect(trans_bar, "motion-notify-event",  G_CALLBACK(on_trans_bar_motion),          dd);
-        g_signal_connect(trans_bar, "leave-notify-event",   G_CALLBACK(on_trans_bar_leave),           dd);
+        g_signal_connect(trans_bar, "realize", G_CALLBACK(on_node_bar_realize), NULL);
+        g_signal_connect(trans_bar, "draw", G_CALLBACK(on_trans_bar_draw), dd);
+        g_signal_connect(trans_bar, "button-press-event", G_CALLBACK(on_trans_bar_button_press), dd);
+        g_signal_connect(trans_bar, "button-release-event", G_CALLBACK(on_trans_bar_button_release), dd);
+        g_signal_connect(trans_bar, "motion-notify-event", G_CALLBACK(on_trans_bar_motion), dd);
+        g_signal_connect(trans_bar, "leave-notify-event", G_CALLBACK(on_trans_bar_leave), dd);
     }
 
     /* Adjustment signals for opacity and location controls */

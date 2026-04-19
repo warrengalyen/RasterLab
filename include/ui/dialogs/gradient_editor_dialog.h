@@ -17,7 +17,7 @@
 /**
  * Show the Gradient Editor dialog (Tools > Developer > Gradient Editor).
  *
- * Scans ctx->app_dir/gradients/ for .ggr and .grd files, loads them, caches
+ * Scans ctx->app_dir/gradients/ for .ggr, .grd, .rgr, and .svg files, loads them, caches
  * UI preview textures, and displays a two-tab dialog:
  *   - Collection: scrollable list with swatch preview + gradient name
  *   - Editor:     large preview bar and detail info for the selected gradient
