@@ -457,9 +457,24 @@ static void trans_bar_move_stop(GradientDef* def, int* idx_ptr, double new_pos) 
 }
 
 /* Insert a new transparency stop at pos, interpolating opacity from neighbours.
- * No-op when the gradient has no transparency_stops array (e.g. GGR). */
+ * Creates the first stop when the gradient has no transparency_stops array yet. */
 static void trans_bar_add_stop(GradientDef* def, double pos) {
-    if (!def || !def->transparency_stops) return;
+    if (!def) return;
+
+    /* Bootstrap: allocate the very first transparency stop */
+    if (!def->transparency_stops) {
+        GradientTransparencyStop* ns =
+            (GradientTransparencyStop*)malloc(sizeof(GradientTransparencyStop));
+        if (!ns) return;
+        ns->position = pos;
+        ns->opacity  = 1.0;
+        ns->midpoint = pos;
+        def->transparency_stops     = ns;
+        def->num_transparency_stops = 1;
+        gradient_invalidate(def);
+        return;
+    }
+
     int N   = def->num_transparency_stops;
 
     /* Find sorted insert position */
@@ -1072,7 +1087,7 @@ static gboolean on_trans_bar_draw(GtkWidget* widget, cairo_t* cr, gpointer user_
     }
 
     /* Blue position indicator when hovering over empty bar space */
-    if (dd && dd->selected && dd->selected->transparency_stops &&
+    if (dd && dd->selected &&
         dd->hover_trans_node < 0 && dd->hover_trans_x >= 0 && !dd->trans_dragging) {
         double r  = (double)h * 0.25;
         double cy = (double)h * 0.5;
@@ -1097,7 +1112,7 @@ static gboolean on_trans_bar_button_press(GtkWidget*      widget,
                                           GdkEventButton* event,
                                           gpointer        user_data) {
     DialogData* dd = (DialogData*)user_data;
-    if (!dd || !dd->selected || !dd->selected->transparency_stops) return FALSE;
+    if (!dd || !dd->selected) return FALSE;
 
     int w = gtk_widget_get_allocated_width(widget);
     if (w < 2) return FALSE;
@@ -1105,11 +1120,11 @@ static gboolean on_trans_bar_button_press(GtkWidget*      widget,
     int    click_x = (int)event->x;
     double pos     = x_to_pos(click_x, w);
 
+    /* collect_trans_nodes returns NULL when there are no stops yet; that's fine */
     GArray* nodes = collect_trans_nodes(dd->selected);
-    if (!nodes) return FALSE;
-    int node_idx  = find_trans_node_at_x(nodes, click_x, w);
-    int total     = (int)nodes->len;
-    g_array_free(nodes, TRUE);
+    int node_idx  = nodes ? find_trans_node_at_x(nodes, click_x, w) : -1;
+    int total     = nodes ? (int)nodes->len : 0;
+    if (nodes) g_array_free(nodes, TRUE);
 
     /* Clicking the transparency bar deselects any colour-stop selection */
     dd->selected_node = -1;
