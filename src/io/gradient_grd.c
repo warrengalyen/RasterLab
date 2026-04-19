@@ -639,6 +639,39 @@ static gboolean parse_v5_gradient(FILE* fp, GradientDef* def, GradientGrdError* 
     uint32_t top_count = 0;
     if (!read_be_u32(fp, &top_count)) { *err = GRADIENT_GRD_ERROR_CORRUPT_FILE; return FALSE; }
 
+    /* Some GRD v5 files wrap the actual gradient keys inside an extra
+     * "Grad" → Objc layer (one key at the top level whose value contains the
+     * real Nm /GrdF/Clrs/Trns keys).  Detect and transparently unwrap it so
+     * the main loop below sees the inner keys directly. */
+    if (top_count == 1) {
+        long saved_pos = ftell(fp);
+        char* peek_key  = read_var_string(fp);
+        char  peek_type[5] = {0};
+        gboolean peeked = (peek_key != NULL) && read_tag(fp, peek_type);
+        if (peeked && strcmp(peek_key, "Grad") == 0
+                   && strcmp(peek_type, OST_OBJC) == 0) {
+            /* Step into the inner Objc: skip name + classID, read inner count */
+            uint32_t inl = 0;
+            gboolean unwrapped = read_be_u32(fp, &inl)
+                              && skip_bytes(fp, (size_t)inl * 2);
+            if (unwrapped) {
+                char* icid = read_var_string(fp);
+                unwrapped  = (icid != NULL);
+                g_free(icid);
+            }
+            if (unwrapped) unwrapped = read_be_u32(fp, &top_count);
+            if (!unwrapped) {
+                g_free(peek_key);
+                *err = GRADIENT_GRD_ERROR_CORRUPT_FILE;
+                return FALSE;
+            }
+            /* fp is now positioned at the first inner key; top_count updated */
+        } else {
+            fseek(fp, saved_pos, SEEK_SET); /* not a wrapper — restore */
+        }
+        g_free(peek_key);
+    }
+
     /* Dynamic arrays for color/transparency stops */
     int n_cstops = 0, cap_cstops = 0;
     int n_tstops = 0, cap_tstops = 0;
