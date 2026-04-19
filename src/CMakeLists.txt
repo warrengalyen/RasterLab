@@ -152,6 +152,7 @@ set(SOURCES
     ui/dialogs/palettize_dialog.c
     ui/dialogs/recovery_dialog.c
     ui/dialogs/retinex_dialog.c
+    ui/dialogs/gradient_editor_dialog.c
     ui/dialogs/settings_dialog.c
     ui/dialogs/rotate_dialog.c
     ui/dialogs/save_options_dialog.c

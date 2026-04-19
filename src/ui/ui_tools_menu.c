@@ -17,6 +17,7 @@
 #include "document.h"
 #include "i18n.h"
 #include "ui.h"
+#include "ui/dialogs/gradient_editor_dialog.h"
 #include "ui/dialogs/settings_dialog.h"
 #include <glib.h>
 #include <gtk/gtk.h>
@@ -91,6 +92,14 @@ static void on_tools_menu_show_debug_log_activate(GtkMenuItem* item, gpointer us
     }
 
     g_free(uri);
+}
+
+static void on_tools_menu_gradient_editor_activate(GtkMenuItem* item, gpointer user_data) {
+    (void)item;
+    AppContext* ctx = (AppContext*)user_data;
+    if (ctx) {
+        gradient_editor_dialog_show(ctx);
+    }
 }
 
 static void on_tools_menu_gpu_debug_toggled(GtkCheckMenuItem* check_menu_item, gpointer user_data) {
@@ -299,5 +308,11 @@ void ui_tools_menu_setup(GtkBuilder* builder, AppContext* ctx) {
             gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(tools_menu_gpu_debug),
                                            settings_get_show_gpu_stats(ctx->settings));
         }
+    }
+
+    GtkWidget* tools_menu_gradient_editor = GTK_WIDGET(gtk_builder_get_object(builder, "tools_menu_gradient_editor"));
+    if (tools_menu_gradient_editor) {
+        g_signal_connect(tools_menu_gradient_editor, "activate",
+                         G_CALLBACK(on_tools_menu_gradient_editor_activate), ctx);
     }
 }

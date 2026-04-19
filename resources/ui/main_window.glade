@@ -1747,6 +1747,20 @@
                 <property name="use-underline">True</property>
               </object>
             </child>
+            <child>
+              <object class="GtkSeparatorMenuItem">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkMenuItem" id="tools_menu_gradient_editor">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">Gradient Editor...</property>
+                <property name="use-underline">True</property>
+              </object>
+            </child>
           </object>
         </child>
       </object>
