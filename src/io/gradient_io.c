@@ -11,6 +11,7 @@
 #include "io/gradient_io.h"
 #include "io/gradient_ggr.h"
 #include "io/gradient_grd.h"
+#include "io/gradient_rgr.h"
 #include "debug_logger.h"
 #include "i18n.h"
 #include <glib.h>
@@ -23,7 +24,8 @@
 typedef enum {
     GRADIENT_FORMAT_UNKNOWN = 0,
     GRADIENT_FORMAT_GGR,
-    GRADIENT_FORMAT_GRD
+    GRADIENT_FORMAT_GRD,
+    GRADIENT_FORMAT_RGR
 } GradientFormat;
 
 static GradientFormat detect_format(const char* filename) {
@@ -33,6 +35,7 @@ static GradientFormat detect_format(const char* filename) {
     ext++; /* skip the dot */
     if (g_ascii_strcasecmp(ext, "ggr") == 0) return GRADIENT_FORMAT_GGR;
     if (g_ascii_strcasecmp(ext, "grd") == 0) return GRADIENT_FORMAT_GRD;
+    if (g_ascii_strcasecmp(ext, "rgr") == 0) return GRADIENT_FORMAT_RGR;
     return GRADIENT_FORMAT_UNKNOWN;
 }
 
@@ -59,6 +62,19 @@ static GradientIOError map_grd_error(GradientGrdError err) {
         case GRADIENT_GRD_ERROR_CORRUPT_FILE:       return GRADIENT_IO_ERROR_CORRUPT_FILE;
         case GRADIENT_GRD_ERROR_OUT_OF_MEMORY:      return GRADIENT_IO_ERROR_OUT_OF_MEMORY;
         case GRADIENT_GRD_ERROR_UNSUPPORTED_FORMAT: return GRADIENT_IO_ERROR_UNSUPPORTED_FORMAT;
+        default:                                     return GRADIENT_IO_ERROR_UNKNOWN;
+    }
+}
+
+static GradientIOError map_rgr_error(GradientRgrError err) {
+    switch (err) {
+        case GRADIENT_RGR_ERROR_NONE:               return GRADIENT_IO_ERROR_NONE;
+        case GRADIENT_RGR_ERROR_INVALID_PARAMETERS: return GRADIENT_IO_ERROR_INVALID_PARAMETERS;
+        case GRADIENT_RGR_ERROR_FILE_NOT_FOUND:     return GRADIENT_IO_ERROR_FILE_NOT_FOUND;
+        case GRADIENT_RGR_ERROR_FILE_READ_ERROR:    return GRADIENT_IO_ERROR_FILE_READ_ERROR;
+        case GRADIENT_RGR_ERROR_FILE_WRITE_ERROR:   return GRADIENT_IO_ERROR_FILE_WRITE_ERROR;
+        case GRADIENT_RGR_ERROR_CORRUPT_FILE:       return GRADIENT_IO_ERROR_CORRUPT_FILE;
+        case GRADIENT_RGR_ERROR_OUT_OF_MEMORY:      return GRADIENT_IO_ERROR_OUT_OF_MEMORY;
         default:                                     return GRADIENT_IO_ERROR_UNKNOWN;
     }
 }
@@ -98,6 +114,13 @@ GradientSet* gradient_io_load(const char* filename, GradientIOError* error_out) 
         return set;
     }
 
+    if (fmt == GRADIENT_FORMAT_RGR) {
+        GradientRgrError rgr_err = GRADIENT_RGR_ERROR_NONE;
+        set = gradient_rgr_load(filename, &rgr_err);
+        if (error_out) *error_out = map_rgr_error(rgr_err);
+        return set;
+    }
+
     if (error_out) *error_out = GRADIENT_IO_ERROR_UNSUPPORTED_FORMAT;
     return NULL;
 }
@@ -133,6 +156,13 @@ gboolean gradient_io_save(const GradientSet* set, const char* filename,
         return ok;
     }
 
+    if (fmt == GRADIENT_FORMAT_RGR) {
+        GradientRgrError rgr_err = GRADIENT_RGR_ERROR_NONE;
+        gboolean ok = gradient_rgr_save(set, filename, &rgr_err);
+        if (error_out) *error_out = map_rgr_error(rgr_err);
+        return ok;
+    }
+
     if (error_out) *error_out = GRADIENT_IO_ERROR_UNSUPPORTED_FORMAT;
     return FALSE;
 }
@@ -161,7 +191,7 @@ const char* gradient_io_get_error_message(GradientIOError error, const char* fil
         case GRADIENT_IO_ERROR_FILE_WRITE_ERROR:
             return _("Failed to write gradient file. The file may be locked or the disk may be full.");
         case GRADIENT_IO_ERROR_UNSUPPORTED_FORMAT:
-            return _("Unsupported gradient file format. Only .ggr and .grd files are supported.");
+            return _("Unsupported gradient file format. Supported formats: .ggr, .grd, .rgr");
         case GRADIENT_IO_ERROR_CORRUPT_FILE:
             return _("Gradient file is corrupted or incomplete.");
         case GRADIENT_IO_ERROR_OUT_OF_MEMORY:

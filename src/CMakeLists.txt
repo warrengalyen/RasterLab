@@ -58,6 +58,7 @@ set(SOURCES
     io/gradient_io.c
     io/gradient_ggr.c
     io/gradient_grd.c
+    io/gradient_rgr.c
     io/image_io.c
     main.c
     panels.c

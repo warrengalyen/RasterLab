@@ -1332,13 +1332,8 @@ static void load_gradient_collection(DialogData* dd, const gchar* app_dir) {
 
     const gchar* fname;
     while ((fname = g_dir_read_name(dir)) != NULL) {
-        const gchar* dot = strrchr(fname, '.');
-        if (!dot)
+        if (!gradient_io_is_supported(fname))
             continue;
-        if (g_ascii_strcasecmp(dot, ".ggr") != 0 &&
-            g_ascii_strcasecmp(dot, ".grd") != 0) {
-            continue;
-        }
 
         gchar* full = g_build_filename(dir_path, fname, NULL);
         GradientIOError io_err = GRADIENT_IO_ERROR_NONE;
