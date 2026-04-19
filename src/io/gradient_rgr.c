@@ -25,6 +25,7 @@
  *     [4]  num_segments            (uint32)
  *     [4]  num_transparency_stops  (uint32)
  *     [4]  smoothness              (int32)
+ *     [4]  flags                   (uint32)  bit 0 = gamma_blend
  *
  *   Per segment (104 bytes each):
  *     11 × double (8 bytes, little-endian IEEE 754):
@@ -225,12 +226,13 @@ GradientSet* gradient_rgr_load(const char* filename, GradientRgrError* error_out
             name_buf = NULL;
         }
 
-        /* Counts and smoothness */
-        uint32_t num_segments = 0, num_trans = 0;
+        /* Counts, smoothness, and flags */
+        uint32_t num_segments = 0, num_trans = 0, flags = 0;
         int32_t  smoothness   = 0;
         if (!read_u32(fp, &num_segments) ||
             !read_u32(fp, &num_trans)    ||
-            !read_i32(fp, &smoothness)) {
+            !read_i32(fp, &smoothness)   ||
+            !read_u32(fp, &flags)) {
             FAIL(GRADIENT_RGR_ERROR_FILE_READ_ERROR);
         }
         if (num_segments > RGR_MAX_SEGMENTS || num_trans > RGR_MAX_TRANS_STOPS) {
@@ -238,7 +240,8 @@ GradientSet* gradient_rgr_load(const char* filename, GradientRgrError* error_out
             FAIL(GRADIENT_RGR_ERROR_CORRUPT_FILE);
         }
 
-        def->smoothness = smoothness;
+        def->smoothness  = smoothness;
+        def->gamma_blend = (flags & 0x1u) != 0;
 
         /* Segments */
         if (num_segments > 0) {
@@ -366,10 +369,12 @@ gboolean gradient_rgr_save(const GradientSet* set, const char* filename,
             }
         }
 
-        /* Counts and smoothness */
+        /* Counts, smoothness, and flags */
+        uint32_t flags = def->gamma_blend ? 0x1u : 0u;
         if (!write_u32(fp, (uint32_t)def->num_segments)            ||
             !write_u32(fp, (uint32_t)def->num_transparency_stops)  ||
-            !write_i32(fp, (int32_t)def->smoothness)) {
+            !write_i32(fp, (int32_t)def->smoothness)               ||
+            !write_u32(fp, flags)) {
             FAIL(GRADIENT_RGR_ERROR_FILE_WRITE_ERROR);
         }
 

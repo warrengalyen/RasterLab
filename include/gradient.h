@@ -178,6 +178,8 @@ typedef struct {
 
     int smoothness; /* [0, 4096], preserved from GRD for round-tripping */
 
+    bool gamma_blend; /* TRUE = interpolate in linear light (sRGB gamma-corrected) */
+
     /* --- LUT cache (managed by gradient_lut_*()) --- */
     GradientLUT* lut;            /* precomputed float table; NULL = not yet built */
     bool         lut_dirty;      /* true = rebuild required on next evaluate */

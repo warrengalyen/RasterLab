@@ -129,8 +129,22 @@ static void rgb_to_hsv(double r, double g, double b,
     *out_h /= 6.0;
 }
 
-/* Interpolate two RGBA endpoints according to the segment's color space. */
-static void interpolate_color(const GradientSegment* seg, double blend,
+/* sRGB ↔ linear-light conversion (IEC 61966-2-1) */
+static double srgb_to_linear(double c) {
+    if (c <= 0.04045)
+        return c / 12.92;
+    return pow((c + 0.055) / 1.055, 2.4);
+}
+
+static double linear_to_srgb(double c) {
+    if (c <= 0.0031308)
+        return c * 12.92;
+    return 1.055 * pow(c, 1.0 / 2.4) - 0.055;
+}
+
+/* Interpolate two RGBA endpoints according to the segment's color space.
+ * When gamma_blend is true, RGB interpolation is performed in linear light. */
+static void interpolate_color(const GradientSegment* seg, double blend, bool gamma_blend,
                               double* out_r, double* out_g, double* out_b, double* out_a) {
     double lr = seg->left_r, lg = seg->left_g, lb = seg->left_b, la = seg->left_a;
     double rr = seg->right_r, rg = seg->right_g, rb = seg->right_b, ra = seg->right_a;
@@ -139,9 +153,17 @@ static void interpolate_color(const GradientSegment* seg, double blend,
 
     switch (seg->color_space) {
         case GRADIENT_COLOR_RGB:
-            *out_r = lr + blend * (rr - lr);
-            *out_g = lg + blend * (rg - lg);
-            *out_b = lb + blend * (rb - lb);
+            if (gamma_blend) {
+                double ll_r = srgb_to_linear(lr), ll_g = srgb_to_linear(lg), ll_b = srgb_to_linear(lb);
+                double rl_r = srgb_to_linear(rr), rl_g = srgb_to_linear(rg), rl_b = srgb_to_linear(rb);
+                *out_r = linear_to_srgb(ll_r + blend * (rl_r - ll_r));
+                *out_g = linear_to_srgb(ll_g + blend * (rl_g - ll_g));
+                *out_b = linear_to_srgb(ll_b + blend * (rl_b - ll_b));
+            } else {
+                *out_r = lr + blend * (rr - lr);
+                *out_g = lg + blend * (rg - lg);
+                *out_b = lb + blend * (rb - lb);
+            }
             break;
         case GRADIENT_COLOR_HSV_CCW:
         case GRADIENT_COLOR_HSV_CW: {
@@ -301,7 +323,7 @@ void gradient_evaluate(const GradientDef* def, double position,
     mid_norm = clamp_d(mid_norm, 0.0, 1.0);
 
     double blend = apply_blend(t, mid_norm, seg->blend_mode);
-    interpolate_color(seg, blend, out_r, out_g, out_b, out_a);
+    interpolate_color(seg, blend, def->gamma_blend, out_r, out_g, out_b, out_a);
 
     /* Multiply by transparency stops if present (GRD overlay) */
     if (def->transparency_stops && def->num_transparency_stops > 0) {

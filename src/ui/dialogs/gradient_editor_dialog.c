@@ -79,14 +79,20 @@ typedef struct {
     GradientDef* selected;  /* currently selected gradient (borrowed) */
     gchar* selected_source; /* currently selected source basename (borrowed) */
 
+    /* App context (borrowed – lives as long as the dialog) */
+    const gchar* app_dir;
+
     /* Glade widgets we need to update on selection change */
     GtkWidget* notebook;
     GtkWidget* editor_preview;
-    GtkWidget* node_bar;   /* GtkDrawingArea for colour stop handles */
+    GtkWidget* node_bar;          /* GtkDrawingArea for colour stop handles */
     GtkWidget* trans_bar;         /* GtkDrawingArea for transparency stop handles */
-    GtkWidget* collection_list;  /* GtkListBox in the Collection tab */
-    GtkWidget* name_label;
-    GtkWidget* file_label;
+    GtkWidget* collection_list;   /* GtkListBox in the Collection tab */
+
+    /* Gradient options widgets */
+    GtkWidget* name_entry;           /* GtkEntry: gradient_name_entry */
+    GtkWidget* gamma_blend_checkbox; /* GtkCheckButton: gamma_blend_checkbox */
+    GtkWidget* equally_space_checkbox; /* GtkCheckButton: equally_space_checkbox */
 
     /* Node options section */
     GtkWidget*          node_options_separator; /* shown only when a node is selected */
@@ -1269,6 +1275,326 @@ static void on_location_adj_changed(GtkAdjustment* adj, gpointer user_data) {
     }
 }
 
+/* Forward declaration needed by on_import_btn_clicked */
+static void update_editor_tab(DialogData* dd, GradientDef* def, const gchar* source);
+
+/* -------------------------------------------------------------------------
+ * Gradient options signal handlers
+ * ---------------------------------------------------------------------- */
+
+/* Gradient name entry changed: keep def->name in sync */
+static void on_name_entry_changed(GtkEditable* editable, gpointer user_data) {
+    DialogData* dd = (DialogData*)user_data;
+    if (!dd || !dd->selected || dd->updating_node_ui) return;
+
+    const gchar* text = gtk_entry_get_text(GTK_ENTRY(editable));
+    g_free(dd->selected->name);
+    dd->selected->name = (text && text[0] != '\0') ? g_strdup(text) : NULL;
+}
+
+/* Gamma blend checkbox toggled: enable/disable linear-light blending */
+static void on_gamma_blend_toggled(GtkToggleButton* button, gpointer user_data) {
+    DialogData* dd = (DialogData*)user_data;
+    if (!dd || !dd->selected || dd->updating_node_ui) return;
+
+    dd->selected->gamma_blend = gtk_toggle_button_get_active(button);
+    gradient_invalidate(dd->selected);
+    gtk_widget_queue_draw(dd->editor_preview);
+}
+
+/* Equally space checkbox toggled: redistribute all nodes evenly, then uncheck */
+static void on_equally_space_toggled(GtkToggleButton* button, gpointer user_data) {
+    DialogData* dd = (DialogData*)user_data;
+    if (!dd || !dd->selected) return;
+    if (!gtk_toggle_button_get_active(button)) return;
+
+    GradientDef* def = dd->selected;
+
+    /* Equally space colour stops, preserving their colours */
+    if (def->num_segments > 0) {
+        int N = def->num_segments;
+        ColorStopRec* stops = (ColorStopRec*)calloc((size_t)(N + 1), sizeof(ColorStopRec));
+        if (stops) {
+            stops[0].r = def->segments[0].left_r;
+            stops[0].g = def->segments[0].left_g;
+            stops[0].b = def->segments[0].left_b;
+            stops[0].a = def->segments[0].left_a;
+            for (int i = 0; i < N; i++) {
+                stops[i + 1].r = def->segments[i].right_r;
+                stops[i + 1].g = def->segments[i].right_g;
+                stops[i + 1].b = def->segments[i].right_b;
+                stops[i + 1].a = def->segments[i].right_a;
+            }
+            for (int i = 0; i <= N; i++)
+                stops[i].pos = (double)i / (double)N;
+
+            for (int i = 0; i < N; i++) {
+                def->segments[i].left_pos  = stops[i].pos;
+                def->segments[i].right_pos = stops[i + 1].pos;
+                def->segments[i].midpoint  = (stops[i].pos + stops[i + 1].pos) * 0.5;
+                def->segments[i].left_r    = stops[i].r;
+                def->segments[i].left_g    = stops[i].g;
+                def->segments[i].left_b    = stops[i].b;
+                def->segments[i].left_a    = stops[i].a;
+                def->segments[i].right_r   = stops[i + 1].r;
+                def->segments[i].right_g   = stops[i + 1].g;
+                def->segments[i].right_b   = stops[i + 1].b;
+                def->segments[i].right_a   = stops[i + 1].a;
+            }
+            free(stops);
+        }
+    }
+
+    /* Equally space transparency stops */
+    int M = def->num_transparency_stops;
+    if (M > 1) {
+        double step = 1.0 / (double)(M - 1);
+        for (int i = 0; i < M; i++) {
+            def->transparency_stops[i].position = (double)i * step;
+            /* Set midpoint halfway to the next stop (clamp at 1.0) */
+            double next = (i < M - 1) ? (double)(i + 1) * step : 1.0;
+            def->transparency_stops[i].midpoint = (def->transparency_stops[i].position + next) * 0.5;
+        }
+    }
+
+    gradient_invalidate(def);
+    gtk_widget_queue_draw(dd->editor_preview);
+    if (dd->node_bar)  gtk_widget_queue_draw(dd->node_bar);
+    if (dd->trans_bar) gtk_widget_queue_draw(dd->trans_bar);
+    update_node_options_ui(dd);
+
+    /* Auto-uncheck: this is a one-shot action */
+    dd->updating_node_ui = TRUE;
+    gtk_toggle_button_set_active(button, FALSE);
+    dd->updating_node_ui = FALSE;
+}
+
+/* Save to collection: write the current gradient as .rgr in gradients/ directory */
+static void on_save_collection_btn_clicked(GtkButton* button, gpointer user_data) {
+    (void)button;
+    DialogData* dd = (DialogData*)user_data;
+    if (!dd || !dd->selected) return;
+
+    GtkWidget* top = gtk_widget_get_toplevel(GTK_WIDGET(button));
+    GtkWindow* parent_win = GTK_IS_WINDOW(top) ? GTK_WINDOW(top) : NULL;
+
+    /* Get name from entry (or def->name as fallback) */
+    const gchar* name = NULL;
+    if (dd->name_entry)
+        name = gtk_entry_get_text(GTK_ENTRY(dd->name_entry));
+    if (!name || name[0] == '\0')
+        name = dd->selected->name;
+
+    if (!name || name[0] == '\0') {
+        GtkWidget* warn = gtk_message_dialog_new(
+            parent_win, GTK_DIALOG_MODAL,
+            GTK_MESSAGE_WARNING, GTK_BUTTONS_OK,
+            "Please enter a gradient name before saving to the collection.");
+        gtk_dialog_run(GTK_DIALOG(warn));
+        gtk_widget_destroy(warn);
+        return;
+    }
+
+    /* Keep def->name in sync with the entry */
+    if (!dd->selected->name || strcmp(dd->selected->name, name) != 0) {
+        g_free(dd->selected->name);
+        dd->selected->name = g_strdup(name);
+    }
+
+    /* Sanitize name for use as a filename */
+    gchar* sanitized = g_strdup(name);
+    for (gchar* p = sanitized; *p; p++) {
+        if (*p == '/' || *p == '\\' || *p == ':' || *p == '*' ||
+            *p == '?' || *p == '"'  || *p == '<' || *p == '>' || *p == '|')
+            *p = '_';
+    }
+
+    /* Build path: <app_dir>/gradients/<name>.rgr */
+    const gchar* app_dir = dd->app_dir ? dd->app_dir : ".";
+    gchar* dir_path  = g_build_filename(app_dir, "gradients", NULL);
+    g_mkdir_with_parents(dir_path, 0755);
+    gchar* rgr_name  = g_strdup_printf("%s.rgr", sanitized);
+    gchar* filepath  = g_build_filename(dir_path, rgr_name, NULL);
+    g_free(rgr_name);
+    g_free(dir_path);
+    g_free(sanitized);
+
+    /* Prompt if the file already exists */
+    if (g_file_test(filepath, G_FILE_TEST_EXISTS)) {
+        GtkWidget* confirm = gtk_message_dialog_new(
+            parent_win, GTK_DIALOG_MODAL,
+            GTK_MESSAGE_QUESTION, GTK_BUTTONS_YES_NO,
+            "A gradient named \"%s\" already exists in the collection.\n\nOverwrite it?",
+            name);
+        gint resp = gtk_dialog_run(GTK_DIALOG(confirm));
+        gtk_widget_destroy(confirm);
+        if (resp != GTK_RESPONSE_YES) {
+            g_free(filepath);
+            return;
+        }
+    }
+
+    /* Save using a stack-allocated set that borrows the gradient pointer */
+    GradientSet tmp_set = { 1, dd->selected };
+    GradientIOError io_err = GRADIENT_IO_ERROR_NONE;
+    gboolean ok = gradient_io_save(&tmp_set, filepath, &io_err);
+
+    if (ok) {
+        GtkWidget* msg = gtk_message_dialog_new(
+            parent_win, GTK_DIALOG_MODAL,
+            GTK_MESSAGE_INFO, GTK_BUTTONS_OK,
+            "Gradient \"%s\" saved to collection.", name);
+        gtk_dialog_run(GTK_DIALOG(msg));
+        gtk_widget_destroy(msg);
+    } else {
+        GtkWidget* err = gtk_message_dialog_new(
+            parent_win, GTK_DIALOG_MODAL,
+            GTK_MESSAGE_ERROR, GTK_BUTTONS_OK,
+            "Failed to save gradient:\n%s",
+            gradient_io_get_error_message(io_err, filepath));
+        gtk_dialog_run(GTK_DIALOG(err));
+        gtk_widget_destroy(err);
+    }
+
+    g_free(filepath);
+}
+
+/* Import gradient file: load into the editor without saving to collection */
+static void on_import_btn_clicked(GtkButton* button, gpointer user_data) {
+    (void)button;
+    DialogData* dd = (DialogData*)user_data;
+    if (!dd) return;
+
+    GtkWidget* top = gtk_widget_get_toplevel(GTK_WIDGET(button));
+    GtkWindow* parent_win = GTK_IS_WINDOW(top) ? GTK_WINDOW(top) : NULL;
+
+    GtkWidget* dlg = gtk_file_chooser_dialog_new(
+        "Import Gradient File", parent_win,
+        GTK_FILE_CHOOSER_ACTION_OPEN,
+        "_Cancel", GTK_RESPONSE_CANCEL,
+        "_Open",   GTK_RESPONSE_ACCEPT,
+        NULL);
+
+    GtkFileFilter* grad_filter = gtk_file_filter_new();
+    gtk_file_filter_set_name(grad_filter, "Gradient files (*.ggr, *.grd, *.rgr)");
+    gtk_file_filter_add_pattern(grad_filter, "*.ggr");
+    gtk_file_filter_add_pattern(grad_filter, "*.GGR");
+    gtk_file_filter_add_pattern(grad_filter, "*.grd");
+    gtk_file_filter_add_pattern(grad_filter, "*.GRD");
+    gtk_file_filter_add_pattern(grad_filter, "*.rgr");
+    gtk_file_filter_add_pattern(grad_filter, "*.RGR");
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dlg), grad_filter);
+
+    GtkFileFilter* all_filter = gtk_file_filter_new();
+    gtk_file_filter_set_name(all_filter, "All files");
+    gtk_file_filter_add_pattern(all_filter, "*");
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dlg), all_filter);
+
+    gint resp = gtk_dialog_run(GTK_DIALOG(dlg));
+    if (resp != GTK_RESPONSE_ACCEPT) {
+        gtk_widget_destroy(dlg);
+        return;
+    }
+
+    gchar* filename = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dlg));
+    gtk_widget_destroy(dlg);
+
+    GradientIOError io_err = GRADIENT_IO_ERROR_NONE;
+    GradientSet* gs = gradient_io_load(filename, &io_err);
+
+    if (!gs || gs->num_gradients == 0) {
+        GtkWidget* err = gtk_message_dialog_new(
+            parent_win, GTK_DIALOG_MODAL,
+            GTK_MESSAGE_ERROR, GTK_BUTTONS_OK,
+            "Failed to import gradient file:\n%s",
+            gradient_io_get_error_message(io_err, filename));
+        gtk_dialog_run(GTK_DIALOG(err));
+        gtk_widget_destroy(err);
+        if (gs) gradient_set_free(gs);
+        g_free(filename);
+        return;
+    }
+
+    /* Wrap in a GradEntry so the set is properly owned */
+    GradEntry* entry   = g_new0(GradEntry, 1);
+    entry->set         = gs;
+    entry->filepath    = filename; /* ownership transferred */
+    gchar* base        = g_path_get_basename(filename);
+    gchar* dot         = strrchr(base, '.');
+    if (dot) *dot      = '\0';
+    entry->basename    = base;
+
+    g_ptr_array_add(dd->entries, entry);
+
+    /* Load first gradient into editor */
+    update_editor_tab(dd, &gs->gradients[0], entry->basename);
+    gtk_notebook_set_current_page(GTK_NOTEBOOK(dd->notebook), 1);
+}
+
+/* Export gradient file: save the current editor gradient to a user-chosen path */
+static void on_export_btn_clicked(GtkButton* button, gpointer user_data) {
+    (void)button;
+    DialogData* dd = (DialogData*)user_data;
+    if (!dd || !dd->selected) return;
+
+    GtkWidget* top = gtk_widget_get_toplevel(GTK_WIDGET(button));
+    GtkWindow* parent_win = GTK_IS_WINDOW(top) ? GTK_WINDOW(top) : NULL;
+
+    GtkWidget* dlg = gtk_file_chooser_dialog_new(
+        "Export Gradient File", parent_win,
+        GTK_FILE_CHOOSER_ACTION_SAVE,
+        "_Cancel", GTK_RESPONSE_CANCEL,
+        "_Save",   GTK_RESPONSE_ACCEPT,
+        NULL);
+    gtk_file_chooser_set_do_overwrite_confirmation(GTK_FILE_CHOOSER(dlg), TRUE);
+
+    /* Suggest a default filename */
+    const gchar* def_name = dd->selected->name ? dd->selected->name : "gradient";
+    gchar* suggest = g_strdup_printf("%s.rgr", def_name);
+    gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(dlg), suggest);
+    g_free(suggest);
+
+    GtkFileFilter* rgr_filter = gtk_file_filter_new();
+    gtk_file_filter_set_name(rgr_filter, "RasterLab Gradient (*.rgr)");
+    gtk_file_filter_add_pattern(rgr_filter, "*.rgr");
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dlg), rgr_filter);
+
+    GtkFileFilter* ggr_filter = gtk_file_filter_new();
+    gtk_file_filter_set_name(ggr_filter, "GIMP Gradient (*.ggr)");
+    gtk_file_filter_add_pattern(ggr_filter, "*.ggr");
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dlg), ggr_filter);
+
+    GtkFileFilter* all_filter = gtk_file_filter_new();
+    gtk_file_filter_set_name(all_filter, "All files");
+    gtk_file_filter_add_pattern(all_filter, "*");
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dlg), all_filter);
+
+    gint resp = gtk_dialog_run(GTK_DIALOG(dlg));
+    if (resp != GTK_RESPONSE_ACCEPT) {
+        gtk_widget_destroy(dlg);
+        return;
+    }
+
+    gchar* filepath = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dlg));
+    gtk_widget_destroy(dlg);
+
+    GradientSet tmp_set = { 1, dd->selected };
+    GradientIOError io_err = GRADIENT_IO_ERROR_NONE;
+    gboolean ok = gradient_io_save(&tmp_set, filepath, &io_err);
+
+    if (!ok) {
+        GtkWidget* err = gtk_message_dialog_new(
+            parent_win, GTK_DIALOG_MODAL,
+            GTK_MESSAGE_ERROR, GTK_BUTTONS_OK,
+            "Failed to export gradient file:\n%s",
+            gradient_io_get_error_message(io_err, filepath));
+        gtk_dialog_run(GTK_DIALOG(err));
+        gtk_widget_destroy(err);
+    }
+
+    g_free(filepath);
+}
+
 /* -------------------------------------------------------------------------
  * Selection handler
  * ---------------------------------------------------------------------- */
@@ -1295,13 +1621,24 @@ static void update_editor_tab(DialogData* dd, GradientDef* def, const gchar* sou
     if (dd->trans_bar)
         gtk_widget_queue_draw(dd->trans_bar);
 
-    if (!def) {
-        gtk_label_set_text(GTK_LABEL(dd->name_label), "No gradient selected");
-        gtk_label_set_text(GTK_LABEL(dd->file_label), "");
-    } else {
-        gtk_label_set_text(GTK_LABEL(dd->name_label), def->name ? def->name : "(unnamed)");
-        gtk_label_set_text(GTK_LABEL(dd->file_label), source ? source : "");
+    /* Populate gradient name entry and options, suppressing feedback signals */
+    dd->updating_node_ui = TRUE;
+    if (dd->name_entry) {
+        gtk_entry_set_text(GTK_ENTRY(dd->name_entry),
+                           (def && def->name) ? def->name : "");
     }
+    if (dd->gamma_blend_checkbox) {
+        gtk_toggle_button_set_active(
+            GTK_TOGGLE_BUTTON(dd->gamma_blend_checkbox),
+            def ? def->gamma_blend : FALSE);
+    }
+    if (dd->equally_space_checkbox) {
+        gtk_toggle_button_set_active(
+            GTK_TOGGLE_BUTTON(dd->equally_space_checkbox), FALSE);
+    }
+    dd->updating_node_ui = FALSE;
+
+    (void)source; /* source was used for the removed file label */
 
     update_node_options_ui(dd);
 }
@@ -1562,17 +1899,23 @@ void gradient_editor_dialog_show(AppContext* ctx) {
     }
 
     /* Collect widget references */
-    GtkWidget* notebook = GTK_WIDGET(gtk_builder_get_object(builder, "gradient_editor_notebook"));
-    GtkWidget* list_box = GTK_WIDGET(gtk_builder_get_object(builder, "gradient_collection_list"));
+    GtkWidget* notebook       = GTK_WIDGET(gtk_builder_get_object(builder, "gradient_editor_notebook"));
+    GtkWidget* list_box       = GTK_WIDGET(gtk_builder_get_object(builder, "gradient_collection_list"));
     GtkWidget* editor_preview = GTK_WIDGET(gtk_builder_get_object(builder, "gradient_editor_preview"));
-    GtkWidget* node_bar  = GTK_WIDGET(gtk_builder_get_object(builder, "gradient_node_bar"));
-    GtkWidget* trans_bar = GTK_WIDGET(gtk_builder_get_object(builder, "gradient_trans_bar"));
-    GtkWidget* name_label = GTK_WIDGET(gtk_builder_get_object(builder, "gradient_editor_name_label"));
-    GtkWidget* file_label = GTK_WIDGET(gtk_builder_get_object(builder, "gradient_editor_file_label"));
+    GtkWidget* node_bar       = GTK_WIDGET(gtk_builder_get_object(builder, "gradient_node_bar"));
+    GtkWidget* trans_bar      = GTK_WIDGET(gtk_builder_get_object(builder, "gradient_trans_bar"));
     GtkWidget* close_btn      = GTK_WIDGET(gtk_builder_get_object(builder, "gradient_editor_close_btn"));
     GtkWidget* ok_btn         = GTK_WIDGET(gtk_builder_get_object(builder, "gradient_editor_cancel_btn"));
     GtkWidget* edit_grad_btn  = GTK_WIDGET(gtk_builder_get_object(builder, "edit_gradient_btn"));
     GtkWidget* new_grad_btn   = GTK_WIDGET(gtk_builder_get_object(builder, "new_gradient_btn"));
+
+    /* Gradient options widgets */
+    GtkWidget* name_entry         = GTK_WIDGET(gtk_builder_get_object(builder, "gradient_name_entry"));
+    GtkWidget* gamma_blend_cb     = GTK_WIDGET(gtk_builder_get_object(builder, "gamma_blend_checkbox"));
+    GtkWidget* equally_space_cb   = GTK_WIDGET(gtk_builder_get_object(builder, "equally_space_checkbox"));
+    GtkWidget* save_collection_btn = GTK_WIDGET(gtk_builder_get_object(builder, "save_collection_btn"));
+    GtkWidget* import_btn         = GTK_WIDGET(gtk_builder_get_object(builder, "import_btn"));
+    GtkWidget* export_btn         = GTK_WIDGET(gtk_builder_get_object(builder, "export_btn"));
 
     /* Node options widgets */
     GtkWidget* node_options_sep   = GTK_WIDGET(gtk_builder_get_object(builder, "node_options_separator"));
@@ -1595,13 +1938,15 @@ void gradient_editor_dialog_show(AppContext* ctx) {
     dd->hover_trans_node    = -1;
     dd->hover_trans_x       = -1;
     dd->drag_trans_idx      = -1;
+    dd->app_dir             = ctx->app_dir;
     dd->notebook            = notebook;
     dd->editor_preview      = editor_preview;
     dd->node_bar            = node_bar;
     dd->trans_bar           = trans_bar;
     dd->collection_list     = list_box;
-    dd->name_label          = name_label;
-    dd->file_label          = file_label;
+    dd->name_entry          = name_entry;
+    dd->gamma_blend_checkbox   = gamma_blend_cb;
+    dd->equally_space_checkbox = equally_space_cb;
     dd->node_options_separator = node_options_sep;
     dd->node_options_label     = node_options_lbl;
     dd->node_options_box       = node_options_box;
@@ -1678,6 +2023,20 @@ void gradient_editor_dialog_show(AppContext* ctx) {
     if (new_grad_btn)
         g_signal_connect(new_grad_btn,  "clicked",    G_CALLBACK(on_new_gradient_btn_clicked),  dd);
     g_signal_connect(dialog,          "destroy",      G_CALLBACK(on_dialog_destroy),            NULL);
+
+    /* Gradient options signals */
+    if (name_entry)
+        g_signal_connect(name_entry,        "changed", G_CALLBACK(on_name_entry_changed),          dd);
+    if (gamma_blend_cb)
+        g_signal_connect(gamma_blend_cb,    "toggled", G_CALLBACK(on_gamma_blend_toggled),          dd);
+    if (equally_space_cb)
+        g_signal_connect(equally_space_cb,  "toggled", G_CALLBACK(on_equally_space_toggled),        dd);
+    if (save_collection_btn)
+        g_signal_connect(save_collection_btn, "clicked", G_CALLBACK(on_save_collection_btn_clicked), dd);
+    if (import_btn)
+        g_signal_connect(import_btn,  "clicked", G_CALLBACK(on_import_btn_clicked),  dd);
+    if (export_btn)
+        g_signal_connect(export_btn,  "clicked", G_CALLBACK(on_export_btn_clicked),  dd);
 
     /* Colour stop node bar: draw + mouse input */
     if (node_bar) {
