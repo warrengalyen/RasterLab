@@ -143,9 +143,9 @@ static void on_help_about_activate(GtkMenuItem* item, gpointer user_data) {
 
     /* Version from version.h; build number from generated build_version.h. */
 #if RASTERLAB_BUILD_NUMBER != 0
-    gchar* version_line = g_strdup_printf(_("%s (Build %d)"), RASTERLAB_VERSION_LINE, RASTERLAB_BUILD_NUMBER);
+    gchar* version_line = g_strdup_printf(_("%s (Build %d)"), RASTERLAB_VERSION_FOR_DISPLAY, RASTERLAB_BUILD_NUMBER);
 #else
-    gchar* version_line = g_strdup(RASTERLAB_VERSION_LINE);
+    gchar* version_line = g_strdup(RASTERLAB_VERSION_FOR_DISPLAY);
 #endif
     gtk_about_dialog_set_version(GTK_ABOUT_DIALOG(dialog), version_line);
     g_free(version_line);

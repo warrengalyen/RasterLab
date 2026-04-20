@@ -571,9 +571,9 @@ static void write_header(DebugLoggerState* logger, const char* app_dir) {
     fprintf(logger->file, "Memory load at startup: %d%%\r\n", get_memory_usage_percent());
     fprintf(logger->file, "-- PROGRAM INFORMATION --\r\n");
 #if RASTERLAB_BUILD_NUMBER != 0
-    fprintf(logger->file, "Version: %s (build %d)\n", RASTERLAB_VERSION_LINE, RASTERLAB_BUILD_NUMBER);
+    fprintf(logger->file, "Version: %s (build %d)\n", RASTERLAB_VERSION_FOR_DISPLAY, RASTERLAB_BUILD_NUMBER);
 #else
-    fprintf(logger->file, "Version: %s\n", RASTERLAB_VERSION_LINE);
+    fprintf(logger->file, "Version: %s\n", RASTERLAB_VERSION_FOR_DISPLAY);
 #endif
     fprintf(logger->file, "Translation active: %s\n", trans);
     fprintf(logger->file, "Language in use: %s\n", lang);
