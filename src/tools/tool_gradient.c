@@ -16,7 +16,6 @@
 #include "render/compositor.h"
 #include "render/dirty.h"
 #include "render/layer.h"
-#include "render/render_utils.h"
 #include "selection/selection_mask.h"
 #include "selection/selection_render.h"
 #include "tool_options.h"
@@ -307,6 +306,116 @@ static void gradient_build_color_lut(GradientDef* grad, gdouble opacity,
  *
  * doc is used to access the selection mask; may be NULL (no selection clipping).
  */
+/*
+ * Viewport clip rectangle for limiting gradient work to the visible region.
+ * When non-NULL, only pixels inside [x0, x1) x [y0, y1) (in layer coords)
+ * are filled and composited.  Pass NULL for a full-layer fill (mouse_up).
+ */
+typedef struct {
+    gint x0, y0, x1, y1;
+} GradientClipRect;
+
+/* =========================================================================
+ * Row-based gradient pipeline
+ *
+ * Eliminates the full-layer intermediate Cairo surface.  A single row
+ * buffer is reused for each scanline through a fused
+ * restore → fill → mask → blend pipeline, keeping data L1-hot.
+ * ========================================================================= */
+
+/* Fill a row buffer with gradient colors — linear/reflection fast path */
+static inline void gradient_fill_row_linear(
+    guint32* buf, gint fill_x0, gint fill_x1,
+    gint y, gint shape, gint repeat,
+    gdouble lsx, gdouble lsy, gdouble dt_dx,
+    const GradientParams* p, const guint32* lut, gint lut_max) {
+
+    gdouble ry = (gdouble)y - lsy;
+    gdouble t_base =
+        ((-lsx) * p->dx + ry * p->dy) * p->inv_len2;
+
+    for (gint x = fill_x0; x < fill_x1; x++) {
+        gdouble raw_t = t_base + (gdouble)x * dt_dx;
+        if (shape == 1)
+            raw_t = fabs(raw_t);
+
+        if (repeat == 0) {
+            if (raw_t < 0.0 || raw_t > 1.0) {
+                buf[x - fill_x0] = 0;
+                continue;
+            }
+        } else {
+            raw_t = gradient_apply_repeat(raw_t, repeat);
+        }
+
+        gint idx = (gint)(raw_t * lut_max + 0.5);
+        if (idx < 0)
+            idx = 0;
+        else if (idx > lut_max)
+            idx = lut_max;
+        buf[x - fill_x0] = lut[idx];
+    }
+}
+
+/* Fill a row buffer with gradient colors — general shapes */
+static inline void gradient_fill_row_general(
+    guint32* buf, gint fill_x0, gint fill_x1,
+    gint y, gint repeat,
+    const GradientParams* p, const guint32* lut, gint lut_max) {
+
+    for (gint x = fill_x0; x < fill_x1; x++) {
+        gdouble raw_t = gradient_compute_t(p, (gdouble)x, (gdouble)y);
+
+        if (repeat == 0 && (raw_t < 0.0 || raw_t > 1.0)) {
+            buf[x - fill_x0] = 0;
+            continue;
+        }
+
+        gdouble t = gradient_apply_repeat(raw_t, repeat);
+        gint idx = (gint)(t * lut_max + 0.5);
+        if (idx < 0)
+            idx = 0;
+        else if (idx > lut_max)
+            idx = lut_max;
+        buf[x - fill_x0] = lut[idx];
+    }
+}
+
+/* Multiply premultiplied gradient row by selection mask values */
+static inline void gradient_mask_row(
+    guint32* buf, gint row_width, gint fill_x0, gint y,
+    const guint8* mask_data, gint mask_x, gint mask_y,
+    gint mask_width, gint mask_height, gint mask_stride) {
+
+    gint my = y - mask_y;
+    if (my < 0 || my >= mask_height) {
+        memset(buf, 0, (gsize)row_width * 4);
+        return;
+    }
+    const guint8* mrow = mask_data + (gsize)my * mask_stride;
+
+    for (gint i = 0; i < row_width; i++) {
+        gint mx = (fill_x0 + i) - mask_x;
+        if (mx < 0 || mx >= mask_width) {
+            buf[i] = 0;
+            continue;
+        }
+        guint32 m = mrow[mx];
+        if (m == 255)
+            continue;
+        if (m == 0) {
+            buf[i] = 0;
+            continue;
+        }
+        guint32 px = buf[i];
+        guint32 a = (((px >> 24)) * m + 127) / 255;
+        guint32 r = (((px >> 16) & 0xFF) * m + 127) / 255;
+        guint32 g = (((px >> 8) & 0xFF) * m + 127) / 255;
+        guint32 b = ((px & 0xFF) * m + 127) / 255;
+        buf[i] = (a << 24) | (r << 16) | (g << 8) | b;
+    }
+}
+
 static void gradient_apply_to_layer(struct ImageLayer* layer,
                                     GradientDef* grad,
                                     gdouble start_x, gdouble start_y,
@@ -318,7 +427,8 @@ static void gradient_apply_to_layer(struct ImageLayer* layer,
                                     gint restore_stride,
                                     cairo_surface_t** cached_surf,
                                     gint* cache_w, gint* cache_h,
-                                    ImageDocument* doc) {
+                                    ImageDocument* doc,
+                                    const GradientClipRect* clip) {
     if (!layer || !layer->surface)
         return;
 
@@ -332,6 +442,25 @@ static void gradient_apply_to_layer(struct ImageLayer* layer,
 
     if (!data || width <= 0 || height <= 0)
         return;
+
+    /* Release legacy cached surface — no longer needed with row pipeline */
+    if (cached_surf && *cached_surf) {
+        cairo_surface_destroy(*cached_surf);
+        *cached_surf = NULL;
+        if (cache_w) *cache_w = 0;
+        if (cache_h) *cache_h = 0;
+    }
+
+    /* --- Effective fill region (viewport clip or full layer) --- */
+    gint fill_x0 = 0, fill_y0 = 0, fill_x1 = width, fill_y1 = height;
+    if (clip) {
+        fill_x0 = clip->x0 > 0 ? clip->x0 : 0;
+        fill_y0 = clip->y0 > 0 ? clip->y0 : 0;
+        fill_x1 = clip->x1 < width ? clip->x1 : width;
+        fill_y1 = clip->y1 < height ? clip->y1 : height;
+        if (fill_x0 >= fill_x1 || fill_y0 >= fill_y1)
+            return;
+    }
 
     /* --- Precompute all invariants once --- */
     gdouble lsx = start_x - layer->offset_x;
@@ -348,146 +477,76 @@ static void gradient_apply_to_layer(struct ImageLayer* layer,
     if (opacity_factor > 1.0)
         opacity_factor = 1.0;
 
-    /* --- Build premultiplied ARGB32 color LUT (once per apply) --- */
     guint32 color_lut[GRAD_COLOR_LUT_SIZE];
     gradient_build_color_lut(grad, opacity_factor, color_lut);
 
-    /* --- Restore original pixels --- */
-    if (restore_from && restore_stride > 0) {
-        for (gint y = 0; y < height; y++) {
-            memcpy(data + (gsize)(y * stride),
-                   restore_from + (gsize)(y * restore_stride),
-                   (gsize)(width * 4));
-        }
-    }
+    BlendMode bm = (blend_mode_idx >= 0 && blend_mode_idx < BLEND_MODE_COUNT)
+                       ? (BlendMode)blend_mode_idx
+                       : BLEND_MODE_NORMAL;
 
-    /* --- Obtain (or reuse) temporary gradient surface --- */
-    cairo_surface_t* grad_surf = NULL;
-    if (cached_surf) {
-        if (*cached_surf && cache_w && cache_h &&
-            *cache_w == width && *cache_h == height) {
-            grad_surf = *cached_surf;
-        } else {
-            if (*cached_surf)
-                cairo_surface_destroy(*cached_surf);
-            grad_surf = cairo_image_surface_create(CAIRO_FORMAT_ARGB32,
-                                                   width, height);
-            *cached_surf = grad_surf;
-            if (cache_w)
-                *cache_w = width;
-            if (cache_h)
-                *cache_h = height;
-        }
-    } else {
-        grad_surf = cairo_image_surface_create(CAIRO_FORMAT_ARGB32,
-                                               width, height);
-    }
+    /* --- Build selection mask (if any) --- */
+    const guint8* mask_data = NULL;
+    gint mask_x = 0, mask_y = 0, mask_w = 0, mask_h = 0, mask_s = 0;
+    SelectionMask* region_mask = NULL;
 
-    if (cairo_surface_status(grad_surf) != CAIRO_STATUS_SUCCESS) {
-        if (!cached_surf)
-            cairo_surface_destroy(grad_surf);
-        return;
-    }
-
-    cairo_surface_flush(grad_surf);
-    guchar* gdata = cairo_image_surface_get_data(grad_surf);
-    gint gstride = cairo_image_surface_get_stride(grad_surf);
-
-    /* --- Fill gradient surface --- */
-    const gint lut_max = GRAD_COLOR_LUT_SIZE - 1;
-
-    if ((shape == 0 || shape == 1) && repeat != 0) {
-        /*
-         * Linear / Reflection with a repeat mode: incremental t.
-         * t(x,y) = (rx*dx + ry*dy) * inv_len2
-         * dt/dx  = dx * inv_len2  (constant)
-         */
-        gdouble dt_dx = params.dx * params.inv_len2;
-
-        for (gint y = 0; y < height; y++) {
-            guint32* row = (guint32*)(gdata + (gsize)(y * gstride));
-            gdouble ry = (gdouble)y - lsy;
-            gdouble t_base = ((-lsx) * params.dx + ry * params.dy) * params.inv_len2;
-
-            for (gint x = 0; x < width; x++) {
-                gdouble raw_t = t_base + (gdouble)x * dt_dx;
-                if (shape == 1)
-                    raw_t = fabs(raw_t);
-                gdouble t = gradient_apply_repeat(raw_t, repeat);
-                gint idx = (gint)(t * lut_max + 0.5);
-                if (idx < 0)
-                    idx = 0;
-                else if (idx > lut_max)
-                    idx = lut_max;
-                row[x] = color_lut[idx];
-            }
-        }
-    } else {
-        /* General path for all other shapes */
-        for (gint y = 0; y < height; y++) {
-            guint32* row = (guint32*)(gdata + (gsize)(y * gstride));
-            for (gint x = 0; x < width; x++) {
-                gdouble raw_t = gradient_compute_t(&params,
-                                                   (gdouble)x, (gdouble)y);
-
-                if (repeat == 0 && (raw_t < 0.0 || raw_t > 1.0)) {
-                    row[x] = 0;
-                    continue;
-                }
-
-                gdouble t = gradient_apply_repeat(raw_t, repeat);
-                gint idx = (gint)(t * lut_max + 0.5);
-                if (idx < 0)
-                    idx = 0;
-                else if (idx > lut_max)
-                    idx = lut_max;
-                row[x] = color_lut[idx];
-            }
-        }
-    }
-    cairo_surface_mark_dirty(grad_surf);
-
-    /* --- Apply selection mask (if any) so gradient only affects selected area --- */
     if (doc && doc->selection_mask &&
         !selection_mask_is_empty(doc->selection_mask)) {
-
         DirtyRect sel_dirty;
         dirty_rect_set(&sel_dirty,
                        layer->offset_x, layer->offset_y,
                        width, height);
-
         DirtyRect actual_region;
-        SelectionMask* region_mask = selection_build_combined_mask(
+        region_mask = selection_build_combined_mask(
             doc->selection_mask, &sel_dirty,
             FEATHER_QUALITY_NORMAL, &actual_region);
-
         if (region_mask && region_mask->data) {
-            gint mask_x = actual_region.x - layer->offset_x;
-            gint mask_y = actual_region.y - layer->offset_y;
-
-            render_utils_apply_selection_mask(
-                grad_surf,
-                region_mask->data,
-                mask_x, mask_y,
-                region_mask->width, region_mask->height,
-                region_mask->stride);
-
-            selection_mask_free(region_mask);
+            mask_data = region_mask->data;
+            mask_x = actual_region.x - layer->offset_x;
+            mask_y = actual_region.y - layer->offset_y;
+            mask_w = region_mask->width;
+            mask_h = region_mask->height;
+            mask_s = region_mask->stride;
         }
     }
 
-    /* --- Composite gradient surface onto layer using blend mode --- */
-    cairo_t* cr = cairo_create(surf);
-    BlendMode bm = (blend_mode_idx >= 0 && blend_mode_idx < BLEND_MODE_COUNT)
-                       ? (BlendMode)blend_mode_idx
-                       : BLEND_MODE_NORMAL;
-    cairo_set_operator(cr, blend_mode_to_cairo_operator(bm));
-    cairo_set_source_surface(cr, grad_surf, 0, 0);
-    cairo_paint(cr);
-    cairo_destroy(cr);
+    /* --- Fused row pipeline: restore → fill → mask → blend per scanline --- */
+    const gint lut_max = GRAD_COLOR_LUT_SIZE - 1;
+    gdouble dt_dx = params.dx * params.inv_len2;
+    gint row_width = fill_x1 - fill_x0;
+    guint32* row_buf = (guint32*)g_malloc((gsize)row_width * 4);
 
-    if (!cached_surf)
-        cairo_surface_destroy(grad_surf);
+    for (gint y = fill_y0; y < fill_y1; y++) {
+        guint32* dst = (guint32*)(data + (gsize)y * stride) + fill_x0;
+
+        if (restore_from) {
+            const guint32* src = (const guint32*)(
+                restore_from + (gsize)y * restore_stride) + fill_x0;
+            memcpy(dst, src, (gsize)row_width * 4);
+        }
+
+        if (shape == 0 || shape == 1)
+            gradient_fill_row_linear(row_buf, fill_x0, fill_x1,
+                                     y, shape, repeat,
+                                     lsx, lsy, dt_dx,
+                                     &params, color_lut, lut_max);
+        else
+            gradient_fill_row_general(row_buf, fill_x0, fill_x1,
+                                      y, repeat,
+                                      &params, color_lut, lut_max);
+
+        if (mask_data)
+            gradient_mask_row(row_buf, row_width, fill_x0, y,
+                              mask_data, mask_x, mask_y,
+                              mask_w, mask_h, mask_s);
+
+        blend_composite_row((const guint32*)row_buf, dst,
+                            row_width, fill_x0, y, 255, bm);
+    }
+
+    g_free(row_buf);
+
+    if (region_mask)
+        selection_mask_free(region_mask);
 
     cairo_surface_mark_dirty(surf);
 }
@@ -700,6 +759,42 @@ static void gradient_tool_mouse_move(Tool* tool, struct ImageDocument* doc,
         gint blend_mode = opts ? opts->gradient_blend_mode : 0;
         gdouble center_off = opts ? opts->gradient_center_offset : 75.0;
 
+        /* Compute viewport-visible region in layer coordinates so we only
+         * fill and composite the pixels currently on screen. */
+        GradientClipRect viewport_clip;
+        GradientClipRect* clip_ptr = NULL;
+        gint lw = cairo_image_surface_get_width(layer->surface);
+        gint lh = cairo_image_surface_get_height(layer->surface);
+
+        if (doc->scrolled_window &&
+            GTK_IS_SCROLLED_WINDOW(doc->scrolled_window) &&
+            doc->zoom_factor > 0.0) {
+            GtkAdjustment* hadj = gtk_scrolled_window_get_hadjustment(
+                GTK_SCROLLED_WINDOW(doc->scrolled_window));
+            GtkAdjustment* vadj = gtk_scrolled_window_get_vadjustment(
+                GTK_SCROLLED_WINDOW(doc->scrolled_window));
+            if (hadj && vadj) {
+                gdouble sx = gtk_adjustment_get_value(hadj);
+                gdouble sy = gtk_adjustment_get_value(vadj);
+                gdouble vw = gtk_adjustment_get_page_size(hadj);
+                gdouble vh = gtk_adjustment_get_page_size(vadj);
+                gdouble inv_zoom = 1.0 / doc->zoom_factor;
+
+                gint pad = 2;
+                viewport_clip.x0 = (gint)(sx * inv_zoom) - layer->offset_x - pad;
+                viewport_clip.y0 = (gint)(sy * inv_zoom) - layer->offset_y - pad;
+                viewport_clip.x1 = (gint)((sx + vw) * inv_zoom) - layer->offset_x + pad;
+                viewport_clip.y1 = (gint)((sy + vh) * inv_zoom) - layer->offset_y + pad;
+
+                if (viewport_clip.x0 < 0) viewport_clip.x0 = 0;
+                if (viewport_clip.y0 < 0) viewport_clip.y0 = 0;
+                if (viewport_clip.x1 > lw) viewport_clip.x1 = lw;
+                if (viewport_clip.y1 > lh) viewport_clip.y1 = lh;
+
+                clip_ptr = &viewport_clip;
+            }
+        }
+
         gradient_apply_to_layer(layer, grad,
                                 state->start_x, state->start_y,
                                 state->end_x, state->end_y,
@@ -707,13 +802,13 @@ static void gradient_tool_mouse_move(Tool* tool, struct ImageDocument* doc,
                                 state->pixel_backup, state->backup_stride,
                                 &state->grad_surface,
                                 &state->grad_surf_w, &state->grad_surf_h,
-                                doc);
+                                doc, clip_ptr);
 
         cairo_surface_flush(layer->surface);
         layer_invalidate_cache(layer);
 
         DirtyRect dr;
-        dirty_rect_set(&dr, 0, 0, doc->width, doc->height);
+        dirty_rect_set(&dr, layer->offset_x, layer->offset_y, lw, lh);
         document_invalidate_region(doc, &dr);
     }
 }
@@ -760,7 +855,7 @@ static void gradient_tool_mouse_up(Tool* tool, struct ImageDocument* doc,
         return;
     }
 
-    /* Apply the final gradient one last time from the backup */
+    /* Apply the final gradient at full resolution (no viewport clip) */
     if (state->pixel_backup) {
         ToolOptions* opts = tool_options_get_for_tool(TOOL_GRADIENT);
         gint shape = opts ? opts->gradient_shape : 0;
@@ -776,7 +871,7 @@ static void gradient_tool_mouse_up(Tool* tool, struct ImageDocument* doc,
                                 state->pixel_backup, state->backup_stride,
                                 &state->grad_surface,
                                 &state->grad_surf_w, &state->grad_surf_h,
-                                doc);
+                                doc, NULL);
         cairo_surface_flush(layer->surface);
         layer_invalidate_cache(layer);
     }
