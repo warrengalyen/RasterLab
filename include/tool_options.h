@@ -105,6 +105,13 @@ typedef struct {
     gfloat crop_darken_opacity;      /* Darken overlay opacity 0–100 (default 60) */
     gint crop_overlay_mode;          /* 0=None, 1=Rule of Thirds, 2=Phi Grid, 3=Golden Spiral, 4=Diagonal, 5=Center Lines */
     gboolean crop_snap;              /* Snap to guides */
+
+    /* Gradient tool options */
+    gint    gradient_shape;          /* 0=linear,1=reflection,2=radial,3=spherical,4=square,5=diamond,6=conical,7=spiral */
+    gint    gradient_repeat;         /* 0=none,1=clamp,2=wrap,3=reflect; default 1 (clamp) */
+    gfloat  gradient_opacity;        /* 0–100, default 100 */
+    gint    gradient_blend_mode;     /* BlendMode index, default 0 (Normal) */
+    gdouble gradient_center_offset;  /* -99–99, default 75.0; used only for spherical shape */
 } ToolOptions;
 
 /**
@@ -454,5 +461,35 @@ gint tool_options_get_crop_overlay_mode(ToolOptions* opts);
  */
 void tool_options_set_crop_snap(ToolOptions* opts, gboolean snap);
 gboolean tool_options_get_crop_snap(ToolOptions* opts);
+
+/**
+ * Gradient tool: set/get shape (0=linear,1=reflection,2=radial,3=spherical,4=square,5=diamond,6=conical,7=spiral)
+ */
+void tool_options_set_gradient_shape(ToolOptions* opts, gint shape);
+gint tool_options_get_gradient_shape(ToolOptions* opts);
+
+/**
+ * Gradient tool: set/get repeat mode (0=none,1=clamp,2=wrap,3=reflect)
+ */
+void tool_options_set_gradient_repeat(ToolOptions* opts, gint repeat);
+gint tool_options_get_gradient_repeat(ToolOptions* opts);
+
+/**
+ * Gradient tool: set/get opacity (0–100)
+ */
+void tool_options_set_gradient_opacity(ToolOptions* opts, gfloat opacity);
+gfloat tool_options_get_gradient_opacity(ToolOptions* opts);
+
+/**
+ * Gradient tool: set/get blend mode (BlendMode index 0–26)
+ */
+void tool_options_set_gradient_blend_mode(ToolOptions* opts, gint blend_mode);
+gint tool_options_get_gradient_blend_mode(ToolOptions* opts);
+
+/**
+ * Gradient tool: set/get center offset (-99–99; used only for spherical shape)
+ */
+void tool_options_set_gradient_center_offset(ToolOptions* opts, gdouble offset);
+gdouble tool_options_get_gradient_center_offset(ToolOptions* opts);
 
 #endif  /* TOOL_OPTIONS_H */

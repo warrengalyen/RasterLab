@@ -13,6 +13,7 @@
 #include "commands/command_image.h"
 #include "commands/command_text_layer.h"
 #include "document.h"
+#include "gradient.h"
 #include "i18n.h"
 #include "render/layer.h"
 #include "render/render_utils.h"
@@ -27,6 +28,7 @@
 #include "tools/tool_rect_select.h"
 #include "ui.h"
 #include "ui/dialogs/color_chooser_dialog.h"
+#include "ui/dialogs/gradient_editor_dialog.h"
 #include "ui/ui_utils.h"
 #include "ui/widgets/vertical_spin_button.h"
 #include <pango/pango.h>
@@ -60,23 +62,25 @@ static gdouble g_color_picker_preview_a = 1.0;
  * @param builder The GtkBuilder containing the widgets
  * @param scale_id The ID of the scale widget
  * @param control_box_id The ID of the control box containing the scale
+ * @return The spin widget, or NULL on failure
  */
-static void add_spin_button_to_scale(GtkBuilder* builder, const gchar* scale_id, const gchar* control_box_id) {
+static GtkWidget* add_spin_button_to_scale(GtkBuilder* builder, const gchar* scale_id,
+                                            const gchar* control_box_id) {
     if (!builder || !scale_id || !control_box_id) {
-        return;
+        return NULL;
     }
 
     GtkWidget* scale = GTK_WIDGET(gtk_builder_get_object(builder, scale_id));
     GtkWidget* control_box = GTK_WIDGET(gtk_builder_get_object(builder, control_box_id));
 
     if (!scale || !control_box) {
-        return;
+        return NULL;
     }
 
     /* Get the adjustment from the scale */
     GtkAdjustment* adjustment = gtk_range_get_adjustment(GTK_RANGE(scale));
     if (!adjustment) {
-        return;
+        return NULL;
     }
 
     /* Get the number of digits from the scale */
@@ -85,12 +89,43 @@ static void add_spin_button_to_scale(GtkBuilder* builder, const gchar* scale_id,
     /* Create vertical spin button with the same adjustment */
     GtkWidget* spin_button = vertical_spin_button_new(adjustment, 1.0, digits);
     if (!spin_button) {
-        return;
+        return NULL;
     }
 
     /* Add the spin button to the control box */
     gtk_box_pack_start(GTK_BOX(control_box), spin_button, FALSE, FALSE, 0);
     gtk_widget_show_all(spin_button);
+    return spin_button;
+}
+
+/**
+ * Keep a tool-options row (scale + optional vertical spin + optional reset) from growing
+ * with the toolbar. GtkRange and VerticalSpinButton's entry default to expanding.
+ */
+static void gradient_compact_scale_spin_row(GtkWidget* row_hbox, GtkWidget* scale, GtkWidget* spin,
+                                            GtkWidget* reset_btn) {
+    if (!row_hbox || !GTK_IS_BOX(row_hbox)) {
+        return;
+    }
+    if (scale) {
+        gtk_widget_set_hexpand(scale, FALSE);
+        gtk_box_set_child_packing(GTK_BOX(row_hbox), scale, FALSE, FALSE, 0, GTK_PACK_START);
+    }
+    if (spin) {
+        gtk_widget_set_hexpand(spin, FALSE);
+        gtk_box_set_child_packing(GTK_BOX(row_hbox), spin, FALSE, FALSE, 0, GTK_PACK_START);
+        if (IS_VERTICAL_SPIN_BUTTON(spin)) {
+            GtkWidget* entry = vertical_spin_button_get_entry(VERTICAL_SPIN_BUTTON(spin));
+            if (entry) {
+                gtk_widget_set_hexpand(entry, FALSE);
+                gtk_box_set_child_packing(GTK_BOX(spin), entry, FALSE, FALSE, 0, GTK_PACK_START);
+            }
+        }
+    }
+    if (reset_btn) {
+        gtk_widget_set_hexpand(reset_btn, FALSE);
+        gtk_box_set_child_packing(GTK_BOX(row_hbox), reset_btn, FALSE, FALSE, 0, GTK_PACK_START);
+    }
 }
 
 /**
@@ -2020,6 +2055,142 @@ static void on_crop_apply_clicked(GtkButton* button, gpointer user_data) {
 }
 
 /* =========================================================================
+ * Gradient tool options — helpers and signal handlers
+ * ========================================================================= */
+
+static gboolean on_gradient_preview_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
+    (void)widget;
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    if (!panel || !panel->panel)
+        return FALSE;
+
+    GtkWidget* win = gtk_widget_get_toplevel(panel->panel);
+    AppContext* ctx = win ? (AppContext*)g_object_get_data(G_OBJECT(win), "app_context") : NULL;
+    GradientDef* grad = ctx ? (GradientDef*)ctx->active_gradient : NULL;
+
+    GtkAllocation alloc;
+    gtk_widget_get_allocation(GTK_WIDGET(widget), &alloc);
+    gint w = alloc.width;
+    gint h = alloc.height;
+
+    if (!grad) {
+        /* Draw a default black-to-white gradient as placeholder */
+        cairo_pattern_t* pat = cairo_pattern_create_linear(0, 0, w, 0);
+        cairo_pattern_add_color_stop_rgb(pat, 0.0, 0.0, 0.0, 0.0);
+        cairo_pattern_add_color_stop_rgb(pat, 1.0, 1.0, 1.0, 1.0);
+        cairo_set_source(cr, pat);
+        cairo_rectangle(cr, 0, 0, w, h);
+        cairo_fill(cr);
+        cairo_pattern_destroy(pat);
+    } else {
+        const GradientPreview* preview = gradient_preview_get(grad);
+        if (preview && preview->pixels) {
+            /* Scale preview to widget size */
+            cairo_surface_t* surf = cairo_image_surface_create_for_data(
+                preview->pixels,
+                CAIRO_FORMAT_ARGB32,
+                preview->width,
+                preview->height,
+                preview->width * 4);
+            if (cairo_surface_status(surf) == CAIRO_STATUS_SUCCESS) {
+                cairo_save(cr);
+                cairo_scale(cr, (gdouble)w / preview->width, (gdouble)h / preview->height);
+                cairo_set_source_surface(cr, surf, 0, 0);
+                cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_BILINEAR);
+                cairo_rectangle(cr, 0, 0, preview->width, preview->height);
+                cairo_fill(cr);
+                cairo_restore(cr);
+            }
+            cairo_surface_destroy(surf);
+        }
+    }
+    return FALSE;
+}
+
+static void on_gradient_preview_clicked(GtkButton* button, gpointer user_data) {
+    (void)button;
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    if (!panel || !panel->panel)
+        return;
+
+    GtkWidget* win = gtk_widget_get_toplevel(panel->panel);
+    AppContext* ctx = win ? (AppContext*)g_object_get_data(G_OBJECT(win), "app_context") : NULL;
+    if (!ctx)
+        return;
+
+    gradient_editor_dialog_show(ctx);
+
+    /* Redraw gradient preview after dialog closes */
+    if (panel->gradient_preview_draw)
+        gtk_widget_queue_draw(panel->gradient_preview_draw);
+}
+
+static void on_gradient_opacity_changed(GtkRange* range, gpointer user_data) {
+    (void)user_data;
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_GRADIENT);
+    if (opts)
+        tool_options_set_gradient_opacity(opts, (gfloat)gtk_range_get_value(range));
+}
+
+static void on_gradient_blend_changed(GtkComboBox* combo, gpointer user_data) {
+    (void)user_data;
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_GRADIENT);
+    if (opts)
+        tool_options_set_gradient_blend_mode(opts, gtk_combo_box_get_active(combo));
+}
+
+static void on_gradient_shape_changed(GtkComboBox* combo, gpointer user_data) {
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    gint shape = gtk_combo_box_get_active(combo);
+
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_GRADIENT);
+    if (opts)
+        tool_options_set_gradient_shape(opts, shape);
+
+    /* Show center offset group only for spherical shape (index 3) */
+    if (panel) {
+        gboolean is_spherical = (shape == 3);
+        if (panel->gradient_center_offset_group) {
+            gtk_widget_set_visible(panel->gradient_center_offset_group, is_spherical);
+            gtk_widget_set_no_show_all(panel->gradient_center_offset_group, !is_spherical);
+        }
+        if (panel->gradient_center_offset_separator) {
+            gtk_widget_set_visible(panel->gradient_center_offset_separator, is_spherical);
+            gtk_widget_set_no_show_all(panel->gradient_center_offset_separator, !is_spherical);
+        }
+    }
+}
+
+static void on_gradient_repeat_changed(GtkComboBox* combo, gpointer user_data) {
+    (void)user_data;
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_GRADIENT);
+    if (opts)
+        tool_options_set_gradient_repeat(opts, gtk_combo_box_get_active(combo));
+}
+
+static void on_gradient_center_offset_changed(GtkRange* range, gpointer user_data) {
+    (void)user_data;
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_GRADIENT);
+    if (opts)
+        tool_options_set_gradient_center_offset(opts, gtk_range_get_value(range));
+}
+
+static void on_gradient_center_offset_reset(GtkButton* button, gpointer user_data) {
+    (void)button;
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    ToolOptions* opts = tool_options_get_for_tool(TOOL_GRADIENT);
+    if (opts)
+        tool_options_set_gradient_center_offset(opts, 75.0);
+    if (panel && panel->gradient_center_offset_scale) {
+        g_signal_handlers_block_by_func(panel->gradient_center_offset_scale,
+                                        G_CALLBACK(on_gradient_center_offset_changed), panel);
+        gtk_range_set_value(GTK_RANGE(panel->gradient_center_offset_scale), 75.0);
+        g_signal_handlers_unblock_by_func(panel->gradient_center_offset_scale,
+                                          G_CALLBACK(on_gradient_center_offset_changed), panel);
+    }
+}
+
+/* =========================================================================
  * Text tool options — helpers and signal handlers
  * ========================================================================= */
 
@@ -2554,6 +2725,15 @@ ToolOptionsPanel* create_tool_options_panel(void) {
     tool_opts_panel->lasso_area_combo = NULL;
     tool_opts_panel->lasso_border_scale = NULL;
     tool_opts_panel->move_auto_select_checkbox = NULL;
+    tool_opts_panel->gradient_panel = NULL;
+    tool_opts_panel->gradient_preview_draw = NULL;
+    tool_opts_panel->gradient_blend_combo = NULL;
+    tool_opts_panel->gradient_shape_combo = NULL;
+    tool_opts_panel->gradient_repeat_combo = NULL;
+    tool_opts_panel->gradient_opacity_scale = NULL;
+    tool_opts_panel->gradient_center_offset_scale = NULL;
+    tool_opts_panel->gradient_center_offset_group = NULL;
+    tool_opts_panel->gradient_center_offset_separator = NULL;
     tool_opts_panel->current_tool_type = TOOL_MOVE; /* Start with no tool selected */
 
     /* Create container to hold the current panel */
@@ -3606,6 +3786,116 @@ ToolOptionsPanel* create_tool_options_panel(void) {
         g_object_unref(builder);
     }
 
+    /* ── Load gradient tool options panel from Glade ── */
+    {
+        GtkBuilder* builder = gtk_builder_new();
+        ui_utils_builder_set_translation_domain(builder);
+        GError* err = NULL;
+        if (gtk_builder_add_from_resource(builder, "/ui/gradient_options.glade", &err)) {
+            tool_opts_panel->gradient_panel =
+                GTK_WIDGET(gtk_builder_get_object(builder, "gradient_options_panel"));
+
+            if (tool_opts_panel->gradient_panel) {
+                gtk_container_add(GTK_CONTAINER(container), tool_opts_panel->gradient_panel);
+
+                /* Grab widget references */
+                tool_opts_panel->gradient_preview_draw =
+                    GTK_WIDGET(gtk_builder_get_object(builder, "gradient_preview_draw"));
+                tool_opts_panel->gradient_blend_combo =
+                    GTK_WIDGET(gtk_builder_get_object(builder, "gradient_blend_combo"));
+                tool_opts_panel->gradient_shape_combo =
+                    GTK_WIDGET(gtk_builder_get_object(builder, "gradient_shape_combo"));
+                tool_opts_panel->gradient_repeat_combo =
+                    GTK_WIDGET(gtk_builder_get_object(builder, "gradient_repeat_combo"));
+                tool_opts_panel->gradient_opacity_scale =
+                    GTK_WIDGET(gtk_builder_get_object(builder, "gradient_opacity_scale"));
+                tool_opts_panel->gradient_center_offset_scale =
+                    GTK_WIDGET(gtk_builder_get_object(builder, "gradient_center_offset_scale"));
+                tool_opts_panel->gradient_center_offset_group =
+                    GTK_WIDGET(gtk_builder_get_object(builder, "gradient_center_offset_group"));
+                tool_opts_panel->gradient_center_offset_separator =
+                    GTK_WIDGET(gtk_builder_get_object(builder, "gradient_center_offset_separator"));
+
+                /* Add vertical spin button next to opacity scale */
+                GtkWidget* gradient_opacity_spin = NULL;
+                if (tool_opts_panel->gradient_opacity_scale)
+                    gradient_opacity_spin = add_spin_button_to_scale(builder, "gradient_opacity_scale",
+                                                                   "gradient_opacity_box");
+                {
+                    GtkWidget* opacity_row = GTK_WIDGET(gtk_builder_get_object(builder, "gradient_opacity_box"));
+                    if (opacity_row)
+                        gradient_compact_scale_spin_row(opacity_row, tool_opts_panel->gradient_opacity_scale,
+                                                        gradient_opacity_spin, NULL);
+                }
+
+                /* Add vertical spin button next to center offset scale; order: scale, spin, reset */
+                if (tool_opts_panel->gradient_center_offset_scale) {
+                    GtkWidget* center_offset_spin = add_spin_button_to_scale(
+                        builder, "gradient_center_offset_scale", "gradient_center_offset_box");
+                    GtkWidget* center_offset_box =
+                        GTK_WIDGET(gtk_builder_get_object(builder, "gradient_center_offset_box"));
+                    if (center_offset_spin && center_offset_box)
+                        gtk_box_reorder_child(GTK_BOX(center_offset_box), center_offset_spin, 1);
+                    GtkWidget* center_reset =
+                        GTK_WIDGET(gtk_builder_get_object(builder, "gradient_center_offset_reset"));
+                    if (center_offset_box)
+                        gradient_compact_scale_spin_row(center_offset_box,
+                                                        tool_opts_panel->gradient_center_offset_scale,
+                                                        center_offset_spin, center_reset);
+                }
+
+                /* Connect signals */
+                GtkWidget* preview_btn =
+                    GTK_WIDGET(gtk_builder_get_object(builder, "gradient_preview_button"));
+                if (preview_btn)
+                    g_signal_connect(preview_btn, "clicked",
+                                     G_CALLBACK(on_gradient_preview_clicked), tool_opts_panel);
+
+                if (tool_opts_panel->gradient_preview_draw)
+                    g_signal_connect(tool_opts_panel->gradient_preview_draw, "draw",
+                                     G_CALLBACK(on_gradient_preview_draw), tool_opts_panel);
+
+                if (tool_opts_panel->gradient_opacity_scale)
+                    g_signal_connect(tool_opts_panel->gradient_opacity_scale, "value-changed",
+                                     G_CALLBACK(on_gradient_opacity_changed), tool_opts_panel);
+
+                if (tool_opts_panel->gradient_blend_combo)
+                    g_signal_connect(tool_opts_panel->gradient_blend_combo, "changed",
+                                     G_CALLBACK(on_gradient_blend_changed), tool_opts_panel);
+
+                if (tool_opts_panel->gradient_shape_combo)
+                    g_signal_connect(tool_opts_panel->gradient_shape_combo, "changed",
+                                     G_CALLBACK(on_gradient_shape_changed), tool_opts_panel);
+
+                if (tool_opts_panel->gradient_repeat_combo)
+                    g_signal_connect(tool_opts_panel->gradient_repeat_combo, "changed",
+                                     G_CALLBACK(on_gradient_repeat_changed), tool_opts_panel);
+
+                if (tool_opts_panel->gradient_center_offset_scale)
+                    g_signal_connect(tool_opts_panel->gradient_center_offset_scale,
+                                     "value-changed",
+                                     G_CALLBACK(on_gradient_center_offset_changed),
+                                     tool_opts_panel);
+
+                GtkWidget* reset_btn =
+                    GTK_WIDGET(gtk_builder_get_object(builder, "gradient_center_offset_reset"));
+                if (reset_btn)
+                    g_signal_connect(reset_btn, "clicked",
+                                     G_CALLBACK(on_gradient_center_offset_reset), tool_opts_panel);
+
+                /* Hide initially */
+                gtk_widget_set_visible(tool_opts_panel->gradient_panel, FALSE);
+                gtk_widget_set_no_show_all(tool_opts_panel->gradient_panel, TRUE);
+            }
+        } else {
+            debug_log("WRN", "Failed to load gradient options panel: %s",
+                      err ? err->message : "Unknown error");
+            if (err)
+                g_error_free(err);
+        }
+        g_object_unref(builder);
+    }
+
     /* Hide the container initially - will be shown when a tool with options is selected */
     gtk_widget_set_visible(container, FALSE);
 
@@ -3630,6 +3920,8 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
         new_tool_type = TOOL_PENCIL;
     } else if (g_strcmp0(tool_name, "Paint Bucket") == 0) {
         new_tool_type = TOOL_PAINT_BUCKET;
+    } else if (g_strcmp0(tool_name, "Gradient") == 0) {
+        new_tool_type = TOOL_GRADIENT;
     } else if (g_strcmp0(tool_name, "Rectangular Select") == 0) {
         new_tool_type = TOOL_RECT_SELECT;
     } else if (g_strcmp0(tool_name, "Elliptical Select") == 0) {
@@ -3697,6 +3989,9 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
     if (panel->text_panel) {
         gtk_widget_set_visible(panel->text_panel, FALSE);
     }
+    if (panel->gradient_panel) {
+        gtk_widget_set_visible(panel->gradient_panel, FALSE);
+    }
 
     /* For crop tool, show the options panel */
     if (new_tool_type == TOOL_CROP && panel->crop_panel) {
@@ -3730,6 +4025,84 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
                 }
             }
         }
+        return;
+    }
+
+    /* For gradient tool, show the options panel */
+    if (new_tool_type == TOOL_GRADIENT && panel->gradient_panel) {
+        if (panel->panel) {
+            gtk_widget_set_visible(panel->panel, TRUE);
+        }
+        gtk_widget_set_no_show_all(panel->gradient_panel, FALSE);
+        gtk_widget_set_visible(panel->gradient_panel, TRUE);
+        gtk_widget_show_all(panel->gradient_panel);
+
+        ToolOptions* opts = tool_options_get_for_tool(TOOL_GRADIENT);
+        if (opts) {
+            /* Sync opacity scale */
+            if (panel->gradient_opacity_scale) {
+                g_signal_handlers_block_by_func(panel->gradient_opacity_scale,
+                                                G_CALLBACK(on_gradient_opacity_changed), panel);
+                gtk_range_set_value(GTK_RANGE(panel->gradient_opacity_scale),
+                                    opts->gradient_opacity);
+                g_signal_handlers_unblock_by_func(panel->gradient_opacity_scale,
+                                                  G_CALLBACK(on_gradient_opacity_changed), panel);
+            }
+            /* Sync blend mode combo */
+            if (panel->gradient_blend_combo) {
+                g_signal_handlers_block_by_func(panel->gradient_blend_combo,
+                                                G_CALLBACK(on_gradient_blend_changed), panel);
+                gtk_combo_box_set_active(GTK_COMBO_BOX(panel->gradient_blend_combo),
+                                         opts->gradient_blend_mode);
+                g_signal_handlers_unblock_by_func(panel->gradient_blend_combo,
+                                                  G_CALLBACK(on_gradient_blend_changed), panel);
+            }
+            /* Sync shape combo and show/hide center offset */
+            if (panel->gradient_shape_combo) {
+                g_signal_handlers_block_by_func(panel->gradient_shape_combo,
+                                                G_CALLBACK(on_gradient_shape_changed), panel);
+                gtk_combo_box_set_active(GTK_COMBO_BOX(panel->gradient_shape_combo),
+                                         opts->gradient_shape);
+                g_signal_handlers_unblock_by_func(panel->gradient_shape_combo,
+                                                  G_CALLBACK(on_gradient_shape_changed), panel);
+            }
+            /* Show/hide center offset group based on shape */
+            {
+                gboolean is_spherical = (opts->gradient_shape == 3);
+                if (panel->gradient_center_offset_group) {
+                    gtk_widget_set_visible(panel->gradient_center_offset_group, is_spherical);
+                    gtk_widget_set_no_show_all(panel->gradient_center_offset_group, !is_spherical);
+                }
+                if (panel->gradient_center_offset_separator) {
+                    gtk_widget_set_visible(panel->gradient_center_offset_separator, is_spherical);
+                    gtk_widget_set_no_show_all(panel->gradient_center_offset_separator,
+                                               !is_spherical);
+                }
+            }
+            /* Sync repeat combo */
+            if (panel->gradient_repeat_combo) {
+                g_signal_handlers_block_by_func(panel->gradient_repeat_combo,
+                                                G_CALLBACK(on_gradient_repeat_changed), panel);
+                gtk_combo_box_set_active(GTK_COMBO_BOX(panel->gradient_repeat_combo),
+                                         opts->gradient_repeat);
+                g_signal_handlers_unblock_by_func(panel->gradient_repeat_combo,
+                                                  G_CALLBACK(on_gradient_repeat_changed), panel);
+            }
+            /* Sync center offset scale */
+            if (panel->gradient_center_offset_scale) {
+                g_signal_handlers_block_by_func(panel->gradient_center_offset_scale,
+                                                G_CALLBACK(on_gradient_center_offset_changed),
+                                                panel);
+                gtk_range_set_value(GTK_RANGE(panel->gradient_center_offset_scale),
+                                    opts->gradient_center_offset);
+                g_signal_handlers_unblock_by_func(panel->gradient_center_offset_scale,
+                                                  G_CALLBACK(on_gradient_center_offset_changed),
+                                                  panel);
+            }
+        }
+        /* Redraw gradient preview */
+        if (panel->gradient_preview_draw)
+            gtk_widget_queue_draw(panel->gradient_preview_draw);
         return;
     }
 
@@ -4439,6 +4812,10 @@ void tool_options_panel_switch_tool(ToolOptionsPanel* panel, const gchar* tool_n
         if (panel->text_panel) {
             gtk_widget_set_no_show_all(panel->text_panel, TRUE);
             gtk_widget_hide(panel->text_panel);
+        }
+        if (panel->gradient_panel) {
+            gtk_widget_set_no_show_all(panel->gradient_panel, TRUE);
+            gtk_widget_hide(panel->gradient_panel);
         }
 
         /* Clear widget references */

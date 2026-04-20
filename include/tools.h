@@ -38,7 +38,8 @@ typedef enum {
     TOOL_CROP = 12,
     TOOL_MAGIC_WAND = 13,
     TOOL_TEXT = 14,
-    TOOL_COUNT = 15 /* Total number of tools */
+    TOOL_GRADIENT = 15,
+    TOOL_COUNT = 16 /* Total number of tools */
 } ToolType;
 
 /**

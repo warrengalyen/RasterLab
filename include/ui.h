@@ -133,6 +133,8 @@ struct _AppContext {
     gchar* app_dir;                       /* Application executable directory */
     gchar* size_unit;                     /* Current size unit for dimensions display (default: "px") */
     SwatchesData swatches;                /* Swatches data (main swatches and recent colors) */
+    gpointer active_gradient;             /* Currently selected GradientDef* for gradient tool (borrowed from active_gradient_set) */
+    gpointer active_gradient_set;         /* GradientSet* that owns the active gradient (AppContext owns this) */
 };
 typedef struct _AppContext AppContext;
 

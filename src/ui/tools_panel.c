@@ -378,6 +378,7 @@ GtkWidget* tools_panel_initialize_from_builder(GtkBuilder* builder, ToolRegistry
         "tool_button_brush",
         "tool_button_eraser",
         "tool_button_fill",
+        "tool_button_gradient",
         "tool_button_rect_select",
         "tool_button_elliptical_select",
         "tool_button_polygon_select",
@@ -396,6 +397,7 @@ GtkWidget* tools_panel_initialize_from_builder(GtkBuilder* builder, ToolRegistry
         TOOL_BRUSH,
         TOOL_ERASER,
         TOOL_PAINT_BUCKET,
+        TOOL_GRADIENT,
         TOOL_RECT_SELECT,
         TOOL_ELLIPSE_SELECT,
         TOOL_POLYGON_SELECT,
@@ -435,6 +437,7 @@ GtkWidget* tools_panel_initialize_from_builder(GtkBuilder* builder, ToolRegistry
                 "/icons/tool-paintbrush.png",
                 "/icons/tool-eraser.png",
                 "/icons/tool-paintbucket.png",
+                "/icons/tool-gradient.png",
                 "/icons/tool-rect-select.png",
                 "/icons/tool-elliptical-select.png",
                 "/icons/tool-polygon-select.png",
@@ -666,6 +669,10 @@ gboolean tools_panel_on_window_key_press(GtkWidget* widget, GdkEventKey* event, 
         case GDK_KEY_f:
         case GDK_KEY_F:
             tool_to_activate = TOOL_PAINT_BUCKET;
+            break;
+        case GDK_KEY_g:
+        case GDK_KEY_G:
+            tool_to_activate = TOOL_GRADIENT;
             break;
         case GDK_KEY_e:
         case GDK_KEY_E:

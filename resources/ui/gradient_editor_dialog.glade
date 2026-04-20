@@ -42,30 +42,10 @@
                 <property name="halign">start</property>
                 <property name="spacing">5</property>
                 <child>
-                  <object class="GtkButton" id="gradient_undo_btn">
-                    <property name="label" translatable="yes">undo</property>
-                    <property name="visible">True</property>
-                    <property name="can-focus">True</property>
-                    <property name="receives-default">True</property>
-                  </object>
-                  <packing>
-                    <property name="expand">False</property>
-                    <property name="fill">True</property>
-                    <property name="position">0</property>
-                  </packing>
+                  <placeholder/>
                 </child>
                 <child>
-                  <object class="GtkButton" id="gradient_redo_btn">
-                    <property name="label" translatable="yes">redo</property>
-                    <property name="visible">True</property>
-                    <property name="can-focus">True</property>
-                    <property name="receives-default">True</property>
-                  </object>
-                  <packing>
-                    <property name="expand">False</property>
-                    <property name="fill">True</property>
-                    <property name="position">1</property>
-                  </packing>
+                  <placeholder/>
                 </child>
               </object>
               <packing>
@@ -82,7 +62,7 @@
                 <property name="spacing">10</property>
                 <property name="homogeneous">True</property>
                 <child>
-                  <object class="GtkButton" id="gradient_editor_cancel_btn">
+                  <object class="GtkButton" id="gradient_editor_ok_btn">
                     <property name="label" translatable="yes">OK</property>
                     <property name="visible">True</property>
                     <property name="can-focus">True</property>
@@ -95,7 +75,7 @@
                   </packing>
                 </child>
                 <child>
-                  <object class="GtkButton" id="gradient_editor_close_btn">
+                  <object class="GtkButton" id="gradient_editor_cancel_btn">
                     <property name="label" translatable="yes">Cancel</property>
                     <property name="visible">True</property>
                     <property name="can-focus">True</property>
@@ -139,13 +119,17 @@
                   <object class="GtkScrolledWindow" id="gradient_collection_scroll">
                     <property name="visible">True</property>
                     <property name="can-focus">True</property>
-                    <property name="hscrollbar-policy">never</property>
                     <property name="shadow-type">in</property>
                     <child>
-                      <object class="GtkListBox" id="gradient_collection_list">
+                      <object class="GtkViewport">
                         <property name="visible">True</property>
                         <property name="can-focus">False</property>
-                        <property name="selection-mode">single</property>
+                        <child>
+                          <object class="GtkListBox" id="gradient_collection_list">
+                            <property name="visible">True</property>
+                            <property name="can-focus">False</property>
+                          </object>
+                        </child>
                       </object>
                     </child>
                   </object>
@@ -160,6 +144,7 @@
                     <property name="visible">True</property>
                     <property name="can-focus">False</property>
                     <property name="margin-start">10</property>
+                    <property name="margin-end">10</property>
                     <property name="margin-top">10</property>
                     <property name="orientation">vertical</property>
                     <property name="spacing">10</property>
@@ -193,7 +178,7 @@
                   <packing>
                     <property name="expand">False</property>
                     <property name="fill">True</property>
-                    <property name="position">1</property>
+                    <property name="position">2</property>
                   </packing>
                 </child>
               </object>
@@ -207,6 +192,7 @@
               </object>
               <packing>
                 <property name="tab-expand">True</property>
+                <property name="tab-fill">False</property>
               </packing>
             </child>
             <child>
@@ -657,6 +643,7 @@
               <packing>
                 <property name="position">1</property>
                 <property name="tab-expand">True</property>
+                <property name="tab-fill">False</property>
               </packing>
             </child>
           </object>

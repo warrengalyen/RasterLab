@@ -10,6 +10,7 @@
     <file preprocess="to-pixdata">icons/tool-paintbrush.png</file>
     <file preprocess="to-pixdata">icons/tool-eraser.png</file>
     <file preprocess="to-pixdata">icons/tool-paintbucket.png</file>
+    <file preprocess="to-pixdata">icons/tool-gradient.png</file>
     <file preprocess="to-pixdata">icons/tool-rect-select.png</file>
     <file preprocess="to-pixdata">icons/tool-elliptical-select.png</file>
     <file preprocess="to-pixdata">icons/tool-polygon-select.png</file>
@@ -93,6 +94,7 @@
     <file>ui/color_picker_options.glade</file>
     <file>ui/move_options.glade</file>
     <file>ui/text_options.glade</file>
+    <file>ui/gradient_options.glade</file>
     <file>ui/new_image_dialog.glade</file>
     <file>ui/new_layer_dialog.glade</file>
     <file>ui/canvas_size_dialog.glade</file>

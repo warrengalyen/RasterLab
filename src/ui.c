@@ -10,6 +10,7 @@
 
 #include "ui.h"
 #include "app/autosave.h"
+#include "gradient.h"
 #include "app/recent_files.h"
 #include "app/settings.h"
 #include "document.h"
@@ -445,6 +446,8 @@ AppContext* ui_create_main_window(Settings* initial_settings) {
     ctx->effects_menu_item = NULL;
     ctx->workspace = NULL;           /* Initialize workspace early */
     ctx->layers_panel = NULL;        /* Will be set from workspace */
+    ctx->active_gradient = NULL;
+    ctx->active_gradient_set = NULL;
     ctx->settings = initial_settings;
     ctx->app_dir = NULL; /* Set in main.c after window creation */
     ctx->size_unit = g_strdup("px"); /* Default size unit is pixels */
@@ -1178,6 +1181,13 @@ void ui_context_free(AppContext* ctx) {
     /* Free settings (will be saved in main.c before this is called) */
     if (ctx->settings) {
         settings_free(ctx->settings);
+    }
+
+    /* Free active gradient set (gradient tool selection) */
+    if (ctx->active_gradient_set) {
+        gradient_set_free((GradientSet*)ctx->active_gradient_set);
+        ctx->active_gradient_set = NULL;
+        ctx->active_gradient = NULL;
     }
 
     /* Free swatches data */

@@ -37,6 +37,7 @@
 #include "tools/tool_colorpicker.h"
 #include "tools/tool_crop.h"
 #include "tools/tool_ellipse_select.h"
+#include "tools/tool_gradient.h"
 #include "tools/tool_lasso_select.h"
 #include "tools/tool_magic_wand_select.h"
 #include "tools/tool_move.h"
@@ -60,6 +61,7 @@ static gboolean on_viewport_button_press(GtkWidget* widget, GdkEventButton* even
 static gboolean on_viewport_button_release(GtkWidget* widget, GdkEventButton* event, gpointer user_data);
 static gboolean on_viewport_motion_notify(GtkWidget* widget, GdkEventMotion* event, gpointer user_data);
 static gboolean on_viewport_leave_notify(GtkWidget* widget, GdkEventCrossing* event, gpointer user_data);
+static gboolean on_viewport_enter_notify(GtkWidget* widget, GdkEventCrossing* event, gpointer user_data);
 /** Queue only the ruler strips containing the mouse marker (old and new) for minimal redraw. */
 static void queue_ruler_marker_areas(ImageDocument* doc, gdouble old_cx, gdouble old_cy, gdouble new_cx, gdouble new_cy);
 
@@ -910,6 +912,17 @@ static gboolean on_viewport_draw(GtkWidget* widget, cairo_t* cr, gpointer user_d
     /* Draw text tool bounding-box overlay */
     tool_text_draw_preview(doc, cr, doc->zoom_factor);
 
+    /* Draw gradient tool line/arrow overlay */
+    if (doc->drawing_area) {
+        ToolRegistry* grad_registry =
+            (ToolRegistry*)g_object_get_data(G_OBJECT(doc->drawing_area), "tool_registry");
+        if (grad_registry) {
+            Tool* gradient_tool = tool_manager_get(grad_registry, TOOL_GRADIENT);
+            if (gradient_tool)
+                tool_gradient_draw_preview(gradient_tool, doc, cr, doc->zoom_factor);
+        }
+    }
+
     cairo_restore(cr);
 
     /* Draw GPU stats overlay if enabled */
@@ -1287,6 +1300,19 @@ static gboolean on_drawing_area_enter_notify(GtkWidget* widget, GdkEventCrossing
         return FALSE;
     }
 
+    /* Gradient tool: custom plus-sign cursor (but blank during drag) */
+    if (active_tool->type == TOOL_GRADIENT) {
+        GradientToolState* gstate = (GradientToolState*)active_tool->user_data;
+        if (!gstate || !gstate->dragging) {
+            GdkCursor* c = tool_gradient_create_plus_cursor();
+            if (c) {
+                gdk_window_set_cursor(window, c);
+                g_object_unref(c);
+            }
+        }
+        return FALSE;
+    }
+
     if (!active_tool->cursor) {
         return FALSE;
     }
@@ -1435,6 +1461,50 @@ static gboolean on_viewport_leave_notify(GtkWidget* widget, GdkEventCrossing* ev
 }
 
 /**
+ * Viewport enter notify callback - sets cursor for gradient tool on the viewport
+ */
+static gboolean on_viewport_enter_notify(GtkWidget* widget, GdkEventCrossing* event, gpointer user_data) {
+    ImageDocument* doc = (ImageDocument*)user_data;
+    ToolRegistry* tool_registry = NULL;
+    Tool* active_tool = NULL;
+
+    (void)widget;
+    (void)event;
+
+    if (!doc || !doc->drawing_area || !doc->viewport) {
+        return FALSE;
+    }
+
+    tool_registry = (ToolRegistry*)g_object_get_data(G_OBJECT(doc->drawing_area), "tool_registry");
+    if (!tool_registry) {
+        return FALSE;
+    }
+
+    active_tool = tool_manager_get_active(tool_registry);
+    if (!active_tool) {
+        return FALSE;
+    }
+
+    /* Set the plus cursor on the viewport for the gradient tool */
+    if (active_tool->type == TOOL_GRADIENT) {
+        GradientToolState* gstate = (GradientToolState*)active_tool->user_data;
+        /* Only show plus cursor when NOT dragging (dragging shows blank cursor) */
+        if (!gstate || !gstate->dragging) {
+            GdkWindow* vp_win = gtk_widget_get_window(doc->viewport);
+            if (vp_win) {
+                GdkCursor* c = tool_gradient_create_plus_cursor();
+                if (c) {
+                    gdk_window_set_cursor(vp_win, c);
+                    g_object_unref(c);
+                }
+            }
+        }
+    }
+
+    return FALSE;
+}
+
+/**
  * Viewport button press callback - for hand tool panning anywhere in viewport
  */
 static gboolean on_viewport_button_press(GtkWidget* widget, GdkEventButton* event, gpointer user_data) {
@@ -1458,22 +1528,37 @@ static gboolean on_viewport_button_press(GtkWidget* widget, GdkEventButton* even
 
     /* Get active tool */
     active_tool = tool_manager_get_active(tool_registry);
-    if (!active_tool || active_tool->type != TOOL_HAND || !active_tool->mouse_down) {
-        return FALSE; /* Only handle hand tool */
+    if (!active_tool || !active_tool->mouse_down) {
+        return FALSE;
     }
 
-    /* For hand tool, pass viewport coordinates directly */
-    /* Viewport coordinates are relative to the viewport widget and are stable */
-    tool_event.x = (gint)event->x;
-    tool_event.y = (gint)event->y;
+    if (active_tool->type == TOOL_HAND) {
+        /* For hand tool, pass viewport coordinates directly */
+        tool_event.x = (gint)event->x;
+        tool_event.y = (gint)event->y;
+        tool_event.button = event->button;
+        tool_event.state = event->state;
+        tool_event.click_count = 1;
+        active_tool->mouse_down(active_tool, doc, &tool_event);
+        return TRUE;
+    }
 
-    tool_event.button = event->button;
-    tool_event.state = event->state;
+    if (active_tool->type == TOOL_GRADIENT) {
+        /* Convert viewport coords to image coords (can be outside canvas) */
+        GtkAllocation da_alloc;
+        gtk_widget_get_allocation(doc->drawing_area, &da_alloc);
+        gdouble widget_x = event->x - da_alloc.x;
+        gdouble widget_y = event->y - da_alloc.y;
+        widget_to_image_coords(doc, widget_x, widget_y,
+                               &tool_event.x, &tool_event.y);
+        tool_event.button = event->button;
+        tool_event.state = event->state;
+        tool_event.click_count = 1;
+        active_tool->mouse_down(active_tool, doc, &tool_event);
+        return TRUE;
+    }
 
-    /* Call tool handler */
-    active_tool->mouse_down(active_tool, doc, &tool_event);
-
-    return TRUE;
+    return FALSE;
 }
 
 /**
@@ -1500,22 +1585,36 @@ static gboolean on_viewport_button_release(GtkWidget* widget, GdkEventButton* ev
 
     /* Get active tool */
     active_tool = tool_manager_get_active(tool_registry);
-    if (!active_tool || active_tool->type != TOOL_HAND || !active_tool->mouse_up) {
-        return FALSE; /* Only handle hand tool */
+    if (!active_tool || !active_tool->mouse_up) {
+        return FALSE;
     }
 
-    /* For hand tool, pass viewport coordinates directly */
-    /* Viewport coordinates are relative to the viewport widget and are stable */
-    tool_event.x = (gint)event->x;
-    tool_event.y = (gint)event->y;
+    if (active_tool->type == TOOL_HAND) {
+        /* For hand tool, pass viewport coordinates directly */
+        tool_event.x = (gint)event->x;
+        tool_event.y = (gint)event->y;
+        tool_event.button = event->button;
+        tool_event.state = event->state;
+        active_tool->mouse_up(active_tool, doc, &tool_event);
+        return TRUE;
+    }
 
-    tool_event.button = event->button;
-    tool_event.state = event->state;
+    if (active_tool->type == TOOL_GRADIENT) {
+        /* Convert viewport coords to image coords */
+        GtkAllocation da_alloc;
+        gtk_widget_get_allocation(doc->drawing_area, &da_alloc);
+        gdouble widget_x = event->x - da_alloc.x;
+        gdouble widget_y = event->y - da_alloc.y;
+        widget_to_image_coords(doc, widget_x, widget_y,
+                               &tool_event.x, &tool_event.y);
+        tool_event.button = event->button;
+        tool_event.state = event->state;
+        active_tool->mouse_up(active_tool, doc, &tool_event);
+        gtk_widget_queue_draw(doc->drawing_area);
+        return TRUE;
+    }
 
-    /* Call tool handler */
-    active_tool->mouse_up(active_tool, doc, &tool_event);
-
-    return TRUE;
+    return FALSE;
 }
 
 /**
@@ -1567,22 +1666,34 @@ static gboolean on_viewport_motion_notify(GtkWidget* widget, GdkEventMotion* eve
 
     /* Get active tool */
     active_tool = tool_manager_get_active(tool_registry);
-    if (!active_tool || active_tool->type != TOOL_HAND || !active_tool->mouse_move) {
-        return FALSE; /* Only handle hand tool */
+    if (!active_tool || !active_tool->mouse_move) {
+        return FALSE;
     }
 
-    /* For hand tool, pass viewport coordinates directly */
-    /* Viewport coordinates are relative to the viewport widget and are stable */
-    tool_event.x = (gint)event->x;
-    tool_event.y = (gint)event->y;
+    if (active_tool->type == TOOL_HAND) {
+        /* For hand tool, pass viewport coordinates directly */
+        tool_event.x = (gint)event->x;
+        tool_event.y = (gint)event->y;
+        tool_event.button = 0;
+        tool_event.state = event->state;
+        active_tool->mouse_move(active_tool, doc, &tool_event);
+        return TRUE;
+    }
 
-    tool_event.button = 0; /* No button pressed during motion */
-    tool_event.state = event->state;
+    if (active_tool->type == TOOL_GRADIENT) {
+        /* Gradient tool: use image-space coordinates (already computed above) */
+        tool_event.x = image_x;
+        tool_event.y = image_y;
+        tool_event.button = 0;
+        tool_event.state = event->state;
+        active_tool->mouse_move(active_tool, doc, &tool_event);
+        /* The tool's mouse_move already queues redraws, but ensure overlay updates */
+        if (doc->viewport)
+            gtk_widget_queue_draw(doc->viewport);
+        return TRUE;
+    }
 
-    /* Call tool handler */
-    active_tool->mouse_move(active_tool, doc, &tool_event);
-
-    return TRUE;
+    return FALSE;
 }
 
 /**
@@ -2115,21 +2226,24 @@ GtkWidget* document_create_drawing_area(ImageDocument* doc) {
     g_signal_connect(drawing_area, "leave-notify-event",
                      G_CALLBACK(on_drawing_area_leave_notify), doc);
 
-    /* Enable mouse events on viewport for hand tool panning and cursor position tracking */
+    /* Enable mouse events on viewport for hand/gradient tools, panning and cursor position tracking */
     gtk_widget_set_events(viewport,
                           gtk_widget_get_events(viewport) |
                               GDK_BUTTON_PRESS_MASK |
                               GDK_BUTTON_RELEASE_MASK |
                               GDK_POINTER_MOTION_MASK |
+                              GDK_ENTER_NOTIFY_MASK |
                               GDK_LEAVE_NOTIFY_MASK);
 
-    /* Connect viewport mouse events for hand tool and cursor tracking */
+    /* Connect viewport mouse events for hand tool, gradient tool and cursor tracking */
     g_signal_connect(viewport, "button-press-event",
                      G_CALLBACK(on_viewport_button_press), doc);
     g_signal_connect(viewport, "button-release-event",
                      G_CALLBACK(on_viewport_button_release), doc);
     g_signal_connect(viewport, "motion-notify-event",
                      G_CALLBACK(on_viewport_motion_notify), doc);
+    g_signal_connect(viewport, "enter-notify-event",
+                     G_CALLBACK(on_viewport_enter_notify), doc);
     g_signal_connect(viewport, "leave-notify-event",
                      G_CALLBACK(on_viewport_leave_notify), doc);
 

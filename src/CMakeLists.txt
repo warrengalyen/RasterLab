@@ -115,6 +115,7 @@ set(SOURCES
     tools/tool_brush.c
     tools/tool_eraser.c
     tools/tool_hand.c
+    tools/tool_gradient.c
     tools/tool_manager.c
     tools/tool_move.c
     tools/tool_paintbucket.c

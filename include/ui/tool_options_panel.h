@@ -104,6 +104,15 @@ typedef struct {
     GtkWidget* text_letter_spacing_spin;         /* Letter spacing spin (text tool) */
     GtkWidget* text_antialias_checkbox;          /* Antialias checkbox (text tool) */
     GtkWidget* text_rotation_spin;               /* Rotation spin button (text tool) */
+    GtkWidget* gradient_panel;                   /* Gradient tool options panel (from Glade) */
+    GtkWidget* gradient_preview_draw;            /* GtkDrawingArea inside preview button */
+    GtkWidget* gradient_blend_combo;             /* Blend mode combo (gradient tool) */
+    GtkWidget* gradient_shape_combo;             /* Shape combo (gradient tool) */
+    GtkWidget* gradient_repeat_combo;            /* Repeat mode combo (gradient tool) */
+    GtkWidget* gradient_opacity_scale;           /* Opacity scale (gradient tool) */
+    GtkWidget* gradient_center_offset_scale;     /* Center offset scale (gradient tool) */
+    GtkWidget* gradient_center_offset_group;     /* Center offset group (hidden unless spherical) */
+    GtkWidget* gradient_center_offset_separator; /* Separator before center offset group */
     ToolType current_tool_type;                  /* Currently displayed tool type */
     ToolRegistry* tool_registry;                 /* Tool registry for cursor updates */
 } ToolOptionsPanel;

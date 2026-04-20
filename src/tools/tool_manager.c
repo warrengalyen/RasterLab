@@ -17,6 +17,7 @@
 #include "tools/tool_ellipse_select.h"
 #include "tools/tool_eraser.h"
 #include "tools/tool_fill.h"
+#include "tools/tool_gradient.h"
 #include "tools/tool_hand.h"
 #include "tools/tool_move.h"
 #include "tools/tool_pencil.h"
@@ -104,6 +105,13 @@ gboolean tool_manager_init_defaults(ToolRegistry* registry) {
         return FALSE;
     }
     tool_manager_register(registry, tool, TOOL_PAINT_BUCKET);
+
+    /* Create Gradient tool */
+    tool = tool_gradient_create();
+    if (!tool) {
+        return FALSE;
+    }
+    tool_manager_register(registry, tool, TOOL_GRADIENT);
 
     /* Create Color Picker tool */
     tool = tool_colorpicker_create();

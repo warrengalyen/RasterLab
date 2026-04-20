@@ -102,6 +102,13 @@ ToolOptions* tool_options_new(void) {
     opts->crop_overlay_mode = 1;
     opts->crop_snap = FALSE;
 
+    /* Initialize gradient tool options */
+    opts->gradient_shape = 0;         /* 0=linear */
+    opts->gradient_repeat = 1;        /* 1=clamp */
+    opts->gradient_opacity = 100.0f;
+    opts->gradient_blend_mode = 0;    /* 0=Normal */
+    opts->gradient_center_offset = 75.0;
+
     return opts;
 }
 
@@ -686,6 +693,38 @@ void tool_options_set_magicwand_contiguous(ToolOptions* opts, gboolean contiguou
 }
 gboolean tool_options_get_magicwand_contiguous(ToolOptions* opts) {
     return opts ? opts->magicwand_contiguous : TRUE;
+}
+
+/* Gradient tool options */
+void tool_options_set_gradient_shape(ToolOptions* opts, gint shape) {
+    if (opts) opts->gradient_shape = (shape >= 0 && shape <= 7) ? shape : 0;
+}
+gint tool_options_get_gradient_shape(ToolOptions* opts) {
+    return opts ? opts->gradient_shape : 0;
+}
+void tool_options_set_gradient_repeat(ToolOptions* opts, gint repeat) {
+    if (opts) opts->gradient_repeat = (repeat >= 0 && repeat <= 3) ? repeat : 1;
+}
+gint tool_options_get_gradient_repeat(ToolOptions* opts) {
+    return opts ? opts->gradient_repeat : 1;
+}
+void tool_options_set_gradient_opacity(ToolOptions* opts, gfloat opacity) {
+    if (opts) opts->gradient_opacity = fmaxf(0.0f, fminf(100.0f, opacity));
+}
+gfloat tool_options_get_gradient_opacity(ToolOptions* opts) {
+    return opts ? opts->gradient_opacity : 100.0f;
+}
+void tool_options_set_gradient_blend_mode(ToolOptions* opts, gint blend_mode) {
+    if (opts) opts->gradient_blend_mode = (blend_mode >= 0 && blend_mode <= 26) ? blend_mode : 0;
+}
+gint tool_options_get_gradient_blend_mode(ToolOptions* opts) {
+    return opts ? opts->gradient_blend_mode : 0;
+}
+void tool_options_set_gradient_center_offset(ToolOptions* opts, gdouble offset) {
+    if (opts) opts->gradient_center_offset = (offset < -99.0) ? -99.0 : (offset > 99.0) ? 99.0 : offset;
+}
+gdouble tool_options_get_gradient_center_offset(ToolOptions* opts) {
+    return opts ? opts->gradient_center_offset : 75.0;
 }
 
 /**

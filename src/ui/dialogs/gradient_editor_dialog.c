@@ -14,7 +14,8 @@
  *
  * Collection tab  – scrollable list of gradient swatches read from
  *                   <app_dir>/gradients/  (.ggr, .grd, .rgr, .svg)
- * Editor tab      – large preview bar + detail info for the selected gradient
+ * Editor tab      – large preview bar; loads from the list via "edit gradient"
+ *                   (otherwise shows the same default as "new gradient")
  */
 
 #include "ui/dialogs/gradient_editor_dialog.h"
@@ -76,8 +77,16 @@ typedef struct {
 /* Dialog-level state stored as GObject data on the dialog widget */
 typedef struct {
     GPtrArray* entries;     /* owns GradEntry* elements */
-    GradientDef* selected;  /* currently selected gradient (borrowed) */
-    gchar* selected_source; /* currently selected source basename (borrowed) */
+    GradientDef* editor_def; /* gradient shown in the Editor tab (borrowed) */
+    gchar* editor_source;    /* basename for editor context (borrowed) */
+
+    /* Collection list row — used for OK when the user picks a swatch without editing */
+    GradientDef* list_selected;
+    gchar* list_selected_source; /* borrowed */
+
+    /* Default white→black editor state until Edit / New / Import loads another def */
+    GradientDef* placeholder_editor_def;
+    gboolean placeholder_modified;
 
     /* App context (borrowed – lives as long as the dialog) */
     const gchar* app_dir;
@@ -121,6 +130,8 @@ typedef struct {
     int drag_trans_idx;      /* dragging transparency node index; -1 = none */
 } DialogData;
 
+static void update_editor_tab(DialogData* dd, GradientDef* def, const gchar* source);
+
 /* -------------------------------------------------------------------------
  * Helpers
  * ---------------------------------------------------------------------- */
@@ -145,6 +156,66 @@ static void dialog_data_free(gpointer p) {
         g_ptr_array_unref(d->entries);
     }
     g_free(d);
+}
+
+/* One-segment white→black gradient; same as the "new gradient" action. */
+static GradientSet* gradient_editor_new_default_set(void) {
+    GradientSet* set = gradient_set_new(1);
+    if (!set)
+        return NULL;
+
+    GradientDef* def = &set->gradients[0];
+    def->name = g_strdup("New Gradient");
+
+    def->num_segments = 1;
+    def->segments = (GradientSegment*)calloc(1, sizeof(GradientSegment));
+    if (!def->segments) {
+        gradient_set_free(set);
+        return NULL;
+    }
+    GradientSegment* seg = &def->segments[0];
+    seg->left_pos = 0.0;
+    seg->midpoint = 0.5;
+    seg->right_pos = 1.0;
+    seg->left_r = 1.0;
+    seg->left_g = 1.0;
+    seg->left_b = 1.0;
+    seg->left_a = 1.0;
+    seg->right_r = 0.0;
+    seg->right_g = 0.0;
+    seg->right_b = 0.0;
+    seg->right_a = 1.0;
+    seg->blend_mode = GRADIENT_BLEND_LINEAR;
+    seg->color_space = GRADIENT_COLOR_RGB;
+    seg->left_type = GRADIENT_ENDPOINT_FIXED;
+    seg->right_type = GRADIENT_ENDPOINT_FIXED;
+
+    return set;
+}
+
+static void editor_touch_placeholder(DialogData* dd) {
+    if (dd && dd->editor_def == dd->placeholder_editor_def)
+        dd->placeholder_modified = TRUE;
+}
+
+/* Initialise editor tab with the default gradient (not tied to list selection). */
+static void gradient_editor_init_placeholder(DialogData* dd) {
+    if (!dd)
+        return;
+
+    GradientSet* set = gradient_editor_new_default_set();
+    if (!set)
+        return;
+
+    GradEntry* entry = g_new0(GradEntry, 1);
+    entry->set = set;
+    entry->filepath = g_strdup("(default)");
+    entry->basename = g_strdup("New Gradient");
+    g_ptr_array_add(dd->entries, entry);
+
+    dd->placeholder_editor_def = &set->gradients[0];
+    dd->placeholder_modified = FALSE;
+    update_editor_tab(dd, dd->placeholder_editor_def, entry->basename);
 }
 
 /* -------------------------------------------------------------------------
@@ -614,8 +685,8 @@ static void update_node_options_ui(DialogData* dd) {
     if (!dd)
         return;
 
-    gboolean has_color = (dd->selected != NULL && dd->selected_node >= 0);
-    gboolean has_trans = (dd->selected != NULL && dd->selected_trans_node >= 0);
+    gboolean has_color = (dd->editor_def != NULL && dd->selected_node >= 0);
+    gboolean has_trans = (dd->editor_def != NULL && dd->selected_trans_node >= 0);
     gboolean has_any = (has_color || has_trans);
 
     if (dd->node_options_separator)
@@ -641,10 +712,10 @@ static void update_node_options_ui(DialogData* dd) {
 
     if (has_color) {
         double r, g, b;
-        get_node_color(dd->selected, dd->selected_node, &r, &g, &b);
-        opacity = get_node_opacity(dd->selected, dd->selected_node);
+        get_node_color(dd->editor_def, dd->selected_node, &r, &g, &b);
+        opacity = get_node_opacity(dd->editor_def, dd->selected_node);
 
-        GArray* nodes = collect_nodes(dd->selected);
+        GArray* nodes = collect_nodes(dd->editor_def);
         if (nodes) {
             if (dd->selected_node < (int)nodes->len) {
                 NodeStop* ns = &g_array_index(nodes, NodeStop, dd->selected_node);
@@ -658,7 +729,7 @@ static void update_node_options_ui(DialogData* dd) {
             update_color_button_appearance(dd->node_color_btn, &rgba);
         }
     } else {
-        GArray* nodes = collect_trans_nodes(dd->selected);
+        GArray* nodes = collect_trans_nodes(dd->editor_def);
         if (nodes) {
             if (dd->selected_trans_node < (int)nodes->len) {
                 TransStop* ts = &g_array_index(nodes, TransStop, dd->selected_trans_node);
@@ -776,7 +847,7 @@ static gboolean on_row_swatch_draw(GtkWidget* widget, cairo_t* cr, gpointer user
 /* Draw callback for the large preview bar in the Editor tab */
 static gboolean on_editor_preview_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     DialogData* dd = (DialogData*)user_data;
-    if (!dd || !dd->selected)
+    if (!dd || !dd->editor_def)
         return FALSE;
 
     int w = gtk_widget_get_allocated_width(widget);
@@ -786,16 +857,12 @@ static gboolean on_editor_preview_draw(GtkWidget* widget, cairo_t* cr, gpointer 
 
     draw_checkerboard(cr, w, h);
 
-    const GradientPreview* pv = gradient_preview_get(dd->selected);
+    const GradientPreview* pv = gradient_preview_get(dd->editor_def);
     if (pv) {
         paint_gradient_preview(cr, pv, w, h);
     }
     return TRUE;
 }
-
-/* -------------------------------------------------------------------------
- * Selection handler
- * ---------------------------------------------------------------------- */
 
 /* -------------------------------------------------------------------------
  * Node bar draw + input callbacks
@@ -868,8 +935,8 @@ static gboolean on_node_bar_draw(GtkWidget* widget, cairo_t* cr, gpointer user_d
     cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
     cairo_paint(cr);
 
-    if (dd && dd->selected && w >= 2) {
-        GArray* nodes = collect_nodes(dd->selected);
+    if (dd && dd->editor_def && w >= 2) {
+        GArray* nodes = collect_nodes(dd->editor_def);
         if (nodes) {
             for (guint i = 0; i < nodes->len; i++) {
                 NodeStop* ns = &g_array_index(nodes, NodeStop, i);
@@ -882,7 +949,7 @@ static gboolean on_node_bar_draw(GtkWidget* widget, cairo_t* cr, gpointer user_d
     }
 
     /* Blue position indicator: shown when pointer is in empty bar space */
-    if (dd && dd->selected && dd->hover_node < 0 && dd->hover_x >= 0 && !dd->dragging) {
+    if (dd && dd->editor_def && dd->hover_node < 0 && dd->hover_x >= 0 && !dd->dragging) {
         double r = (double)h * 0.25; /* ~half bar height diameter */
         double cy = (double)h * 0.5;
         cairo_save(cr);
@@ -907,7 +974,7 @@ static gboolean on_node_bar_button_press(GtkWidget* widget,
                                          GdkEventButton* event,
                                          gpointer user_data) {
     DialogData* dd = (DialogData*)user_data;
-    if (!dd || !dd->selected)
+    if (!dd || !dd->editor_def)
         return FALSE;
 
     int w = gtk_widget_get_allocated_width(widget);
@@ -917,7 +984,7 @@ static gboolean on_node_bar_button_press(GtkWidget* widget,
     int click_x = (int)event->x;
     double pos = x_to_pos(click_x, w);
 
-    GArray* nodes = collect_nodes(dd->selected);
+    GArray* nodes = collect_nodes(dd->editor_def);
     if (!nodes)
         return FALSE;
     int node_idx = find_node_at_x(nodes, click_x, w);
@@ -935,8 +1002,9 @@ static gboolean on_node_bar_button_press(GtkWidget* widget,
             dd->drag_node_idx = node_idx;
         } else {
             /* Add new stop at this position */
-            node_bar_add_stop(dd->selected, pos);
-            GArray* updated = collect_nodes(dd->selected);
+            editor_touch_placeholder(dd);
+            node_bar_add_stop(dd->editor_def, pos);
+            GArray* updated = collect_nodes(dd->editor_def);
             if (updated) {
                 dd->selected_node = find_node_at_x(updated, click_x, w);
                 g_array_free(updated, TRUE);
@@ -946,7 +1014,8 @@ static gboolean on_node_bar_button_press(GtkWidget* widget,
     } else if (event->button == GDK_BUTTON_SECONDARY) {
         if (node_idx > 0 && node_idx < total - 1) {
             /* Remove interior stop */
-            node_bar_remove_stop(dd->selected, node_idx, total);
+            editor_touch_placeholder(dd);
+            node_bar_remove_stop(dd->editor_def, node_idx, total);
             if (dd->selected_node >= (int)(total - 1))
                 dd->selected_node = (int)(total - 2);
             gtk_widget_queue_draw(dd->editor_preview);
@@ -962,14 +1031,15 @@ static gboolean on_node_bar_motion(GtkWidget* widget,
                                    GdkEventMotion* event,
                                    gpointer user_data) {
     DialogData* dd = (DialogData*)user_data;
-    if (!dd || !dd->selected)
+    if (!dd || !dd->editor_def)
         return FALSE;
 
     int w = gtk_widget_get_allocated_width(widget);
 
     if (dd->dragging && dd->drag_node_idx >= 0) {
+        editor_touch_placeholder(dd);
         double new_pos = x_to_pos((int)event->x, w);
-        node_bar_move_stop(dd->selected, &dd->drag_node_idx, new_pos);
+        node_bar_move_stop(dd->editor_def, &dd->drag_node_idx, new_pos);
         dd->selected_node = dd->drag_node_idx; /* follow reordering */
         /* Sync location spin without triggering the adj callback */
         if (dd->location_adj) {
@@ -980,7 +1050,7 @@ static gboolean on_node_bar_motion(GtkWidget* widget,
         gtk_widget_queue_draw(dd->editor_preview);
         gtk_widget_queue_draw(widget);
     } else {
-        GArray* nodes = collect_nodes(dd->selected);
+        GArray* nodes = collect_nodes(dd->editor_def);
         int idx = nodes ? find_node_at_x(nodes, (int)event->x, w) : -1;
         if (nodes)
             g_array_free(nodes, TRUE);
@@ -1095,8 +1165,8 @@ static gboolean on_trans_bar_draw(GtkWidget* widget, cairo_t* cr, gpointer user_
     cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
     cairo_paint(cr);
 
-    if (dd && dd->selected && w >= 2) {
-        GArray* nodes = collect_trans_nodes(dd->selected);
+    if (dd && dd->editor_def && w >= 2) {
+        GArray* nodes = collect_trans_nodes(dd->editor_def);
         if (nodes) {
             for (guint i = 0; i < nodes->len; i++) {
                 TransStop* ts = &g_array_index(nodes, TransStop, i);
@@ -1110,7 +1180,7 @@ static gboolean on_trans_bar_draw(GtkWidget* widget, cairo_t* cr, gpointer user_
     }
 
     /* Blue position indicator when hovering over empty bar space */
-    if (dd && dd->selected &&
+    if (dd && dd->editor_def &&
         dd->hover_trans_node < 0 && dd->hover_trans_x >= 0 && !dd->trans_dragging) {
         double r = (double)h * 0.25;
         double cy = (double)h * 0.5;
@@ -1135,7 +1205,7 @@ static gboolean on_trans_bar_button_press(GtkWidget* widget,
                                           GdkEventButton* event,
                                           gpointer user_data) {
     DialogData* dd = (DialogData*)user_data;
-    if (!dd || !dd->selected)
+    if (!dd || !dd->editor_def)
         return FALSE;
 
     int w = gtk_widget_get_allocated_width(widget);
@@ -1146,7 +1216,7 @@ static gboolean on_trans_bar_button_press(GtkWidget* widget,
     double pos = x_to_pos(click_x, w);
 
     /* collect_trans_nodes returns NULL when there are no stops yet; that's fine */
-    GArray* nodes = collect_trans_nodes(dd->selected);
+    GArray* nodes = collect_trans_nodes(dd->editor_def);
     int node_idx = nodes ? find_trans_node_at_x(nodes, click_x, w) : -1;
     int total = nodes ? (int)nodes->len : 0;
     if (nodes)
@@ -1161,8 +1231,9 @@ static gboolean on_trans_bar_button_press(GtkWidget* widget,
             dd->trans_dragging = TRUE;
             dd->drag_trans_idx = node_idx;
         } else {
-            trans_bar_add_stop(dd->selected, pos);
-            GArray* updated = collect_trans_nodes(dd->selected);
+            editor_touch_placeholder(dd);
+            trans_bar_add_stop(dd->editor_def, pos);
+            GArray* updated = collect_trans_nodes(dd->editor_def);
             if (updated) {
                 dd->selected_trans_node = find_trans_node_at_x(updated, click_x, w);
                 g_array_free(updated, TRUE);
@@ -1171,7 +1242,8 @@ static gboolean on_trans_bar_button_press(GtkWidget* widget,
         }
     } else if (event->button == GDK_BUTTON_SECONDARY) {
         if (node_idx > 0 && node_idx < total - 1) {
-            trans_bar_remove_stop(dd->selected, node_idx);
+            editor_touch_placeholder(dd);
+            trans_bar_remove_stop(dd->editor_def, node_idx);
             if (dd->selected_trans_node >= total - 1)
                 dd->selected_trans_node = total - 2;
             gtk_widget_queue_draw(dd->editor_preview);
@@ -1187,14 +1259,15 @@ static gboolean on_trans_bar_motion(GtkWidget* widget,
                                     GdkEventMotion* event,
                                     gpointer user_data) {
     DialogData* dd = (DialogData*)user_data;
-    if (!dd || !dd->selected)
+    if (!dd || !dd->editor_def)
         return FALSE;
 
     int w = gtk_widget_get_allocated_width(widget);
 
     if (dd->trans_dragging && dd->drag_trans_idx >= 0) {
+        editor_touch_placeholder(dd);
         double new_pos = x_to_pos((int)event->x, w);
-        trans_bar_move_stop(dd->selected, &dd->drag_trans_idx, new_pos);
+        trans_bar_move_stop(dd->editor_def, &dd->drag_trans_idx, new_pos);
         dd->selected_trans_node = dd->drag_trans_idx; /* follow reordering */
         /* Sync location spin without triggering the adj callback */
         if (dd->location_adj) {
@@ -1205,7 +1278,7 @@ static gboolean on_trans_bar_motion(GtkWidget* widget,
         gtk_widget_queue_draw(dd->editor_preview);
         gtk_widget_queue_draw(widget);
     } else {
-        GArray* nodes = collect_trans_nodes(dd->selected);
+        GArray* nodes = collect_trans_nodes(dd->editor_def);
         int idx = nodes ? find_trans_node_at_x(nodes, (int)event->x, w) : -1;
         if (nodes)
             g_array_free(nodes, TRUE);
@@ -1253,7 +1326,7 @@ static gboolean on_trans_bar_button_release(GtkWidget* widget,
 /* Colour-swatch button clicked: open colour chooser and apply to stop */
 static void on_node_color_btn_clicked(GtkButton* button, gpointer user_data) {
     DialogData* dd = (DialogData*)user_data;
-    if (!dd || !dd->selected || dd->selected_node < 0)
+    if (!dd || !dd->editor_def || dd->selected_node < 0)
         return;
 
     GtkWidget* top = gtk_widget_get_toplevel(GTK_WIDGET(button));
@@ -1261,7 +1334,7 @@ static void on_node_color_btn_clicked(GtkButton* button, gpointer user_data) {
         return;
 
     double r, g, b;
-    get_node_color(dd->selected, dd->selected_node, &r, &g, &b);
+    get_node_color(dd->editor_def, dd->selected_node, &r, &g, &b);
     GdkRGBA initial = {(float)r, (float)g, (float)b, 1.0f};
 
     GtkWidget* dlg = color_chooser_dialog_new(
@@ -1272,7 +1345,8 @@ static void on_node_color_btn_clicked(GtkButton* button, gpointer user_data) {
     color_chooser_dialog_get_color(dlg, &out_r, &out_g, &out_b);
     gtk_widget_destroy(dlg);
 
-    set_node_color(dd->selected, dd->selected_node, out_r, out_g, out_b);
+    set_node_color(dd->editor_def, dd->selected_node, out_r, out_g, out_b);
+    editor_touch_placeholder(dd);
 
     GdkRGBA new_rgba = {(float)out_r, (float)out_g, (float)out_b, 1.0f};
     update_color_button_appearance(GTK_WIDGET(button), &new_rgba);
@@ -1285,21 +1359,23 @@ static void on_node_color_btn_clicked(GtkButton* button, gpointer user_data) {
 /* Opacity adjustment changed: apply to selected colour or transparency stop */
 static void on_opacity_adj_changed(GtkAdjustment* adj, gpointer user_data) {
     DialogData* dd = (DialogData*)user_data;
-    if (!dd || !dd->selected || dd->updating_node_ui)
+    if (!dd || !dd->editor_def || dd->updating_node_ui)
         return;
 
     double opacity = gtk_adjustment_get_value(adj) / 100.0;
 
     if (dd->selected_node >= 0) {
-        set_node_opacity(dd->selected, dd->selected_node, opacity);
+        editor_touch_placeholder(dd);
+        set_node_opacity(dd->editor_def, dd->selected_node, opacity);
         gtk_widget_queue_draw(dd->editor_preview);
         if (dd->node_bar)
             gtk_widget_queue_draw(dd->node_bar);
     } else if (dd->selected_trans_node >= 0 &&
-               dd->selected->transparency_stops &&
-               dd->selected_trans_node < dd->selected->num_transparency_stops) {
-        dd->selected->transparency_stops[dd->selected_trans_node].opacity = opacity;
-        gradient_invalidate(dd->selected);
+               dd->editor_def->transparency_stops &&
+               dd->selected_trans_node < dd->editor_def->num_transparency_stops) {
+        editor_touch_placeholder(dd);
+        dd->editor_def->transparency_stops[dd->selected_trans_node].opacity = opacity;
+        gradient_invalidate(dd->editor_def);
         gtk_widget_queue_draw(dd->editor_preview);
         if (dd->trans_bar)
             gtk_widget_queue_draw(dd->trans_bar);
@@ -1309,26 +1385,25 @@ static void on_opacity_adj_changed(GtkAdjustment* adj, gpointer user_data) {
 /* Location adjustment changed: move selected stop along the gradient */
 static void on_location_adj_changed(GtkAdjustment* adj, gpointer user_data) {
     DialogData* dd = (DialogData*)user_data;
-    if (!dd || !dd->selected || dd->updating_node_ui)
+    if (!dd || !dd->editor_def || dd->updating_node_ui)
         return;
 
     double pos = gtk_adjustment_get_value(adj) / 100.0;
 
     if (dd->selected_node >= 0) {
-        node_bar_move_stop(dd->selected, &dd->selected_node, pos);
+        editor_touch_placeholder(dd);
+        node_bar_move_stop(dd->editor_def, &dd->selected_node, pos);
         gtk_widget_queue_draw(dd->editor_preview);
         if (dd->node_bar)
             gtk_widget_queue_draw(dd->node_bar);
     } else if (dd->selected_trans_node >= 0) {
-        trans_bar_move_stop(dd->selected, &dd->selected_trans_node, pos);
+        editor_touch_placeholder(dd);
+        trans_bar_move_stop(dd->editor_def, &dd->selected_trans_node, pos);
         gtk_widget_queue_draw(dd->editor_preview);
         if (dd->trans_bar)
             gtk_widget_queue_draw(dd->trans_bar);
     }
 }
-
-/* Forward declaration needed by on_import_btn_clicked */
-static void update_editor_tab(DialogData* dd, GradientDef* def, const gchar* source);
 
 /* -------------------------------------------------------------------------
  * Gradient options signal handlers
@@ -1337,34 +1412,37 @@ static void update_editor_tab(DialogData* dd, GradientDef* def, const gchar* sou
 /* Gradient name entry changed: keep def->name in sync */
 static void on_name_entry_changed(GtkEditable* editable, gpointer user_data) {
     DialogData* dd = (DialogData*)user_data;
-    if (!dd || !dd->selected || dd->updating_node_ui)
+    if (!dd || !dd->editor_def || dd->updating_node_ui)
         return;
 
+    editor_touch_placeholder(dd);
     const gchar* text = gtk_entry_get_text(GTK_ENTRY(editable));
-    g_free(dd->selected->name);
-    dd->selected->name = (text && text[0] != '\0') ? g_strdup(text) : NULL;
+    g_free(dd->editor_def->name);
+    dd->editor_def->name = (text && text[0] != '\0') ? g_strdup(text) : NULL;
 }
 
 /* Gamma blend checkbox toggled: enable/disable linear-light blending */
 static void on_gamma_blend_toggled(GtkToggleButton* button, gpointer user_data) {
     DialogData* dd = (DialogData*)user_data;
-    if (!dd || !dd->selected || dd->updating_node_ui)
+    if (!dd || !dd->editor_def || dd->updating_node_ui)
         return;
 
-    dd->selected->gamma_blend = gtk_toggle_button_get_active(button);
-    gradient_invalidate(dd->selected);
+    editor_touch_placeholder(dd);
+    dd->editor_def->gamma_blend = gtk_toggle_button_get_active(button);
+    gradient_invalidate(dd->editor_def);
     gtk_widget_queue_draw(dd->editor_preview);
 }
 
 /* Equally space checkbox toggled: redistribute all nodes evenly, then uncheck */
 static void on_equally_space_toggled(GtkToggleButton* button, gpointer user_data) {
     DialogData* dd = (DialogData*)user_data;
-    if (!dd || !dd->selected)
+    if (!dd || !dd->editor_def)
         return;
     if (!gtk_toggle_button_get_active(button))
         return;
 
-    GradientDef* def = dd->selected;
+    editor_touch_placeholder(dd);
+    GradientDef* def = dd->editor_def;
 
     /* Equally space colour stops, preserving their colours */
     if (def->num_segments > 0) {
@@ -1431,7 +1509,7 @@ static void on_equally_space_toggled(GtkToggleButton* button, gpointer user_data
 static void on_save_collection_btn_clicked(GtkButton* button, gpointer user_data) {
     (void)button;
     DialogData* dd = (DialogData*)user_data;
-    if (!dd || !dd->selected)
+    if (!dd || !dd->editor_def)
         return;
 
     GtkWidget* top = gtk_widget_get_toplevel(GTK_WIDGET(button));
@@ -1442,7 +1520,7 @@ static void on_save_collection_btn_clicked(GtkButton* button, gpointer user_data
     if (dd->name_entry)
         name = gtk_entry_get_text(GTK_ENTRY(dd->name_entry));
     if (!name || name[0] == '\0')
-        name = dd->selected->name;
+        name = dd->editor_def->name;
 
     if (!name || name[0] == '\0') {
         GtkWidget* warn = gtk_message_dialog_new(
@@ -1455,9 +1533,9 @@ static void on_save_collection_btn_clicked(GtkButton* button, gpointer user_data
     }
 
     /* Keep def->name in sync with the entry */
-    if (!dd->selected->name || strcmp(dd->selected->name, name) != 0) {
-        g_free(dd->selected->name);
-        dd->selected->name = g_strdup(name);
+    if (!dd->editor_def->name || strcmp(dd->editor_def->name, name) != 0) {
+        g_free(dd->editor_def->name);
+        dd->editor_def->name = g_strdup(name);
     }
 
     /* Sanitize name for use as a filename */
@@ -1494,7 +1572,7 @@ static void on_save_collection_btn_clicked(GtkButton* button, gpointer user_data
     }
 
     /* Save using a stack-allocated set that borrows the gradient pointer */
-    GradientSet tmp_set = {1, dd->selected};
+    GradientSet tmp_set = {1, dd->editor_def};
     GradientIOError io_err = GRADIENT_IO_ERROR_NONE;
     gboolean ok = gradient_io_save(&tmp_set, filepath, &io_err);
 
@@ -1599,7 +1677,7 @@ static void on_import_btn_clicked(GtkButton* button, gpointer user_data) {
 static void on_export_btn_clicked(GtkButton* button, gpointer user_data) {
     (void)button;
     DialogData* dd = (DialogData*)user_data;
-    if (!dd || !dd->selected)
+    if (!dd || !dd->editor_def)
         return;
 
     GtkWidget* top = gtk_widget_get_toplevel(GTK_WIDGET(button));
@@ -1614,7 +1692,7 @@ static void on_export_btn_clicked(GtkButton* button, gpointer user_data) {
     gtk_file_chooser_set_do_overwrite_confirmation(GTK_FILE_CHOOSER(dlg), TRUE);
 
     /* Suggest a default filename */
-    const gchar* def_name = dd->selected->name ? dd->selected->name : "gradient";
+    const gchar* def_name = dd->editor_def->name ? dd->editor_def->name : "gradient";
     gchar* suggest = g_strdup_printf("%s.rgr", def_name);
     gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(dlg), suggest);
     g_free(suggest);
@@ -1648,7 +1726,7 @@ static void on_export_btn_clicked(GtkButton* button, gpointer user_data) {
     gchar* filepath = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dlg));
     gtk_widget_destroy(dlg);
 
-    GradientSet tmp_set = {1, dd->selected};
+    GradientSet tmp_set = {1, dd->editor_def};
     GradientIOError io_err = GRADIENT_IO_ERROR_NONE;
     gboolean ok = gradient_io_save(&tmp_set, filepath, &io_err);
 
@@ -1670,8 +1748,8 @@ static void on_export_btn_clicked(GtkButton* button, gpointer user_data) {
  * ---------------------------------------------------------------------- */
 
 static void update_editor_tab(DialogData* dd, GradientDef* def, const gchar* source) {
-    dd->selected = def;
-    dd->selected_source = (gchar*)source; /* borrowed */
+    dd->editor_def = def;
+    dd->editor_source = (gchar*)source; /* borrowed */
 
     dd->selected_node = -1;
     dd->hover_node = -1;
@@ -1716,11 +1794,23 @@ static void update_editor_tab(DialogData* dd, GradientDef* def, const gchar* sou
 static void on_collection_row_selected(GtkListBox* list_box,
                                        GtkListBoxRow* row,
                                        gpointer user_data) {
-    /* Selection is tracked by GTK; editor is only loaded when the user
-     * explicitly clicks "Edit Gradient". Nothing to do here. */
     (void)list_box;
-    (void)row;
-    (void)user_data;
+    DialogData* dd = (DialogData*)user_data;
+    if (!dd)
+        return;
+
+    if (!row) {
+        dd->list_selected = NULL;
+        dd->list_selected_source = NULL;
+        return;
+    }
+
+    /* List selection only — load into the editor via "edit gradient". */
+    RowData* rd = (RowData*)g_object_get_data(G_OBJECT(row), "row-data");
+    if (rd) {
+        dd->list_selected = rd->def;
+        dd->list_selected_source = (gchar*)rd->source; /* borrowed */
+    }
 }
 
 /* -------------------------------------------------------------------------
@@ -1891,37 +1981,11 @@ static void on_new_gradient_btn_clicked(GtkButton* button, gpointer user_data) {
     if (!dd)
         return;
 
-    /* Allocate a GradientSet with one slot */
-    GradientSet* set = gradient_set_new(1);
+    GradientSet* set = gradient_editor_new_default_set();
     if (!set)
         return;
 
     GradientDef* def = &set->gradients[0];
-    def->name = g_strdup("New Gradient");
-
-    /* One segment: white at 0% → black at 100% */
-    def->num_segments = 1;
-    def->segments = (GradientSegment*)calloc(1, sizeof(GradientSegment));
-    if (!def->segments) {
-        gradient_set_free(set);
-        return;
-    }
-    GradientSegment* seg = &def->segments[0];
-    seg->left_pos = 0.0;
-    seg->midpoint = 0.5;
-    seg->right_pos = 1.0;
-    seg->left_r = 1.0; /* white */
-    seg->left_g = 1.0;
-    seg->left_b = 1.0;
-    seg->left_a = 1.0;
-    seg->right_r = 0.0; /* black */
-    seg->right_g = 0.0;
-    seg->right_b = 0.0;
-    seg->right_a = 1.0;
-    seg->blend_mode = GRADIENT_BLEND_LINEAR;
-    seg->color_space = GRADIENT_COLOR_RGB;
-    seg->left_type = GRADIENT_ENDPOINT_FIXED;
-    seg->right_type = GRADIENT_ENDPOINT_FIXED;
 
     /* Create a GradEntry to own the set */
     GradEntry* entry = g_new0(GradEntry, 1);
@@ -1943,6 +2007,42 @@ static void on_dialog_destroy(GtkWidget* widget, gpointer user_data) {
     (void)widget;
     (void)user_data;
     /* DialogData is freed via g_object_set_data_full with dialog_data_free */
+}
+
+/* ------------------------------------------------------------------
+ * Transfer ownership of the GradientSet* that contains `selected`
+ * out of dd->entries so that dialog_data_free does not free it.
+ * Returns the stolen set, or NULL if not found.
+ * The caller is responsible for freeing the returned set.
+ * ------------------------------------------------------------------ */
+static GradientSet* steal_owning_set(DialogData* dd, GradientDef* selected) {
+    if (!dd || !selected || !dd->entries)
+        return NULL;
+    for (guint i = 0; i < dd->entries->len; i++) {
+        GradEntry* e = (GradEntry*)g_ptr_array_index(dd->entries, i);
+        if (!e || !e->set)
+            continue;
+        for (int j = 0; j < e->set->num_gradients; j++) {
+            if (&e->set->gradients[j] == selected) {
+                GradientSet* stolen = e->set;
+                e->set = NULL; /* prevent dialog_data_free → grad_entry_free from freeing it */
+                return stolen;
+            }
+        }
+    }
+    return NULL;
+}
+
+/* Button callbacks — emit the appropriate dialog response code so that
+ * gtk_dialog_run() returns the correct value in gradient_editor_dialog_show(). */
+static void on_gradient_editor_ok_clicked(GtkButton* btn, gpointer user_data) {
+    (void)btn;
+    gtk_dialog_response(GTK_DIALOG(user_data), GTK_RESPONSE_OK);
+}
+
+static void on_gradient_editor_cancel_clicked(GtkButton* btn, gpointer user_data) {
+    (void)btn;
+    gtk_dialog_response(GTK_DIALOG(user_data), GTK_RESPONSE_CANCEL);
 }
 
 /* -------------------------------------------------------------------------
@@ -1979,8 +2079,8 @@ void gradient_editor_dialog_show(AppContext* ctx) {
     GtkWidget* editor_preview = GTK_WIDGET(gtk_builder_get_object(builder, "gradient_editor_preview"));
     GtkWidget* node_bar = GTK_WIDGET(gtk_builder_get_object(builder, "gradient_node_bar"));
     GtkWidget* trans_bar = GTK_WIDGET(gtk_builder_get_object(builder, "gradient_trans_bar"));
-    GtkWidget* close_btn = GTK_WIDGET(gtk_builder_get_object(builder, "gradient_editor_close_btn"));
-    GtkWidget* ok_btn = GTK_WIDGET(gtk_builder_get_object(builder, "gradient_editor_cancel_btn"));
+    GtkWidget* ok_btn     = GTK_WIDGET(gtk_builder_get_object(builder, "gradient_editor_ok_btn"));
+    GtkWidget* cancel_btn = GTK_WIDGET(gtk_builder_get_object(builder, "gradient_editor_cancel_btn"));
     GtkWidget* edit_grad_btn = GTK_WIDGET(gtk_builder_get_object(builder, "edit_gradient_btn"));
     GtkWidget* new_grad_btn = GTK_WIDGET(gtk_builder_get_object(builder, "new_gradient_btn"));
 
@@ -2004,7 +2104,7 @@ void gradient_editor_dialog_show(AppContext* ctx) {
     /* Build dialog data */
     DialogData* dd = g_new0(DialogData, 1);
     dd->entries = g_ptr_array_new_with_free_func(grad_entry_free);
-    dd->selected = NULL;
+    dd->placeholder_editor_def = NULL;
     dd->selected_node = -1;
     dd->hover_node = -1;
     dd->hover_x = -1;
@@ -2087,12 +2187,22 @@ void gradient_editor_dialog_show(AppContext* ctx) {
     /* Populate the list */
     populate_collection_list(dd, list_box);
 
+    /* Editor tab starts with the same default as "new gradient" (not from list). */
+    gradient_editor_init_placeholder(dd);
+
     /* Wire signals */
     g_signal_connect(list_box, "row-selected", G_CALLBACK(on_collection_row_selected), dd);
     g_signal_connect(editor_preview, "draw", G_CALLBACK(on_editor_preview_draw), dd);
-    g_signal_connect(close_btn, "clicked", G_CALLBACK(gtk_widget_destroy), dialog);
+
+    /* OK emits GTK_RESPONSE_OK; Cancel emits GTK_RESPONSE_CANCEL.
+     * gtk_dialog_run() will return the respective code. */
     if (ok_btn)
-        g_signal_connect(ok_btn, "clicked", G_CALLBACK(gtk_widget_destroy), dialog);
+        g_signal_connect(ok_btn, "clicked",
+                         G_CALLBACK(on_gradient_editor_ok_clicked), dialog);
+    if (cancel_btn)
+        g_signal_connect(cancel_btn, "clicked",
+                         G_CALLBACK(on_gradient_editor_cancel_clicked), dialog);
+
     if (edit_grad_btn)
         g_signal_connect(edit_grad_btn, "clicked", G_CALLBACK(on_edit_gradient_btn_clicked), dd);
     if (new_grad_btn)
@@ -2161,11 +2271,37 @@ void gradient_editor_dialog_show(AppContext* ctx) {
     /* Re-apply visibility after show_all, which overrides gtk_widget_hide */
     update_node_options_ui(dd);
 
-    /* Run – gtk_dialog_run is synchronous but we want a non-blocking window;
-     * use gtk_widget_show_all + let the main loop handle it.
-     * For a developer test dialog, gtk_dialog_run is fine too. */
-    gtk_dialog_run(GTK_DIALOG(dialog));
-    gtk_widget_destroy(dialog);
+    /* Run the dialog modally and wait for OK or Cancel response. */
+    gint response = gtk_dialog_run(GTK_DIALOG(dialog));
 
+    /* OK: transfer the chosen gradient to AppContext.
+     * We steal ownership of the GradientSet so it outlives the dialog. */
+    if (response == GTK_RESPONSE_OK) {
+        DialogData* result_dd =
+            (DialogData*)g_object_get_data(G_OBJECT(dialog), "dialog-data");
+        if (result_dd) {
+            GradientDef* pick = NULL;
+            if (result_dd->list_selected != NULL &&
+                result_dd->editor_def == result_dd->placeholder_editor_def &&
+                !result_dd->placeholder_modified) {
+                pick = result_dd->list_selected;
+            } else {
+                pick = result_dd->editor_def;
+            }
+            if (pick) {
+                GradientSet* new_set = steal_owning_set(result_dd, pick);
+                if (new_set) {
+                    if (ctx->active_gradient_set) {
+                        gradient_set_free((GradientSet*)ctx->active_gradient_set);
+                    }
+                    ctx->active_gradient_set = (gpointer)new_set;
+                    ctx->active_gradient = (gpointer)pick;
+                }
+            }
+        }
+    }
+    /* Cancel: leave ctx->active_gradient unchanged */
+
+    gtk_widget_destroy(dialog);
     g_object_unref(builder);
 }
