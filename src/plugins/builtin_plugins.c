@@ -11,17 +11,18 @@
 #include "app/settings.h"
 #include "image_format_plugin.h"
 #include "plugins/format_registry.h"
-#include "plugins/plugin_runtime_deps.h"
+#include "plugins/plugin_avif.h"
 #include "plugins/plugin_bmp.h"
 #include "plugins/plugin_cut.h"
 #include "plugins/plugin_deep.h"
 #include "plugins/plugin_dicom.h"
 #include "plugins/plugin_fits.h"
+#include "plugins/plugin_gif.h"
 #include "plugins/plugin_hdr.h"
 #include "plugins/plugin_heic.h"
-#include "plugins/plugin_avif.h"
 #include "plugins/plugin_host_api.h"
 #include "plugins/plugin_jpeg.h"
+#include "plugins/plugin_jxl.h"
 #include "plugins/plugin_loader.h"
 #include "plugins/plugin_netpbm.h"
 #include "plugins/plugin_pcd.h"
@@ -29,18 +30,18 @@
 #include "plugins/plugin_png.h"
 #include "plugins/plugin_ras.h"
 #include "plugins/plugin_rli.h"
+#include "plugins/plugin_runtime_deps.h"
 #include "plugins/plugin_sgi.h"
 #include "plugins/plugin_tga.h"
 #include "plugins/plugin_tiff.h"
-#include "plugins/plugin_jxl.h"
 #include "plugins/plugin_webp.h"
 #include "plugins/plugin_xbm.h"
 #include "plugins/plugin_xpm.h"
 #ifdef HAVE_OPENEXR
 #include "plugins/plugin_exr.h"
 #endif
-#include <glib.h>
 #include "debug_logger.h"
+#include <glib.h>
 
 /**
  * Register built-in plugins (PNG, JPEG, BMP)
@@ -71,7 +72,20 @@ void builtin_plugins_register(void) {
     ImageFormatPlugin avif_plugin;
     ImageFormatPlugin jxl_plugin;
     ImageFormatPlugin exr_plugin;
+    ImageFormatPlugin gif_plugin;
     ImageFormatPlugin rli_plugin;
+
+    /* Register GIF plugin */
+    debug_log("DBG", "Registering built-in GIF plugin");
+    if (plugin_init_gif(host_api, &gif_plugin)) {
+        if (format_registry_register_builtin(&gif_plugin)) {
+            debug_log("DBG", "Successfully registered GIF plugin");
+        } else {
+            debug_log("ERR", "Failed to register GIF plugin with format registry");
+        }
+    } else {
+        debug_log("ERR", "Failed to initialize GIF plugin");
+    }
 
     /* Register RLI plugin (native Rasterlab Image format); LZ4 is linked statically */
     debug_log("DBG", "Registering built-in RLI plugin");

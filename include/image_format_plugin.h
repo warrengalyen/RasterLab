@@ -182,6 +182,16 @@ typedef struct ImageFormatHostAPI {
     /* If non-NULL: return whether to use embedded ICC profiles when loading. If false, plugins must not set profile (assume sRGB). */
     bool (*get_use_embedded_icc)(void);
 
+    /*
+     * Optional: main-window load progress (maps to status bar + GtkProgressBar).
+     * If NULL, plugins should not call (no UI for progress).
+     * show: pass fraction < 0.0 for indeterminate (pulse), or 0.0–1.0 for determinate.
+     * set: update fraction 0.0–1.0; optional NULL message to keep current label.
+     */
+    void (*load_progress_show)(const char* message, double fraction);
+    void (*load_progress_set)(double fraction, const char* message);
+    void (*load_progress_hide)(void);
+
     /* Get number of layers in document */
     uint32_t (*document_get_layer_count)(ImageDocument* doc);
 

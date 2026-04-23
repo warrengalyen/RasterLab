@@ -17,6 +17,7 @@
 #include "ui/dialogs/formats/tiff_options_dialog.h"
 #include "ui/dialogs/formats/heic_options_dialog.h"
 #include "ui/dialogs/formats/avif_options_dialog.h"
+#include "ui/dialogs/formats/gif_options_dialog.h"
 #include "ui/dialogs/formats/jxl_options_dialog.h"
 #include "ui/dialogs/formats/webp_options_dialog.h"
 #include <glib.h>
@@ -49,6 +50,9 @@ gboolean save_options_dialog_show(GtkWindow* parent, const char* filename, SaveO
     ext++; /* Skip the dot */
 
     /* Check format and show appropriate dialog */
+    if (g_ascii_strcasecmp(ext, "gif") == 0) {
+        return gif_options_dialog_show(parent, opts, doc);
+    }
     if (g_ascii_strcasecmp(ext, "bmp") == 0) {
         return bmp_options_dialog_show(parent, opts);
     }

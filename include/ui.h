@@ -279,6 +279,15 @@ void ui_update_progress(AppContext* ctx);
 void ui_hide_progress(AppContext* ctx);
 
 /**
+ * Show load progress in the main window. Use fraction 0.0–1.0 for determinate, or
+ * a negative value for the same indeterminate (pulse) behaviour as ui_show_progress.
+ */
+void ui_load_progress_show(AppContext* ctx, const gchar* message, gdouble fraction);
+
+/** Update load progress fraction and optional status message; pumps the GTK main loop. */
+void ui_load_progress_set(AppContext* ctx, gdouble fraction, const gchar* message);
+
+/**
  * Get canvas background color
  * @param ctx The application context
  * @param r Output parameter for red component (0.0-1.0)

@@ -16,6 +16,7 @@
 #include "render/compositor.h"
 #include "render/layer.h"
 #include "render/render_utils.h"
+#include "ui.h"
 #include <glib.h>
 #include <stdlib.h>
 #include <string.h>
@@ -151,6 +152,34 @@ static void host_document_set_load_icc_profile(ImageDocument* doc, void* profile
     doc->load_icc_profile = profile;
 }
 
+/** Main window context for load progress (set via plugin_host_api_set_app_context). */
+static AppContext* s_host_app_context = NULL;
+
+void plugin_host_api_set_app_context(void* app_context) {
+    s_host_app_context = (AppContext*)app_context;
+}
+
+static void host_load_progress_show(const char* message, double fraction) {
+    if (!s_host_app_context) {
+        return;
+    }
+    ui_load_progress_show(s_host_app_context, message, fraction);
+}
+
+static void host_load_progress_set(double fraction, const char* message) {
+    if (!s_host_app_context) {
+        return;
+    }
+    ui_load_progress_set(s_host_app_context, fraction, message);
+}
+
+static void host_load_progress_hide(void) {
+    if (!s_host_app_context) {
+        return;
+    }
+    ui_hide_progress(s_host_app_context);
+}
+
 /** Settings pointer for color management (use embedded ICC). Set via plugin_host_api_set_cm_settings(). */
 static Settings* s_cm_settings = NULL;
 
@@ -282,6 +311,9 @@ ImageFormatHostAPI* plugin_host_api_get(void) {
     host_api.document_set_metadata = host_document_set_metadata;
     host_api.document_set_load_icc_profile = host_document_set_load_icc_profile;
     host_api.get_use_embedded_icc = host_get_use_embedded_icc;
+    host_api.load_progress_show = host_load_progress_show;
+    host_api.load_progress_set = host_load_progress_set;
+    host_api.load_progress_hide = host_load_progress_hide;
     host_api.document_get_layer_count = host_document_get_layer_count;
     host_api.document_get_layer_descriptor = host_document_get_layer_descriptor;
     host_api.layer_descriptor_free = host_layer_descriptor_free;

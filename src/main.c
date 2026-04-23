@@ -127,6 +127,7 @@ int main(int argc, char* argv[]) {
     /* Create the main application UI (settings loaded above for locale + persistence) */
     app = ui_create_main_window(settings);
     if (app) {
+        plugin_host_api_set_app_context(app);
         /* Store app directory in context */
         app->app_dir = app_dir;
         ui_tools_menu_populate_language(app);

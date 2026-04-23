@@ -67,6 +67,7 @@ set(SOURCES
     plugins/plugin_runtime_deps.c
     plugins/format_registry.c
     plugins/plugin_host_api.c
+    plugins/plugin_gif.c
     plugins/plugin_bmp.c
     plugins/plugin_jpeg.c
     plugins/plugin_loader.c
@@ -141,6 +142,7 @@ set(SOURCES
     ui/dialogs/convolution_dialog.c
     ui/dialogs/curves_dialog.c
     ui/dialogs/fill_dialog.c
+    ui/dialogs/formats/gif_options_dialog.c
     ui/dialogs/formats/bmp_options_dialog.c
     ui/dialogs/formats/jpeg_options_dialog.c
     ui/dialogs/formats/png_options_dialog.c

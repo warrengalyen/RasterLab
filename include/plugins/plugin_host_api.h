@@ -30,6 +30,13 @@ ImageFormatHostAPI* plugin_host_api_get(void);
 void plugin_host_api_set_cm_settings(void* settings);
 
 /**
+ * Set application UI context for load-progress callbacks (status bar + progress bar).
+ * Call once after the main window exists (e.g. from main after ui_create_main_window).
+ * Pass NULL to clear.
+ */
+void plugin_host_api_set_app_context(void* app_context);
+
+/**
  * Get the CMS rendering intent from settings (0-3). Default: 1 (relative colorimetric).
  */
 int plugin_host_api_get_cm_rendering_intent(void);

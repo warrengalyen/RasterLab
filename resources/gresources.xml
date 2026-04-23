@@ -107,6 +107,7 @@
     <file>ui/heic_options_dialog.glade</file>
     <file>ui/avif_options_dialog.glade</file>
     <file>ui/jxl_options_dialog.glade</file>
+    <file>ui/gif_options_dialog.glade</file>
     <file>ui/fill_dialog.glade</file>
     <file>ui/hdr_image_dialog.glade</file>
     <file>ui/settings_dialog.glade</file>

@@ -2547,6 +2547,43 @@ void ui_hide_cursor_position(AppContext* ctx) {
     gtk_widget_hide(position_box);
 }
 
+static gboolean s_main_progress_bar_css_applied = FALSE;
+
+static void ui_ensure_main_progress_bar_css(GtkWidget* progress_bar) {
+    if (!progress_bar || s_main_progress_bar_css_applied) {
+        return;
+    }
+    gtk_widget_set_name(progress_bar, "progress_bar");
+
+    GtkCssProvider* css_provider = gtk_css_provider_new();
+    const gchar* css =
+        "progressbar#progress_bar {"
+        "  padding: 0;"
+        "  margin: 0;"
+        "  border: none;"
+        "}"
+        "progressbar#progress_bar trough {"
+        "  padding: 0;"
+        "  margin: 0;"
+        "  border: none;"
+        "  min-height: 15px;"
+        "  border-radius: 0;"
+        "}"
+        "progressbar#progress_bar progress {"
+        "  padding: 0;"
+        "  margin: 0;"
+        "  border: none;"
+        "  min-height: 15px;"
+        "  border-radius: 0;"
+        "}";
+    gtk_css_provider_load_from_data(css_provider, css, -1, NULL);
+    GtkStyleContext* style_context = gtk_widget_get_style_context(progress_bar);
+    gtk_style_context_add_provider(style_context, GTK_STYLE_PROVIDER(css_provider),
+                                   GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+    g_object_unref(css_provider);
+    s_main_progress_bar_css_applied = TRUE;
+}
+
 /**
  * Show and start the progress bar with a message
  */
@@ -2570,41 +2607,7 @@ void ui_show_progress(AppContext* ctx, const gchar* message) {
     status_label = GTK_WIDGET(gtk_builder_get_object(builder, "sb_status_label"));
 
     if (progress_bar) {
-        /* Apply CSS to make trough fill full height (remove padding/margins) */
-        static gboolean css_applied = FALSE;
-        if (!css_applied) {
-            /* Set widget name for CSS targeting */
-            gtk_widget_set_name(progress_bar, "progress_bar");
-
-            GtkCssProvider* css_provider = gtk_css_provider_new();
-            const gchar* css =
-                "progressbar#progress_bar {"
-                "  padding: 0;"
-                "  margin: 0;"
-                "  border: none;"
-                "}"
-                "progressbar#progress_bar trough {"
-                "  padding: 0;"
-                "  margin: 0;"
-                "  border: none;"
-                "  min-height: 15px;"
-                "  border-radius: 0;"
-                "}"
-                "progressbar#progress_bar progress {"
-                "  padding: 0;"
-                "  margin: 0;"
-                "  border: none;"
-                "  min-height: 15px;"
-                "  border-radius: 0;"
-                "}";
-            gtk_css_provider_load_from_data(css_provider, css, -1, NULL);
-            GtkStyleContext* style_context = gtk_widget_get_style_context(progress_bar);
-            gtk_style_context_add_provider(style_context, GTK_STYLE_PROVIDER(css_provider),
-                                           GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
-            g_object_unref(css_provider);
-            css_applied = TRUE;
-        }
-
+        ui_ensure_main_progress_bar_css(progress_bar);
         /* Show progress bar and start pulse animation */
         gtk_progress_bar_set_pulse_step(GTK_PROGRESS_BAR(progress_bar), 0.1);
         gtk_progress_bar_pulse(GTK_PROGRESS_BAR(progress_bar));
@@ -2617,6 +2620,79 @@ void ui_show_progress(AppContext* ctx, const gchar* message) {
     }
 
     /* Process pending events to show the progress bar */
+    while (gtk_events_pending()) {
+        gtk_main_iteration();
+    }
+}
+
+void ui_load_progress_show(AppContext* ctx, const gchar* message, gdouble fraction) {
+    GtkWidget* progress_bar;
+    GtkWidget* status_label;
+    GtkBuilder* builder;
+
+    if (!ctx || !ctx->window) {
+        return;
+    }
+
+    builder = GTK_BUILDER(g_object_get_data(G_OBJECT(ctx->window), "main_builder"));
+    if (!builder) {
+        return;
+    }
+
+    progress_bar = GTK_WIDGET(gtk_builder_get_object(builder, "progress_bar"));
+    status_label = GTK_WIDGET(gtk_builder_get_object(builder, "sb_status_label"));
+
+    if (progress_bar) {
+        ui_ensure_main_progress_bar_css(progress_bar);
+        gtk_progress_bar_set_show_text(GTK_PROGRESS_BAR(progress_bar), FALSE);
+        if (fraction < 0.0) {
+            gtk_progress_bar_set_pulse_step(GTK_PROGRESS_BAR(progress_bar), 0.1);
+            gtk_progress_bar_pulse(GTK_PROGRESS_BAR(progress_bar));
+        } else {
+            gdouble c = (fraction < 0.0) ? 0.0 : (fraction > 1.0) ? 1.0 : fraction;
+            gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progress_bar), c);
+        }
+        gtk_widget_show(progress_bar);
+    }
+
+    if (status_label && message) {
+        gtk_label_set_text(GTK_LABEL(status_label), message);
+    }
+
+    while (gtk_events_pending()) {
+        gtk_main_iteration();
+    }
+}
+
+void ui_load_progress_set(AppContext* ctx, gdouble fraction, const gchar* message) {
+    GtkWidget* progress_bar;
+    GtkWidget* status_label;
+    GtkBuilder* builder;
+    gdouble c;
+
+    if (!ctx || !ctx->window) {
+        return;
+    }
+
+    builder = GTK_BUILDER(g_object_get_data(G_OBJECT(ctx->window), "main_builder"));
+    if (!builder) {
+        return;
+    }
+
+    progress_bar = GTK_WIDGET(gtk_builder_get_object(builder, "progress_bar"));
+    status_label = GTK_WIDGET(gtk_builder_get_object(builder, "sb_status_label"));
+    c = (fraction < 0.0) ? 0.0 : (fraction > 1.0) ? 1.0 : fraction;
+
+    if (progress_bar) {
+        ui_ensure_main_progress_bar_css(progress_bar);
+        gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progress_bar), c);
+        gtk_widget_show(progress_bar);
+    }
+
+    if (status_label && message) {
+        gtk_label_set_text(GTK_LABEL(status_label), message);
+    }
+
     while (gtk_events_pending()) {
         gtk_main_iteration();
     }
