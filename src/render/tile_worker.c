@@ -86,8 +86,30 @@ gboolean tile_worker_composite_pixels(ImageDocument* doc,
         return TRUE; /* Empty tile is valid */
     }
 
+    /* Occlusion culling: scan top-to-bottom (last → first) to find the lowest
+     * fully-opaque NORMAL-blend layer that completely covers this tile.  All
+     * layers below it are invisible in the final composite so we can skip them. */
+    GList* start_layer = doc->layers;
+    for (iter = g_list_last(doc->layers); iter; iter = iter->prev) {
+        layer = (ImageLayer*)iter->data;
+        if (!layer || !layer->visible || !layer->surface ||
+            layer->layer_type == LAYER_TYPE_TEXT)
+            continue;
+        if (layer->opacity < 1.0 || layer->blend_mode != BLEND_MODE_NORMAL)
+            continue;
+        layer_x = layer->offset_x;
+        layer_y = layer->offset_y;
+        layer_right = layer_x + (gint)layer->width;
+        layer_bottom = layer_y + (gint)layer->height;
+        if (layer_x <= tile->px && layer_y <= tile->py &&
+            layer_right >= tile_right && layer_bottom >= tile_bottom) {
+            start_layer = iter;
+            break;
+        }
+    }
+
     /* Composite each visible layer that intersects tile */
-    for (iter = doc->layers; iter; iter = iter->next) {
+    for (iter = start_layer; iter; iter = iter->next) {
         layer = (ImageLayer*)iter->data;
 
         if (!layer || !layer->visible || layer->opacity <= 0.0 || !layer->surface) {

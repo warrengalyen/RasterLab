@@ -574,8 +574,27 @@ void document_render_layers_at_zoom(ImageDocument* doc, cairo_t* cr,
     cairo_rectangle(cr, viewport_x, viewport_y, viewport_w, viewport_h);
     cairo_clip(cr);
 
+    /* Occlusion culling: find the lowest fully-opaque NORMAL-blend layer that
+     * completely covers the viewport — skip all layers below it. */
+    GList* start_layer = doc->layers;
+    for (iter = g_list_last(doc->layers); iter; iter = iter->prev) {
+        layer = (ImageLayer*)iter->data;
+        if (!layer || !layer->visible || !layer->surface ||
+            layer->layer_type == LAYER_TYPE_TEXT)
+            continue;
+        if (layer->opacity < 1.0 || layer->blend_mode != BLEND_MODE_NORMAL)
+            continue;
+        gint lx = layer->offset_x, ly = layer->offset_y;
+        gint lr = lx + (gint)layer->width, lb = ly + (gint)layer->height;
+        if (lx <= viewport_x && ly <= viewport_y &&
+            lr >= viewport_x + viewport_w && lb >= viewport_y + viewport_h) {
+            start_layer = iter;
+            break;
+        }
+    }
+
     /* Composite each visible layer directly at zoom scale */
-    for (iter = doc->layers; iter; iter = iter->next) {
+    for (iter = start_layer; iter; iter = iter->next) {
         layer = (ImageLayer*)iter->data;
 
         if (!layer || !layer->visible || layer->opacity <= 0.0 || !layer->surface) {
@@ -781,6 +800,7 @@ void document_invalidate_composite(ImageDocument* doc) {
             }
         }
     }
+
 }
 
 /**

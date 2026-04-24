@@ -246,8 +246,28 @@ static gboolean tile_composite(ImageDocument* doc, Tile* tile) {
         return FALSE;
     }
 
+    /* Occlusion culling: find the lowest fully-opaque NORMAL-blend layer that
+     * completely covers this tile — all layers below it are invisible. */
+    gint tile_right = tile->px + tile->w;
+    gint tile_bottom = tile->py + tile->h;
+    GList* start_layer = doc->layers;
+    for (iter = g_list_last(doc->layers); iter; iter = iter->prev) {
+        layer = (ImageLayer*)iter->data;
+        if (!layer || !layer->visible || !layer->surface ||
+            layer->layer_type == LAYER_TYPE_TEXT)
+            continue;
+        if (layer->opacity < 1.0 || layer->blend_mode != BLEND_MODE_NORMAL)
+            continue;
+        gint lx = layer->offset_x, ly = layer->offset_y;
+        gint lr = lx + (gint)layer->width, lb = ly + (gint)layer->height;
+        if (lx <= tile->px && ly <= tile->py && lr >= tile_right && lb >= tile_bottom) {
+            start_layer = iter;
+            break;
+        }
+    }
+
     /* Composite each visible layer that intersects this tile */
-    for (iter = doc->layers; iter; iter = iter->next) {
+    for (iter = start_layer; iter; iter = iter->next) {
         layer = (ImageLayer*)iter->data;
 
         if (!layer || !layer->visible || layer->opacity <= 0.0 || !layer->surface) {

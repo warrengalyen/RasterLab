@@ -704,7 +704,7 @@ static PluginError load_gif(ImageDocument* doc, const char* filename) {
                 if (fr > 1.0)
                     fr = 1.0;
                 gchar* base = g_path_get_basename(filename);
-                gchar* msg = g_strdup_printf(_("Loading %s — frame %d of %d…"),
+                gchar* msg = g_strdup_printf(_("Loading %s - frame %d of %d…"),
                                              base ? base : filename, frame_index, total_image_frames);
                 host->load_progress_set(fr, msg);
                 g_free(msg);

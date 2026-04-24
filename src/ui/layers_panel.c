@@ -1251,14 +1251,24 @@ void layers_panel_update(LayersPanel* layers_panel, ImageDocument* doc) {
         return;
     }
 
-    /* Clear existing layers */
+    /* Detach model from treeview to suppress per-row signals during bulk update.
+     * Without this, gtk_list_store_clear emits row-deleted for every row and each
+     * append emits row-inserted, causing the treeview to re-layout/redraw per signal. */
+    if (layers_panel->tree_view) {
+        g_object_ref(layers_panel->store);
+        gtk_tree_view_set_model(GTK_TREE_VIEW(layers_panel->tree_view), NULL);
+    }
+
     gtk_list_store_clear(layers_panel->store);
 
-    /* Add all layers from document */
-    guint layer_count = document_get_layer_count(doc);
+    /* Walk the GList directly (O(n)) instead of document_get_layer index lookups (O(n) each = O(n^2)).
+     * Layers are bottom-to-top in the list; panel shows top-to-bottom, so traverse in reverse. */
+    guint layer_count = 0;
 
-    for (gint i = layer_count - 1; i >= 0; i--) {
-        ImageLayer* layer = document_get_layer(doc, i);
+    GList* last = g_list_last(doc->layers);
+    for (GList* l = last; l != NULL; l = l->prev) {
+        ImageLayer* layer = (ImageLayer*)l->data;
+        layer_count++;
 
         if (layer) {
             GtkTreeIter iter;
@@ -1273,7 +1283,6 @@ void layers_panel_update(LayersPanel* layers_panel, ImageDocument* doc) {
                                3, layer->visible,  /* Visible state */
                                -1);
 
-            /* Unref pixbufs - the store will take ownership */
             if (visibility_icon) {
                 g_object_unref(visibility_icon);
             }
@@ -1283,25 +1292,26 @@ void layers_panel_update(LayersPanel* layers_panel, ImageDocument* doc) {
         }
     }
 
-    /* Always select the layer at index 0 (last row in tree view since layers are displayed in reverse) */
+    /* Reattach model — treeview gets a single bulk update instead of N signals */
+    if (layers_panel->tree_view) {
+        gtk_tree_view_set_model(GTK_TREE_VIEW(layers_panel->tree_view),
+                                GTK_TREE_MODEL(layers_panel->store));
+        g_object_unref(layers_panel->store);
+    }
+
+    /* Select the last row (corresponds to layer index 0 since layers are displayed in reverse) */
     if (layer_count > 0 && layers_panel->tree_view) {
         GtkTreeSelection* selection = gtk_tree_view_get_selection(
             GTK_TREE_VIEW(layers_panel->tree_view));
         GtkTreeIter iter;
 
-        /* Navigate to the last row (which corresponds to index 0) */
-        if (gtk_tree_model_get_iter_first(GTK_TREE_MODEL(layers_panel->store), &iter)) {
-            /* Move to the last row */
-            for (guint i = 0; i < layer_count - 1; i++) {
-                if (!gtk_tree_model_iter_next(GTK_TREE_MODEL(layers_panel->store), &iter)) {
-                    break;
-                }
-            }
+        GtkTreePath* path = gtk_tree_path_new_from_indices((gint)layer_count - 1, -1);
+        if (gtk_tree_model_get_iter(GTK_TREE_MODEL(layers_panel->store), &iter, path)) {
             gtk_tree_selection_select_iter(selection, &iter);
         }
+        gtk_tree_path_free(path);
 
-        /* Ensure document's selected layer is set to index 0 */
-        ImageLayer* layer_0 = document_get_layer(doc, 0);
+        ImageLayer* layer_0 = (ImageLayer*)g_list_nth_data(doc->layers, 0);
         if (layer_0) {
             document_set_selected_layer(doc, layer_0);
         }
@@ -1423,6 +1433,7 @@ void layers_panel_update_selected_thumbnail(LayersPanel* layers_panel) {
         g_object_unref(visibility_icon);
         g_object_unref(thumbnail);
     }
+
 }
 
 /**
