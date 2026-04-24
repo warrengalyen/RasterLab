@@ -1234,10 +1234,8 @@ void layers_panel_update(LayersPanel* layers_panel, ImageDocument* doc) {
     layers_panel->current_doc = doc;
 
     if (!doc) {
-        /* Clear existing layers */
         gtk_list_store_clear(layers_panel->store);
 
-        /* Disable opacity controls */
         if (layers_panel->scale_opacity) {
             gtk_widget_set_sensitive(layers_panel->scale_opacity, FALSE);
         }
@@ -1251,55 +1249,93 @@ void layers_panel_update(LayersPanel* layers_panel, ImageDocument* doc) {
         return;
     }
 
-    /* Detach model from treeview to suppress per-row signals during bulk update.
-     * Without this, gtk_list_store_clear emits row-deleted for every row and each
-     * append emits row-inserted, causing the treeview to re-layout/redraw per signal. */
-    if (layers_panel->tree_view) {
-        g_object_ref(layers_panel->store);
-        gtk_tree_view_set_model(GTK_TREE_VIEW(layers_panel->tree_view), NULL);
-    }
+    guint layer_count = g_list_length(doc->layers);
+    guint store_count = gtk_tree_model_iter_n_children(
+                            GTK_TREE_MODEL(layers_panel->store), NULL);
 
-    gtk_list_store_clear(layers_panel->store);
+    if (store_count == layer_count && store_count > 0) {
+        /* ---- Fast path: differential in-place update ----
+         * Layer count unchanged (visibility toggle, reorder, undo/redo).
+         * Walk existing store rows in parallel with the layer list and only
+         * touch rows whose data actually differs.  Avoids the expensive
+         * clear + rebuild + model detach/reattach cycle entirely. */
+        GtkTreeIter iter;
+        gboolean valid = gtk_tree_model_get_iter_first(
+                             GTK_TREE_MODEL(layers_panel->store), &iter);
+        GList* l = g_list_last(doc->layers);
 
-    /* Walk the GList directly (O(n)) instead of document_get_layer index lookups (O(n) each = O(n^2)).
-     * Layers are bottom-to-top in the list; panel shows top-to-bottom, so traverse in reverse. */
-    guint layer_count = 0;
+        while (valid && l) {
+            ImageLayer* layer = (ImageLayer*)l->data;
 
-    GList* last = g_list_last(doc->layers);
-    for (GList* l = last; l != NULL; l = l->prev) {
-        ImageLayer* layer = (ImageLayer*)l->data;
-        layer_count++;
+            if (layer) {
+                gboolean old_visible;
+                gchar* old_name = NULL;
+                gtk_tree_model_get(GTK_TREE_MODEL(layers_panel->store), &iter,
+                                   2, &old_name, 3, &old_visible, -1);
 
-        if (layer) {
-            GtkTreeIter iter;
-            GdkPixbuf* visibility_icon = get_visibility_icon(layer->visible);
-            GdkPixbuf* thumbnail = layer_row_thumbnail(layer, 48);
+                gboolean need_update = (old_visible != layer->visible) ||
+                                       (g_strcmp0(old_name, layer->name) != 0);
+                g_free(old_name);
 
-            gtk_list_store_append(layers_panel->store, &iter);
-            gtk_list_store_set(layers_panel->store, &iter,
-                               0, visibility_icon, /* Visibility icon */
-                               1, thumbnail,       /* Thumbnail */
-                               2, layer->name,     /* Name */
-                               3, layer->visible,  /* Visible state */
-                               -1);
+                if (need_update) {
+                    GdkPixbuf* visibility_icon = get_visibility_icon(layer->visible);
+                    GdkPixbuf* thumbnail = layer_row_thumbnail(layer, 48);
 
-            if (visibility_icon) {
-                g_object_unref(visibility_icon);
+                    gtk_list_store_set(layers_panel->store, &iter,
+                                       0, visibility_icon,
+                                       1, thumbnail,
+                                       2, layer->name,
+                                       3, layer->visible,
+                                       -1);
+
+                    if (visibility_icon) g_object_unref(visibility_icon);
+                    if (thumbnail) g_object_unref(thumbnail);
+                }
             }
-            if (thumbnail) {
-                g_object_unref(thumbnail);
+
+            valid = gtk_tree_model_iter_next(
+                        GTK_TREE_MODEL(layers_panel->store), &iter);
+            l = l->prev;
+        }
+    } else {
+        /* ---- Full rebuild path (layer added / removed / initial load) ----
+         * Detach model to suppress per-row signals during bulk mutation. */
+        if (layers_panel->tree_view) {
+            g_object_ref(layers_panel->store);
+            gtk_tree_view_set_model(GTK_TREE_VIEW(layers_panel->tree_view), NULL);
+        }
+
+        gtk_list_store_clear(layers_panel->store);
+
+        for (GList* l = g_list_last(doc->layers); l != NULL; l = l->prev) {
+            ImageLayer* layer = (ImageLayer*)l->data;
+
+            if (layer) {
+                GtkTreeIter iter;
+                GdkPixbuf* visibility_icon = get_visibility_icon(layer->visible);
+                GdkPixbuf* thumbnail = layer_row_thumbnail(layer, 48);
+
+                gtk_list_store_append(layers_panel->store, &iter);
+                gtk_list_store_set(layers_panel->store, &iter,
+                                   0, visibility_icon,
+                                   1, thumbnail,
+                                   2, layer->name,
+                                   3, layer->visible,
+                                   -1);
+
+                if (visibility_icon) g_object_unref(visibility_icon);
+                if (thumbnail) g_object_unref(thumbnail);
             }
+        }
+
+        if (layers_panel->tree_view) {
+            gtk_tree_view_set_model(GTK_TREE_VIEW(layers_panel->tree_view),
+                                    GTK_TREE_MODEL(layers_panel->store));
+            g_object_unref(layers_panel->store);
         }
     }
 
-    /* Reattach model — treeview gets a single bulk update instead of N signals */
-    if (layers_panel->tree_view) {
-        gtk_tree_view_set_model(GTK_TREE_VIEW(layers_panel->tree_view),
-                                GTK_TREE_MODEL(layers_panel->store));
-        g_object_unref(layers_panel->store);
-    }
-
-    /* Select the last row (corresponds to layer index 0 since layers are displayed in reverse) */
+    /* Ensure correct row is selected */
     if (layer_count > 0 && layers_panel->tree_view) {
         GtkTreeSelection* selection = gtk_tree_view_get_selection(
             GTK_TREE_VIEW(layers_panel->tree_view));
