@@ -23,22 +23,22 @@ extern "C" {
  * definitions under the standard SVG namespace.
  */
 typedef enum {
-    GRADIENT_SVG_ERROR_NONE                 = 0,
-    GRADIENT_SVG_ERROR_INVALID_PARAMETERS   = 1,
-    GRADIENT_SVG_ERROR_FILE_NOT_FOUND       = 2,
-    GRADIENT_SVG_ERROR_FILE_READ_ERROR      = 3,
-    GRADIENT_SVG_ERROR_FILE_WRITE_ERROR     = 4,
-    GRADIENT_SVG_ERROR_CORRUPT_FILE         = 5,
-    GRADIENT_SVG_ERROR_OUT_OF_MEMORY        = 6
+    GRADIENT_SVG_ERROR_NONE = 0,
+    GRADIENT_SVG_ERROR_INVALID_PARAMETERS = 1,
+    GRADIENT_SVG_ERROR_FILE_NOT_FOUND = 2,
+    GRADIENT_SVG_ERROR_FILE_READ_ERROR = 3,
+    GRADIENT_SVG_ERROR_FILE_WRITE_ERROR = 4,
+    GRADIENT_SVG_ERROR_CORRUPT_FILE = 5,
+    GRADIENT_SVG_ERROR_OUT_OF_MEMORY = 6
 } GradientSvgError;
 
 /**
  * Load linearGradient definitions from an SVG file.
  *
- * Only \c <linearGradient> elements in the SVG namespace are converted.
- * \c <radialGradient> and other paint servers are skipped. Each gradient
- * becomes one \c GradientDef with linear RGB segments derived from its
- * \c <stop> list. \c xlink:href / \c href inheritance is resolved when the
+ * Only <linearGradient> elements in the SVG namespace are converted.
+ * <radialGradient> and other paint servers are skipped. Each gradient
+ * becomes one GradientDef with linear RGB segments derived from its
+ * <stop> list. xlink:href and href inheritance is resolved when the
  * referencing element has no child stops (per SVG).
  *
  * @param filename   Path to a .svg file
@@ -48,8 +48,8 @@ typedef enum {
 GradientSet* gradient_svg_load(const char* filename, GradientSvgError* error_out);
 
 /**
- * Save gradients as a minimal SVG document with \c <linearGradient> entries
- * in \c <defs>. Writes one \c <stop> per segment endpoint (merged at shared
+ * Save gradients as a minimal SVG document with <linearGradient> entries
+ * in <defs>. Writes one <stop> per segment endpoint (merged at shared
  * positions). SVG interpolates linearly between stops; non-linear GIMP blend
  * curves are not preserved in the file, only endpoint colors.
  *

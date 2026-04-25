@@ -54,12 +54,17 @@ set(SOURCES
     document_revert_diff.c
     i18n.c
     filters/filters.c
+    filters/filter_lut3d.c
     gradient.c
     io/gradient_io.c
     io/gradient_ggr.c
     io/gradient_grd.c
     io/gradient_rgr.c
     io/gradient_svg.c
+    io/lut3d.c
+    io/lut3d_cube.c
+    io/lut3d_look.c
+    io/lut3d_io.c
     io/image_io.c
     main.c
     panels.c

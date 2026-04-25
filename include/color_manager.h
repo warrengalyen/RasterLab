@@ -208,7 +208,7 @@ void cm_premultiply_argb32(uint8_t* buffer, size_t pixel_count);
  * Convert SDR image buffer from embedded ICC profile space to sRGB.
  * Buffer must be Cairo ARGB32 (BGRA in memory, premultiplied).
  *
- * If \a icc_data is NULL (or \a icc_size is 0), the buffer is assumed
+ * If icc_data is NULL (or icc_size is 0), the buffer is assumed
  * already sRGB and no conversion is performed.
  *
  * If ICC data is provided: unpremultiplies, converts via profile transform,
@@ -226,7 +226,7 @@ void cm_convert_sdr_to_srgb_argb32(uint8_t* buffer, size_t pixel_count,
 /**
  * Convert SDR ARGB32 buffer from embedded profile (cmsHPROFILE) to sRGB.
  * Same buffer layout as cm_convert_sdr_to_srgb_argb32. Caller retains ownership
- * of \a source_profile_handle (do not destroy it before calling this).
+ * of source_profile_handle (do not destroy it before calling this).
  *
  * \param buffer                  ARGB32 pixel buffer (modified in place)
  * \param pixel_count             Number of pixels
@@ -290,7 +290,7 @@ bool cm_convert_srgb_argb32_to_profile(uint8_t* buffer, size_t pixel_count,
  *
  * Buffer layout: interleaved float RGB, 3 floats per pixel (R, G, B).
  *
- * If \a source is NULL, the buffer is assumed already linear sRGB (e.g. Linear Rec.709)
+ * If source is NULL, the buffer is assumed already linear sRGB (e.g. Linear Rec.709)
  * and no conversion is performed.
  *
  * \param buffer       Linear float RGB buffer (modified in place), 3 floats per pixel
