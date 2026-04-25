@@ -9,10 +9,10 @@
  */
 
 #include "ui/filters/filter_wave.h"
+#include "debug_logger.h"
 #include "ocular.h"
 #include "ui/filters/filter_distort_utils.h"
 #include <glib.h>
-#include "debug_logger.h"
 
 static OcWaveType wave_type_from_value(gint wave_type_value) {
     switch (wave_type_value) {
@@ -20,8 +20,6 @@ static OcWaveType wave_type_from_value(gint wave_type_value) {
             return OC_WAVE_TRIANGLE;
         case 2:
             return OC_WAVE_SQUARE;
-        case 3:
-            return OC_WAVE_SAWTOOTH;
         case 0:
         default:
             return OC_WAVE_SINE;

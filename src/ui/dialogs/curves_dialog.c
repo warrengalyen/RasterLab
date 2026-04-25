@@ -9,7 +9,7 @@
  */
 
 #include "ui/dialogs/curves_dialog.h"
-#include "../lib/ocular.h"
+#include "ocular.h"
 #include "render/compositor.h"
 #include "render/layer.h"
 #include "ui/filters/filter_curves.h"

@@ -405,8 +405,13 @@ endif()
 # Link pthread for tile thread pool
 target_link_libraries(rasterlab pthread)
 
-# Link Ocular static library
-target_link_libraries(rasterlab ${CMAKE_SOURCE_DIR}/lib/libocular.a)
+# Ocular static library (CMake target from submodule lib/ocular/lib)
+if(TARGET ocular)
+    target_link_libraries(rasterlab ocular)
+    message(STATUS "Linking Ocular static library target: ocular")
+else()
+    message(FATAL_ERROR "Ocular CMake target missing; expected submodule at lib/ocular")
+endif()
 
 # Link libjpeg if available
 if(LIBJPEG_FOUND)

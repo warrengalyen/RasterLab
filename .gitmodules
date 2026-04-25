@@ -41,3 +41,6 @@
 [submodule "lib/libjxl"]
 	path = lib/libjxl
 	url = https://github.com/libjxl/libjxl
+[submodule "lib/ocular"]
+	path = lib/ocular
+	url = https://github.com/warrengalyen/ocular.git

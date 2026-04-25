@@ -9,10 +9,10 @@
  */
 
 #include "ui/dialogs/rotate_dialog.h"
+#include "i18n.h"
 #include "ui/ui_utils.h"
 #include "ui/widgets/vertical_spin_button.h"
 #include <glib.h>
-#include "i18n.h"
 
 struct _RotateDialog {
     GtkWidget* dialog;
@@ -48,11 +48,11 @@ static void trigger_preview(RotateDialog* dialog) {
     gdouble angle = gtk_range_get_value(GTK_RANGE(dialog->angle_scale));
     gboolean preserve_size = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(dialog->size_preserve_radio));
 
-    OcInterpolationMode interpolation = OC_INTERPOLATION_NEAREST;
+    OcInterpolationMode interpolation = OC_INTERPOLATE_NEAREST;
     if (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(dialog->quality_bilinear_radio))) {
-        interpolation = OC_INTERPOLATION_BILINEAR;
+        interpolation = OC_INTERPOLATE_BILINEAR;
     } else if (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(dialog->quality_bicubic_radio))) {
-        interpolation = OC_INTERPOLATION_BICUBIC;
+        interpolation = OC_INTERPOLATE_BICUBIC;
     }
 
     gboolean use_transparency = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(dialog->border_transparent_radio));
@@ -447,11 +447,11 @@ gint rotate_dialog_run(RotateDialog* dialog,
             *out_preserve_size = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(dialog->size_preserve_radio));
         }
         if (out_interpolation) {
-            OcInterpolationMode interpolation = OC_INTERPOLATION_NEAREST;
+            OcInterpolationMode interpolation = OC_INTERPOLATE_NEAREST;
             if (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(dialog->quality_bilinear_radio))) {
-                interpolation = OC_INTERPOLATION_BILINEAR;
+                interpolation = OC_INTERPOLATE_BILINEAR;
             } else if (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(dialog->quality_bicubic_radio))) {
-                interpolation = OC_INTERPOLATION_BICUBIC;
+                interpolation = OC_INTERPOLATE_BICUBIC;
             }
             *out_interpolation = interpolation;
         }

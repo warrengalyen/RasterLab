@@ -8,7 +8,7 @@
  * See LICENSE.txt for full terms.
  */
 
-#include "../lib/ocular.h"
+#include "ocular.h"
 #include "ui/widgets/anchor_position_widget.h"
 #include "ui/widgets/curves_widget.h"
 #include "ui/widgets/filter_dialog.h"

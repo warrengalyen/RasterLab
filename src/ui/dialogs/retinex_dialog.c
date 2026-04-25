@@ -10,6 +10,7 @@
 
 #include "ui/dialogs/retinex_dialog.h"
 #include "document.h"
+#include "i18n.h"
 #include "render/compositor.h"
 #include "render/layer.h"
 #include "ui/filters/filter_retinex.h"
@@ -21,8 +22,6 @@
 #include <glib.h>
 #include <stdlib.h>
 #include <string.h>
-#include "i18n.h"
-
 
 /**
  * Retinex dialog structure
@@ -74,11 +73,11 @@ static void update_preview(RetinexDialog* dialog) {
     /* Get mode from combo */
     gint active = gtk_combo_box_get_active(GTK_COMBO_BOX(dialog->mode_combo));
     if (active == 0) {
-        dialog->mode = OC_RETINEX_UNIFORM;
+        dialog->mode = RETINEX_UNIFORM;
     } else if (active == 1) {
-        dialog->mode = OC_RETINEX_LOW;
+        dialog->mode = RETINEX_LOW;
     } else {
-        dialog->mode = OC_RETINEX_HIGH;
+        dialog->mode = RETINEX_HIGH;
     }
 
     /* Call user callback if provided */
@@ -239,7 +238,7 @@ RetinexDialog* retinex_dialog_new(const gchar* title) {
     dialog->preview_user_data = NULL;
 
     /* Set default parameters */
-    dialog->mode = OC_RETINEX_UNIFORM;
+    dialog->mode = RETINEX_UNIFORM;
     dialog->scale = 240;
     dialog->num_scales = 3.0f;
     dialog->dynamic = 1.2f;
@@ -524,11 +523,11 @@ gint retinex_dialog_run(RetinexDialog* dialog, GtkWindow* parent,
         /* Get mode */
         gint active = gtk_combo_box_get_active(GTK_COMBO_BOX(dialog->mode_combo));
         if (active == 0) {
-            *mode = OC_RETINEX_UNIFORM;
+            *mode = RETINEX_UNIFORM;
         } else if (active == 1) {
-            *mode = OC_RETINEX_LOW;
+            *mode = RETINEX_LOW;
         } else {
-            *mode = OC_RETINEX_HIGH;
+            *mode = RETINEX_HIGH;
         }
     }
 

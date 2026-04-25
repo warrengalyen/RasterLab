@@ -9,7 +9,7 @@
  */
 
 #include "commands/command_image.h"
-#include "../lib/ocular.h"
+#include "ocular.h"
 #include "command.h"
 #include "document.h"
 #include "filters.h"

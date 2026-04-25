@@ -553,16 +553,14 @@ static void on_distort_wave(GtkWidget* widget, gpointer data) {
     controls[6].filter_min = 1.0;
     controls[6].filter_max = 100.0;
 
-    controls[7].type = FILTER_CONTROL_DOUBLE;
     static const gchar* const wave_types[] = {
         "Sine",
         "Triangle",
-        "Square",
-        "Sawtooth"};
+        "Square"};
     controls[7].type = FILTER_CONTROL_ENUM;
     controls[7].label = _("wave type");
     controls[7].enum_labels = wave_types;
-    controls[7].enum_n_labels = 4;
+    controls[7].enum_n_labels = 3;
     controls[7].default_enum_index = 0;
 
     controls[8].type = FILTER_CONTROL_DOUBLE;

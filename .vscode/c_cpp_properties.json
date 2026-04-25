@@ -13,7 +13,8 @@
                 "C:/msys64/mingw64/include/harfbuzz",
                 "C:/msys64/mingw64/include/glib-2.0",
                 "C:/msys64/mingw64/lib/glib-2.0/include",
-                "C:/msys64/mingw64/include/libxml2"
+                "C:/msys64/mingw64/include/libxml2",
+                "${workspaceFolder}/lib/ocular/lib"
             ],
             "defines": ["_DEBUG", "UNICODE", "_UNICODE"],
             "compilerPath": "C:\\msys64\\mingw64\\bin\\gcc.exe",

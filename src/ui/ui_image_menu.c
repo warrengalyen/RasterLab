@@ -9,27 +9,27 @@
  */
 
 #include "ui/ui_image_menu.h"
-#include "i18n.h"
 #include "command.h"
 #include "commands/command_image.h"
+#include "debug_logger.h"
 #include "document.h"
 #include "filters.h"
+#include "i18n.h"
 #include "render/compositor.h"
 #include "render/layer.h"
 #include "render/tile.h"
+#include "selection/selection_mask.h"
 #include "ui.h"
 #include "ui/dialogs/canvas_size_dialog.h"
 #include "ui/dialogs/resize_dialog.h"
 #include "ui/dialogs/rotate_dialog.h"
 #include "ui/layers_panel.h"
-#include "selection/selection_mask.h"
 #include <cairo/cairo.h>
 #include <glib.h>
 #include <gtk/gtk.h>
 #include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include "debug_logger.h"
 
 static gboolean image_doc_has_layer_with_surface(ImageDocument* doc) {
     if (!doc || !doc->layers) {
@@ -353,10 +353,10 @@ void ui_image_menu_update_sensitivity(AppContext* ctx) {
         gtk_widget_set_sensitive(ctx->image_menu_flatten, can_flatten);
     }
 
-#define SYNC_IMG_CTX_PANEL(wmain, wctx) \
-    do { \
+#define SYNC_IMG_CTX_PANEL(wmain, wctx)                                           \
+    do {                                                                          \
         if ((wctx) && GTK_IS_WIDGET((wctx)) && (wmain) && GTK_IS_WIDGET((wmain))) \
-            gtk_widget_set_sensitive((wctx), gtk_widget_get_sensitive((wmain))); \
+            gtk_widget_set_sensitive((wctx), gtk_widget_get_sensitive((wmain)));  \
     } while (0)
     SYNC_IMG_CTX_PANEL(ctx->image_menu_merge_visible, ctx->layer_panel_context_merge_visible);
     SYNC_IMG_CTX_PANEL(ctx->image_menu_flatten, ctx->layer_panel_context_flatten);
@@ -1246,7 +1246,7 @@ static void apply_fixed_rotation(AppContext* ctx, const gchar* command_name, gdo
     /* Defaults for fixed rotations: enlarge-to-fit, transparent borders, nearest-neighbor */
     const gboolean preserve_size = FALSE;
     const gboolean use_transparency = TRUE;
-    const OcInterpolationMode interpolation = OC_INTERPOLATION_NEAREST;
+    const OcInterpolationMode interpolation = OC_INTERPOLATE_NEAREST;
     const guchar fill_r = 0, fill_g = 0, fill_b = 0;
 
     Command* cmd = command_create_rotate_arbitrary_named(command_name,
@@ -1329,7 +1329,7 @@ void on_image_rotate_arbitrary(GtkWidget* widget, gpointer data) {
 
     gdouble angle_degrees = 0.0;
     gboolean preserve_size = FALSE;
-    OcInterpolationMode interpolation = OC_INTERPOLATION_NEAREST;
+    OcInterpolationMode interpolation = OC_INTERPOLATE_NEAREST;
     gboolean use_transparency = TRUE;
     GdkRGBA fill_color = {0};
 

@@ -9,6 +9,7 @@
  */
 
 #include "ui/dialogs/color_balance_dialog.h"
+#include "i18n.h"
 #include "render/compositor.h"
 #include "render/layer.h"
 #include "ui/filters/filter_utils.h"
@@ -19,7 +20,6 @@
 #include <glib.h>
 #include <stdlib.h>
 #include <string.h>
-#include "i18n.h"
 
 /**
  * Color balance dialog structure
@@ -172,11 +172,11 @@ static void on_tone_mode_changed(GtkToggleButton* button, gpointer user_data) {
     }
 
     if (button_widget == dialog->shadows_radio) {
-        dialog->tone_mode = OC_TONE_SHADOWS;
+        dialog->tone_mode = SHADOWS;
     } else if (button_widget == dialog->midtones_radio) {
-        dialog->tone_mode = OC_TONE_MIDTONES;
+        dialog->tone_mode = MIDTONES;
     } else if (button_widget == dialog->highlights_radio) {
-        dialog->tone_mode = OC_TONE_HIGHLIGHTS;
+        dialog->tone_mode = HIGHLIGHTS;
     }
 
     /* Trigger preview update */
@@ -261,7 +261,7 @@ ColorBalanceDialog* color_balance_dialog_new(const gchar* title) {
     dialog->midtones_radio = NULL;
     dialog->highlights_radio = NULL;
     dialog->preserve_luminosity_checkbox = NULL;
-    dialog->tone_mode = OC_TONE_MIDTONES;
+    dialog->tone_mode = MIDTONES;
     dialog->preserve_luminosity = TRUE;
     dialog->preview_callback = NULL;
     dialog->preview_user_data = NULL;
@@ -656,6 +656,6 @@ void color_balance_dialog_reset(ColorBalanceDialog* dialog) {
     /* Trigger preview update if callback is set */
     if (dialog->preview_callback) {
         gint values[3] = {default_balance, default_balance, default_balance};
-        dialog->preview_callback(dialog, values, 3, OC_TONE_MIDTONES, TRUE, dialog->preview_user_data);
+        dialog->preview_callback(dialog, values, 3, MIDTONES, TRUE, dialog->preview_user_data);
     }
 }

@@ -4,6 +4,12 @@ project(RasterLab C)
 # C++ toolchain (used by ExternalProject builds such as libjxl); keeps CMAKE_CXX_COMPILER defined for subprojects
 enable_language(CXX)
 
+# Ocular submodule (lib/ocular/lib): upstream CMake requires CXX standard >= 17 at configure time; sources are C.
+if(NOT DEFINED CMAKE_CXX_STANDARD OR CMAKE_CXX_STANDARD VERSION_LESS 17)
+    set(CMAKE_CXX_STANDARD 17)
+endif()
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 # Option: build only the application, use system libs (skip building libjpeg, libpng, libtiff, libwebp, libheif, libde265, libaom, zlib, openexr from lib/)
 option(RASTERLAB_APP_ONLY "Only build the application; skip building libraries in lib/ (use system libjpeg, libpng, libtiff, libwebp, libheif, libde265, libaom, zlib, openexr, libjxl)" OFF)
 if(RASTERLAB_APP_ONLY)
@@ -1904,6 +1910,16 @@ include_directories(${LZ4_INCLUDE_DIRS})
 link_directories(${GTK3_LIBRARY_DIRS})
 link_directories(${LIBXML2_LIBRARY_DIRS})
 link_directories(${LZ4_LIBRARY_DIRS})
+
+# ---------------------------------------------------------------------------
+# Ocular: static image filter library from git submodule (build lib/ocular/lib only)
+# ---------------------------------------------------------------------------
+if(EXISTS "${CMAKE_SOURCE_DIR}/lib/ocular/lib/CMakeLists.txt")
+    add_subdirectory("${CMAKE_SOURCE_DIR}/lib/ocular/lib" "${CMAKE_BINARY_DIR}/ocular")
+    message(STATUS "Ocular: building static library from submodule lib/ocular/lib")
+else()
+    message(FATAL_ERROR "Ocular submodule missing. Run: git submodule update --init lib/ocular")
+endif()
 
 # ---------------------------------------------------------------------------
 # GLFW: add as static library

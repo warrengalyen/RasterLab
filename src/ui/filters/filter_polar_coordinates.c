@@ -9,13 +9,13 @@
  */
 
 #include "ui/filters/filter_polar_coordinates.h"
+#include "debug_logger.h"
 #include "ocular.h"
 #include "ui/filters/filter_distort_utils.h"
 #include <glib.h>
-#include "debug_logger.h"
 
 static OcPolarMode polar_mode_from_value(gint mode_value) {
-    return (mode_value != 0) ? OC_POLAR_POLAR_TO_RECT : OC_POLAR_RECT_TO_POLAR;
+    return (mode_value != 0) ? OC_POLAR_TO_RECT : OC_RECT_TO_POLAR;
 }
 
 gboolean filter_polar_coordinates_apply(ImageLayer* layer, const gfloat* values, gint num_values) {
