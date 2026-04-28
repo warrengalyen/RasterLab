@@ -98,6 +98,7 @@ struct _AppContext {
     GtkWidget* file_menu_save;
     GtkWidget* file_menu_save_as;
     GtkWidget* file_menu_revert;
+    GtkWidget* export_menu_color_lookup; /* File > Export > Color lookup */
     GtkWidget* file_menu_close;
     GtkWidget* file_menu_close_all;
     GtkWidget* file_menu_exit;

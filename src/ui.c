@@ -417,6 +417,7 @@ AppContext* ui_create_main_window(Settings* initial_settings) {
     ctx->file_menu_save = NULL;
     ctx->file_menu_save_as = NULL;
     ctx->file_menu_revert = NULL;
+    ctx->export_menu_color_lookup = NULL;
     ctx->file_menu_close = NULL;
     ctx->file_menu_close_all = NULL;
     ctx->file_menu_exit = NULL;

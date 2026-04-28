@@ -39,7 +39,7 @@ gboolean filter_apply_3d_lut(
 
 /** Minimum and maximum grid_points for filter_save_3d_lut_from_image (LUT_3D_SIZE in the file). */
 #define FILTER_LUT3D_PHOTO_GRID_MIN 2
-#define FILTER_LUT3D_PHOTO_GRID_MAX 64
+#define FILTER_LUT3D_PHOTO_GRID_MAX 126
 
 /**
  * Build and save a 3D LUT that approximates the color character of a photograph. The

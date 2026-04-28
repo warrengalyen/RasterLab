@@ -16,8 +16,11 @@
 #include "commands/command_revert.h"
 #include "document.h"
 #include "document_revert_diff.h"
+#include "filters/filter_lut3d.h"
 #include "io/image_io.h"
+#include "io/lut3d_io.h"
 #include "plugins/format_registry.h"
+#include "render/compositor.h"
 #include "ui.h"
 #include "ui/dialogs/new_image_dialog.h"
 #include "ui/dialogs/save_options_dialog.h"
@@ -33,6 +36,9 @@
 
 /* Header probe size for format detection (must be >= 132 for DICOM) */
 #define FILE_HEADER_PROBE_SIZE 256
+
+#define LUT_CHOOSER_FORMAT_KEY "rasterlab-lut-export-fmt"
+enum { LUT_CHOOSER_FMT_CUBE = 0, LUT_CHOOSER_FMT_LOOK, LUT_CHOOSER_FMT_ANY };
 
 static void on_canvas_viewport_drag_data_received(GtkWidget* widget, GdkDragContext* context,
                                                   gint x, gint y, GtkSelectionData* sel_data,
@@ -583,6 +589,319 @@ static void on_file_revert(GtkMenuItem* menu_item, gpointer user_data) {
     ui_update_recent_files_menu(ctx);
 }
 
+static void on_lut_quality_value_changed(GtkAdjustment* adj, gpointer user_data) {
+    GtkLabel* lbl = GTK_LABEL(user_data);
+    gint n = CLAMP((gint)gtk_adjustment_get_value(adj),
+                   FILTER_LUT3D_PHOTO_GRID_MIN,
+                   FILTER_LUT3D_PHOTO_GRID_MAX);
+    gchar* text = g_strdup_printf("(%d x %d x %d)", n, n, n);
+    gtk_label_set_text(lbl, text);
+    g_free(text);
+}
+
+static void on_lut_dlg_button_clicked(GtkButton* btn, gpointer dlg) {
+    gint rid = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(btn), "response-id"));
+    gtk_dialog_response(GTK_DIALOG(dlg), rid);
+}
+
+/**
+ * Show the Color lookup options dialog
+ *
+ * @param parent        Transient parent window.
+ * @param out_title     Filled with g_strdup'd title string on GTK_RESPONSE_OK (caller frees).
+ * @param out_copyright Filled with g_strdup'd description/copyright string (caller frees).
+ * @param out_grid      Filled with chosen grid points (2–64).
+ * @return GTK_RESPONSE_OK if the user confirmed, any other value on cancel/close.
+ */
+static gint run_color_lookup_options_dialog(GtkWindow* parent,
+                                            gchar**    out_title,
+                                            gchar**    out_copyright,
+                                            gint*      out_grid) {
+    GtkBuilder*    builder;
+    GtkWidget*     dlg;
+    GtkWidget*     title_entry;
+    GtkWidget*     desc_entry;
+    GtkAdjustment* adj;
+    GtkWidget*     quality_label;
+    GtkWidget*     cancel_btn;
+    GtkWidget*     export_btn;
+    GError*        err = NULL;
+    gint           response;
+
+    if (out_title)     *out_title     = NULL;
+    if (out_copyright) *out_copyright = NULL;
+    if (out_grid)      *out_grid      = 17;
+
+    builder = gtk_builder_new();
+    ui_utils_builder_set_translation_domain(builder);
+    if (!gtk_builder_add_from_resource(builder, "/ui/3dlut_export_dialog.glade", &err)) {
+        debug_log("WRN", "3dlut_export_dialog.glade load failed: %s",
+                  err ? err->message : "unknown");
+        if (err) g_error_free(err);
+        g_object_unref(builder);
+        return GTK_RESPONSE_CANCEL;
+    }
+
+    dlg = GTK_WIDGET(gtk_builder_get_object(builder, "3dlut_export_dialog"));
+    if (!dlg) {
+        debug_log("WRN", "3dlut_export_dialog widget not found in builder");
+        g_object_unref(builder);
+        return GTK_RESPONSE_CANCEL;
+    }
+
+    if (parent) {
+        gtk_window_set_transient_for(GTK_WINDOW(dlg), parent);
+        gtk_window_set_modal(GTK_WINDOW(dlg), TRUE);
+        gtk_window_set_destroy_with_parent(GTK_WINDOW(dlg), TRUE);
+    }
+    gtk_window_set_resizable(GTK_WINDOW(dlg), FALSE);
+    ui_utils_set_header_bar(GTK_WINDOW(dlg), _("Color lookup options"));
+
+    title_entry   = GTK_WIDGET(gtk_builder_get_object(builder, "3dlut_export_title_entry"));
+    desc_entry    = GTK_WIDGET(gtk_builder_get_object(builder, "3dlut_export_desc_entry"));
+    adj           = GTK_ADJUSTMENT(gtk_builder_get_object(builder, "quality_scale"));
+    quality_label = GTK_WIDGET(gtk_builder_get_object(builder, "quality_value_label"));
+    cancel_btn    = GTK_WIDGET(gtk_builder_get_object(builder, "3dlut_cancel_button"));
+    export_btn    = GTK_WIDGET(gtk_builder_get_object(builder, "3dlut_export_button"));
+
+    if (adj && quality_label) {
+        /* Clamp adjustment bounds to filter limits. */
+        gtk_adjustment_set_lower(adj, (gdouble)FILTER_LUT3D_PHOTO_GRID_MIN);
+        gtk_adjustment_set_upper(adj, (gdouble)FILTER_LUT3D_PHOTO_GRID_MAX);
+        if (gtk_adjustment_get_value(adj) < (gdouble)FILTER_LUT3D_PHOTO_GRID_MIN)
+            gtk_adjustment_set_value(adj, 17.0);
+        /* Wire live update. */
+        g_signal_connect(adj, "value-changed",
+                         G_CALLBACK(on_lut_quality_value_changed), quality_label);
+        /* Trigger once to set initial text. */
+        on_lut_quality_value_changed(adj, quality_label);
+    }
+
+    if (cancel_btn) {
+        g_object_set_data(G_OBJECT(cancel_btn), "response-id",
+                          GINT_TO_POINTER(GTK_RESPONSE_CANCEL));
+        g_signal_connect(cancel_btn, "clicked",
+                         G_CALLBACK(on_lut_dlg_button_clicked), dlg);
+    }
+    if (export_btn) {
+        g_object_set_data(G_OBJECT(export_btn), "response-id",
+                          GINT_TO_POINTER(GTK_RESPONSE_OK));
+        g_signal_connect(export_btn, "clicked",
+                         G_CALLBACK(on_lut_dlg_button_clicked), dlg);
+    }
+
+    gtk_widget_show_all(dlg);
+    response = gtk_dialog_run(GTK_DIALOG(dlg));
+
+    if (response == GTK_RESPONSE_OK) {
+        if (out_title && title_entry) {
+            const gchar* t = gtk_entry_get_text(GTK_ENTRY(title_entry));
+            *out_title = g_strdup(t ? t : "");
+        }
+        if (out_copyright && desc_entry) {
+            const gchar* d = gtk_entry_get_text(GTK_ENTRY(desc_entry));
+            *out_copyright = g_strdup(d ? d : "");
+        }
+        if (out_grid && adj) {
+            *out_grid = CLAMP((gint)gtk_adjustment_get_value(adj),
+                              FILTER_LUT3D_PHOTO_GRID_MIN,
+                              FILTER_LUT3D_PHOTO_GRID_MAX);
+        }
+    }
+
+    gtk_widget_destroy(dlg);
+    g_object_unref(builder);
+    return response;
+}
+
+static void on_export_menu_color_lookup(GtkWidget* widget, gpointer user_data) {
+    GtkFileChooserNative* native;
+    GtkFileFilter* f_cube;
+    GtkFileFilter* f_look;
+    GtkFileFilter* f_all;
+    GtkFileFilter* sel_filter;
+    gint fmt_choice;
+    gint response;
+    gchar* path;
+    gpointer fmt_ptr;
+
+    (void)widget;
+
+    AppContext* ctx = (AppContext*)user_data;
+    if (!ctx || !ctx->window) {
+        return;
+    }
+
+    {
+        ImageDocument* active = ui_get_active_document(ctx);
+        if (!active) {
+            return;
+        }
+    }
+
+    native = gtk_file_chooser_native_new(
+        _("Export color lookup"),
+        GTK_WINDOW(ctx->window),
+        GTK_FILE_CHOOSER_ACTION_SAVE,
+        _("_Save"),
+        _("_Cancel"));
+    gtk_file_chooser_set_do_overwrite_confirmation(GTK_FILE_CHOOSER(native), TRUE);
+    gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(native), "color-lookup.cube");
+
+    f_cube = gtk_file_filter_new();
+    gtk_file_filter_set_name(f_cube, _("Adobe/Resolve cube LUT (*.cube)"));
+    gtk_file_filter_add_pattern(f_cube, "*.cube");
+    g_object_set_data(G_OBJECT(f_cube), LUT_CHOOSER_FORMAT_KEY, GINT_TO_POINTER((gint)LUT_CHOOSER_FMT_CUBE));
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(native), f_cube);
+
+    f_look = gtk_file_filter_new();
+    gtk_file_filter_set_name(f_look, _("SpeedGrade / XML LUT (*.look)"));
+    gtk_file_filter_add_pattern(f_look, "*.look");
+    g_object_set_data(G_OBJECT(f_look), LUT_CHOOSER_FORMAT_KEY, GINT_TO_POINTER((gint)LUT_CHOOSER_FMT_LOOK));
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(native), f_look);
+
+    f_all = gtk_file_filter_new();
+    gtk_file_filter_set_name(f_all, _("All 3D LUTs (*.cube; *.look)"));
+    gtk_file_filter_add_pattern(f_all, "*.cube");
+    gtk_file_filter_add_pattern(f_all, "*.look");
+    g_object_set_data(G_OBJECT(f_all), LUT_CHOOSER_FORMAT_KEY, GINT_TO_POINTER((gint)LUT_CHOOSER_FMT_ANY));
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(native), f_all);
+    gtk_file_chooser_set_filter(GTK_FILE_CHOOSER(native), f_cube);
+
+    response = gtk_native_dialog_run(GTK_NATIVE_DIALOG(native));
+    if (response != GTK_RESPONSE_ACCEPT) {
+        g_object_unref(native);
+        return;
+    }
+
+    sel_filter = gtk_file_chooser_get_filter(GTK_FILE_CHOOSER(native));
+    fmt_ptr = sel_filter ? g_object_get_data(G_OBJECT(sel_filter), LUT_CHOOSER_FORMAT_KEY) : NULL;
+    fmt_choice = fmt_ptr ? GPOINTER_TO_INT(fmt_ptr) : LUT_CHOOSER_FMT_ANY;
+
+    path = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(native));
+    g_object_unref(native);
+    if (!path) {
+        return;
+    }
+
+    if (!lut3d_io_is_supported(path)) {
+        const gchar* ext = (fmt_choice == (gint)LUT_CHOOSER_FMT_LOOK) ? ".look" : ".cube";
+        if (fmt_choice == (gint)LUT_CHOOSER_FMT_ANY) {
+            ext = ".cube";
+        }
+        {
+            gchar* with_ext = g_strconcat(path, ext, NULL);
+            g_free(path);
+            path = with_ext;
+        }
+    }
+
+    if (!lut3d_io_is_supported(path)) {
+        ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_ERROR,
+                                    _("Choose a .cube or .look filename to export a 3D LUT."),
+                                    NULL, GTK_RESPONSE_OK, _("_OK"), GTK_RESPONSE_OK, NULL);
+        g_free(path);
+        return;
+    }
+
+    {
+        gchar* dlg_title     = NULL;
+        gchar* dlg_copyright = NULL;
+        gint   dlg_grid      = 17;
+
+        if (run_color_lookup_options_dialog(GTK_WINDOW(ctx->window),
+                                            &dlg_title, &dlg_copyright, &dlg_grid)
+                != GTK_RESPONSE_OK) {
+            g_free(path);
+            g_free(dlg_title);
+            g_free(dlg_copyright);
+            return;
+        }
+
+        {
+            ImageDocument* doc = ui_get_active_document(ctx);
+            cairo_surface_t* export_surface;
+            gboolean ok;
+
+            if (!doc) {
+                g_free(path);
+                g_free(dlg_title);
+                g_free(dlg_copyright);
+                return;
+            }
+            export_surface = document_export_composite_surface(doc);
+            if (!export_surface) {
+                ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_ERROR,
+                                            _("Could not prepare the image for export."),
+                                            NULL, GTK_RESPONSE_OK, _("_OK"), GTK_RESPONSE_OK, NULL);
+                g_free(path);
+                g_free(dlg_title);
+                g_free(dlg_copyright);
+                return;
+            }
+            {
+                /*
+                 * LUT export strategy:
+                 *
+                 *  A) Multi-layer document: treat bottom layer as the "before" image
+                 *     and the composite as the "after" image.  The pixel-sampling
+                 *     two-surface builder captures the exact per-pixel transform
+                 *     applied by all layers above the base.
+                 *
+                 *  B) Single-layer (or mismatched sizes): use the voxel-bin
+                 *     nearest-colour builder on the composite alone.  For each LUT
+                 *     grid vertex (its identity colour) the nearest colour that
+                 *     actually exists in the reference image is stored as the LUT
+                 *     output.  This reproduces the image's colour palette when the
+                 *     LUT is applied to any other image — no original file needed.
+                 */
+                guint  nlayers = document_get_layer_count(doc);
+                gint   cw      = cairo_image_surface_get_width(export_surface);
+                gint   ch      = cairo_image_surface_get_height(export_surface);
+
+                if (nlayers > 1) {
+                    /* Strategy A: two-surface pixel sampling */
+                    ImageLayer*      base_layer = document_get_layer(doc, 0);
+                    cairo_surface_t* base_surf  = (base_layer && base_layer->surface)
+                                                  ? base_layer->surface : NULL;
+                    gboolean sizes_ok = base_surf
+                        && cairo_image_surface_get_width(base_surf)  == cw
+                        && cairo_image_surface_get_height(base_surf) == ch;
+                    if (sizes_ok) {
+                        ok = filter_save_3d_lut_from_two_surfaces(
+                                 base_surf, export_surface, path,
+                                 dlg_title, dlg_copyright, dlg_grid);
+                    } else {
+                        ok = filter_save_3d_lut_from_image(
+                                 export_surface, path,
+                                 dlg_title, dlg_copyright, dlg_grid);
+                    }
+                } else {
+                    /* Strategy B: voxel-bin nearest-colour from single image */
+                    ok = filter_save_3d_lut_from_image(
+                             export_surface, path,
+                             dlg_title, dlg_copyright, dlg_grid);
+                }
+            }
+            cairo_surface_destroy(export_surface);
+            if (ok) {
+                ui_update_status_bar_message(ctx, _("Color lookup exported"));
+            } else {
+                ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_ERROR,
+                                            _("Could not export the color lookup file. "
+                                              "The image may need at least one non-transparent pixel, "
+                                              "or the path may be invalid."),
+                                            NULL, GTK_RESPONSE_OK, _("_OK"), GTK_RESPONSE_OK, NULL);
+            }
+        }
+
+        g_free(dlg_title);
+        g_free(dlg_copyright);
+    }
+
+    g_free(path);
+}
+
 void ui_file_menu_update_sensitivity(AppContext* ctx) {
     ImageDocument* doc;
     gboolean has_document;
@@ -626,6 +945,9 @@ void ui_file_menu_update_sensitivity(AppContext* ctx) {
     if (ctx->file_menu_revert && GTK_IS_WIDGET(ctx->file_menu_revert)) {
         gboolean can_revert = has_document && doc->file_path && doc->file_path[0] != '\0';
         gtk_widget_set_sensitive(ctx->file_menu_revert, can_revert);
+    }
+    if (ctx->export_menu_color_lookup && GTK_IS_WIDGET(ctx->export_menu_color_lookup)) {
+        gtk_widget_set_sensitive(ctx->export_menu_color_lookup, can_save_as);
     }
     if (ctx->file_menu_close && GTK_IS_WIDGET(ctx->file_menu_close)) {
         gtk_widget_set_sensitive(ctx->file_menu_close, can_close);
@@ -793,6 +1115,7 @@ void ui_file_menu_setup(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* acc
     ctx->file_menu_save = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_save"));
     ctx->file_menu_save_as = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_save_as"));
     ctx->file_menu_revert = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_revert"));
+    ctx->export_menu_color_lookup = GTK_WIDGET(gtk_builder_get_object(builder, "export_menu_color_lookup"));
     ctx->file_menu_close = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_close"));
     ctx->file_menu_close_all = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_close_all"));
     ctx->file_menu_exit = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_exit"));
@@ -834,6 +1157,9 @@ void ui_file_menu_setup(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* acc
     }
     if (ctx->file_menu_revert) {
         g_signal_connect(ctx->file_menu_revert, "activate", G_CALLBACK(on_file_revert), ctx);
+    }
+    if (ctx->export_menu_color_lookup) {
+        g_signal_connect(ctx->export_menu_color_lookup, "activate", G_CALLBACK(on_export_menu_color_lookup), ctx);
     }
     if (ctx->file_menu_close) {
         g_signal_connect(ctx->file_menu_close, "activate", G_CALLBACK(on_file_close), ctx);
