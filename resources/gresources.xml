@@ -99,6 +99,7 @@
     <file>ui/new_layer_dialog.glade</file>
     <file>ui/canvas_size_dialog.glade</file>
     <file>ui/resize_dialog.glade</file>
+    <file>ui/undo_history_dialog.glade</file>
     <file>ui/bmp_options_dialog.glade</file>
     <file>ui/jpeg_options_dialog.glade</file>
     <file>ui/png_options_dialog.glade</file>

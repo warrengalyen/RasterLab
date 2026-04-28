@@ -14,16 +14,22 @@
  */
 
 #include "ui/dialogs/undo_history_dialog.h"
-#include "command.h"    /* CommandStack, command_stack_size */
-#include "document.h"   /* ImageDocument, document_undo, document_redo */
+#include "command.h" /* CommandStack, command_stack_size */
+#include "debug_logger.h"
+#include "document.h" /* ImageDocument, document_undo, document_redo */
 #include "i18n.h"
 #include "ui/ui_utils.h"
-#include "debug_logger.h"
 
 #include <cairo/cairo.h>
 #include <glib.h>
 #include <gtk/gtk.h>
 #include <string.h>
+
+static void on_response_button_clicked(GtkButton* button, gpointer user_data) {
+    GtkDialog* dlg = GTK_DIALOG(user_data);
+    gint response_id = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "response-id"));
+    gtk_dialog_response(dlg, response_id);
+}
 
 /* Thumbnail display size in the list rows */
 #define ROW_THUMB_SIZE 52
@@ -34,20 +40,20 @@
 
 /* Per-row data attached to each GtkListBoxRow */
 typedef struct {
-    Command*  cmd;         /* NULL for the synthetic "Original image" row */
-    gboolean  is_current;  /* TRUE for the row matching the current doc state */
-    guint     index;       /* 0-based display index (used to compute navigation) */
+    Command* cmd;        /* NULL for the synthetic "Original image" row */
+    gboolean is_current; /* TRUE for the row matching the current doc state */
+    guint index;         /* 0-based display index (used to compute navigation) */
 } RowData;
 
 /* State passed into draw callbacks */
 typedef struct {
-    Command*       cmd;          /* Non-NULL for undo/redo rows; NULL for the "Original image" row */
-    ImageDocument* doc_initial;  /* Non-NULL ONLY for the "Original image" row.
+    Command* cmd;               /* Non-NULL for undo/redo rows; NULL for the "Original image" row */
+    ImageDocument* doc_initial; /* Non-NULL ONLY for the "Original image" row.
                                   * Dereferenced at draw time (doc->initial_thumbnail) so we always
                                   * use the current live pointer rather than a potentially stale one
                                   * captured at dialog-build time — avoids use-after-free when the
                                   * worker replaces initial_thumbnail while the dialog is rendering. */
-    gboolean       is_current;
+    gboolean is_current;
 } DrawData;
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -110,11 +116,11 @@ static void draw_data_free(gpointer data) {
  * @param is_current    Whether to prepend "* " to the title
  */
 static GtkWidget* build_row(guint display_num,
-                             const gchar* title,
-                             const gchar* subtitle,
-                             Command* cmd,
-                             ImageDocument* doc_initial,
-                             gboolean is_current) {
+                            const gchar* title,
+                            const gchar* subtitle,
+                            Command* cmd,
+                            ImageDocument* doc_initial,
+                            gboolean is_current) {
     /* Outer row box (horizontal) */
     GtkWidget* row_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
     gtk_widget_set_margin_start(row_box, 6);
@@ -131,9 +137,9 @@ static GtkWidget* build_row(guint display_num,
     gtk_widget_set_events(da, GDK_EXPOSURE_MASK);
 
     DrawData* dd = g_new0(DrawData, 1);
-    dd->cmd         = cmd;
+    dd->cmd = cmd;
     dd->doc_initial = doc_initial;
-    dd->is_current  = is_current;
+    dd->is_current = is_current;
     g_signal_connect_data(da, "draw", G_CALLBACK(on_thumb_draw),
                           dd, (GClosureNotify)draw_data_free, 0);
 
@@ -193,11 +199,11 @@ void undo_history_dialog_show(GtkWindow* parent, ImageDocument* doc) {
 
     guint undo_size = doc->undo_stack ? command_stack_size(doc->undo_stack) : 0;
     guint redo_size = doc->redo_stack ? command_stack_size(doc->redo_stack) : 0;
-    guint total = 1 + undo_size + redo_size;  /* +1 for "Original image" */
-    guint current_idx = undo_size;            /* 0-based index of current state */
+    guint total = 1 + undo_size + redo_size; /* +1 for "Original image" */
+    guint current_idx = undo_size;           /* 0-based index of current state */
 
     /* Collect Command pointers in display order (oldest → newest) */
-    GPtrArray* entries = g_ptr_array_new();  /* Command* or NULL for origin */
+    GPtrArray* entries = g_ptr_array_new(); /* Command* or NULL for origin */
 
     /* Row 0 — synthetic origin */
     g_ptr_array_add(entries, NULL);
@@ -220,51 +226,68 @@ void undo_history_dialog_show(GtkWindow* parent, ImageDocument* doc) {
         }
     }
 
-    GtkWidget* dialog = gtk_dialog_new_with_buttons(
-        _("Undo history"),
-        parent,
-        GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
-        _("Cancel"), GTK_RESPONSE_CANCEL,
-        _("OK"),     GTK_RESPONSE_OK,
-        NULL);
+    GError* glade_err = NULL;
+    GtkBuilder* builder = gtk_builder_new();
+    ui_utils_builder_set_translation_domain(builder);
+    if (!gtk_builder_add_from_resource(builder, "/ui/undo_history_dialog.glade", &glade_err)) {
+        debug_log("WRN", "Failed to load undo_history_dialog.glade: %s",
+                  glade_err ? glade_err->message : "Unknown error");
+        if (glade_err)
+            g_error_free(glade_err);
+        g_object_unref(builder);
+        g_ptr_array_free(entries, FALSE);
+        return;
+    }
+
+    GtkWidget* dialog = GTK_WIDGET(gtk_builder_get_object(builder, "undo_history_dialog"));
+    if (!dialog) {
+        debug_log("WRN", "undo_history_dialog: missing undo_history_dialog");
+        g_object_unref(builder);
+        g_ptr_array_free(entries, FALSE);
+        return;
+    }
+
+    GtkWidget* scroll = GTK_WIDGET(gtk_builder_get_object(builder, "undo_history_scrolled"));
+    GtkWidget* list_box = GTK_WIDGET(gtk_builder_get_object(builder, "undo_history_list_box"));
+    GtkWidget* hdr_label = GTK_WIDGET(gtk_builder_get_object(builder, "undo_history_subtitle_label"));
+    GtkWidget* footer = GTK_WIDGET(gtk_builder_get_object(builder, "undo_history_footer_label"));
+    GtkWidget* ok_button = GTK_WIDGET(gtk_builder_get_object(builder, "undo_history_ok_button"));
+    GtkWidget* cancel_button = GTK_WIDGET(gtk_builder_get_object(builder, "undo_history_cancel_button"));
+
+    if (!scroll || !list_box || !hdr_label || !footer || !ok_button || !cancel_button) {
+        debug_log("WRN", "undo_history_dialog: missing one or more widgets from glade");
+        g_object_unref(builder);
+        g_ptr_array_free(entries, FALSE);
+        return;
+    }
+
+    g_object_unref(builder);
+
+    gtk_window_set_transient_for(GTK_WINDOW(dialog), parent);
+    gtk_window_set_destroy_with_parent(GTK_WINDOW(dialog), TRUE);
 
     ui_utils_set_header_bar(GTK_WINDOW(dialog), _("Undo history"));
 
-    gtk_window_set_default_size(GTK_WINDOW(dialog), 460, 420);
+    gtk_window_set_resizable(GTK_WINDOW(dialog), FALSE);
     gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_OK);
 
-    GtkWidget* content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
-    gtk_box_set_spacing(GTK_BOX(content), 0);
+    g_object_set_data(G_OBJECT(ok_button), "response-id", GINT_TO_POINTER(GTK_RESPONSE_OK));
+    g_signal_connect(ok_button, "clicked", G_CALLBACK(on_response_button_clicked), dialog);
+    g_object_set_data(G_OBJECT(cancel_button), "response-id", GINT_TO_POINTER(GTK_RESPONSE_CANCEL));
+    g_signal_connect(cancel_button, "clicked", G_CALLBACK(on_response_button_clicked), dialog);
 
-    /* Subtitle label */
-    GtkWidget* hdr_label = gtk_label_new(NULL);
     {
         gchar* hdr_markup = g_markup_printf_escaped(
             "<span foreground=\"#000000\">%s</span>", _("available image states"));
         gtk_label_set_markup(GTK_LABEL(hdr_label), hdr_markup);
         g_free(hdr_markup);
     }
-    gtk_label_set_xalign(GTK_LABEL(hdr_label), 0.0f);
-    gtk_widget_set_margin_start(hdr_label, 12);
-    gtk_widget_set_margin_end(hdr_label, 12);
-    gtk_widget_set_margin_top(hdr_label, 10);
-    gtk_widget_set_margin_bottom(hdr_label, 6);
-    gtk_box_pack_start(GTK_BOX(content), hdr_label, FALSE, FALSE, 0);
-
-    /* Scrolled window + list box */
-    GtkWidget* scroll = gtk_scrolled_window_new(NULL, NULL);
-    gtk_widget_set_name(scroll, "undo_history_list");
-    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll),
-                                   GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
-    gtk_widget_set_margin_start(scroll, 10);
-    gtk_widget_set_margin_end(scroll, 10);
-    gtk_widget_set_margin_bottom(scroll, 6);
-    gtk_box_pack_start(GTK_BOX(content), scroll, TRUE, TRUE, 0);
-
-    GtkWidget* list_box = gtk_list_box_new();
-    gtk_list_box_set_selection_mode(GTK_LIST_BOX(list_box),
-                                    GTK_SELECTION_SINGLE);
-    gtk_container_add(GTK_CONTAINER(scroll), list_box);
+    {
+        gchar* footer_markup = g_markup_printf_escaped(
+            "<small><i>%s</i></small>", _("* current image state"));
+        gtk_label_set_markup(GTK_LABEL(footer), footer_markup);
+        g_free(footer_markup);
+    }
 
     GtkListBoxRow* current_row = NULL;
 
@@ -272,7 +295,7 @@ void undo_history_dialog_show(GtkWindow* parent, ImageDocument* doc) {
         Command* cmd = (Command*)g_ptr_array_index(entries, i);
         gboolean is_current = (i == current_idx);
 
-        const gchar* title    = cmd ? cmd->name    : _("Original image");
+        const gchar* title = cmd ? cmd->name : _("Original image");
         const gchar* subtitle = cmd ? cmd->subtitle : NULL;
 
         /* Row 0 ("Original image"): pass doc so the draw callback can dereference
@@ -301,16 +324,6 @@ void undo_history_dialog_show(GtkWindow* parent, ImageDocument* doc) {
         gtk_list_box_select_row(GTK_LIST_BOX(list_box), current_row);
     }
 
-    /* Footer legend */
-    GtkWidget* footer = gtk_label_new(NULL);
-    gtk_label_set_markup(GTK_LABEL(footer),
-        "<small><i>* current image state</i></small>");
-    gtk_label_set_xalign(GTK_LABEL(footer), 0.0f);
-    gtk_widget_set_margin_start(footer, 12);
-    gtk_widget_set_margin_end(footer, 12);
-    gtk_widget_set_margin_bottom(footer, 6);
-    gtk_box_pack_start(GTK_BOX(content), footer, FALSE, FALSE, 0);
-
     gtk_widget_show_all(dialog);
 
     /* Scroll to current row after showing */
@@ -321,10 +334,12 @@ void undo_history_dialog_show(GtkWindow* parent, ImageDocument* doc) {
         GtkAllocation alloc;
         gtk_widget_get_allocation(GTK_WIDGET(current_row), &alloc);
         gdouble upper = gtk_adjustment_get_upper(adj);
-        gdouble page  = gtk_adjustment_get_page_size(adj);
+        gdouble page = gtk_adjustment_get_page_size(adj);
         gdouble target = alloc.y - (page / 2.0) + (alloc.height / 2.0);
-        if (target < 0) target = 0;
-        if (target > upper - page) target = upper - page;
+        if (target < 0)
+            target = 0;
+        if (target > upper - page)
+            target = upper - page;
         if (target >= 0) {
             gtk_adjustment_set_value(adj, target);
         }
