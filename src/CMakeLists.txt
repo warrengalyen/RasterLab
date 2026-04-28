@@ -157,6 +157,7 @@ set(SOURCES
     ui/dialogs/formats/tiff_options_dialog.c
     ui/dialogs/formats/webp_options_dialog.c
     ui/dialogs/gamma_dialog.c
+    ui/dialogs/lut3d_dialog.c
     ui/dialogs/new_image_dialog.c
     ui/dialogs/new_layer_dialog.c
     ui/dialogs/palettize_dialog.c

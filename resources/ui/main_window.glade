@@ -92,6 +92,14 @@
               </object>
             </child>
             <child>
+              <object class="GtkMenuItem" id="adjust_menu_color_lookup">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">Color lookup</property>
+                <property name="use-underline">True</property>
+              </object>
+            </child>
+            <child>
               <object class="GtkMenuItem" id="adjust_menu_chroma_key">
                 <property name="visible">True</property>
                 <property name="can-focus">False</property>

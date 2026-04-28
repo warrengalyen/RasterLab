@@ -9,10 +9,12 @@
  */
 
 #include "ui/ui_filter_adjust.h"
-#include "i18n.h"
 #include "command.h"
+#include "debug_logger.h"
 #include "document.h"
 #include "filters.h"
+#include "filters/filter_lut3d.h"
+#include "i18n.h"
 #include "render/layer.h"
 #include "selection/selection_mask.h"
 #include "ui.h"
@@ -20,6 +22,7 @@
 #include "ui/dialogs/color_balance_dialog.h"
 #include "ui/dialogs/curves_dialog.h"
 #include "ui/dialogs/gamma_dialog.h"
+#include "ui/dialogs/lut3d_dialog.h"
 #include "ui/dialogs/palettize_dialog.h"
 #include "ui/dialogs/retinex_dialog.h"
 #include "ui/filters/filter_auto_contrast.h"
@@ -37,13 +40,13 @@
 #include "ui/filters/filter_dehaze.h"
 #include "ui/filters/filter_equalize.h"
 #include "ui/filters/filter_exposure.h"
-#include "ui/filters/filter_glass_tiles.h"
 #include "ui/filters/filter_gamma.h"
-#include "ui/filters/filter_marble.h"
+#include "ui/filters/filter_glass_tiles.h"
 #include "ui/filters/filter_grayscale.h"
 #include "ui/filters/filter_highlight_shadow_tint.h"
 #include "ui/filters/filter_hsl.h"
 #include "ui/filters/filter_luminance_threshold.h"
+#include "ui/filters/filter_marble.h"
 #include "ui/filters/filter_monochrome.h"
 #include "ui/filters/filter_palettize.h"
 #include "ui/filters/filter_posterize.h"
@@ -60,7 +63,7 @@
 #include "ui/ui_filter_utils.h"
 #include "ui/widgets/filter_dialog.h"
 #include <glib.h>
-#include "debug_logger.h"
+
 
 /* Filter wrapper functions moved to ui_filter_utils.c */
 
@@ -351,7 +354,7 @@ static gboolean on_marble_preview_update(FilterDialog* dialog,
     }
 
     ui_filter_utils_setup_viewport_filter(dialog, (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_marble_apply,
-                                         filter_values, 5);
+                                          filter_values, 5);
     return TRUE;
 }
 
@@ -403,7 +406,7 @@ static void on_adjust_glass_tiles(GtkWidget* widget, gpointer data) {
     (void)widget;
 
     AppContext* ctx = (AppContext*)data;
-    static const gchar* edge_labels[] = { "clamp", "reflect", "wrap", "erase", "ignore" };
+    static const gchar* edge_labels[] = {"clamp", "reflect", "wrap", "erase", "ignore"};
     FilterControlParam controls[5];
     gdouble values[5];
     gint response;
@@ -482,7 +485,7 @@ static void on_adjust_marble(GtkWidget* widget, gpointer data) {
     (void)widget;
 
     AppContext* ctx = (AppContext*)data;
-    static const gchar* edge_labels[] = { "clamp", "reflect", "wrap", "erase", "ignore" };
+    static const gchar* edge_labels[] = {"clamp", "reflect", "wrap", "erase", "ignore"};
     FilterControlParam controls[5];
     gdouble values[5];
     gint response;
@@ -2345,6 +2348,152 @@ static void on_adjust_retinex(GtkWidget* widget, gpointer data) {
     layer_free(temp_layer);
 }
 
+/* ---- 3D LUT color lookup -------------------------------------------------- */
+
+/**
+ * Live preview callback for the 3D LUT dialog.
+ * Re-applies the currently selected LUT (with current intensity and blend mode)
+ * to a copy of the original layer and refreshes the preview.
+ */
+static gboolean on_lut3d_preview_update(Lut3dDialog* dialog, gpointer user_data) {
+    ImageLayer* temp_layer = (ImageLayer*)user_data;
+    ImageLayer* original_layer;
+    const gchar* lut_path;
+    gint intensity;
+    BlendMode blend_mode;
+
+    if (!dialog || !temp_layer)
+        return FALSE;
+
+    original_layer = (ImageLayer*)g_object_get_data(
+        G_OBJECT(lut3d_dialog_get_window(dialog)), "original_layer");
+    if (!original_layer)
+        return FALSE;
+
+    lut_path = lut3d_dialog_get_selected_path(dialog);
+    if (!lut_path)
+        return FALSE;
+
+    if (!ui_filter_utils_copy_layer_surface(temp_layer, original_layer))
+        return FALSE;
+
+    intensity = lut3d_dialog_get_intensity(dialog);
+    blend_mode = lut3d_dialog_get_blend_mode(dialog);
+
+    filter_apply_3d_lut(temp_layer->surface, lut_path, intensity, blend_mode);
+
+    lut3d_dialog_update_after_layer(dialog, temp_layer);
+    return TRUE;
+}
+
+/**
+ * Adjustments > Color > Color Lookup callback
+ */
+static void on_adjust_color_lookup(GtkWidget* widget, gpointer data) {
+    (void)widget;
+
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc;
+    ImageLayer* layer;
+    Lut3dDialog* dialog;
+    ImageLayer* temp_layer;
+    cairo_t* cr;
+    gint response;
+    gchar* lut_path = NULL;
+    gint intensity = 100;
+    BlendMode blend_mode = BLEND_MODE_NORMAL;
+
+    if (!ctx)
+        return;
+
+    doc = ui_get_active_document(ctx);
+    if (!doc) {
+        debug_log("WRN", "on_adjust_color_lookup: no document open");
+        return;
+    }
+
+    layer = document_get_selected_layer(doc);
+    if (!layer) {
+        debug_log("WRN", "on_adjust_color_lookup: no layer selected");
+        return;
+    }
+
+    dialog = lut3d_dialog_new(_("Color Lookup"), ctx->app_dir);
+    if (!dialog) {
+        debug_log("WRN", "on_adjust_color_lookup: failed to create dialog");
+        return;
+    }
+
+    temp_layer = ui_filter_utils_create_temp_layer(layer);
+    if (!temp_layer) {
+        debug_log("WRN", "on_adjust_color_lookup: failed to create temp layer");
+        lut3d_dialog_free(dialog);
+        return;
+    }
+
+    g_object_set_data(G_OBJECT(lut3d_dialog_get_window(dialog)), "original_layer", layer);
+    g_object_set_data(G_OBJECT(lut3d_dialog_get_window(dialog)), "filter_doc", doc);
+
+    lut3d_dialog_set_layers(dialog, layer, temp_layer);
+    lut3d_dialog_set_preview_callback(dialog, on_lut3d_preview_update, temp_layer);
+
+    if (ctx->window) {
+        gtk_window_set_transient_for(lut3d_dialog_get_window(dialog),
+                                     GTK_WINDOW(ctx->window));
+    }
+
+    response = lut3d_dialog_run(dialog, GTK_WINDOW(ctx->window),
+                                &lut_path, &intensity, &blend_mode);
+
+    if (response == GTK_RESPONSE_OK && lut_path) {
+        Command* cmd = command_create_draw(layer, _("Color Lookup"));
+        if (cmd) {
+            cairo_surface_t* original_surface = NULL;
+            if (layer->surface) {
+                gint width = cairo_image_surface_get_width(layer->surface);
+                gint height = cairo_image_surface_get_height(layer->surface);
+                original_surface = cairo_image_surface_create(
+                    cairo_image_surface_get_format(layer->surface), width, height);
+                if (original_surface) {
+                    cr = cairo_create(original_surface);
+                    cairo_set_source_surface(cr, layer->surface, 0, 0);
+                    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+                    cairo_paint(cr);
+                    cairo_destroy(cr);
+                }
+            }
+
+            gboolean success = filter_apply_3d_lut(layer->surface, lut_path,
+                                                   intensity, blend_mode);
+
+            if (success && original_surface && layer->surface) {
+                filter_utils_apply_selection_mask(layer->surface, original_surface, doc, layer);
+            }
+            if (original_surface) {
+                cairo_surface_destroy(original_surface);
+            }
+
+            if (success) {
+                command_finalize_draw(cmd);
+                document_push_undo_command(doc, cmd);
+                layer_invalidate_cache(layer);
+                doc->modified = TRUE;
+                document_invalidate_composite(doc);
+                ui_update_window_title(ctx, NULL);
+                ui_update_menu_and_button_states(ctx);
+            } else {
+                command_free(cmd);
+                debug_log("WRN", "on_adjust_color_lookup: filter_apply_3d_lut failed");
+            }
+        }
+    }
+
+    g_free(lut_path);
+    g_object_set_data(G_OBJECT(lut3d_dialog_get_window(dialog)), "original_layer", NULL);
+    lut3d_dialog_free(dialog);
+    layer_free(temp_layer);
+}
+
 /**
  * Setup Adjustments menu from Glade builder
  */
@@ -2527,5 +2676,10 @@ void ui_filter_adjust_setup_menu(GtkBuilder* builder, AppContext* ctx) {
     GtkWidget* adjust_menu_marble = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_marble"));
     if (adjust_menu_marble) {
         g_signal_connect(adjust_menu_marble, "activate", G_CALLBACK(on_adjust_marble), ctx);
+    }
+
+    GtkWidget* adjust_menu_color_lookup = GTK_WIDGET(gtk_builder_get_object(builder, "adjust_menu_color_lookup"));
+    if (adjust_menu_color_lookup) {
+        g_signal_connect(adjust_menu_color_lookup, "activate", G_CALLBACK(on_adjust_color_lookup), ctx);
     }
 }
