@@ -39,3 +39,16 @@ notebook tab:focus {
     background-image: none;
     box-shadow: none;
 }
+
+/* Popup tooltip window: style the window node (GtkBox often skips border/bg on Win GTK). */
+/* GtkWindow ignores CSS padding for the content inset; label margins are set in swatches_widget.c */
+window.swatches-tooltip-window {
+    border-style: solid;
+    border-width: 1px;
+    border-color: shade(@theme_bg_color, 0.65);
+    background-color: @theme_base_color;
+}
+
+window.swatches-tooltip-window label {
+    color: @theme_fg_color;
+}

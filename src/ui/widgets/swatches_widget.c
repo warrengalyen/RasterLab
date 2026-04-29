@@ -21,6 +21,7 @@
 #define DEFAULT_MAX_SWATCH_SIZE 20.0
 #define DEFAULT_SPACING 1.0
 #define DEFAULT_PADDING 0.0
+#define SWATCHES_TOOLTIP_INNER_MARGIN 5
 
 /* Signal enum */
 enum {
@@ -722,9 +723,17 @@ static void update_tooltip(SwatchesWidget* self) {
         gtk_widget_set_events(GTK_WIDGET(self->tooltip_window), 0);
         gtk_widget_set_can_focus(GTK_WIDGET(self->tooltip_window), FALSE);
 
+        gtk_style_context_add_class(gtk_widget_get_style_context(self->tooltip_window),
+                                    "swatches-tooltip-window");
+
         GtkWidget* label = gtk_label_new(NULL);
         gtk_label_set_line_wrap(GTK_LABEL(label), FALSE);
         gtk_label_set_selectable(GTK_LABEL(label), FALSE);
+        /* GtkWindow does not apply CSS padding around its child; margins inset the label from the border */
+        gtk_widget_set_margin_top(label, SWATCHES_TOOLTIP_INNER_MARGIN);
+        gtk_widget_set_margin_bottom(label, SWATCHES_TOOLTIP_INNER_MARGIN);
+        gtk_widget_set_margin_start(label, SWATCHES_TOOLTIP_INNER_MARGIN);
+        gtk_widget_set_margin_end(label, SWATCHES_TOOLTIP_INNER_MARGIN);
         gtk_container_add(GTK_CONTAINER(self->tooltip_window), label);
         gtk_widget_show(label);
 
