@@ -95,22 +95,12 @@ static GradientToolState* gradient_get_state(Tool* tool) {
     return (GradientToolState*)tool->user_data;
 }
 
-/* Free pixel backup in state (does NOT free state itself) */
-static void gradient_state_free_backup(GradientToolState* state) {
-    if (state->pixel_backup) {
-        g_free(state->pixel_backup);
-        state->pixel_backup = NULL;
+/* Free the gradient preview surface */
+static void gradient_state_free_preview(GradientToolState* state) {
+    if (state->preview_surface) {
+        cairo_surface_destroy(state->preview_surface);
+        state->preview_surface = NULL;
     }
-}
-
-/* Free the cached gradient surface */
-static void gradient_state_free_surface(GradientToolState* state) {
-    if (state->grad_surface) {
-        cairo_surface_destroy(state->grad_surface);
-        state->grad_surface = NULL;
-    }
-    state->grad_surf_w = 0;
-    state->grad_surf_h = 0;
 }
 
 /* Cancel an in-progress drag without finalizing */
@@ -119,8 +109,7 @@ static void gradient_cancel_drag(GradientToolState* state) {
         command_free((Command*)state->draw_cmd);
         state->draw_cmd = NULL;
     }
-    gradient_state_free_backup(state);
-    gradient_state_free_surface(state);
+    gradient_state_free_preview(state);
     state->dragging = FALSE;
     state->active_layer = NULL;
 }
@@ -291,20 +280,12 @@ static void gradient_build_color_lut(GradientDef* grad, gdouble opacity,
  * ========================================================================= */
 
 /*
- * Apply the gradient to a layer.
- *
- * If restore_from is non-NULL the layer pixels are first restored from that
- * buffer before the gradient is applied (used for real-time drag updates).
+ * Apply the gradient to a layer (committed write — called once on mouse_up).
  *
  * start/end are in IMAGE (document) coordinates.
  * grad may be NULL; a built-in black-to-white linear fallback is used.
- *
- * If cached_surf is non-NULL it points to a reusable temp surface pointer.
- * On first call *cached_surf is NULL; the function allocates it and writes it
- * back.  On subsequent calls the same surface is reused (zero allocation).
- * cache_w/cache_h track the cached dimensions so we reallocate if needed.
- *
  * doc is used to access the selection mask; may be NULL (no selection clipping).
+ * clip may be NULL for a full-layer fill.
  */
 /*
  * Viewport clip rectangle for limiting gradient work to the visible region.
@@ -416,6 +397,142 @@ static inline void gradient_mask_row(
     }
 }
 
+/* =========================================================================
+ * Preview rendering — gradient composited into state->preview_surface only.
+ * The actual layer surface is left untouched until mouse_up.
+ * ========================================================================= */
+
+/*
+ * Render the current gradient into state->preview_surface (viewport-clipped).
+ * The preview surface is the same pixel dimensions as the layer (ARGB32,
+ * premultiplied), cleared to transparent outside the filled region so the
+ * draw-preview callback can composite it over the canvas with CAIRO_OPERATOR_OVER.
+ * Selection masking is applied so the preview matches the committed result.
+ */
+static void gradient_render_preview(GradientToolState* state,
+                                    struct ImageLayer* layer,
+                                    GradientDef* grad,
+                                    gdouble start_x, gdouble start_y,
+                                    gdouble end_x, gdouble end_y,
+                                    gint shape, gint repeat,
+                                    gfloat opacity, gdouble center_offset,
+                                    ImageDocument* doc,
+                                    const GradientClipRect* clip) {
+    if (!state || !layer || !layer->surface)
+        return;
+
+    gint lw = cairo_image_surface_get_width(layer->surface);
+    gint lh = cairo_image_surface_get_height(layer->surface);
+    if (lw <= 0 || lh <= 0)
+        return;
+
+    /* Create or reuse the preview surface (full layer dimensions) */
+    if (!state->preview_surface ||
+        cairo_image_surface_get_width(state->preview_surface) != lw ||
+        cairo_image_surface_get_height(state->preview_surface) != lh) {
+        if (state->preview_surface)
+            cairo_surface_destroy(state->preview_surface);
+        state->preview_surface =
+            cairo_image_surface_create(CAIRO_FORMAT_ARGB32, lw, lh);
+    }
+
+    cairo_surface_flush(state->preview_surface);
+    gint prev_stride = cairo_image_surface_get_stride(state->preview_surface);
+    guchar* prev_data = cairo_image_surface_get_data(state->preview_surface);
+    if (!prev_data)
+        return;
+
+    /* Clear to transparent */
+    memset(prev_data, 0, (gsize)lh * prev_stride);
+
+    /* Effective fill region */
+    gint fill_x0 = 0, fill_y0 = 0, fill_x1 = lw, fill_y1 = lh;
+    if (clip) {
+        fill_x0 = clip->x0 > 0 ? clip->x0 : 0;
+        fill_y0 = clip->y0 > 0 ? clip->y0 : 0;
+        fill_x1 = clip->x1 < lw ? clip->x1 : lw;
+        fill_y1 = clip->y1 < lh ? clip->y1 : lh;
+        if (fill_x0 >= fill_x1 || fill_y0 >= fill_y1) {
+            cairo_surface_mark_dirty(state->preview_surface);
+            return;
+        }
+    }
+
+    /* Precompute gradient invariants */
+    gdouble lsx = start_x - layer->offset_x;
+    gdouble lsy = start_y - layer->offset_y;
+    gdouble lex = end_x   - layer->offset_x;
+    gdouble ley = end_y   - layer->offset_y;
+
+    GradientParams params;
+    gradient_params_init(&params, lsx, lsy, lex, ley, shape, center_offset);
+
+    gdouble opacity_factor = (gdouble)opacity / 100.0;
+    if (opacity_factor < 0.0) opacity_factor = 0.0;
+    if (opacity_factor > 1.0) opacity_factor = 1.0;
+
+    guint32 color_lut[GRAD_COLOR_LUT_SIZE];
+    gradient_build_color_lut(grad, opacity_factor, color_lut);
+
+    /* Selection mask (optional) */
+    const guint8* mask_data = NULL;
+    gint mask_x = 0, mask_y = 0, mask_w = 0, mask_h = 0, mask_s = 0;
+    SelectionMask* region_mask = NULL;
+
+    if (doc && doc->selection_mask &&
+        !selection_mask_is_empty(doc->selection_mask)) {
+        DirtyRect sel_dirty;
+        dirty_rect_set(&sel_dirty,
+                       layer->offset_x, layer->offset_y, lw, lh);
+        DirtyRect actual_region;
+        region_mask = selection_build_combined_mask(
+            doc->selection_mask, &sel_dirty,
+            FEATHER_QUALITY_NORMAL, &actual_region);
+        if (region_mask && region_mask->data) {
+            mask_data = region_mask->data;
+            mask_x = actual_region.x - layer->offset_x;
+            mask_y = actual_region.y - layer->offset_y;
+            mask_w = region_mask->width;
+            mask_h = region_mask->height;
+            mask_s = region_mask->stride;
+        }
+    }
+
+    /* Fill rows into the preview surface */
+    const gint lut_max = GRAD_COLOR_LUT_SIZE - 1;
+    gdouble dt_dx = params.dx * params.inv_len2;
+    gint row_width = fill_x1 - fill_x0;
+    guint32* row_buf = (guint32*)g_malloc((gsize)row_width * 4);
+
+    for (gint y = fill_y0; y < fill_y1; y++) {
+        guint32* dst = (guint32*)(prev_data + (gsize)y * prev_stride) + fill_x0;
+
+        if (shape == 0 || shape == 1)
+            gradient_fill_row_linear(row_buf, fill_x0, fill_x1,
+                                     y, shape, repeat,
+                                     lsx, lsy, dt_dx,
+                                     &params, color_lut, lut_max);
+        else
+            gradient_fill_row_general(row_buf, fill_x0, fill_x1,
+                                      y, repeat,
+                                      &params, color_lut, lut_max);
+
+        if (mask_data)
+            gradient_mask_row(row_buf, row_width, fill_x0, y,
+                              mask_data, mask_x, mask_y,
+                              mask_w, mask_h, mask_s);
+
+        memcpy(dst, row_buf, (gsize)row_width * 4);
+    }
+
+    g_free(row_buf);
+
+    if (region_mask)
+        selection_mask_free(region_mask);
+
+    cairo_surface_mark_dirty(state->preview_surface);
+}
+
 static void gradient_apply_to_layer(struct ImageLayer* layer,
                                     GradientDef* grad,
                                     gdouble start_x, gdouble start_y,
@@ -423,10 +540,6 @@ static void gradient_apply_to_layer(struct ImageLayer* layer,
                                     gint shape, gint repeat,
                                     gfloat opacity, gint blend_mode_idx,
                                     gdouble center_offset,
-                                    const guchar* restore_from,
-                                    gint restore_stride,
-                                    cairo_surface_t** cached_surf,
-                                    gint* cache_w, gint* cache_h,
                                     ImageDocument* doc,
                                     const GradientClipRect* clip) {
     if (!layer || !layer->surface)
@@ -442,14 +555,6 @@ static void gradient_apply_to_layer(struct ImageLayer* layer,
 
     if (!data || width <= 0 || height <= 0)
         return;
-
-    /* Release legacy cached surface — no longer needed with row pipeline */
-    if (cached_surf && *cached_surf) {
-        cairo_surface_destroy(*cached_surf);
-        *cached_surf = NULL;
-        if (cache_w) *cache_w = 0;
-        if (cache_h) *cache_h = 0;
-    }
 
     /* --- Effective fill region (viewport clip or full layer) --- */
     gint fill_x0 = 0, fill_y0 = 0, fill_x1 = width, fill_y1 = height;
@@ -518,12 +623,6 @@ static void gradient_apply_to_layer(struct ImageLayer* layer,
     for (gint y = fill_y0; y < fill_y1; y++) {
         guint32* dst = (guint32*)(data + (gsize)y * stride) + fill_x0;
 
-        if (restore_from) {
-            const guint32* src = (const guint32*)(
-                restore_from + (gsize)y * restore_stride) + fill_x0;
-            memcpy(dst, src, (gsize)row_width * 4);
-        }
-
         if (shape == 0 || shape == 1)
             gradient_fill_row_linear(row_buf, fill_x0, fill_x1,
                                      y, shape, repeat,
@@ -565,16 +664,6 @@ static void gradient_stroke_path(cairo_t* cr, gdouble line_width) {
     cairo_stroke(cr);
 }
 
-/* Draw a plus-sign at (x, y) in viewport coords */
-static void gradient_draw_plus(cairo_t* cr, gdouble x, gdouble y,
-                               gdouble arm, gdouble lw) {
-    cairo_move_to(cr, x - arm, y);
-    cairo_line_to(cr, x + arm, y);
-    cairo_move_to(cr, x, y - arm);
-    cairo_line_to(cr, x, y + arm);
-    gradient_stroke_path(cr, lw);
-}
-
 /* Draw a filled arrowhead at (tip_x, tip_y) pointing along (dir_x, dir_y) */
 static void gradient_draw_arrow(cairo_t* cr, gdouble tip_x, gdouble tip_y,
                                 gdouble dir_x, gdouble dir_y,
@@ -610,6 +699,20 @@ void tool_gradient_draw_preview(Tool* tool, struct ImageDocument* doc,
     if (!state->dragging)
         return;
 
+    /* --- Composite the preview surface over the canvas --- */
+    if (state->preview_surface && state->active_layer) {
+        struct ImageLayer* layer = state->active_layer;
+        cairo_save(cr);
+        /* Scale to document space then offset to layer origin */
+        cairo_scale(cr, zoom, zoom);
+        cairo_translate(cr, (gdouble)layer->offset_x, (gdouble)layer->offset_y);
+        cairo_set_source_surface(cr, state->preview_surface, 0.0, 0.0);
+        cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+        cairo_paint(cr);
+        cairo_restore(cr);
+    }
+
+    /* --- Draw the direction line and arrowhead overlay --- */
     gdouble sx = state->start_x * zoom;
     gdouble sy = state->start_y * zoom;
     gdouble ex = state->end_x * zoom;
@@ -617,19 +720,16 @@ void tool_gradient_draw_preview(Tool* tool, struct ImageDocument* doc,
 
     gdouble lw = 1.0;
     gdouble arr = 10.0; /* arrowhead size */
-    gdouble plus = 8.0; /* plus-sign arm length */
 
     cairo_save(cr);
     cairo_set_antialias(cr, CAIRO_ANTIALIAS_DEFAULT);
     cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
     cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
 
-    /* Gradient line */
     cairo_move_to(cr, sx, sy);
     cairo_line_to(cr, ex, ey);
     gradient_stroke_path(cr, lw);
 
-    /* Arrowhead at end point (indicates current mouse position) */
     gradient_draw_arrow(cr, ex, ey, ex - sx, ey - sy, arr, lw);
 
     cairo_restore(cr);
@@ -654,38 +754,13 @@ static void gradient_tool_mouse_down(Tool* tool, struct ImageDocument* doc,
     if (!layer || !layer->surface)
         return;
 
-    /* Flush surface so we get an accurate pixel snapshot */
+    /* Capture "before" state for undo — the layer is not touched until mouse_up */
     cairo_surface_flush(layer->surface);
-
-    /* Capture "before" state for undo */
     Command* cmd = command_create_draw(layer, "Gradient Tool");
     if (!cmd)
         return;
 
-    /* Save a pixel backup for real-time restoration on each mouse_move */
-    gint width = cairo_image_surface_get_width(layer->surface);
-    gint height = cairo_image_surface_get_height(layer->surface);
-    gint stride = cairo_image_surface_get_stride(layer->surface);
-    const guchar* pixels = cairo_image_surface_get_data(layer->surface);
-
-    guchar* backup = NULL;
-    if (pixels && width > 0 && height > 0) {
-        gsize sz = (gsize)(height * stride);
-        backup = g_malloc(sz);
-        if (backup)
-            memcpy(backup, pixels, sz);
-    }
-
-    if (!backup) {
-        command_free(cmd);
-        return;
-    }
-
     state->draw_cmd = (gpointer)cmd;
-    state->pixel_backup = backup;
-    state->backup_width = width;
-    state->backup_height = height;
-    state->backup_stride = stride;
     state->active_layer = layer;
     state->start_x = event->x;
     state->start_y = event->y;
@@ -751,16 +826,15 @@ static void gradient_tool_mouse_move(Tool* tool, struct ImageDocument* doc,
     GradientDef* grad = ctx ? (GradientDef*)ctx->active_gradient : NULL;
     struct ImageLayer* layer = state->active_layer;
 
-    if (layer && layer->surface && state->pixel_backup) {
+    if (layer && layer->surface) {
         ToolOptions* opts = tool_options_get_for_tool(TOOL_GRADIENT);
         gint shape = opts ? opts->gradient_shape : 0;
         gint repeat = opts ? opts->gradient_repeat : 1;
         gfloat opacity = opts ? opts->gradient_opacity : 100.0f;
-        gint blend_mode = opts ? opts->gradient_blend_mode : 0;
         gdouble center_off = opts ? opts->gradient_center_offset : 75.0;
 
-        /* Compute viewport-visible region in layer coordinates so we only
-         * fill and composite the pixels currently on screen. */
+        /* Clip gradient preview to the viewport-visible region so the
+         * render stays cheap even on large layers. */
         GradientClipRect viewport_clip;
         GradientClipRect* clip_ptr = NULL;
         gint lw = cairo_image_surface_get_width(layer->surface);
@@ -774,20 +848,20 @@ static void gradient_tool_mouse_move(Tool* tool, struct ImageDocument* doc,
             GtkAdjustment* vadj = gtk_scrolled_window_get_vadjustment(
                 GTK_SCROLLED_WINDOW(doc->scrolled_window));
             if (hadj && vadj) {
-                gdouble sx = gtk_adjustment_get_value(hadj);
-                gdouble sy = gtk_adjustment_get_value(vadj);
-                gdouble vw = gtk_adjustment_get_page_size(hadj);
-                gdouble vh = gtk_adjustment_get_page_size(vadj);
+                gdouble sv_x = gtk_adjustment_get_value(hadj);
+                gdouble sv_y = gtk_adjustment_get_value(vadj);
+                gdouble vw   = gtk_adjustment_get_page_size(hadj);
+                gdouble vh   = gtk_adjustment_get_page_size(vadj);
                 gdouble inv_zoom = 1.0 / doc->zoom_factor;
-
                 gint pad = 2;
-                viewport_clip.x0 = (gint)(sx * inv_zoom) - layer->offset_x - pad;
-                viewport_clip.y0 = (gint)(sy * inv_zoom) - layer->offset_y - pad;
-                viewport_clip.x1 = (gint)((sx + vw) * inv_zoom) - layer->offset_x + pad;
-                viewport_clip.y1 = (gint)((sy + vh) * inv_zoom) - layer->offset_y + pad;
 
-                if (viewport_clip.x0 < 0) viewport_clip.x0 = 0;
-                if (viewport_clip.y0 < 0) viewport_clip.y0 = 0;
+                viewport_clip.x0 = (gint)(sv_x * inv_zoom) - layer->offset_x - pad;
+                viewport_clip.y0 = (gint)(sv_y * inv_zoom) - layer->offset_y - pad;
+                viewport_clip.x1 = (gint)((sv_x + vw) * inv_zoom) - layer->offset_x + pad;
+                viewport_clip.y1 = (gint)((sv_y + vh) * inv_zoom) - layer->offset_y + pad;
+
+                if (viewport_clip.x0 < 0)  viewport_clip.x0 = 0;
+                if (viewport_clip.y0 < 0)  viewport_clip.y0 = 0;
                 if (viewport_clip.x1 > lw) viewport_clip.x1 = lw;
                 if (viewport_clip.y1 > lh) viewport_clip.y1 = lh;
 
@@ -795,21 +869,17 @@ static void gradient_tool_mouse_move(Tool* tool, struct ImageDocument* doc,
             }
         }
 
-        gradient_apply_to_layer(layer, grad,
+        /* Render gradient into the preview surface — the layer is unchanged. */
+        gradient_render_preview(state, layer, grad,
                                 state->start_x, state->start_y,
                                 state->end_x, state->end_y,
-                                shape, repeat, opacity, blend_mode, center_off,
-                                state->pixel_backup, state->backup_stride,
-                                &state->grad_surface,
-                                &state->grad_surf_w, &state->grad_surf_h,
+                                shape, repeat, opacity, center_off,
                                 doc, clip_ptr);
 
-        cairo_surface_flush(layer->surface);
-        layer_invalidate_cache(layer);
-
-        DirtyRect dr;
-        dirty_rect_set(&dr, layer->offset_x, layer->offset_y, lw, lh);
-        document_invalidate_region(doc, &dr);
+        /* Trigger a cheap viewport redraw to show the updated preview.
+         * No layer cache rebuild or full compositor pass is needed. */
+        if (doc->viewport)
+            gtk_widget_queue_draw(doc->viewport);
     }
 }
 
@@ -855,22 +925,20 @@ static void gradient_tool_mouse_up(Tool* tool, struct ImageDocument* doc,
         return;
     }
 
-    /* Apply the final gradient at full resolution (no viewport clip) */
-    if (state->pixel_backup) {
+    /* Apply the final gradient at full resolution — layer has not been
+     * touched during the drag, so no restore step is needed. */
+    {
         ToolOptions* opts = tool_options_get_for_tool(TOOL_GRADIENT);
-        gint shape = opts ? opts->gradient_shape : 0;
-        gint repeat = opts ? opts->gradient_repeat : 1;
-        gfloat opacity = opts ? opts->gradient_opacity : 100.0f;
-        gint blend_mode = opts ? opts->gradient_blend_mode : 0;
+        gint shape      = opts ? opts->gradient_shape        : 0;
+        gint repeat     = opts ? opts->gradient_repeat       : 1;
+        gfloat opacity  = opts ? opts->gradient_opacity      : 100.0f;
+        gint blend_mode = opts ? opts->gradient_blend_mode   : 0;
         gdouble center_off = opts ? opts->gradient_center_offset : 75.0;
 
         gradient_apply_to_layer(layer, grad,
                                 state->start_x, state->start_y,
                                 state->end_x, state->end_y,
                                 shape, repeat, opacity, blend_mode, center_off,
-                                state->pixel_backup, state->backup_stride,
-                                &state->grad_surface,
-                                &state->grad_surf_w, &state->grad_surf_h,
                                 doc, NULL);
         cairo_surface_flush(layer->surface);
         layer_invalidate_cache(layer);
@@ -890,9 +958,8 @@ static void gradient_tool_mouse_up(Tool* tool, struct ImageDocument* doc,
         command_free(draw_cmd);
     }
 
-    /* Clean up */
-    gradient_state_free_backup(state);
-    gradient_state_free_surface(state);
+    /* Free the preview surface and clear active layer */
+    gradient_state_free_preview(state);
     state->active_layer = NULL;
 
     /* Restore plus cursor (drag is over) */

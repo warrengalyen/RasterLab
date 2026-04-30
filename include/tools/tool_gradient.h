@@ -27,17 +27,12 @@ typedef struct {
     gdouble end_x;              /* Gradient end point (image coordinates) */
     gdouble end_y;
     gpointer draw_cmd;          /* Command* — undo command with "before" state captured at mouse_down */
-    guchar* pixel_backup;       /* Copy of original layer pixels for real-time re-application */
-    gint backup_width;
-    gint backup_height;
-    gint backup_stride;
     struct ImageLayer* active_layer; /* Layer being painted during this drag */
 
-    /* --- Performance caches (valid for the duration of a drag) --- */
-    cairo_surface_t* grad_surface;  /* Reusable temp surface for compositing */
-    gint grad_surf_w;               /* Cached surface width */
-    gint grad_surf_h;               /* Cached surface height */
-    gint64 last_apply_usec;         /* Monotonic timestamp of last gradient apply */
+    /* Preview surface — gradient rendered here during drag, composited in draw_preview.
+     * The actual layer surface is not modified until mouse_up. */
+    cairo_surface_t* preview_surface;
+    gint64 last_apply_usec;     /* Monotonic timestamp of last preview recompute */
 } GradientToolState;
 
 /**
