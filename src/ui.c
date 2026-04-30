@@ -553,9 +553,14 @@ AppContext* ui_create_main_window(Settings* initial_settings) {
     g_object_ref(builder);
     g_object_set_data_full(G_OBJECT(ctx->window), "main_builder", builder, g_object_unref);
 
-    /* Connect notebook signal */
-    g_signal_connect(ctx->notebook, "switch-page",
-                     G_CALLBACK(on_notebook_switch_page), ctx);
+    /* Connect notebook signal with _after so our handler runs after GTK's
+     * default class handler (gtk_notebook_real_switch_page) has updated
+     * priv->cur_page. Without _after, gtk_notebook_get_current_page() still
+     * returns the old page when ui_get_active_document() is called from inside
+     * the handler, causing document-state-dependent menu items (e.g. Export >
+     * Color profile) to be evaluated against the wrong document. */
+    g_signal_connect_after(ctx->notebook, "switch-page",
+                           G_CALLBACK(on_notebook_switch_page), ctx);
 
     ui_file_menu_setup_notebook_drag_drop(ctx->notebook, ctx);
 

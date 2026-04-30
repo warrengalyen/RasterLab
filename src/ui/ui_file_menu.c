@@ -1077,6 +1077,86 @@ static void on_export_menu_palette(GtkWidget* widget, gpointer user_data) {
     g_free(save_path);
 }
 
+static void on_export_menu_color_profile(GtkWidget* widget, gpointer user_data) {
+    AppContext*           ctx = (AppContext*)user_data;
+    ImageDocument*        doc;
+    GtkFileChooserNative* native;
+    GtkFileFilter*        f;
+    gchar*                save_path = NULL;
+    gint                  fc_response;
+    FILE*                 fp;
+
+    (void)widget;
+
+    if (!ctx || !ctx->window) return;
+
+    doc = ui_get_active_document(ctx);
+    if (!doc) return;
+    if (!doc->original_icc_data || doc->original_icc_size == 0) return;
+
+    native = gtk_file_chooser_native_new(
+        _("Export color profile"),
+        GTK_WINDOW(ctx->window),
+        GTK_FILE_CHOOSER_ACTION_SAVE,
+        _("_Save"),
+        _("_Cancel"));
+    gtk_file_chooser_set_do_overwrite_confirmation(GTK_FILE_CHOOSER(native), TRUE);
+
+    /* Default filename: strip image extension and add .icc */
+    {
+        const gchar* base = (doc->filename && doc->filename[0]) ? doc->filename : "profile";
+        gchar*       stem = g_strdup(base);
+        gchar*       dot  = strrchr(stem, '.');
+        if (dot) *dot = '\0';
+        gchar* suggested = g_strdup_printf("%s.icc", stem);
+        gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(native), suggested);
+        g_free(stem);
+        g_free(suggested);
+
+        if (doc->file_path && doc->file_path[0]) {
+            gchar* dir = g_path_get_dirname(doc->file_path);
+            gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(native), dir);
+            g_free(dir);
+        }
+    }
+
+    f = gtk_file_filter_new();
+    gtk_file_filter_set_name(f, _("ICC Color Profile (*.icc)"));
+    gtk_file_filter_add_pattern(f, "*.icc");
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(native), f);
+
+    f = gtk_file_filter_new();
+    gtk_file_filter_set_name(f, _("ICM Color Profile (*.icm)"));
+    gtk_file_filter_add_pattern(f, "*.icm");
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(native), f);
+
+    fc_response = gtk_native_dialog_run(GTK_NATIVE_DIALOG(native));
+    if (fc_response == GTK_RESPONSE_ACCEPT) {
+        save_path = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(native));
+    }
+    g_object_unref(native);
+
+    if (!save_path) return;
+
+    fp = g_fopen(save_path, "wb");
+    if (fp) {
+        fwrite(doc->original_icc_data, 1, doc->original_icc_size, fp);
+        fclose(fp);
+    } else {
+        GtkWidget* err_dlg = gtk_message_dialog_new(
+            GTK_WINDOW(ctx->window),
+            GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+            GTK_MESSAGE_ERROR,
+            GTK_BUTTONS_OK,
+            _("Could not write color profile to \"%s\"."),
+            save_path);
+        gtk_dialog_run(GTK_DIALOG(err_dlg));
+        gtk_widget_destroy(err_dlg);
+    }
+
+    g_free(save_path);
+}
+
 static void on_export_menu_color_lookup(GtkWidget* widget, gpointer user_data) {
     GtkFileChooserNative* native;
     GtkFileFilter* f_cube;
@@ -1315,6 +1395,10 @@ void ui_file_menu_update_sensitivity(AppContext* ctx) {
     if (ctx->export_menu_color_lookup && GTK_IS_WIDGET(ctx->export_menu_color_lookup)) {
         gtk_widget_set_sensitive(ctx->export_menu_color_lookup, can_save_as);
     }
+    if (ctx->export_menu_color_profile && GTK_IS_WIDGET(ctx->export_menu_color_profile)) {
+        gboolean has_icc = has_document && doc->original_icc_data && doc->original_icc_size > 0;
+        gtk_widget_set_sensitive(ctx->export_menu_color_profile, has_icc);
+    }
     if (ctx->export_menu_palette && GTK_IS_WIDGET(ctx->export_menu_palette)) {
         gtk_widget_set_sensitive(ctx->export_menu_palette, can_save_as);
     }
@@ -1484,9 +1568,10 @@ void ui_file_menu_setup(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* acc
     ctx->file_menu_save = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_save"));
     ctx->file_menu_save_as = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_save_as"));
     ctx->file_menu_revert = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_revert"));
-    ctx->file_menu_export         = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_export"));
-    ctx->export_menu_color_lookup = GTK_WIDGET(gtk_builder_get_object(builder, "export_menu_color_lookup"));
-    ctx->export_menu_palette      = GTK_WIDGET(gtk_builder_get_object(builder, "export_menu_palette"));
+    ctx->file_menu_export          = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_export"));
+    ctx->export_menu_color_lookup  = GTK_WIDGET(gtk_builder_get_object(builder, "export_menu_color_lookup"));
+    ctx->export_menu_color_profile = GTK_WIDGET(gtk_builder_get_object(builder, "export_menu_color_profile"));
+    ctx->export_menu_palette       = GTK_WIDGET(gtk_builder_get_object(builder, "export_menu_palette"));
     ctx->file_menu_close = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_close"));
     ctx->file_menu_close_all = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_close_all"));
     ctx->file_menu_exit = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_exit"));
@@ -1531,6 +1616,9 @@ void ui_file_menu_setup(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* acc
     }
     if (ctx->export_menu_color_lookup) {
         g_signal_connect(ctx->export_menu_color_lookup, "activate", G_CALLBACK(on_export_menu_color_lookup), ctx);
+    }
+    if (ctx->export_menu_color_profile) {
+        g_signal_connect(ctx->export_menu_color_profile, "activate", G_CALLBACK(on_export_menu_color_profile), ctx);
     }
     if (ctx->export_menu_palette) {
         g_signal_connect(ctx->export_menu_palette, "activate", G_CALLBACK(on_export_menu_palette), ctx);

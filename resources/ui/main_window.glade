@@ -1060,6 +1060,14 @@
                 <property name="use-underline">True</property>
               </object>
             </child>
+             <child>
+              <object class="GtkMenuItem" id="export_menu_color_profile">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">Color profile</property>
+                <property name="use-underline">True</property>
+              </object>
+            </child>
             <child>
               <object class="GtkMenuItem" id="export_menu_palette">
                 <property name="visible">True</property>
