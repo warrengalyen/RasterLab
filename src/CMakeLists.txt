@@ -54,6 +54,7 @@ set(SOURCES
     document_revert_diff.c
     i18n.c
     filters/filters.c
+    filters/filter_export_palette.c
     filters/filter_lut3d.c
     gradient.c
     io/gradient_io.c

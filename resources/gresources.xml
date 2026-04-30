@@ -115,6 +115,7 @@
     <file>ui/about_dialog.glade</file>
     <file>ui/gradient_editor_dialog.glade</file>
     <file>ui/3dlut_export_dialog.glade</file>
+    <file>ui/palette_export_dialog.glade</file>
     <file>ui/color_lookup_dialog.glade</file>
     <file>ui/main_window.glade</file>
     <file>css/app.css</file>

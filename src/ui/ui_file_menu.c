@@ -16,7 +16,9 @@
 #include "commands/command_revert.h"
 #include "document.h"
 #include "document_revert_diff.h"
+#include "filters/filter_export_palette.h"
 #include "filters/filter_lut3d.h"
+#include "ui/widgets/swatches_widget.h"
 #include "io/image_io.h"
 #include "io/lut3d_io.h"
 #include "plugins/format_registry.h"
@@ -714,6 +716,367 @@ static gint run_color_lookup_options_dialog(GtkWindow* parent,
     return response;
 }
 
+/* ──────────────────────────────────────────────────────────────
+ * Palette export dialog helpers
+ * ────────────────────────────────────────────────────────────── */
+
+typedef struct {
+    GtkWidget*              dlg;
+    GtkWidget*              auto_toggle;
+    GtkWidget*              custom_toggle;
+    GtkWidget*              controls_box;
+    GtkAdjustment*          count_adj;
+    SwatchesWidget*         swatch_widget;
+    cairo_surface_t*        export_surface; /* composite snapshot, borrowed lifetime = dialog */
+    gboolean                updating;       /* guard against re-entrant toggle callbacks */
+    gboolean                count_held;     /* TRUE while a button is held on scale or spin */
+    /* Snapshotted before gtk_widget_destroy so they survive after the dialog is gone */
+    FilterPaletteExportCountMode last_mode;
+    gint                    last_count;
+} PaletteExportDlgState;
+
+static void palette_dlg_refresh_swatches(PaletteExportDlgState* st) {
+    OcPalette palette = {0};
+    FilterPaletteExportCountMode mode;
+    gint custom_count;
+    gint i;
+
+    if (!st || !st->export_surface || !st->swatch_widget) {
+        return;
+    }
+
+    mode = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(st->custom_toggle))
+               ? FILTER_PALETTE_EXPORT_COUNT_CUSTOM
+               : FILTER_PALETTE_EXPORT_COUNT_AUTO;
+    custom_count = (gint)gtk_adjustment_get_value(st->count_adj);
+
+    if (!filter_build_preview_palette(st->export_surface, mode, custom_count, &palette)) {
+        swatches_widget_clear(st->swatch_widget);
+        return;
+    }
+
+    swatches_widget_clear(st->swatch_widget);
+    for (i = 0; i < palette.num_colors; i++) {
+        GdkRGBA c;
+        c.red   = palette.colors[i].r / 255.0;
+        c.green = palette.colors[i].g / 255.0;
+        c.blue  = palette.colors[i].b / 255.0;
+        c.alpha = 1.0;
+        swatches_widget_add_swatch(st->swatch_widget, &c, palette.colors[i].name[0] ? palette.colors[i].name : NULL);
+    }
+    ocularFreePalette(&palette);
+    gtk_widget_queue_draw(GTK_WIDGET(st->swatch_widget));
+}
+
+static void on_palette_dlg_auto_toggled(GtkToggleButton* btn, gpointer user_data) {
+    PaletteExportDlgState* st = (PaletteExportDlgState*)user_data;
+    if (st->updating) return;
+    st->updating = TRUE;
+    if (gtk_toggle_button_get_active(btn)) {
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(st->custom_toggle), FALSE);
+        gtk_widget_hide(st->controls_box);
+    } else {
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(st->custom_toggle), TRUE);
+        gtk_widget_show(st->controls_box);
+    }
+    st->updating = FALSE;
+    palette_dlg_refresh_swatches(st);
+}
+
+static void on_palette_dlg_custom_toggled(GtkToggleButton* btn, gpointer user_data) {
+    PaletteExportDlgState* st = (PaletteExportDlgState*)user_data;
+    if (st->updating) return;
+    st->updating = TRUE;
+    if (gtk_toggle_button_get_active(btn)) {
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(st->auto_toggle), FALSE);
+        gtk_widget_show(st->controls_box);
+    } else {
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(st->auto_toggle), TRUE);
+        gtk_widget_hide(st->controls_box);
+    }
+    st->updating = FALSE;
+    palette_dlg_refresh_swatches(st);
+}
+
+/* Set the held flag as soon as any mouse button goes down on scale or spin. */
+static gboolean on_palette_dlg_count_press(GtkWidget* widget, GdkEventButton* event,
+                                           gpointer user_data) {
+    PaletteExportDlgState* st = (PaletteExportDlgState*)user_data;
+    (void)widget;
+    (void)event;
+    st->count_held = TRUE;
+    return FALSE;
+}
+
+/* Clear the held flag and flush the preview once the button is released. */
+static gboolean on_palette_dlg_count_release(GtkWidget* widget, GdkEventButton* event,
+                                             gpointer user_data) {
+    PaletteExportDlgState* st = (PaletteExportDlgState*)user_data;
+    (void)widget;
+    (void)event;
+    st->count_held = FALSE;
+    if (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(st->custom_toggle)))
+        palette_dlg_refresh_swatches(st);
+    return FALSE;
+}
+
+/* value-changed fires for every intermediate step (drag, auto-repeat, keyboard).
+ * Only act when no button is held; the release handler covers the mouse cases. */
+static void on_palette_dlg_count_changed(GtkAdjustment* adj, gpointer user_data) {
+    PaletteExportDlgState* st = (PaletteExportDlgState*)user_data;
+    (void)adj;
+    if (st->count_held) return;
+    if (!gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(st->custom_toggle))) return;
+    palette_dlg_refresh_swatches(st);
+}
+
+static void on_palette_dlg_button_clicked(GtkButton* btn, gpointer dlg) {
+    gint rid = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(btn), "response-id"));
+    gtk_dialog_response(GTK_DIALOG(dlg), rid);
+}
+
+static void on_export_menu_palette(GtkWidget* widget, gpointer user_data) {
+    AppContext*              ctx = (AppContext*)user_data;
+    ImageDocument*           doc;
+    cairo_surface_t*         export_surface;
+    GtkFileChooserNative*    native;
+    GtkFileFilter*           f;
+    gchar*                   save_path = NULL;
+    gint                     fc_response;
+    GtkBuilder*              builder;
+    GtkWidget*               dlg;
+    GtkWidget*               alignment;
+    GtkWidget*               swatches_w;
+    GtkWidget*               ok_btn;
+    GtkWidget*               cancel_btn;
+    GtkWidget*               controls_box;
+    GtkWidget*               auto_toggle;
+    GtkWidget*               custom_toggle;
+    GtkWidget*               count_scale;
+    GtkWidget*               count_spin;
+    GtkAdjustment*           count_adj;
+    PaletteExportDlgState    st = {0};
+    GError*                  err = NULL;
+    gint                     response;
+
+    (void)widget;
+
+    if (!ctx || !ctx->window) return;
+
+    doc = ui_get_active_document(ctx);
+    if (!doc) return;
+
+    native = gtk_file_chooser_native_new(
+        _("Export Palette"),
+        GTK_WINDOW(ctx->window),
+        GTK_FILE_CHOOSER_ACTION_SAVE,
+        _("_Save"),
+        _("_Cancel"));
+    gtk_file_chooser_set_do_overwrite_confirmation(GTK_FILE_CHOOSER(native), TRUE);
+
+    /* Default filename: strip the image extension and add .gpl */
+    {
+        const gchar* base = (doc->filename && doc->filename[0]) ? doc->filename : "palette";
+        gchar* stem = g_strdup(base);
+        gchar* dot  = strrchr(stem, '.');
+        if (dot) *dot = '\0';
+        gchar* suggested = g_strdup_printf("%s.gpl", stem);
+        gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(native), suggested);
+        g_free(stem);
+        g_free(suggested);
+
+        /* If the document already has a saved directory, open there */
+        if (doc->file_path && doc->file_path[0]) {
+            gchar* dir = g_path_get_dirname(doc->file_path);
+            gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(native), dir);
+            g_free(dir);
+        }
+    }
+
+    f = gtk_file_filter_new();
+    gtk_file_filter_set_name(f, _("GIMP Palette (*.gpl)"));
+    gtk_file_filter_add_pattern(f, "*.gpl");
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(native), f);
+
+    f = gtk_file_filter_new();
+    gtk_file_filter_set_name(f, _("RIFF Palette (*.pal)"));
+    gtk_file_filter_add_pattern(f, "*.pal");
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(native), f);
+
+    f = gtk_file_filter_new();
+    gtk_file_filter_set_name(f, _("Adobe Color Swatch (*.aco)"));
+    gtk_file_filter_add_pattern(f, "*.aco");
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(native), f);
+
+    f = gtk_file_filter_new();
+    gtk_file_filter_set_name(f, _("Paint.NET Palette (*.txt)"));
+    gtk_file_filter_add_pattern(f, "*.txt");
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(native), f);
+
+    f = gtk_file_filter_new();
+    gtk_file_filter_set_name(f, _("Adobe Color Table (*.act)"));
+    gtk_file_filter_add_pattern(f, "*.act");
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(native), f);
+
+    fc_response = gtk_native_dialog_run(GTK_NATIVE_DIALOG(native));
+    if (fc_response == GTK_RESPONSE_ACCEPT) {
+        save_path = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(native));
+    }
+    g_object_unref(native);
+
+    if (!save_path) return;
+
+    /* Guarantee a palette extension is present */
+    if (!strrchr(save_path, '.')) {
+        gchar* with_ext = g_strconcat(save_path, ".gpl", NULL);
+        g_free(save_path);
+        save_path = with_ext;
+    }
+
+    /* ── Step 2: composite snapshot for preview ─────────────────── */
+    export_surface = document_export_composite_surface(doc);
+    if (!export_surface) {
+        ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_ERROR,
+                                    _("Could not prepare the image for export."),
+                                    NULL, GTK_RESPONSE_OK, _("_OK"), GTK_RESPONSE_OK, NULL);
+        g_free(save_path);
+        return;
+    }
+
+    /* ── Step 3: options / preview dialog ───────────────────────── */
+    builder = gtk_builder_new();
+    ui_utils_builder_set_translation_domain(builder);
+    if (!gtk_builder_add_from_resource(builder, "/ui/palette_export_dialog.glade", &err)) {
+        debug_log("WRN", "palette_export_dialog.glade load failed: %s",
+                  err ? err->message : "unknown");
+        if (err) g_error_free(err);
+        g_object_unref(builder);
+        cairo_surface_destroy(export_surface);
+        g_free(save_path);
+        return;
+    }
+
+    dlg          = GTK_WIDGET(gtk_builder_get_object(builder, "palette_export_dialog"));
+    alignment    = GTK_WIDGET(gtk_builder_get_object(builder, "palette_swatches_alignment"));
+    controls_box = GTK_WIDGET(gtk_builder_get_object(builder, "color_count_controls_box"));
+    auto_toggle  = GTK_WIDGET(gtk_builder_get_object(builder, "auto_count_toggle"));
+    custom_toggle= GTK_WIDGET(gtk_builder_get_object(builder, "custom_count_toggle"));
+    count_adj    = GTK_ADJUSTMENT(gtk_builder_get_object(builder, "color_count_adjustment"));
+    count_scale  = GTK_WIDGET(gtk_builder_get_object(builder, "color_count_scale"));
+    count_spin   = GTK_WIDGET(gtk_builder_get_object(builder, "color_count_spin"));
+    ok_btn       = GTK_WIDGET(gtk_builder_get_object(builder, "palette_export_ok_button"));
+    cancel_btn   = GTK_WIDGET(gtk_builder_get_object(builder, "palette_export_cancel_button"));
+
+    if (!dlg || !alignment || !controls_box || !auto_toggle || !custom_toggle ||
+        !count_adj || !count_scale || !count_spin || !ok_btn || !cancel_btn) {
+        debug_log("WRN", "palette_export_dialog: missing widget(s) in builder");
+        g_object_unref(builder);
+        cairo_surface_destroy(export_surface);
+        g_free(save_path);
+        return;
+    }
+
+    gtk_window_set_transient_for(GTK_WINDOW(dlg), GTK_WINDOW(ctx->window));
+    gtk_window_set_modal(GTK_WINDOW(dlg), TRUE);
+    gtk_window_set_destroy_with_parent(GTK_WINDOW(dlg), TRUE);
+    ui_utils_set_header_bar(GTK_WINDOW(dlg), _("Palette export options"));
+
+    /* Inject SwatchesWidget inside a GtkScrolledWindow, matching the main swatches panel style:
+     * shadow-type=in, h-policy=never, v-policy=automatic, propagate-natural-height=true.
+     * Size is capped to the frame interior (frame: 285x350) so the widget never overflows. */
+    swatches_w = swatches_widget_new();
+    swatches_widget_set_spacing(SWATCHES_WIDGET(swatches_w), 1.0);
+    swatches_widget_set_padding(SWATCHES_WIDGET(swatches_w), 4.0);
+    gtk_widget_set_size_request(swatches_w, -1, -1);
+
+    {
+        GtkWidget* scroll_w = gtk_scrolled_window_new(NULL, NULL);
+        gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll_w),
+                                       GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+        gtk_scrolled_window_set_shadow_type(GTK_SCROLLED_WINDOW(scroll_w), GTK_SHADOW_NONE);
+        gtk_scrolled_window_set_propagate_natural_height(GTK_SCROLLED_WINDOW(scroll_w), TRUE);
+        gtk_widget_set_size_request(scroll_w, 260, 310);
+        gtk_widget_set_hexpand(scroll_w, FALSE);
+        gtk_widget_set_vexpand(scroll_w, FALSE);
+        gtk_container_add(GTK_CONTAINER(scroll_w), swatches_w);
+        gtk_container_add(GTK_CONTAINER(alignment), scroll_w);
+        gtk_widget_show_all(scroll_w);
+    }
+
+    /* Wire dialog state */
+    st.dlg            = dlg;
+    st.auto_toggle    = auto_toggle;
+    st.custom_toggle  = custom_toggle;
+    st.controls_box   = controls_box;
+    st.count_adj      = count_adj;
+    st.swatch_widget  = SWATCHES_WIDGET(swatches_w);
+    st.export_surface = export_surface;
+    st.updating       = FALSE;
+    st.count_held     = FALSE;
+
+    g_signal_connect(auto_toggle,   "toggled", G_CALLBACK(on_palette_dlg_auto_toggled),   &st);
+    g_signal_connect(custom_toggle, "toggled", G_CALLBACK(on_palette_dlg_custom_toggled), &st);
+
+    g_signal_connect(count_scale, "button-press-event",   G_CALLBACK(on_palette_dlg_count_press),   &st);
+    g_signal_connect(count_scale, "button-release-event", G_CALLBACK(on_palette_dlg_count_release), &st);
+    g_signal_connect(count_spin,  "button-press-event",   G_CALLBACK(on_palette_dlg_count_press),   &st);
+    g_signal_connect(count_spin,  "button-release-event", G_CALLBACK(on_palette_dlg_count_release), &st);
+    g_signal_connect(count_adj,   "value-changed",        G_CALLBACK(on_palette_dlg_count_changed), &st);
+
+    g_object_set_data(G_OBJECT(ok_btn),     "response-id", GINT_TO_POINTER(GTK_RESPONSE_OK));
+    g_object_set_data(G_OBJECT(cancel_btn), "response-id", GINT_TO_POINTER(GTK_RESPONSE_CANCEL));
+    g_signal_connect(ok_btn,     "clicked", G_CALLBACK(on_palette_dlg_button_clicked), dlg);
+    g_signal_connect(cancel_btn, "clicked", G_CALLBACK(on_palette_dlg_button_clicked), dlg);
+
+    /* Initial palette preview */
+    palette_dlg_refresh_swatches(&st);
+
+    gtk_widget_show_all(dlg);
+    gtk_widget_hide(controls_box); /* no-show-all: keep hidden in auto mode */
+
+    response = gtk_dialog_run(GTK_DIALOG(dlg));
+
+    /* Read widget state before the dialog is destroyed */
+    {
+        FilterPaletteExportCountMode dlg_mode;
+        gint dlg_count;
+        dlg_mode  = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(st.custom_toggle))
+                        ? FILTER_PALETTE_EXPORT_COUNT_CUSTOM
+                        : FILTER_PALETTE_EXPORT_COUNT_AUTO;
+        dlg_count = (gint)gtk_adjustment_get_value(st.count_adj);
+        st.last_mode  = dlg_mode;
+        st.last_count = dlg_count;
+    }
+
+    gtk_widget_destroy(dlg);
+    g_object_unref(builder);
+
+    /* ── Step 4: export ─────────────────────────────────────────── */
+    if (response == GTK_RESPONSE_OK) {
+        FilterPaletteExportCountMode mode;
+        gint   custom_count;
+        gboolean ok;
+
+        mode         = st.last_mode;
+        custom_count = st.last_count;
+
+        ok = filter_export_palette_from_surface(export_surface, save_path, mode,
+                                                custom_count, NULL);
+        if (ok) {
+            ui_update_status_bar_message(ctx, _("Palette exported"));
+        } else {
+            ui_utils_message_dialog_run(GTK_WINDOW(ctx->window), GTK_MESSAGE_ERROR,
+                                        _("Could not export the palette. "
+                                          "Check the file path and that the image has "
+                                          "at least one non-transparent pixel."),
+                                        NULL, GTK_RESPONSE_OK, _("_OK"), GTK_RESPONSE_OK, NULL);
+        }
+    }
+
+    cairo_surface_destroy(export_surface);
+    g_free(save_path);
+}
+
 static void on_export_menu_color_lookup(GtkWidget* widget, gpointer user_data) {
     GtkFileChooserNative* native;
     GtkFileFilter* f_cube;
@@ -946,8 +1309,14 @@ void ui_file_menu_update_sensitivity(AppContext* ctx) {
         gboolean can_revert = has_document && doc->file_path && doc->file_path[0] != '\0';
         gtk_widget_set_sensitive(ctx->file_menu_revert, can_revert);
     }
+    if (ctx->file_menu_export && GTK_IS_WIDGET(ctx->file_menu_export)) {
+        gtk_widget_set_sensitive(ctx->file_menu_export, can_save_as);
+    }
     if (ctx->export_menu_color_lookup && GTK_IS_WIDGET(ctx->export_menu_color_lookup)) {
         gtk_widget_set_sensitive(ctx->export_menu_color_lookup, can_save_as);
+    }
+    if (ctx->export_menu_palette && GTK_IS_WIDGET(ctx->export_menu_palette)) {
+        gtk_widget_set_sensitive(ctx->export_menu_palette, can_save_as);
     }
     if (ctx->file_menu_close && GTK_IS_WIDGET(ctx->file_menu_close)) {
         gtk_widget_set_sensitive(ctx->file_menu_close, can_close);
@@ -1115,7 +1484,9 @@ void ui_file_menu_setup(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* acc
     ctx->file_menu_save = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_save"));
     ctx->file_menu_save_as = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_save_as"));
     ctx->file_menu_revert = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_revert"));
+    ctx->file_menu_export         = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_export"));
     ctx->export_menu_color_lookup = GTK_WIDGET(gtk_builder_get_object(builder, "export_menu_color_lookup"));
+    ctx->export_menu_palette      = GTK_WIDGET(gtk_builder_get_object(builder, "export_menu_palette"));
     ctx->file_menu_close = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_close"));
     ctx->file_menu_close_all = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_close_all"));
     ctx->file_menu_exit = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_exit"));
@@ -1160,6 +1531,9 @@ void ui_file_menu_setup(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* acc
     }
     if (ctx->export_menu_color_lookup) {
         g_signal_connect(ctx->export_menu_color_lookup, "activate", G_CALLBACK(on_export_menu_color_lookup), ctx);
+    }
+    if (ctx->export_menu_palette) {
+        g_signal_connect(ctx->export_menu_palette, "activate", G_CALLBACK(on_export_menu_palette), ctx);
     }
     if (ctx->file_menu_close) {
         g_signal_connect(ctx->file_menu_close, "activate", G_CALLBACK(on_file_close), ctx);
