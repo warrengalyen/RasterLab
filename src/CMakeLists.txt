@@ -282,6 +282,7 @@ set(SOURCES
     ui/widgets/canvas_ruler.c
     ui/widgets/swatches_widget.c
     ui/widgets/vertical_spin_button.c
+    ui/widgets/font_chooser_widget.c
     undo/undo_disk.c
 )
 
@@ -389,6 +390,10 @@ target_link_libraries(rasterlab ${LIBXML2_LIBRARIES})
 
 # Link LZ4
 target_link_libraries(rasterlab ${LZ4_LIBRARIES})
+
+# Link FreeType2 and fontconfig (for font type detection in font chooser widget)
+target_link_libraries(rasterlab ${FREETYPE2_LIBRARIES})
+target_link_libraries(rasterlab ${FONTCONFIG_LIBRARIES})
 
 # Link GLFW (static, from lib/glfw) for GPU-accelerated compositing
 if(GLFW_FOUND AND GLFW_TARGET AND TARGET ${GLFW_TARGET})

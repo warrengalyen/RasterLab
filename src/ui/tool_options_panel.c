@@ -12,6 +12,7 @@
 #include "command.h"
 #include "commands/command_image.h"
 #include "commands/command_text_layer.h"
+#include "debug_logger.h"
 #include "document.h"
 #include "gradient.h"
 #include "i18n.h"
@@ -30,11 +31,12 @@
 #include "ui/dialogs/color_chooser_dialog.h"
 #include "ui/dialogs/gradient_editor_dialog.h"
 #include "ui/ui_utils.h"
+#include "ui/widgets/font_chooser_widget.h"
 #include "ui/widgets/vertical_spin_button.h"
 #include <pango/pango.h>
 #include <stdio.h>
 #include <string.h>
-#include "debug_logger.h"
+
 
 /* Flag to prevent recursive spin updates when crop link toggle is active */
 static gboolean g_crop_spin_updating = FALSE;
@@ -65,7 +67,7 @@ static gdouble g_color_picker_preview_a = 1.0;
  * @return The spin widget, or NULL on failure
  */
 static GtkWidget* add_spin_button_to_scale(GtkBuilder* builder, const gchar* scale_id,
-                                            const gchar* control_box_id) {
+                                           const gchar* control_box_id) {
     if (!builder || !scale_id || !control_box_id) {
         return NULL;
     }
@@ -2293,34 +2295,167 @@ static void text_opts_invalidate(ToolOptionsPanel* panel) {
     if (doc->viewport)
         gtk_widget_queue_draw(doc->viewport);
 }
+/* ------------- Signal handlers -----------------------------*/
 
-/* ── Signal handlers ─────────────────────────────────────────────────── */
+typedef struct {
+    ToolOptionsPanel* panel;
+    gchar* family;
+    gint weight;
+    gint style;
+} FontVariationIdleData;
 
-static void on_text_font_family_changed(GtkComboBox* combo, gpointer user_data) {
+/** Bold / Italic toggles from Pango weight & style (variation combo + layer sync). */
+static void tool_opts_sync_style_buttons(ToolOptionsPanel* panel,
+                                          PangoWeight weight, PangoStyle style) {
+    if (!panel)
+        return;
+    g_text_panel_syncing++;
+    if (panel->text_bold_button)
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->text_bold_button),
+                                     weight >= PANGO_WEIGHT_BOLD);
+    if (panel->text_italic_button)
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->text_italic_button),
+                                     style != PANGO_STYLE_NORMAL);
+    g_text_panel_syncing--;
+}
+
+static void tool_opts_refresh_font_variation_combo(ToolOptionsPanel* panel,
+                                                   const gchar* family,
+                                                   gint weight,
+                                                   gint style);
+
+static gboolean tool_opts_idle_refresh_font_variation(gpointer user_data) {
+    FontVariationIdleData* d = user_data;
+    tool_opts_refresh_font_variation_combo(d->panel, d->family, d->weight, d->style);
+    g_free(d->family);
+    g_free(d);
+    return G_SOURCE_REMOVE;
+}
+
+/**
+ * Defer face combo refresh until after the font chooser popover / GTK settles.
+ * (Synchronous refresh from font-changed often left the combo stale on Windows.)
+ */
+static void tool_opts_schedule_font_variation_refresh(ToolOptionsPanel* panel,
+                                                      const gchar* family,
+                                                      gint weight,
+                                                      gint style) {
+    if (!panel || !family || !family[0])
+        return;
+    FontVariationIdleData* d = g_new(FontVariationIdleData, 1);
+    d->panel = panel;
+    d->family = g_strdup(family);
+    d->weight = weight;
+    d->style = style;
+    g_idle_add(tool_opts_idle_refresh_font_variation, d);
+}
+
+static void tool_opts_refresh_font_variation_combo(ToolOptionsPanel* panel,
+                                                   const gchar* family,
+                                                   gint weight,
+                                                   gint style) {
+    if (!panel || !panel->text_font_variation_combo || !family || !family[0])
+        return;
+    g_text_panel_syncing++;
+    font_chooser_face_combo_fill(GTK_COMBO_BOX(panel->text_font_variation_combo),
+                                 family);
+    font_chooser_face_combo_select(GTK_COMBO_BOX(panel->text_font_variation_combo),
+                                   weight, style);
+
+    /* Reflect the active variation row on Bold / Italic (handles fallback row & user picks). */
+    GtkComboBox* combo = GTK_COMBO_BOX(panel->text_font_variation_combo);
+    GtkTreeIter iter;
+    if (gtk_combo_box_get_active_iter(combo, &iter)) {
+        GtkTreeModel* model = gtk_combo_box_get_model(combo);
+        gint rw = (gint)PANGO_WEIGHT_NORMAL;
+        gint rs = (gint)PANGO_STYLE_NORMAL;
+        gtk_tree_model_get(model, &iter,
+                           FONT_FACE_COMBO_COL_WEIGHT, &rw,
+                           FONT_FACE_COMBO_COL_STYLE, &rs,
+                           -1);
+        PangoWeight pw = (rw > 0) ? (PangoWeight)rw : PANGO_WEIGHT_NORMAL;
+        tool_opts_sync_style_buttons(panel, pw, (PangoStyle)rs);
+    }
+
+    g_text_panel_syncing--;
+}
+
+static void on_text_font_chooser_changed(FontChooserWidget* chooser,
+                                         const gchar* family,
+                                         gint weight,
+                                         gint style,
+                                         gboolean apply_face,
+                                         gpointer user_data) {
+    (void)chooser;
     if (g_text_panel_syncing)
         return;
     ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+    if (!panel || !family || !family[0])
+        return;
+
     ImageDocument* doc = NULL;
     ImageLayer* img_layer = NULL;
     TextLayer* tl = text_opts_get_context(panel, &doc, &img_layer);
-    if (!tl)
-        return;
 
-    gchar* family = gtk_combo_box_text_get_active_text(GTK_COMBO_BOX_TEXT(combo));
-    if (!family)
-        return;
+    if (tl) {
+        /* Push font family change */
+        gchar* old_family = g_strdup(tl->font_family ? tl->font_family : "");
+        g_free(tl->font_family);
+        tl->font_family = g_strdup(family);
+        TextLayerPropValue before_v, after_v;
+        before_v.string_val = old_family;
+        after_v.string_val = tl->font_family;
+        text_opts_push_prop(doc, img_layer, TEXT_PROP_FONT, &before_v, &after_v);
+        g_free(old_family);
 
-    /* Duplicate old family before freeing so before_v.string_val stays valid
-     * across the call to text_layer_push_property_change (which g_strdup's it). */
-    gchar* old_family = g_strdup(tl->font_family ? tl->font_family : "");
-    g_free(tl->font_family);
-    tl->font_family = family; /* ownership transferred */
-    TextLayerPropValue before_v, after_v;
-    before_v.string_val = old_family;
-    after_v.string_val = family;
-    text_opts_push_prop(doc, img_layer, TEXT_PROP_FONT, &before_v, &after_v);
-    g_free(old_family); /* push_prop g_strdup'd it internally */
-    text_opts_invalidate(panel);
+        /* Face row: apply metrics */
+        if (apply_face) {
+            PangoWeight w =
+                (weight > 0) ? (PangoWeight)weight : PANGO_WEIGHT_NORMAL;
+
+            TextLayerPropValue w_before, w_after;
+            w_before.int_val = tl->font_weight;
+            tl->font_weight = w;
+            w_after.int_val = tl->font_weight;
+            text_opts_push_prop(doc, img_layer, TEXT_PROP_WEIGHT, &w_before, &w_after);
+
+            TextLayerPropValue s_before, s_after;
+            s_before.int_val = (int)tl->font_style;
+            tl->font_style = (PangoStyle)style;
+            s_after.int_val = (int)tl->font_style;
+            text_opts_push_prop(doc, img_layer, TEXT_PROP_STYLE, &s_before, &s_after);
+        }
+    }
+
+    /* Variation combo: always refresh for the chosen family (even without a text layer). */
+    gint combo_w = PANGO_WEIGHT_NORMAL;
+    gint combo_s = (gint)PANGO_STYLE_NORMAL;
+    if (apply_face) {
+        combo_w = (weight > 0) ? weight : PANGO_WEIGHT_NORMAL;
+        combo_s = style;
+    } else if (tl) {
+        combo_w = tl->font_weight;
+        combo_s = (gint)tl->font_style;
+    }
+    tool_opts_schedule_font_variation_refresh(panel, family, combo_w, combo_s);
+
+    /* Bold / Italic toggles match the effective face or current layer metrics */
+    if (apply_face || tl) {
+        PangoWeight eff_w = PANGO_WEIGHT_NORMAL;
+        PangoStyle eff_st = PANGO_STYLE_NORMAL;
+        if (apply_face) {
+            eff_w = (weight > 0) ? (PangoWeight)weight : PANGO_WEIGHT_NORMAL;
+            eff_st = (PangoStyle)style;
+        } else if (tl) {
+            eff_w = tl->font_weight;
+            eff_st = tl->font_style;
+        }
+
+        tool_opts_sync_style_buttons(panel, eff_w, eff_st);
+    }
+
+    if (tl)
+        text_opts_invalidate(panel);
 }
 
 static void on_text_font_size_changed(GtkWidget* spin_widget, gpointer user_data) {
@@ -2340,6 +2475,49 @@ static void on_text_font_size_changed(GtkWidget* spin_widget, gpointer user_data
     text_opts_invalidate(panel);
 }
 
+static void on_text_font_variation_changed(GtkComboBox* combo, gpointer user_data) {
+    if (g_text_panel_syncing)
+        return;
+    ToolOptionsPanel* panel = (ToolOptionsPanel*)user_data;
+
+    GtkTreeIter iter;
+    if (!gtk_combo_box_get_active_iter(combo, &iter))
+        return;
+    GtkTreeModel* model = gtk_combo_box_get_model(combo);
+    gint weight = (gint)PANGO_WEIGHT_NORMAL;
+    gint style = (gint)PANGO_STYLE_NORMAL;
+    gtk_tree_model_get(model, &iter,
+                       FONT_FACE_COMBO_COL_WEIGHT, &weight,
+                       FONT_FACE_COMBO_COL_STYLE, &style,
+                       -1);
+
+    PangoWeight w =
+        (weight > 0) ? (PangoWeight)weight : PANGO_WEIGHT_NORMAL;
+    PangoStyle st = (PangoStyle)style;
+
+    tool_opts_sync_style_buttons(panel, w, st);
+
+    ImageDocument* doc = NULL;
+    ImageLayer* img_layer = NULL;
+    TextLayer* tl = text_opts_get_context(panel, &doc, &img_layer);
+    if (!tl)
+        return;
+
+    TextLayerPropValue w_before, w_after;
+    w_before.int_val = tl->font_weight;
+    tl->font_weight = w;
+    w_after.int_val = tl->font_weight;
+    text_opts_push_prop(doc, img_layer, TEXT_PROP_WEIGHT, &w_before, &w_after);
+
+    TextLayerPropValue s_before, s_after;
+    s_before.int_val = (int)tl->font_style;
+    tl->font_style = st;
+    s_after.int_val = (int)tl->font_style;
+    text_opts_push_prop(doc, img_layer, TEXT_PROP_STYLE, &s_before, &s_after);
+
+    text_opts_invalidate(panel);
+}
+
 static void on_text_bold_toggled(GtkToggleButton* btn, gpointer user_data) {
     if (g_text_panel_syncing)
         return;
@@ -2355,6 +2533,9 @@ static void on_text_bold_toggled(GtkToggleButton* btn, gpointer user_data) {
     after_v.int_val = tl->font_weight;
     text_opts_push_prop(doc, img_layer, TEXT_PROP_WEIGHT, &before_v, &after_v);
     text_opts_invalidate(panel);
+    if (tl->font_family && tl->font_family[0])
+        tool_opts_refresh_font_variation_combo(panel, tl->font_family, tl->font_weight,
+                                               (gint)tl->font_style);
 }
 
 static void on_text_italic_toggled(GtkToggleButton* btn, gpointer user_data) {
@@ -2374,6 +2555,9 @@ static void on_text_italic_toggled(GtkToggleButton* btn, gpointer user_data) {
     after_v.int_val = (int)tl->font_style;
     text_opts_push_prop(doc, img_layer, TEXT_PROP_STYLE, &before_v, &after_v);
     text_opts_invalidate(panel);
+    if (tl->font_family && tl->font_family[0])
+        tool_opts_refresh_font_variation_combo(panel, tl->font_family, tl->font_weight,
+                                               (gint)tl->font_style);
 }
 
 static void on_text_color_clicked(GtkButton* btn, gpointer user_data) {
@@ -2576,29 +2760,19 @@ void tool_options_panel_sync_text_layer(ToolOptionsPanel* panel,
     g_text_panel_syncing++;
 
     /* Font family */
-    if (panel->text_font_family_combo && tl->font_family) {
-        if (!gtk_combo_box_set_active_id(GTK_COMBO_BOX(panel->text_font_family_combo),
-                                         tl->font_family)) {
-            /* Family not in list yet — append it then select */
-            gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(panel->text_font_family_combo),
-                                      tl->font_family, tl->font_family);
-            gtk_combo_box_set_active_id(GTK_COMBO_BOX(panel->text_font_family_combo),
-                                        tl->font_family);
-        }
-    }
+    if (panel->text_font_chooser && tl->font_family)
+        font_chooser_widget_set_family(panel->text_font_chooser, tl->font_family);
+
+    if (tl->font_family && tl->font_family[0])
+        tool_opts_refresh_font_variation_combo(panel, tl->font_family, tl->font_weight,
+                                               (gint)tl->font_style);
+
+    tool_opts_sync_style_buttons(panel, tl->font_weight, tl->font_style);
 
     /* Font size */
     if (panel->text_font_size_spin)
         vertical_spin_button_set_value(VERTICAL_SPIN_BUTTON(panel->text_font_size_spin),
                                        (gdouble)tl->font_size);
-
-    /* Bold / Italic */
-    if (panel->text_bold_button)
-        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->text_bold_button),
-                                     tl->font_weight >= 700);
-    if (panel->text_italic_button)
-        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(panel->text_italic_button),
-                                     tl->font_style != PANGO_STYLE_NORMAL);
 
     /* Color */
     if (panel->text_color_button) {
@@ -2668,7 +2842,8 @@ ToolOptionsPanel* create_tool_options_panel(void) {
     tool_opts_panel->crop_panel = NULL;
     tool_opts_panel->move_panel = NULL;
     tool_opts_panel->text_panel = NULL;
-    tool_opts_panel->text_font_family_combo = NULL;
+    tool_opts_panel->text_font_chooser = NULL;
+    tool_opts_panel->text_font_variation_combo = NULL;
     tool_opts_panel->text_font_size_spin = NULL;
     tool_opts_panel->text_bold_button = NULL;
     tool_opts_panel->text_italic_button = NULL;
@@ -3652,10 +3827,33 @@ ToolOptionsPanel* create_tool_options_panel(void) {
                 gtk_container_add(GTK_CONTAINER(container), tool_opts_panel->text_panel);
 
                 /* Grab widget references */
-                tool_opts_panel->text_font_family_combo =
-                    GTK_WIDGET(gtk_builder_get_object(builder, "text_font_family_combo"));
+                GtkWidget* font_controls_box =
+                    GTK_WIDGET(gtk_builder_get_object(builder, "font_group_controls_box"));
+                tool_opts_panel->text_font_chooser = font_chooser_widget_new();
+                if (font_controls_box && tool_opts_panel->text_font_chooser) {
+                    gtk_box_pack_start(GTK_BOX(font_controls_box),
+                                       tool_opts_panel->text_font_chooser, FALSE, TRUE, 0);
+                    gtk_box_reorder_child(GTK_BOX(font_controls_box),
+                                          tool_opts_panel->text_font_chooser, 0);
+                    gtk_widget_show_all(tool_opts_panel->text_font_chooser);
+                }
+                tool_opts_panel->text_font_variation_combo = font_chooser_face_combo_new();
+                if (font_controls_box && tool_opts_panel->text_font_variation_combo) {
+                    gtk_box_pack_start(GTK_BOX(font_controls_box),
+                                       tool_opts_panel->text_font_variation_combo,
+                                       FALSE, TRUE, 0);
+                    gtk_widget_set_tooltip_text(tool_opts_panel->text_font_variation_combo,
+                                                _("Font style / weight variation"));
+                    gtk_widget_show_all(tool_opts_panel->text_font_variation_combo);
+                }
                 tool_opts_panel->text_font_size_spin = add_vertical_spin_to_box(
                     builder, "text_font_size_adjustment", "font_group_controls_box", 1.0, 0);
+                if (font_controls_box && tool_opts_panel->text_font_size_spin)
+                    gtk_box_reorder_child(GTK_BOX(font_controls_box),
+                                          tool_opts_panel->text_font_size_spin, 2);
+                if (font_controls_box && tool_opts_panel->text_font_variation_combo)
+                    gtk_box_reorder_child(GTK_BOX(font_controls_box),
+                                          tool_opts_panel->text_font_variation_combo, 1);
                 if (tool_opts_panel->text_font_size_spin)
                     gtk_widget_set_tooltip_text(tool_opts_panel->text_font_size_spin, "Font size in points");
                 tool_opts_panel->text_bold_button =
@@ -3690,23 +3888,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
                     gtk_widget_set_tooltip_text(tool_opts_panel->text_rotation_spin,
                                                 "Rotation angle in degrees (−360 to 360)");
 
-                /* Populate font family combo with Pango font families */
-                if (tool_opts_panel->text_font_family_combo) {
-                    PangoFontMap* font_map = pango_cairo_font_map_get_default();
-                    PangoFontFamily** families = NULL;
-                    int n_families = 0;
-                    pango_font_map_list_families(font_map, &families, &n_families);
-                    for (int fi = 0; fi < n_families; fi++) {
-                        const char* name = pango_font_family_get_name(families[fi]);
-                        gtk_combo_box_text_append(
-                            GTK_COMBO_BOX_TEXT(tool_opts_panel->text_font_family_combo),
-                            name, name);
-                    }
-                    g_free(families);
-                    /* Select a sensible default */
-                    gtk_combo_box_set_active_id(
-                        GTK_COMBO_BOX(tool_opts_panel->text_font_family_combo), "Sans");
-                }
+                /* Font chooser is already populated on construction */
 
                 /* Alignment buttons: store their logical alignment value so the
                  * shared handler knows which alignment to apply. */
@@ -3724,9 +3906,13 @@ ToolOptionsPanel* create_tool_options_panel(void) {
                                       "alignment_value", GINT_TO_POINTER(3));
 
                 /* Connect signals */
-                if (tool_opts_panel->text_font_family_combo)
-                    g_signal_connect(tool_opts_panel->text_font_family_combo, "changed",
-                                     G_CALLBACK(on_text_font_family_changed),
+                if (tool_opts_panel->text_font_chooser)
+                    g_signal_connect(tool_opts_panel->text_font_chooser, "font-changed",
+                                     G_CALLBACK(on_text_font_chooser_changed),
+                                     tool_opts_panel);
+                if (tool_opts_panel->text_font_variation_combo)
+                    g_signal_connect(tool_opts_panel->text_font_variation_combo, "changed",
+                                     G_CALLBACK(on_text_font_variation_changed),
                                      tool_opts_panel);
                 if (tool_opts_panel->text_font_size_spin)
                     g_signal_connect(tool_opts_panel->text_font_size_spin, "value-changed",
@@ -3820,7 +4006,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
                 GtkWidget* gradient_opacity_spin = NULL;
                 if (tool_opts_panel->gradient_opacity_scale)
                     gradient_opacity_spin = add_spin_button_to_scale(builder, "gradient_opacity_scale",
-                                                                   "gradient_opacity_box");
+                                                                     "gradient_opacity_box");
                 {
                     GtkWidget* opacity_row = GTK_WIDGET(gtk_builder_get_object(builder, "gradient_opacity_box"));
                     if (opacity_row)

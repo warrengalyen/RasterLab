@@ -1898,6 +1898,8 @@ endif()
 pkg_check_modules(GTK3 REQUIRED gtk+-3.0 gdk-pixbuf-2.0)
 pkg_check_modules(LIBXML2 REQUIRED libxml-2.0)
 pkg_check_modules(LZ4 REQUIRED liblz4)
+pkg_check_modules(FREETYPE2 REQUIRED freetype2)
+pkg_check_modules(FONTCONFIG REQUIRED fontconfig)
 
 # Include directories
 include_directories(${CMAKE_SOURCE_DIR}/include)
@@ -1905,11 +1907,15 @@ include_directories(${CMAKE_SOURCE_DIR}/lib)
 include_directories(${GTK3_INCLUDE_DIRS})
 include_directories(${LIBXML2_INCLUDE_DIRS})
 include_directories(${LZ4_INCLUDE_DIRS})
+include_directories(${FREETYPE2_INCLUDE_DIRS})
+include_directories(${FONTCONFIG_INCLUDE_DIRS})
 
 # Link directories
 link_directories(${GTK3_LIBRARY_DIRS})
 link_directories(${LIBXML2_LIBRARY_DIRS})
 link_directories(${LZ4_LIBRARY_DIRS})
+link_directories(${FREETYPE2_LIBRARY_DIRS})
+link_directories(${FONTCONFIG_LIBRARY_DIRS})
 
 # ---------------------------------------------------------------------------
 # Ocular: static image filter library from git submodule (build lib/ocular/lib only)

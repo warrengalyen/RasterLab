@@ -81,19 +81,6 @@
             <property name="halign">start</property>
             <property name="hexpand">False</property>
             <property name="spacing">4</property>
-            <child>
-              <object class="GtkComboBoxText" id="text_font_family_combo">
-                <property name="width-request">140</property>
-                <property name="visible">True</property>
-                <property name="can-focus">False</property>
-                <property name="tooltip-text" translatable="yes">Font family</property>
-              </object>
-              <packing>
-                <property name="expand">False</property>
-                <property name="fill">True</property>
-                <property name="position">0</property>
-              </packing>
-            </child>
           </object>
           <packing>
             <property name="expand">False</property>

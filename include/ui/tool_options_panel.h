@@ -67,7 +67,7 @@ typedef struct {
     GtkWidget* polygon_curvature_scale;
     GtkWidget* polygon_area_combo;
     GtkWidget* polygon_border_scale;
-    GtkWidget* lasso_select_panel;               /* Lasso select tool options panel (from Glade) */
+    GtkWidget* lasso_select_panel; /* Lasso select tool options panel (from Glade) */
     GtkWidget* lasso_combine_new_button;
     GtkWidget* lasso_combine_add_button;
     GtkWidget* lasso_combine_subtract_button;
@@ -77,7 +77,7 @@ typedef struct {
     GtkWidget* lasso_animate_checkbox;
     GtkWidget* lasso_area_combo;
     GtkWidget* lasso_border_scale;
-    GtkWidget* magic_wand_panel;                 /* Magic wand select tool options panel (from Glade) */
+    GtkWidget* magic_wand_panel; /* Magic wand select tool options panel (from Glade) */
     GtkWidget* magicwand_combine_new_button;
     GtkWidget* magicwand_combine_add_button;
     GtkWidget* magicwand_combine_subtract_button;
@@ -91,7 +91,8 @@ typedef struct {
     GtkWidget* magicwand_global_radio;
     GtkWidget* move_auto_select_checkbox;        /* Auto-select layer checkbox (move tool only) */
     GtkWidget* text_panel;                       /* Text tool options panel (from Glade) */
-    GtkWidget* text_font_family_combo;           /* Font family combo (text tool) */
+    GtkWidget* text_font_chooser;                /* Font chooser widget (text tool) */
+    GtkWidget* text_font_variation_combo;        /* Font face / variation combo (text tool) */
     GtkWidget* text_font_size_spin;              /* Font size spin button (text tool) */
     GtkWidget* text_bold_button;                 /* Bold toggle button (text tool) */
     GtkWidget* text_italic_button;               /* Italic toggle button (text tool) */
@@ -194,4 +195,4 @@ void tool_options_panel_set_color_picker_preview(ToolOptionsPanel* panel,
                                                  gboolean has_color,
                                                  gdouble r, gdouble g, gdouble b, gdouble a);
 
-#endif  /* TOOL_OPTIONS_PANEL_H */
+#endif /* TOOL_OPTIONS_PANEL_H */

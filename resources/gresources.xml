@@ -69,6 +69,9 @@
     <file preprocess="to-pixdata">icons/reset.png</file>
     <file preprocess="to-pixdata">icons/lock.png</file>
     <file preprocess="to-pixdata">icons/unlock.png</file>
+    <!-- Raw PNG: gdk_pixbuf_new_from_resource_at_scale fails on pixdata on some setups -->
+    <file compressed="true">icons/truetype.png</file>
+    <file compressed="true">icons/opentype.png</file>
     <file compressed="true" alias="app-icon">icons/rasterlab-icon.ico</file>
     <file compressed="true">icons/rasterlab-logo.png</file>
     <file>cursors/zoom_cursor.cur</file>
