@@ -308,7 +308,7 @@ gboolean gif_options_dialog_show(GtkWindow* parent, SaveOptions* opts, ImageDocu
     GError*     error   = NULL;
     GtkBuilder* builder = gtk_builder_new();
     ui_utils_builder_set_translation_domain(builder);
-    if (!gtk_builder_add_from_resource(builder, "/ui/gif_options_dialog.glade", &error)) {
+    if (!gtk_builder_add_from_resource(builder, "/ui/dialogs/gif_options_dialog.glade", &error)) {
         debug_log("WRN", "Failed to load gif_options_dialog.glade: %s",
                   error ? error->message : "unknown");
         if (error) g_error_free(error);

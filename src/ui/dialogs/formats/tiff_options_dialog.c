@@ -396,7 +396,7 @@ gboolean tiff_options_dialog_show(GtkWindow* parent, SaveOptions* opts, ImageDoc
     /* Load dialog from Glade resource */
     builder = gtk_builder_new();
     ui_utils_builder_set_translation_domain(builder);
-    if (!gtk_builder_add_from_resource(builder, "/ui/tiff_options_dialog.glade", &error)) {
+    if (!gtk_builder_add_from_resource(builder, "/ui/dialogs/tiff_options_dialog.glade", &error)) {
         debug_log("WRN", "Failed to load tiff_options_dialog.glade: %s", error ? error->message : "Unknown error");
         if (error) {
             g_error_free(error);

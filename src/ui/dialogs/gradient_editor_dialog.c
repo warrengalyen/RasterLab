@@ -10,7 +10,7 @@
 
 /*
  * Gradient Editor dialog  (Tools > Developer > Gradient Editor)
- * Uses layout from resources/ui/gradient_editor_dialog.glade
+ * Uses layout from resources/ui/dialogs/gradient_editor_dialog.glade
  *
  * Collection tab  – scrollable list of gradient swatches read from
  *                   <app_dir>/gradients/  (.ggr, .grd, .rgr, .svg)
@@ -2057,7 +2057,7 @@ void gradient_editor_dialog_show(AppContext* ctx) {
     GtkBuilder* builder = gtk_builder_new();
     ui_utils_builder_set_translation_domain(builder);
     GError* err = NULL;
-    if (!gtk_builder_add_from_resource(builder, "/ui/gradient_editor_dialog.glade", &err)) {
+    if (!gtk_builder_add_from_resource(builder, "/ui/dialogs/gradient_editor_dialog.glade", &err)) {
         debug_log("WRN", "gradient_editor: failed to load glade: %s",
                   err ? err->message : "unknown");
         if (err)

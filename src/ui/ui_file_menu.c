@@ -638,7 +638,7 @@ static gint run_color_lookup_options_dialog(GtkWindow* parent,
 
     builder = gtk_builder_new();
     ui_utils_builder_set_translation_domain(builder);
-    if (!gtk_builder_add_from_resource(builder, "/ui/3dlut_export_dialog.glade", &err)) {
+    if (!gtk_builder_add_from_resource(builder, "/ui/dialogs/3dlut_export_dialog.glade", &err)) {
         debug_log("WRN", "3dlut_export_dialog.glade load failed: %s",
                   err ? err->message : "unknown");
         if (err) g_error_free(err);
@@ -948,7 +948,7 @@ static void on_export_menu_palette(GtkWidget* widget, gpointer user_data) {
     /* ── Step 3: options / preview dialog ───────────────────────── */
     builder = gtk_builder_new();
     ui_utils_builder_set_translation_domain(builder);
-    if (!gtk_builder_add_from_resource(builder, "/ui/palette_export_dialog.glade", &err)) {
+    if (!gtk_builder_add_from_resource(builder, "/ui/dialogs/palette_export_dialog.glade", &err)) {
         debug_log("WRN", "palette_export_dialog.glade load failed: %s",
                   err ? err->message : "unknown");
         if (err) g_error_free(err);

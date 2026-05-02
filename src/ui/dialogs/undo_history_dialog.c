@@ -229,7 +229,7 @@ void undo_history_dialog_show(GtkWindow* parent, ImageDocument* doc) {
     GError* glade_err = NULL;
     GtkBuilder* builder = gtk_builder_new();
     ui_utils_builder_set_translation_domain(builder);
-    if (!gtk_builder_add_from_resource(builder, "/ui/undo_history_dialog.glade", &glade_err)) {
+    if (!gtk_builder_add_from_resource(builder, "/ui/dialogs/undo_history_dialog.glade", &glade_err)) {
         debug_log("WRN", "Failed to load undo_history_dialog.glade: %s",
                   glade_err ? glade_err->message : "Unknown error");
         if (glade_err)

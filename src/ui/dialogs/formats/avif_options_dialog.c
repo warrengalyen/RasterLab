@@ -46,7 +46,7 @@ gboolean avif_options_dialog_show(GtkWindow* parent, SaveOptions* opts, ImageDoc
 
     builder = gtk_builder_new();
     ui_utils_builder_set_translation_domain(builder);
-    if (!gtk_builder_add_from_resource(builder, "/ui/avif_options_dialog.glade", &error)) {
+    if (!gtk_builder_add_from_resource(builder, "/ui/dialogs/avif_options_dialog.glade", &error)) {
         debug_log("WRN", "Failed to load avif_options_dialog.glade: %s", error ? error->message : "Unknown error");
         if (error) {
             g_error_free(error);

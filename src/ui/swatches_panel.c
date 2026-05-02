@@ -485,7 +485,7 @@ GtkWidget* swatches_panel_create(AppContext* ctx) {
     GtkWidget* swatches_panel = NULL;
     GError* error = NULL;
 
-    if (gtk_builder_add_from_resource(swatches_builder, "/ui/swatches_panel.glade", &error)) {
+    if (gtk_builder_add_from_resource(swatches_builder, "/ui/panels/swatches_panel.glade", &error)) {
         swatches_panel = GTK_WIDGET(gtk_builder_get_object(swatches_builder, "swatches_panel"));
         if (swatches_panel) {
             /* Keep builder alive by storing it on the widget as object data */

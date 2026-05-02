@@ -964,7 +964,7 @@ LayersPanel* create_layers_panel(AppContext* ctx) {
     /* Load the Glade file from resources */
     builder = gtk_builder_new();
     ui_utils_builder_set_translation_domain(builder);
-    if (!gtk_builder_add_from_resource(builder, "/ui/layers_panel.glade", &error)) {
+    if (!gtk_builder_add_from_resource(builder, "/ui/panels/layers_panel.glade", &error)) {
         debug_log("WRN", "Failed to load layers_panel.glade: %s", error->message);
         g_error_free(error);
         g_object_unref(builder);

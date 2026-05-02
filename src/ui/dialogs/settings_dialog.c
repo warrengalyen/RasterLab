@@ -11,7 +11,7 @@
 #include "debug_logger.h"
 /*
  * Settings dialog 
- * Uses layout from resources/ui/settings_dialog.glade
+ * Uses layout from resources/ui/dialogs/settings_dialog.glade
  */
 #include "ui/dialogs/settings_dialog.h"
 #include "app/autosave.h"
@@ -617,7 +617,7 @@ void settings_dialog_show(AppContext* ctx) {
     GError* error = NULL;
     GtkBuilder* builder = gtk_builder_new();
     ui_utils_builder_set_translation_domain(builder);
-    if (!gtk_builder_add_from_resource(builder, "/ui/settings_dialog.glade", &error)) {
+    if (!gtk_builder_add_from_resource(builder, "/ui/dialogs/settings_dialog.glade", &error)) {
         debug_log("WRN", "Failed to load settings_dialog.glade: %s", error ? error->message : "Unknown error");
         if (error) {
             g_error_free(error);

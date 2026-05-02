@@ -2923,7 +2923,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
     /* Load brush panel from Glade */
     GtkWidget *brush_title = NULL, *brush_size = NULL, *brush_opacity = NULL, *brush_hardness = NULL, *brush_flow = NULL, *brush_spacing = NULL;
     tool_opts_panel->brush_panel = load_panel_from_glade(
-        "/ui/brush_options.glade", "brush_options_panel",
+        "/ui/tools/brush_options.glade", "brush_options_panel",
         &brush_title,
         &brush_size,
         &brush_opacity,
@@ -2956,7 +2956,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
     /* Load eraser panel from Glade (but don't show it yet) */
     GtkWidget *eraser_title = NULL, *eraser_size = NULL, *eraser_opacity = NULL, *eraser_hardness = NULL, *eraser_flow = NULL, *eraser_spacing = NULL;
     tool_opts_panel->eraser_panel = load_panel_from_glade(
-        "/ui/eraser_options.glade", "eraser_options_panel",
+        "/ui/tools/eraser_options.glade", "eraser_options_panel",
         &eraser_title,
         &eraser_size,
         &eraser_opacity,
@@ -3005,7 +3005,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
     GtkWidget* pencil_align_pixel_grid = NULL;
     ToolOptions* pencil_opts = tool_options_get_for_tool(TOOL_PENCIL);
 
-    if (gtk_builder_add_from_resource(pencil_builder, "/ui/pencil_options.glade", &pencil_error)) {
+    if (gtk_builder_add_from_resource(pencil_builder, "/ui/tools/pencil_options.glade", &pencil_error)) {
         tool_opts_panel->pencil_panel = GTK_WIDGET(gtk_builder_get_object(pencil_builder, "pencil_options_panel"));
         if (tool_opts_panel->pencil_panel) {
             gtk_container_add(GTK_CONTAINER(container), tool_opts_panel->pencil_panel);
@@ -3083,7 +3083,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
     GtkWidget* paintbucket_compare = NULL;
     ToolOptions* paintbucket_opts = tool_options_get_for_tool(TOOL_PAINT_BUCKET);
 
-    if (gtk_builder_add_from_resource(paintbucket_builder, "/ui/paintbucket_options.glade", &paintbucket_error)) {
+    if (gtk_builder_add_from_resource(paintbucket_builder, "/ui/tools/paintbucket_options.glade", &paintbucket_error)) {
         tool_opts_panel->paintbucket_panel = GTK_WIDGET(gtk_builder_get_object(paintbucket_builder, "paintbucket_options_panel"));
         if (tool_opts_panel->paintbucket_panel) {
             gtk_container_add(GTK_CONTAINER(container), tool_opts_panel->paintbucket_panel);
@@ -3171,7 +3171,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
     GtkWidget* color_draw = NULL;
     ToolOptions* color_picker_opts = tool_options_get_for_tool(TOOL_COLOR_PICKER);
 
-    if (gtk_builder_add_from_resource(color_picker_builder, "/ui/color_picker_options.glade", &color_picker_error)) {
+    if (gtk_builder_add_from_resource(color_picker_builder, "/ui/tools/color_picker_options.glade", &color_picker_error)) {
         tool_opts_panel->color_picker_panel = GTK_WIDGET(gtk_builder_get_object(color_picker_builder, "color_picker_options_panel"));
         if (tool_opts_panel->color_picker_panel) {
             gtk_container_add(GTK_CONTAINER(container), tool_opts_panel->color_picker_panel);
@@ -3235,7 +3235,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
     GtkWidget* rect_select_smooth = NULL;
     GtkWidget* rect_select_feather = NULL;
 
-    if (gtk_builder_add_from_resource(rect_select_builder, "/ui/rect_select_options.glade", &rect_select_error)) {
+    if (gtk_builder_add_from_resource(rect_select_builder, "/ui/tools/rect_select_options.glade", &rect_select_error)) {
         tool_opts_panel->rect_select_panel = GTK_WIDGET(gtk_builder_get_object(rect_select_builder, "rect_select_options_panel"));
         if (tool_opts_panel->rect_select_panel) {
             gtk_container_add(GTK_CONTAINER(container), tool_opts_panel->rect_select_panel);
@@ -3328,7 +3328,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
     GtkWidget* ellipse_select_smooth = NULL;
     GtkWidget* ellipse_select_feather = NULL;
 
-    if (gtk_builder_add_from_resource(ellipse_select_builder, "/ui/elliptical_select_options.glade", &ellipse_select_error)) {
+    if (gtk_builder_add_from_resource(ellipse_select_builder, "/ui/tools/elliptical_select_options.glade", &ellipse_select_error)) {
         tool_opts_panel->ellipse_select_panel = GTK_WIDGET(gtk_builder_get_object(ellipse_select_builder, "elliptical_select_options_panel"));
         if (tool_opts_panel->ellipse_select_panel) {
             gtk_container_add(GTK_CONTAINER(container), tool_opts_panel->ellipse_select_panel);
@@ -3413,7 +3413,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
     GtkBuilder* polygon_select_builder = gtk_builder_new();
     ui_utils_builder_set_translation_domain(polygon_select_builder);
     GError* polygon_select_error = NULL;
-    if (gtk_builder_add_from_resource(polygon_select_builder, "/ui/polygon_select_options.glade", &polygon_select_error)) {
+    if (gtk_builder_add_from_resource(polygon_select_builder, "/ui/tools/polygon_select_options.glade", &polygon_select_error)) {
         tool_opts_panel->polygon_select_panel = GTK_WIDGET(gtk_builder_get_object(polygon_select_builder, "polygon_select_options_panel"));
         if (tool_opts_panel->polygon_select_panel) {
             gtk_container_add(GTK_CONTAINER(container), tool_opts_panel->polygon_select_panel);
@@ -3480,7 +3480,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
     GtkBuilder* lasso_select_builder = gtk_builder_new();
     ui_utils_builder_set_translation_domain(lasso_select_builder);
     GError* lasso_select_error = NULL;
-    if (gtk_builder_add_from_resource(lasso_select_builder, "/ui/lasso_select_options.glade", &lasso_select_error)) {
+    if (gtk_builder_add_from_resource(lasso_select_builder, "/ui/tools/lasso_select_options.glade", &lasso_select_error)) {
         tool_opts_panel->lasso_select_panel = GTK_WIDGET(gtk_builder_get_object(lasso_select_builder, "lasso_select_options_panel"));
         if (tool_opts_panel->lasso_select_panel) {
             gtk_container_add(GTK_CONTAINER(container), tool_opts_panel->lasso_select_panel);
@@ -3544,7 +3544,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
     ui_utils_builder_set_translation_domain(magic_wand_builder);
     GError* magic_wand_error = NULL;
     ToolOptions* magicwand_opts = tool_options_get_for_tool(TOOL_MAGIC_WAND);
-    if (gtk_builder_add_from_resource(magic_wand_builder, "/ui/magic_wand_select_options.glade", &magic_wand_error)) {
+    if (gtk_builder_add_from_resource(magic_wand_builder, "/ui/tools/magic_wand_select_options.glade", &magic_wand_error)) {
         tool_opts_panel->magic_wand_panel = GTK_WIDGET(gtk_builder_get_object(magic_wand_builder, "magicwand_select_options_panel"));
         if (tool_opts_panel->magic_wand_panel) {
             gtk_container_add(GTK_CONTAINER(container), tool_opts_panel->magic_wand_panel);
@@ -3656,7 +3656,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
     GtkWidget* crop_apply_btn = NULL;
     ToolOptions* crop_opts = tool_options_get_for_tool(TOOL_CROP);
 
-    if (gtk_builder_add_from_resource(crop_builder, "/ui/crop_options.glade", &crop_error)) {
+    if (gtk_builder_add_from_resource(crop_builder, "/ui/tools/crop_options.glade", &crop_error)) {
         tool_opts_panel->crop_panel = GTK_WIDGET(gtk_builder_get_object(crop_builder, "crop_options_panel"));
         if (tool_opts_panel->crop_panel) {
             gtk_container_add(GTK_CONTAINER(container), tool_opts_panel->crop_panel);
@@ -3774,7 +3774,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
     GtkWidget* move_auto_select = NULL;
     ToolOptions* move_opts = tool_options_get_for_tool(TOOL_MOVE);
 
-    if (gtk_builder_add_from_resource(move_builder, "/ui/move_options.glade", &move_error)) {
+    if (gtk_builder_add_from_resource(move_builder, "/ui/tools/move_options.glade", &move_error)) {
         tool_opts_panel->move_panel = GTK_WIDGET(gtk_builder_get_object(move_builder, "move_options_panel"));
         if (tool_opts_panel->move_panel) {
             gtk_container_add(GTK_CONTAINER(container), tool_opts_panel->move_panel);
@@ -3819,7 +3819,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
         GtkBuilder* builder = gtk_builder_new();
         ui_utils_builder_set_translation_domain(builder);
         GError* err = NULL;
-        if (gtk_builder_add_from_resource(builder, "/ui/text_options.glade", &err)) {
+        if (gtk_builder_add_from_resource(builder, "/ui/tools/text_options.glade", &err)) {
             tool_opts_panel->text_panel =
                 GTK_WIDGET(gtk_builder_get_object(builder, "text_options_panel"));
 
@@ -3977,7 +3977,7 @@ ToolOptionsPanel* create_tool_options_panel(void) {
         GtkBuilder* builder = gtk_builder_new();
         ui_utils_builder_set_translation_domain(builder);
         GError* err = NULL;
-        if (gtk_builder_add_from_resource(builder, "/ui/gradient_options.glade", &err)) {
+        if (gtk_builder_add_from_resource(builder, "/ui/tools/gradient_options.glade", &err)) {
             tool_opts_panel->gradient_panel =
                 GTK_WIDGET(gtk_builder_get_object(builder, "gradient_options_panel"));
 

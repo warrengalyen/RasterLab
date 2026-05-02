@@ -346,7 +346,7 @@ Lut3dDialog* lut3d_dialog_new(const gchar* title, const gchar* app_dir) {
     /* ---- Load right-panel layout from glade -------------------------------- */
     builder = gtk_builder_new();
     ui_utils_builder_set_translation_domain(builder);
-    if (!gtk_builder_add_from_resource(builder, "/ui/color_lookup_dialog.glade", &err)) {
+    if (!gtk_builder_add_from_resource(builder, "/ui/dialogs/color_lookup_dialog.glade", &err)) {
         debug_log("WRN", "lut3d_dialog: failed to load glade: %s",
                   err ? err->message : "unknown");
         if (err)

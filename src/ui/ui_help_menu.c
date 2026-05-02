@@ -125,7 +125,7 @@ static void on_help_about_activate(GtkMenuItem* item, gpointer user_data) {
     GtkBuilder* builder = gtk_builder_new();
     ui_utils_builder_set_translation_domain(builder);
     GError* error = NULL;
-    if (!gtk_builder_add_from_resource(builder, "/ui/about_dialog.glade", &error)) {
+    if (!gtk_builder_add_from_resource(builder, "/ui/dialogs/about_dialog.glade", &error)) {
         debug_log("WRN", "Failed to load about_dialog.glade: %s", error ? error->message : "Unknown error");
         if (error) {
             g_error_free(error);
