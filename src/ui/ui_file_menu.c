@@ -28,6 +28,7 @@
 #include "ui/dialogs/save_options_dialog.h"
 #include "ui/layers_panel.h"
 #include "ui/swatches.h"
+#include "ui/ui_edit_menu.h"
 #include "ui/ui_utils.h"
 #include "i18n.h"
 #include <glib.h>
@@ -1373,6 +1374,11 @@ void ui_file_menu_update_sensitivity(AppContext* ctx) {
     if (ctx->file_menu_new && GTK_IS_WIDGET(ctx->file_menu_new)) {
         gtk_widget_set_sensitive(ctx->file_menu_new, TRUE);
     }
+    if (ctx->file_menu_import_clipboard && GTK_IS_WIDGET(ctx->file_menu_import_clipboard)) {
+        GtkClipboard* clip = gtk_clipboard_get(GDK_SELECTION_CLIPBOARD);
+        gboolean clipboard_has_image = clip && gtk_clipboard_wait_is_image_available(clip);
+        gtk_widget_set_sensitive(ctx->file_menu_import_clipboard, clipboard_has_image);
+    }
     if (ctx->file_menu_open && GTK_IS_WIDGET(ctx->file_menu_open)) {
         gtk_widget_set_sensitive(ctx->file_menu_open, TRUE);
     }
@@ -1563,6 +1569,8 @@ void ui_file_menu_setup(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* acc
 
     /* Connect File menu signals */
     ctx->file_menu_new = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_new"));
+    ctx->file_menu_import = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_import"));
+    ctx->file_menu_import_clipboard = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_import_clipboard"));
     ctx->file_menu_open = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_open"));
     ctx->file_menu_open_recent = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_open_recent"));
     ctx->file_menu_save = GTK_WIDGET(gtk_builder_get_object(builder, "file_menu_save"));
@@ -1580,6 +1588,11 @@ void ui_file_menu_setup(GtkBuilder* builder, AppContext* ctx, GtkAccelGroup* acc
         g_signal_connect(ctx->file_menu_new, "activate", G_CALLBACK(on_file_new), ctx);
         gtk_widget_add_accelerator(ctx->file_menu_new, "activate", accel_group,
                                    GDK_KEY_n, GDK_CONTROL_MASK, GTK_ACCEL_VISIBLE);
+    }
+
+    if (ctx->file_menu_import_clipboard) {
+        g_signal_connect(ctx->file_menu_import_clipboard, "activate",
+                         G_CALLBACK(on_edit_paste_new_image), ctx);
     }
 
     if (ctx->file_menu_open) {

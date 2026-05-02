@@ -994,6 +994,44 @@
       </object>
     </child>
     <child>
+      <object class="GtkMenuItem" id="file_menu_import">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="label" translatable="yes">Import</property>
+        <property name="use-underline">True</property>
+        <child type="submenu">
+          <object class="GtkMenu">
+            <property name="visible">True</property>
+            <property name="can-focus">False</property>
+            <child>
+              <object class="GtkMenuItem" id="file_menu_import_clipboard">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">From Clipboard</property>
+                <property name="use-underline">True</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkMenuItem" id="file_menu_import_scanner">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">Scanner/Camera...</property>
+                <property name="use-underline">True</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkMenuItem" id="file_menu_import_screenshot">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">Screenshot</property>
+                <property name="use-underline">True</property>
+              </object>
+            </child>
+          </object>
+        </child>
+      </object>
+    </child>
+    <child>
       <object class="GtkMenuItem" id="file_menu_open">
         <property name="visible">True</property>
         <property name="can-focus">False</property>
@@ -1060,7 +1098,7 @@
                 <property name="use-underline">True</property>
               </object>
             </child>
-             <child>
+            <child>
               <object class="GtkMenuItem" id="export_menu_color_profile">
                 <property name="visible">True</property>
                 <property name="can-focus">False</property>

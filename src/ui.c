@@ -412,6 +412,8 @@ AppContext* ui_create_main_window(Settings* initial_settings) {
     ctx->image_menu_merge_visible = NULL;
     ctx->image_menu_flatten = NULL;
     ctx->file_menu_new = NULL;
+    ctx->file_menu_import = NULL;
+    ctx->file_menu_import_clipboard = NULL;
     ctx->file_menu_open = NULL;
     ctx->file_menu_open_recent = NULL;
     ctx->file_menu_save = NULL;

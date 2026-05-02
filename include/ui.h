@@ -93,6 +93,8 @@ struct _AppContext {
     GtkWidget* image_menu_merge_visible;
     GtkWidget* image_menu_flatten;
     GtkWidget* file_menu_new;
+    GtkWidget* file_menu_import;           /* File > Import (submenu parent) */
+    GtkWidget* file_menu_import_clipboard; /* File > Import > From Clipboard */
     GtkWidget* file_menu_open;
     GtkWidget* file_menu_open_recent;
     GtkWidget* file_menu_save;
