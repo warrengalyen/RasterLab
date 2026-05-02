@@ -32,6 +32,12 @@ struct _FontChooserWidgetClass {
 GType font_chooser_widget_get_type(void) G_GNUC_CONST;
 
 /**
+ * Install CLI filtering for harmless Pango font-probe warnings (Fontconfig synthetic names).
+ * Call once after gtk_init(); uses GLib's log writer so messages reach stderr on modern GLib.
+ */
+void font_chooser_install_font_probe_log_suppression(void);
+
+/**
  * Create a new font chooser widget.
  * The widget presents a button that opens a popover with an expandable
  * font family tree (families as roots, faces as children), a font preview

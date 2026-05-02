@@ -21,6 +21,7 @@
 #include "render/render_utils.h"
 #include "test_widgets.h"
 #include "ui.h"
+#include "ui/widgets/font_chooser_widget.h"
 #include "ui/swatches.h"
 #include "ui/ui_tools_menu.h"
 #include <cairo.h>
@@ -91,6 +92,9 @@ int main(int argc, char* argv[]) {
 
     /* Initialize GTK */
     gtk_init(&argc, &argv);
+
+    /* Pango logs font probe failures via GLib's writer (stderr); not the legacy default handler. */
+    font_chooser_install_font_probe_log_suppression();
 
     /* After GTK init: bind catalog + LANGUAGE from settings (must run before any UI gettext). */
     i18n_apply_locale(app_dir, settings_get_interface_locale(settings));

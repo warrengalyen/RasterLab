@@ -44,7 +44,73 @@ enum {
 
 static guint font_chooser_signals[NUM_SIGNALS] = {0};
 
-/* Fontconfig synthetic face names trigger harmless Pango probe warnings on Windows/MSYS2. */
+/* Fontconfig synthetic / probe faces trigger harmless Pango warnings during font enumeration. */
+static gboolean font_chooser_suppress_pango_font_probe_warning(const gchar* message) {
+    if (!message)
+        return FALSE;
+    /* Typical CLI line: couldn't load font "Wide Latin Not-Rotated 14", falling back to ... */
+    if (strstr(message, "couldn't load font") != NULL)
+        return TRUE;
+    if (strstr(message, "could not load font") != NULL)
+        return TRUE;
+    if (strstr(message, "Could not load font") != NULL)
+        return TRUE;
+    return FALSE;
+}
+
+#if GLIB_CHECK_VERSION(2, 50, 0)
+
+static gboolean font_chooser_suppress_pango_font_probe_warning_sized(const gchar* message,
+                                                                     gssize msg_len) {
+    if (!message)
+        return FALSE;
+    if (msg_len < 0)
+        return font_chooser_suppress_pango_font_probe_warning(message);
+    gchar* tmp = g_strndup(message, (gsize)msg_len);
+    gboolean hit = font_chooser_suppress_pango_font_probe_warning(tmp);
+    g_free(tmp);
+    return hit;
+}
+
+static GLogWriterOutput font_chooser_font_probe_log_writer(GLogLevelFlags log_level,
+                                                         const GLogField* fields,
+                                                         gsize n_fields,
+                                                         gpointer user_data) {
+    (void)user_data;
+
+    if ((log_level & G_LOG_LEVEL_MASK) != G_LOG_LEVEL_WARNING)
+        return g_log_writer_default(log_level, fields, n_fields, user_data);
+
+    const gchar* domain = NULL;
+    const gchar* message = NULL;
+    gssize msg_len = -1;
+
+    for (gsize i = 0; i < n_fields; i++) {
+        if (strcmp(fields[i].key, "GLIB_DOMAIN") == 0 && fields[i].value)
+            domain = fields[i].value;
+        else if (strcmp(fields[i].key, "MESSAGE") == 0 && fields[i].value) {
+            message = fields[i].value;
+            msg_len = fields[i].length;
+        }
+    }
+
+    if (domain && g_str_equal(domain, "Pango") &&
+        font_chooser_suppress_pango_font_probe_warning_sized(message, msg_len))
+        return G_LOG_WRITER_HANDLED;
+
+    return g_log_writer_default(log_level, fields, n_fields, user_data);
+}
+
+void font_chooser_install_font_probe_log_suppression(void) {
+    static gboolean installed;
+    if (installed)
+        return;
+    installed = TRUE;
+    g_log_set_writer_func(font_chooser_font_probe_log_writer, NULL, NULL);
+}
+
+#else /* GLib < 2.50: structured writer unavailable */
+
 static GLogFunc font_chooser_prev_default_log_handler;
 
 static void font_chooser_default_log_filter(const gchar* log_domain, GLogLevelFlags log_level,
@@ -52,14 +118,24 @@ static void font_chooser_default_log_filter(const gchar* log_domain, GLogLevelFl
     (void)user_data;
     if (log_domain && g_str_equal(log_domain, "Pango") && message &&
         (log_level & G_LOG_LEVEL_MASK) == G_LOG_LEVEL_WARNING &&
-        strstr(message, "couldn't load font") != NULL &&
-        strstr(message, "Not-Rotated") != NULL)
+        font_chooser_suppress_pango_font_probe_warning(message))
         return;
     if (font_chooser_prev_default_log_handler)
         font_chooser_prev_default_log_handler(log_domain, log_level, message, NULL);
     else
         g_log_default_handler(log_domain, log_level, message, NULL);
 }
+
+void font_chooser_install_font_probe_log_suppression(void) {
+    static gboolean installed;
+    if (installed)
+        return;
+    installed = TRUE;
+    font_chooser_prev_default_log_handler =
+        g_log_set_default_handler(font_chooser_default_log_filter, NULL);
+}
+
+#endif /* GLIB_CHECK_VERSION(2, 50, 0) */
 
 struct _FontChooserWidget {
     GtkBox parent;
@@ -480,13 +556,6 @@ static gchar* resolve_font_path(const gchar* family, int weight, int slant) {
 static void font_chooser_widget_class_init(FontChooserWidgetClass* klass) {
     GObjectClass* obj_class = G_OBJECT_CLASS(klass);
     obj_class->finalize = font_chooser_widget_finalize;
-
-    static gboolean log_filter_installed;
-    if (!log_filter_installed) {
-        font_chooser_prev_default_log_handler =
-            g_log_set_default_handler(font_chooser_default_log_filter, NULL);
-        log_filter_installed = TRUE;
-    }
 
     /*
      * Marshaller must match parameters; NULL marshaller breaks INTEGER args on
