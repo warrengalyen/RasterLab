@@ -578,6 +578,7 @@ static void on_file_revert(GtkMenuItem* menu_item, gpointer user_data) {
     document_mark_saved(doc);
     autosave_mark_saved(doc);
 
+    ui_update_document_tab_label(ctx, doc);
     ui_update_window_title(ctx, doc);
     ui_update_status_bar(ctx, doc);
     ui_update_status_bar_message(ctx, _("Reverted to saved file"));
@@ -1849,6 +1850,7 @@ void on_file_save(GtkWidget* widget, gpointer data) {
         document_mark_saved(doc);
 
         /* Update window title and status bar */
+        ui_update_document_tab_label(ctx, doc);
         ui_update_window_title(ctx, NULL);
         ui_update_status_bar(ctx, NULL);
         ui_update_status_bar_message(ctx, _("Image successfully saved"));

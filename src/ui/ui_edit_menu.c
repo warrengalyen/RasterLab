@@ -1362,11 +1362,11 @@ void on_edit_paste_new_image(GtkWidget* widget, gpointer data) {
         layers_panel_update(layers_panel, new_doc);
     }
 
-    /* Mark document as modified */
-    new_doc->modified = TRUE;
+    document_set_modified(new_doc, TRUE);
 
     /* Update UI state */
     ui_update_menu_and_button_states(ctx);
+    ui_update_document_tab_label(ctx, new_doc);
     ui_update_window_title(ctx, NULL);
     ui_update_status_bar(ctx, NULL);
 }

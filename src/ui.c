@@ -1130,9 +1130,11 @@ void ui_update_document_tab_label(AppContext* ctx, ImageDocument* doc) {
         }
 
         if (tab_label && GTK_IS_LABEL(tab_label)) {
-            /* Update the label text */
+            /* Match window title: asterisk when document has unsaved changes */
             const gchar* filename = doc->filename ? doc->filename : _("Untitled");
-            gtk_label_set_text(GTK_LABEL(tab_label), filename);
+            gchar* tab_text = g_strdup_printf("%s%s", filename, doc->modified ? "*" : "");
+            gtk_label_set_text(GTK_LABEL(tab_label), tab_text);
+            g_free(tab_text);
         }
 
         g_list_free(children);
