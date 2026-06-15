@@ -93,6 +93,7 @@ set(SOURCES
     plugins/plugin_fits.c
     plugins/plugin_dicom.c
     plugins/plugin_exr.c
+    plugins/plugin_raw.c
     plugins/plugin_jxl.c
     plugins/plugin_webp.c
     plugins/plugin_heic.c
@@ -400,7 +401,9 @@ if(GLFW_FOUND AND GLFW_TARGET AND TARGET ${GLFW_TARGET})
     target_link_libraries(rasterlab ${GLFW_TARGET})
     target_compile_definitions(rasterlab PRIVATE HAVE_GLFW=1)
     if(WIN32)
-        target_link_libraries(rasterlab opengl32)
+        # gdi32 provides ChoosePixelFormat/SetPixelFormat/DescribePixelFormat/SwapBuffers/CreateDCW etc.
+        # GCC 16 on MinGW no longer auto-links gdi32; must be explicit.
+        target_link_libraries(rasterlab opengl32 gdi32)
     else()
         # On Linux, link against GL
         find_package(OpenGL)
@@ -684,6 +687,7 @@ endif()
 
 # Link OpenEXR if available (for EXR/HDR support)
 if(OPENEXR_FOUND)
+    set(CMAKE_CXX_STANDARD_LIBRARIES "-lstdc++")
     if(OPENEXR_TARGET AND TARGET ${OPENEXR_TARGET})
         get_target_property(OPENEXR_INCLUDE_DIRS ${OPENEXR_TARGET} INTERFACE_INCLUDE_DIRECTORIES)
         if(OPENEXR_INCLUDE_DIRS)
@@ -705,6 +709,21 @@ if(OPENEXR_FOUND)
     target_compile_definitions(rasterlab PRIVATE HAVE_OPENEXR=1)
 else()
     target_compile_definitions(rasterlab PRIVATE HAVE_OPENEXR=0)
+endif()
+
+# Link LibRaw if available (for camera RAW support)
+if(LIBRAW_FOUND)
+    if(LIBRAW_TARGET AND TARGET ${LIBRAW_TARGET})
+        target_link_libraries(rasterlab ${LIBRAW_TARGET})
+        message(STATUS "Linking against LibRaw static target: ${LIBRAW_TARGET}")
+    elseif(LIBRAW_LIBRARIES)
+        target_link_libraries(rasterlab ${LIBRAW_LIBRARIES})
+        target_compile_options(rasterlab PRIVATE ${LIBRAW_CFLAGS_OTHER})
+        message(STATUS "Linking against system LibRaw: ${LIBRAW_LIBRARIES}")
+    endif()
+    target_compile_definitions(rasterlab PRIVATE HAVE_LIBRAW=1)
+else()
+    target_compile_definitions(rasterlab PRIVATE HAVE_LIBRAW=0)
 endif()
 
 # Link Little CMS (lcms2) if available — used by color_manager module

@@ -40,6 +40,9 @@
 #ifdef HAVE_OPENEXR
 #include "plugins/plugin_exr.h"
 #endif
+#ifdef HAVE_LIBRAW
+#include "plugins/plugin_raw.h"
+#endif
 #include "debug_logger.h"
 #include <glib.h>
 
@@ -74,6 +77,9 @@ void builtin_plugins_register(void) {
     ImageFormatPlugin exr_plugin;
     ImageFormatPlugin gif_plugin;
     ImageFormatPlugin rli_plugin;
+#ifdef HAVE_LIBRAW
+    ImageFormatPlugin raw_plugin;
+#endif
 
     /* Register GIF plugin */
     debug_log("DBG", "Registering built-in GIF plugin");
@@ -407,6 +413,22 @@ void builtin_plugins_register(void) {
     }
 #else
     debug_log("DBG", "EXR plugin not available (HAVE_OPENEXR not defined)");
+#endif
+
+    /* Register camera RAW plugin (LibRaw — statically linked, no DLL check) */
+#ifdef HAVE_LIBRAW
+    debug_log("DBG", "Registering built-in Camera RAW plugin (LibRaw)");
+    if (plugin_init_raw(host_api, &raw_plugin)) {
+        if (format_registry_register_builtin(&raw_plugin)) {
+            debug_log("DBG", "Successfully registered Camera RAW plugin");
+        } else {
+            debug_log("ERR", "Failed to register Camera RAW plugin with format registry");
+        }
+    } else {
+        debug_log("ERR", "Failed to initialize Camera RAW plugin");
+    }
+#else
+    debug_log("DBG", "Camera RAW plugin not available (HAVE_LIBRAW not defined)");
 #endif
 
     g_free(app_dir);

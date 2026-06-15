@@ -1418,6 +1418,13 @@ if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/openexr/CMakeLists
         -DOPENEXR_FORCE_INTERNAL_DEFLATE=ON
         -DOPENEXR_FORCE_INTERNAL_OPENJPH=ON
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+        # GCC 16 changed the default C++ standard to one that generates C4 (unified) constructor
+        # calls for std::string. OpenEXR sets CXX_STANDARD=17 on the shared library target but
+        # NOT on the intermediate OBJECT libraries that do the actual compilation, so the flag is
+        # silently lost. Setting CMAKE_CXX_STANDARD globally ensures ALL targets (including object
+        # libraries) compile with C++17, where GCC emits C1 calls that match the installed libstdc++.
+        -DCMAKE_CXX_STANDARD=17
+        -DCMAKE_CXX_STANDARD_REQUIRED=ON
     )
     unset(_openexr_bt)
 
@@ -1428,6 +1435,12 @@ if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/openexr/CMakeLists
     # OpenEXRCoreTest links internal C APIs (internal_huf_*, exrcore_ensure_*) that are
     # not exported from OpenEXRCore.dll on PE/MinGW; skip upstream library tests only.
     if(MINGW)
+        # GCC 16 MinGW does not recognise the 'evex512' target function attribute used by
+        # libdeflate's AVX-512 VNNI adler32 and VPCLMULQDQ crc32 implementations.
+        # These defines skip those code paths; deflate still uses AVX2-VNNI and SSE paths.
+        list(APPEND OPENEXR_CMAKE_ARGS
+            "-DCMAKE_C_FLAGS=-DLIBDEFLATE_ASSEMBLER_DOES_NOT_SUPPORT_AVX512VNNI -DLIBDEFLATE_ASSEMBLER_DOES_NOT_SUPPORT_VPCLMULQDQ"
+        )
         if(RASTERLAB_OPENEXR_SMALL)
             # --export-all-symbols: required for C++ templates on MinGW; -s strips debug/syms from DLLs
             list(APPEND OPENEXR_CMAKE_ARGS
@@ -1945,6 +1958,30 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/lib/glfw/CMakeLists.txt")
     message(STATUS "GLFW configured as static library")
 else()
     message(STATUS "GLFW not found in lib/glfw")
+endif()
+
+# ---------------------------------------------------------------------------
+# LibRaw: camera RAW file support (static, no DLL required at runtime)
+# ---------------------------------------------------------------------------
+set(LIBRAW_FOUND FALSE)
+set(LIBRAW_TARGET "")
+if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/libraw/libraw/libraw.h")
+    message(STATUS "LibRaw submodule found, building static library")
+    add_subdirectory("${CMAKE_SOURCE_DIR}/lib/libraw" "${CMAKE_BINARY_DIR}/libraw")
+    set(LIBRAW_FOUND TRUE)
+    set(LIBRAW_TARGET raw_static)
+    message(STATUS "LibRaw configured as static library (raw_static)")
+else()
+    if(NOT RASTERLAB_APP_ONLY AND NOT EXISTS "${CMAKE_SOURCE_DIR}/lib/libraw/libraw/libraw.h")
+        message(STATUS "LibRaw submodule not initialised; trying pkg-config libraw")
+    endif()
+    pkg_check_modules(LIBRAW libraw)
+    if(LIBRAW_FOUND)
+        include_directories(${LIBRAW_INCLUDE_DIRS})
+        message(STATUS "Using system LibRaw: ${LIBRAW_LIBRARIES}")
+    else()
+        message(STATUS "LibRaw not available - camera RAW plugin disabled")
+    endif()
 endif()
 
 # Add subdirectories

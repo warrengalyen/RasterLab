@@ -9,10 +9,10 @@
  */
 
 #include "i18n.h"
+#include "debug_logger.h"
 #include <glib.h>
 #include <stdlib.h>
 #include <string.h>
-#include "debug_logger.h"
 
 #ifndef GETTEXT_PACKAGE
 #define GETTEXT_PACKAGE "rasterlab"
@@ -246,20 +246,16 @@ void i18n_apply_locale(const gchar* app_dir, const gchar* locale_code_or_null) {
     bind_textdomain_codeset(GETTEXT_PACKAGE, "UTF-8");
     textdomain(GETTEXT_PACKAGE);
 
-    debug_log("DBG", "i18n: bindtextdomain domain=%s path=%s (user tree=%s)",
-              GETTEXT_PACKAGE,
-              bind_path,
-              user_base ? "yes" : "no (using LOCALEDIR)");
     debug_log("DBG", "i18n: getenv LANGUAGE=%s LANG=%s",
               g_getenv("LANGUAGE") ? g_getenv("LANGUAGE") : "(null)",
               g_getenv("LANG") ? g_getenv("LANG") : "(null)");
     if (locale_code_or_null && locale_code_or_null[0]) {
         debug_log("DBG", "i18n: settings locale tag %s", locale_code_or_null);
         if (effective_lang && g_strcmp0(effective_lang, locale_code_or_null) != 0) {
-            debug_log("DBG", 
-                "i18n: LANGUAGE effective=%s (catalog for %s not under bind path; using existing MO directory)",
-                effective_lang,
-                locale_code_or_null);
+            debug_log("DBG",
+                      "i18n: LANGUAGE effective=%s (catalog for %s not under bind path; using existing MO directory)",
+                      effective_lang,
+                      locale_code_or_null);
         }
     } else {
         debug_log("DBG", "i18n: LANGUAGE unset — using system locale / default messages");

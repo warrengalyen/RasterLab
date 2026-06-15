@@ -44,3 +44,6 @@
 [submodule "lib/ocular"]
 	path = lib/ocular
 	url = https://github.com/warrengalyen/ocular.git
+[submodule "lib/libraw"]
+	path = lib/libraw
+	url = https://github.com/libraw/libraw

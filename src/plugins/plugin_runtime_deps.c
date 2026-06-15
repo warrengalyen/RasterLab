@@ -355,9 +355,7 @@ plugin_runtime_deps_heic_ok(const gchar* app_dir) {
 
 gboolean
 plugin_runtime_deps_jxl_ok(const gchar* app_dir) {
-    return unix_dir_has_shlib_prefix(app_dir, "libjxl")
-        && unix_dir_has_shlib_prefix(app_dir, "libjxl_cms")
-        && unix_dir_has_shlib_prefix(app_dir, "libjxl_threads");
+    return unix_dir_has_shlib_prefix(app_dir, "libjxl") && unix_dir_has_shlib_prefix(app_dir, "libjxl_cms") && unix_dir_has_shlib_prefix(app_dir, "libjxl_threads");
 }
 
 /* libOpenEXR-*.so is a prefix of libOpenEXRCore-*; detect Imf (GCC-style lib* names) */
