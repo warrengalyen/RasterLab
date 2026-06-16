@@ -1962,12 +1962,13 @@ endif()
 
 # ---------------------------------------------------------------------------
 # LibRaw: camera RAW file support (static, no DLL required at runtime)
+# Uses cmake/BuildLibRaw.cmake wrapper to avoid modifying upstream submodule.
 # ---------------------------------------------------------------------------
 set(LIBRAW_FOUND FALSE)
 set(LIBRAW_TARGET "")
 if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/libraw/libraw/libraw.h")
-    message(STATUS "LibRaw submodule found, building static library")
-    add_subdirectory("${CMAKE_SOURCE_DIR}/lib/libraw" "${CMAKE_BINARY_DIR}/libraw")
+    message(STATUS "LibRaw submodule found, building static library via cmake/BuildLibRaw.cmake")
+    include("${CMAKE_SOURCE_DIR}/cmake/BuildLibRaw.cmake")
     set(LIBRAW_FOUND TRUE)
     set(LIBRAW_TARGET raw_static)
     message(STATUS "LibRaw configured as static library (raw_static)")
