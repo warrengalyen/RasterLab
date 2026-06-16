@@ -19,10 +19,11 @@
  * Filter control type enumeration
  */
 typedef enum {
-    FILTER_CONTROL_DOUBLE,  /* Double value with scale and spin button */
-    FILTER_CONTROL_BOOLEAN, /* Boolean value with checkbox */
-    FILTER_CONTROL_RGB,     /* RGB color with color picker (takes 3 values: R, G, B in 0.0-1.0 range) */
-    FILTER_CONTROL_ENUM     /* Enum value with combo box (returns selected index as a numeric value) */
+    FILTER_CONTROL_DOUBLE,        /* Double value with scale and spin button */
+    FILTER_CONTROL_BOOLEAN,       /* Boolean value with checkbox */
+    FILTER_CONTROL_RGB,           /* RGB color with color picker (takes 3 values: R, G, B in 0.0-1.0 range) */
+    FILTER_CONTROL_ENUM,          /* Enum value with combo box (returns selected index as a numeric value) */
+    FILTER_CONTROL_TOGGLE_GROUP   /* Enum value with linked toggle button group (returns selected index) */
 } FilterControlType;
 
 /**

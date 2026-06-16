@@ -27,6 +27,7 @@ A full-featured image editor written in C.
 | OpenEXR | `.exr` | Read only | HDR; RGB, RGBA; Y/RY/BY (luminance+chroma) with optional 2×2 subsampling; Y-only grayscale; scanline and tiled storage |
 | JPEG XL | `.jxl` | Read, Write | RGB, RGBA |
 | Graphics Interchange Format | `.gif` | Read, Write | RGB, RGBA; animated (read as layers, save static only) |
+| Camera Raw | `.cr2`, `.cr3`, `.crw`, `.dng`, `.nef`, `.nrw`, `.orf`, `.rw2`, `.raf`, `.raw`, `.sr2`, `.srw` | Read only | RGB, RGBA |
 
 ## Features
 

@@ -212,6 +212,7 @@ set(SOURCES
     ui/filters/filter_highpass.c
     ui/filters/filter_hsl.c
     ui/filters/filter_kaleidoscope.c
+    ui/filters/filter_kuwahara.c
     ui/filters/filter_laplacian_edge.c
     ui/filters/filter_luminance_threshold.c
     ui/filters/filter_marble.c
@@ -226,6 +227,7 @@ set(SOURCES
     ui/filters/filter_pinch.c
     ui/filters/filter_pointillize.c
     ui/filters/filter_polar_coordinates.c
+    ui/filters/filter_portrait_glow.c
     ui/filters/filter_posterize.c
     ui/filters/filter_prewitt_edge.c
     ui/filters/filter_radial_blur.c

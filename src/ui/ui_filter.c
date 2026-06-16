@@ -431,6 +431,8 @@ gint ui_show_filter_dialog_with_zoom_pan(AppContext* ctx,
                     default_values[value_index++] = controls[i].default_b;
                 } else if (controls[i].type == FILTER_CONTROL_ENUM) {
                     default_values[value_index++] = (gdouble)controls[i].default_enum_index;
+                } else if (controls[i].type == FILTER_CONTROL_TOGGLE_GROUP) {
+                    default_values[value_index++] = (gdouble)controls[i].default_enum_index;
                 }
             }
             preview_callback(dialog, default_values, total_values, temp_layer);

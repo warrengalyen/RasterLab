@@ -39,6 +39,7 @@
 #include "ui/filters/filter_guided.h"
 #include "ui/filters/filter_highpass.h"
 #include "ui/filters/filter_kaleidoscope.h"
+#include "ui/filters/filter_kuwahara.h"
 #include "ui/filters/filter_laplacian_edge.h"
 #include "ui/filters/filter_max.h"
 #include "ui/filters/filter_median_blur.h"
@@ -49,6 +50,7 @@
 #include "ui/filters/filter_pinch.h"
 #include "ui/filters/filter_pointillize.h"
 #include "ui/filters/filter_polar_coordinates.h"
+#include "ui/filters/filter_portrait_glow.h"
 #include "ui/filters/filter_prewitt_edge.h"
 #include "ui/filters/filter_radial_blur.h"
 #include "ui/filters/filter_relief.h"
@@ -1862,6 +1864,129 @@ static void on_effects_skin_smooth(GtkWidget* widget, gpointer data) {
 }
 
 /**
+ * Portrait glow filter preview update callback
+ */
+static gboolean on_portrait_glow_preview_update(FilterDialog* dialog,
+                                                const gdouble* values,
+                                                gint num_values,
+                                                gpointer user_data) {
+    static FilterApplyFuncData func_data = {
+        .filter_apply_func = (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_portrait_glow_apply,
+        .num_values = 4};
+    return ui_filter_utils_preview_update_scaled(dialog, values, num_values, &func_data);
+}
+
+/**
+ * Effects > Stylize > Portrait Glow callback
+ */
+static void on_stylize_portrait_glow(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    FilterControlParam controls[4];
+    gdouble values[4];
+    gint response;
+    gfloat filter_values[4];
+    static const gchar* const style_labels[] = {"classic", "modern", "subtle"};
+
+    if (!ctx)
+        return;
+
+    controls[0].type = FILTER_CONTROL_TOGGLE_GROUP;
+    controls[0].label = _("style");
+    controls[0].enum_labels = style_labels;
+    controls[0].enum_n_labels = 3;
+    controls[0].default_enum_index = 0;
+
+    controls[1].type = FILTER_CONTROL_DOUBLE;
+    controls[1].label = _("glow radius");
+    controls[1].min_value = 1.0;
+    controls[1].max_value = 100.0;
+    controls[1].default_value = 5.0;
+    controls[1].step = 1.0;
+    controls[1].decimals = 0;
+    controls[1].filter_min = 1.0;
+    controls[1].filter_max = 100.0;
+
+    controls[2].type = FILTER_CONTROL_DOUBLE;
+    controls[2].label = _("exposure boost");
+    controls[2].min_value = 0.0;
+    controls[2].max_value = 200.0;
+    controls[2].default_value = 0.0;
+    controls[2].step = 1.0;
+    controls[2].decimals = 0;
+    controls[2].filter_min = 0.0;
+    controls[2].filter_max = 200.0;
+
+    controls[3].type = FILTER_CONTROL_DOUBLE;
+    controls[3].label = _("strength");
+    controls[3].min_value = 0.0;
+    controls[3].max_value = 100.0;
+    controls[3].default_value = 100.0;
+    controls[3].step = 1.0;
+    controls[3].decimals = 0;
+    controls[3].filter_min = 0.0;
+    controls[3].filter_max = 100.0;
+
+    response = ui_show_filter_dialog(ctx, _("Portrait Glow"), controls, 4,
+                                     on_portrait_glow_preview_update, values);
+
+    if (response == GTK_RESPONSE_OK) {
+        if (ui_filter_utils_scale_values(values, filter_values, controls, 4)) {
+            ui_apply_layer_filter_with_value(ctx, filter_portrait_glow_apply,
+                                             _("Portrait Glow"), filter_values, 4);
+        }
+    }
+}
+
+/**
+ * Kuwahara filter preview update callback
+ */
+static gboolean on_kuwahara_preview_update(FilterDialog* dialog,
+                                           const gdouble* values,
+                                           gint num_values,
+                                           gpointer user_data) {
+    static FilterApplyFuncData func_data = {
+        .filter_apply_func = (gboolean(*)(ImageLayer*, const gfloat*, gint))filter_kuwahara_apply,
+        .num_values = 1};
+    return ui_filter_utils_preview_update_scaled(dialog, values, num_values, &func_data);
+}
+
+/**
+ * Effects > Stylize > Kuwahara callback
+ */
+static void on_stylize_kuwahara(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    FilterControlParam controls[1];
+    gdouble values[1];
+    gint response;
+    gfloat filter_values[1];
+
+    if (!ctx)
+        return;
+
+    controls[0].type = FILTER_CONTROL_DOUBLE;
+    controls[0].label = _("radius");
+    controls[0].min_value = 1.0;
+    controls[0].max_value = 10.0;
+    controls[0].default_value = 1.0;
+    controls[0].step = 1.0;
+    controls[0].decimals = 0;
+    controls[0].filter_min = 1.0;
+    controls[0].filter_max = 10.0;
+
+    response = ui_show_filter_dialog(ctx, _("Kuwahara"), controls, 1,
+                                     on_kuwahara_preview_update, values);
+
+    if (response == GTK_RESPONSE_OK) {
+        if (ui_filter_utils_scale_values(values, filter_values, controls, 1)) {
+            ui_apply_layer_filter_with_value(ctx, filter_kuwahara_apply,
+                                             _("Kuwahara"), filter_values, 1);
+        }
+    }
+}
+
+/**
  * Film grain filter preview update callback
  */
 static gboolean on_film_grain_preview_update(FilterDialog* dialog,
@@ -3114,6 +3239,16 @@ void ui_filter_effects_setup_menu(GtkBuilder* builder, AppContext* ctx) {
     GtkWidget* effects_menu_skin_smooth = GTK_WIDGET(gtk_builder_get_object(builder, "effects_menu_skin_smooth"));
     if (effects_menu_skin_smooth) {
         g_signal_connect(effects_menu_skin_smooth, "activate", G_CALLBACK(on_effects_skin_smooth), ctx);
+    }
+
+    GtkWidget* stylize_menu_portrait_glow = GTK_WIDGET(gtk_builder_get_object(builder, "stylize_menu_portrait_glow"));
+    if (stylize_menu_portrait_glow) {
+        g_signal_connect(stylize_menu_portrait_glow, "activate", G_CALLBACK(on_stylize_portrait_glow), ctx);
+    }
+
+    GtkWidget* stylize_menu_kuwahara = GTK_WIDGET(gtk_builder_get_object(builder, "stylize_menu_kuwahara"));
+    if (stylize_menu_kuwahara) {
+        g_signal_connect(stylize_menu_kuwahara, "activate", G_CALLBACK(on_stylize_kuwahara), ctx);
     }
 
     /* Connect Artistic submenu signals */

@@ -31,6 +31,7 @@ struct _FilterDialog {
     GtkWidget** checkbox_widgets; /* Array of checkbox widgets (for boolean controls) */
     GtkWidget** color_widgets;    /* Array of color button widgets (for RGB controls) */
     GtkWidget** combo_widgets;    /* Array of combo box widgets (for enum controls) */
+    GtkWidget** toggle_group_widgets; /* Array of toggle button group boxes */
     FilterControlParam* params;   /* Copy of control parameters */
     gint num_controls;
     FilterDialogPreviewCallback preview_callback; /* Callback for live preview */
@@ -189,6 +190,75 @@ static void on_combo_changed(GtkComboBox* combo, gpointer user_data) {
 }
 
 /**
+ * Get the active index from a linked toggle button group box
+ */
+static gint toggle_group_get_active(GtkWidget* box) {
+    GList* children;
+    GList* node;
+    gint index = 0;
+
+    if (!box) {
+        return 0;
+    }
+
+    children = gtk_container_get_children(GTK_CONTAINER(box));
+    for (node = children; node; node = node->next) {
+        if (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(node->data))) {
+            g_list_free(children);
+            return index;
+        }
+        index++;
+    }
+
+    g_list_free(children);
+    return 0;
+}
+
+/**
+ * Set the active index on a linked toggle button group box
+ */
+static void toggle_group_set_active(GtkWidget* box, gint active) {
+    GList* children;
+    GtkWidget* button;
+
+    if (!box || active < 0) {
+        return;
+    }
+
+    children = gtk_container_get_children(GTK_CONTAINER(box));
+    if (active < (gint)g_list_length(children)) {
+        button = GTK_WIDGET(g_list_nth_data(children, (guint)active));
+        if (button) {
+            gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(button), TRUE);
+        }
+    }
+    g_list_free(children);
+}
+
+/**
+ * Toggle button group changed callback - triggers preview
+ */
+static void on_toggle_group_toggled(GtkToggleButton* toggle, gpointer user_data) {
+    FilterDialog* dialog = (FilterDialog*)user_data;
+    gdouble* values;
+    gint total_values;
+
+    if (!dialog || !gtk_toggle_button_get_active(toggle)) {
+        return;
+    }
+
+    if (dialog->preview_callback) {
+        total_values = filter_dialog_get_total_values_count(dialog);
+        values = (gdouble*)g_malloc(sizeof(gdouble) * total_values);
+        if (values) {
+            filter_dialog_get_values(dialog, values, total_values);
+            dialog->preview_callback(dialog, values, total_values, dialog->preview_user_data);
+            g_free(values);
+        }
+    }
+}
+
+/**
  * Reset button clicked callback
  */
 static void on_reset_clicked(GtkWidget* widget, gpointer user_data) {
@@ -226,15 +296,17 @@ FilterDialog* filter_dialog_new(const gchar* title,
     dialog->checkbox_widgets = (GtkWidget**)g_malloc(sizeof(GtkWidget*) * num_controls);
     dialog->color_widgets = (GtkWidget**)g_malloc(sizeof(GtkWidget*) * num_controls);
     dialog->combo_widgets = (GtkWidget**)g_malloc(sizeof(GtkWidget*) * num_controls);
+    dialog->toggle_group_widgets = (GtkWidget**)g_malloc(sizeof(GtkWidget*) * num_controls);
     dialog->params = (FilterControlParam*)g_malloc(sizeof(FilterControlParam) * num_controls);
 
     if (!dialog->scale_widgets || !dialog->spin_widgets || !dialog->checkbox_widgets ||
-        !dialog->color_widgets || !dialog->combo_widgets || !dialog->params) {
+        !dialog->color_widgets || !dialog->combo_widgets || !dialog->toggle_group_widgets || !dialog->params) {
         g_free(dialog->scale_widgets);
         g_free(dialog->spin_widgets);
         g_free(dialog->checkbox_widgets);
         g_free(dialog->color_widgets);
         g_free(dialog->combo_widgets);
+        g_free(dialog->toggle_group_widgets);
         g_free(dialog->params);
         g_free(dialog);
         return NULL;
@@ -253,6 +325,7 @@ FilterDialog* filter_dialog_new(const gchar* title,
         dialog->checkbox_widgets[i] = NULL;
         dialog->color_widgets[i] = NULL;
         dialog->combo_widgets[i] = NULL;
+        dialog->toggle_group_widgets[i] = NULL;
     }
 
     /* Create dialog window */
@@ -442,6 +515,48 @@ FilterDialog* filter_dialog_new(const gchar* title,
 
             g_signal_connect(combo, "changed",
                              G_CALLBACK(on_combo_changed), dialog);
+        } else if (controls[i].type == FILTER_CONTROL_TOGGLE_GROUP) {
+            GtkWidget* box;
+            GtkWidget* first_button = NULL;
+            GtkStyleContext* ctx;
+            gint active = 0;
+
+            box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+            ctx = gtk_widget_get_style_context(box);
+            gtk_style_context_add_class(ctx, "linked");
+            gtk_widget_set_hexpand(box, TRUE);
+
+            if (controls[i].enum_labels && controls[i].enum_n_labels > 0) {
+                for (gint j = 0; j < controls[i].enum_n_labels; j++) {
+                    const gchar* opt = controls[i].enum_labels[j] ? controls[i].enum_labels[j] : "";
+                    GtkWidget* button;
+
+                    if (j == 0) {
+                        button = gtk_radio_button_new_with_label(NULL, opt);
+                        first_button = button;
+                    } else {
+                        button = gtk_radio_button_new_with_label_from_widget(GTK_RADIO_BUTTON(first_button), opt);
+                    }
+
+                    gtk_toggle_button_set_mode(GTK_TOGGLE_BUTTON(button), FALSE);
+                    gtk_widget_set_hexpand(button, TRUE);
+                    gtk_box_pack_start(GTK_BOX(box), button, TRUE, TRUE, 0);
+                    g_signal_connect(button, "toggled",
+                                     G_CALLBACK(on_toggle_group_toggled), dialog);
+                }
+            }
+
+            active = controls[i].default_enum_index;
+            if (active < 0) {
+                active = 0;
+            }
+            if (controls[i].enum_n_labels > 0 && active >= controls[i].enum_n_labels) {
+                active = controls[i].enum_n_labels - 1;
+            }
+            toggle_group_set_active(box, active);
+
+            gtk_box_pack_start(GTK_BOX(control_vbox), box, FALSE, FALSE, 0);
+            dialog->toggle_group_widgets[i] = box;
         }
     }
 
@@ -665,6 +780,13 @@ void filter_dialog_get_values(FilterDialog* dialog,
                 values[value_index] = (gdouble)dialog->params[i].default_enum_index;
             }
             value_index++;
+        } else if (dialog->params[i].type == FILTER_CONTROL_TOGGLE_GROUP) {
+            if (dialog->toggle_group_widgets[i]) {
+                values[value_index] = (gdouble)toggle_group_get_active(dialog->toggle_group_widgets[i]);
+            } else {
+                values[value_index] = (gdouble)dialog->params[i].default_enum_index;
+            }
+            value_index++;
         }
     }
 }
@@ -724,6 +846,17 @@ void filter_dialog_reset(FilterDialog* dialog) {
                 }
                 gtk_combo_box_set_active(GTK_COMBO_BOX(dialog->combo_widgets[i]), active);
             }
+        } else if (dialog->params[i].type == FILTER_CONTROL_TOGGLE_GROUP) {
+            if (dialog->toggle_group_widgets[i]) {
+                gint active = dialog->params[i].default_enum_index;
+                if (active < 0) {
+                    active = 0;
+                }
+                if (dialog->params[i].enum_n_labels > 0 && active >= dialog->params[i].enum_n_labels) {
+                    active = dialog->params[i].enum_n_labels - 1;
+                }
+                toggle_group_set_active(dialog->toggle_group_widgets[i], active);
+            }
         }
     }
 }
@@ -760,6 +893,10 @@ void filter_dialog_free(FilterDialog* dialog) {
 
     if (dialog->combo_widgets) {
         g_free(dialog->combo_widgets);
+    }
+
+    if (dialog->toggle_group_widgets) {
+        g_free(dialog->toggle_group_widgets);
     }
 
     if (dialog->params) {

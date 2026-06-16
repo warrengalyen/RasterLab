@@ -1,0 +1,59 @@
+/*
+ * This file is part of RasterLab
+ * Copyright (c) 2025-2026 Warren Galyen
+ * All rights reserved.
+ *
+ * This software is provided as freeware for personal and commercial use.
+ * Redistribution, modification, or reverse engineering is not permitted.
+ * See LICENSE.txt for full terms.
+ */
+
+#include "ui/filters/filter_kuwahara.h"
+#include "filters.h"
+#include "ocular.h"
+#include "ui/filters/filter_utils.h"
+#include <glib.h>
+#include "debug_logger.h"
+
+/**
+ * Apply Kuwahara filter to a layer using Ocular library
+ */
+gboolean filter_kuwahara_apply(ImageLayer* layer, const gfloat* values, gint num_values) {
+    FilterRGBBuffers buffers;
+    OC_STATUS status;
+    gint radius;
+
+    if (!layer || !layer->surface || !values || num_values < 1) {
+        return FALSE;
+    }
+
+    radius = (gint)values[0];
+
+    if (!filter_utils_allocate_rgb_buffers(layer->surface, &buffers, "Kuwahara filter")) {
+        return FALSE;
+    }
+
+    if (!filter_utils_cairo_to_rgb(layer->surface, &buffers, "Kuwahara filter")) {
+        filter_utils_free_rgb_buffers(&buffers);
+        return FALSE;
+    }
+
+    status = ocularKuwaharaFilter(buffers.rgb_input, buffers.rgb_output,
+                                  buffers.width, buffers.height, buffers.stride,
+                                  radius);
+
+    if (status != OC_STATUS_OK) {
+        debug_log("WRN", "Kuwahara filter: Ocular filter returned error %d", status);
+        filter_utils_free_rgb_buffers(&buffers);
+        return FALSE;
+    }
+
+    if (!filter_utils_rgb_to_cairo(layer->surface, &buffers, "Kuwahara filter")) {
+        filter_utils_free_rgb_buffers(&buffers);
+        return FALSE;
+    }
+
+    filter_utils_free_rgb_buffers(&buffers);
+
+    return TRUE;
+}

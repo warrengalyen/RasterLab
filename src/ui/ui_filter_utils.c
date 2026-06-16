@@ -175,7 +175,7 @@ gboolean ui_filter_utils_scale_values(const gdouble* ui_values,
                 controls[i].filter_max);
             filter_values[i] = (gfloat)scaled;
         } else {
-            /* Boolean and enum values already come in as the final numeric value */
+            /* Boolean, enum, and toggle group values already come in as the final numeric value */
             filter_values[i] = (gfloat)ui_values[i];
         }
     }
