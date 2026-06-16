@@ -47,3 +47,6 @@
 [submodule "lib/libraw"]
 	path = lib/libraw
 	url = https://github.com/libraw/libraw
+[submodule "lib/lensfun"]
+	path = lib/lensfun
+	url = https://github.com/lensfun/lensfun

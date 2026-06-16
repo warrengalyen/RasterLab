@@ -139,6 +139,7 @@ set(SOURCES
     tools/tool_zoom.c
     ui.c
     ui/dialogs/beeps_dialog.c
+    ui/dialogs/lens_correction_dialog.c
     ui/dialogs/canvas_size_dialog.c
     ui/dialogs/resize_dialog.c
     ui/dialogs/hdr_image_dialog.c
@@ -213,6 +214,7 @@ set(SOURCES
     ui/filters/filter_hsl.c
     ui/filters/filter_kaleidoscope.c
     ui/filters/filter_kuwahara.c
+    ui/filters/filter_lens_correction.c
     ui/filters/filter_laplacian_edge.c
     ui/filters/filter_luminance_threshold.c
     ui/filters/filter_marble.c
@@ -428,6 +430,36 @@ if(TARGET ocular)
     message(STATUS "Linking Ocular static library target: ocular")
 else()
     message(FATAL_ERROR "Ocular CMake target missing; expected submodule at lib/ocular")
+endif()
+
+# Lensfun static library (lens correction)
+if(LENSFUN_FOUND AND LENSFUN_TARGET AND TARGET ${LENSFUN_TARGET})
+    target_link_libraries(rasterlab ${LENSFUN_TARGET})
+    target_compile_definitions(rasterlab PRIVATE HAVE_LENSFUN=1)
+    message(STATUS "Linking Lensfun static library target: ${LENSFUN_TARGET}")
+else()
+    target_compile_definitions(rasterlab PRIVATE HAVE_LENSFUN=0)
+    message(STATUS "Lensfun not available - Lens Correction filter disabled")
+endif()
+
+# Copy lensfun database XML files to LensProfiles/ (stamp-file: runs once, not every build)
+if(LENSFUN_FOUND)
+    set(LENSFUN_DB_SOURCE_DIR "${CMAKE_SOURCE_DIR}/lib/lensfun/data/db")
+    set(LENSFUN_DB_DEST_DIR "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/LensProfiles")
+    set(LENSFUN_DB_STAMP "${CMAKE_BINARY_DIR}/lensfun_db_copied.stamp")
+
+    file(GLOB LENSFUN_DB_FILES "${LENSFUN_DB_SOURCE_DIR}/*.xml")
+
+    add_custom_command(
+        OUTPUT "${LENSFUN_DB_STAMP}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${LENSFUN_DB_DEST_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${LENSFUN_DB_FILES} "${LENSFUN_DB_DEST_DIR}/"
+        COMMAND ${CMAKE_COMMAND} -E touch "${LENSFUN_DB_STAMP}"
+        DEPENDS ${LENSFUN_DB_FILES}
+        COMMENT "Copying lensfun database XML files to LensProfiles/"
+    )
+    add_custom_target(lensfun_db_copy DEPENDS "${LENSFUN_DB_STAMP}")
+    add_dependencies(rasterlab lensfun_db_copy)
 endif()
 
 # Link libjpeg if available

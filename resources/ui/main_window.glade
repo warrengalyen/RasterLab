@@ -639,6 +639,14 @@
               </object>
             </child>
             <child>
+              <object class="GtkMenuItem" id="distort_menu_lens_correction">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">Lens Correction</property>
+                <property name="use-underline">True</property>
+              </object>
+            </child>
+            <child>
               <object class="GtkMenuItem" id="distort_menu_pinch">
                 <property name="visible">True</property>
                 <property name="can-focus">False</property>

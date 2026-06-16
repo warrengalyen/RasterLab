@@ -1984,6 +1984,31 @@ else()
     endif()
 endif()
 
+# ---------------------------------------------------------------------------
+# Lensfun: lens correction library (static, no DLL required at runtime)
+# Uses cmake/BuildLensfun.cmake wrapper to avoid invoking upstream CMake.
+# ---------------------------------------------------------------------------
+set(LENSFUN_FOUND FALSE)
+set(LENSFUN_TARGET "")
+if(NOT RASTERLAB_APP_ONLY AND EXISTS "${CMAKE_SOURCE_DIR}/lib/lensfun/include/lensfun/lensfun.h.in")
+    message(STATUS "Lensfun submodule found, building static library via cmake/BuildLensfun.cmake")
+    include("${CMAKE_SOURCE_DIR}/cmake/BuildLensfun.cmake")
+    set(LENSFUN_FOUND TRUE)
+    set(LENSFUN_TARGET lensfun_static)
+    message(STATUS "Lensfun configured as static library (lensfun_static)")
+else()
+    if(NOT RASTERLAB_APP_ONLY AND NOT EXISTS "${CMAKE_SOURCE_DIR}/lib/lensfun/include/lensfun/lensfun.h.in")
+        message(STATUS "Lensfun submodule not initialised; trying pkg-config lensfun")
+    endif()
+    pkg_check_modules(LENSFUN lensfun)
+    if(LENSFUN_FOUND)
+        include_directories(${LENSFUN_INCLUDE_DIRS})
+        message(STATUS "Using system Lensfun: ${LENSFUN_LIBRARIES}")
+    else()
+        message(STATUS "Lensfun not available - Lens Correction filter disabled")
+    endif()
+endif()
+
 # Add subdirectories
 add_subdirectory(src)
 

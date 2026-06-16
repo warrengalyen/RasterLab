@@ -41,6 +41,8 @@
 #include "ui/filters/filter_kaleidoscope.h"
 #include "ui/filters/filter_kuwahara.h"
 #include "ui/filters/filter_laplacian_edge.h"
+#include "ui/filters/filter_lens_correction.h"
+#include "ui/dialogs/lens_correction_dialog.h"
 #include "ui/filters/filter_max.h"
 #include "ui/filters/filter_median_blur.h"
 #include "ui/filters/filter_min.h"
@@ -235,6 +237,162 @@ static void on_effects_average_blur(GtkWidget* widget, gpointer data) {
                                              _("Average Blur"), filter_values, 1);
         }
     }
+}
+
+/**
+ * Lens Correction filter preview update callback
+ */
+static gboolean on_lens_correction_preview_update(void* dialog_ptr,
+                                                   const LensCorrectionParams* params,
+                                                   gpointer user_data) {
+    LensCorrectionDialog* dialog = (LensCorrectionDialog*)dialog_ptr;
+    ImageLayer* temp_layer = (ImageLayer*)user_data;
+    ImageLayer* original_layer;
+
+    if (!dialog || !params || !temp_layer) {
+        return FALSE;
+    }
+
+    original_layer = (ImageLayer*)g_object_get_data(
+        G_OBJECT(lens_correction_dialog_get_window(dialog)), "original_layer");
+    if (!original_layer) {
+        return FALSE;
+    }
+
+    if (!ui_filter_utils_copy_layer_surface(temp_layer, original_layer)) {
+        return FALSE;
+    }
+
+    AppContext* ctx = (AppContext*)g_object_get_data(
+        G_OBJECT(lens_correction_dialog_get_window(dialog)), "app_ctx");
+    const gchar* app_dir = (ctx && ctx->app_dir) ? ctx->app_dir : "";
+
+    if (!filter_lens_correction_apply(temp_layer, params, app_dir)) {
+        return FALSE;
+    }
+
+    lens_correction_dialog_update_after_layer(dialog, temp_layer);
+    return TRUE;
+}
+
+/**
+ * Effects > Distort > Lens Correction callback
+ */
+static void on_distort_lens_correction(GtkWidget* widget, gpointer data) {
+    (void)widget;
+    AppContext* ctx = (AppContext*)data;
+    ImageDocument* doc;
+    ImageLayer* layer;
+    LensCorrectionDialog* dialog;
+    ImageLayer* temp_layer;
+    gint response;
+    LensCorrectionParams params;
+
+    if (!ctx) {
+        return;
+    }
+
+    doc = ui_get_active_document(ctx);
+    if (!doc) {
+        debug_log("WRN", "No document open");
+        return;
+    }
+
+    layer = document_get_selected_layer(doc);
+    if (!layer) {
+        debug_log("WRN", "No layer selected");
+        return;
+    }
+
+    const gchar* app_dir = ctx->app_dir ? ctx->app_dir : "";
+
+    dialog = lens_correction_dialog_new(_("Lens Correction"), app_dir);
+    if (!dialog) {
+        debug_log("WRN", "Failed to create Lens Correction dialog");
+        return;
+    }
+
+    temp_layer = ui_filter_utils_create_temp_layer(layer);
+    if (!temp_layer) {
+        debug_log("WRN", "Failed to create temporary layer for preview");
+        lens_correction_dialog_free(dialog);
+        return;
+    }
+
+    g_object_set_data(G_OBJECT(lens_correction_dialog_get_window(dialog)),
+                      "original_layer", layer);
+    g_object_set_data(G_OBJECT(lens_correction_dialog_get_window(dialog)),
+                      "filter_doc", doc);
+    g_object_set_data(G_OBJECT(lens_correction_dialog_get_window(dialog)),
+                      "app_ctx", ctx);
+
+    lens_correction_dialog_set_preview_callback(dialog,
+                                                 on_lens_correction_preview_update,
+                                                 temp_layer);
+
+    lens_correction_dialog_set_layers(dialog, layer, temp_layer);
+
+    if (ctx->window) {
+        gtk_window_set_transient_for(lens_correction_dialog_get_window(dialog),
+                                     GTK_WINDOW(ctx->window));
+    }
+
+    response = lens_correction_dialog_run(dialog, GTK_WINDOW(ctx->window), &params);
+
+    if (response == GTK_RESPONSE_OK) {
+        Command* cmd = command_create_draw(layer, _("Lens Correction"));
+        if (cmd) {
+            gint64 start_time = g_get_monotonic_time();
+
+            cairo_surface_t* original_surface = NULL;
+            if (layer->surface) {
+                gint w = cairo_image_surface_get_width(layer->surface);
+                gint h = cairo_image_surface_get_height(layer->surface);
+                original_surface = cairo_image_surface_create(
+                    cairo_image_surface_get_format(layer->surface), w, h);
+                if (original_surface) {
+                    cairo_t* cr = cairo_create(original_surface);
+                    cairo_set_source_surface(cr, layer->surface, 0, 0);
+                    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+                    cairo_paint(cr);
+                    cairo_destroy(cr);
+                }
+            }
+
+            gboolean success = filter_lens_correction_apply(layer, &params, app_dir);
+
+            if (success && original_surface && layer->surface) {
+                filter_utils_apply_selection_mask(layer->surface, original_surface, doc, layer);
+            }
+
+            if (original_surface) {
+                cairo_surface_destroy(original_surface);
+            }
+
+            if (success) {
+                gint64 current_time = g_get_monotonic_time();
+                gdouble processing_time = (gdouble)(current_time - start_time) / 1000000.0;
+
+                command_finalize_draw(cmd);
+                document_push_undo_command(doc, cmd);
+                layer_invalidate_cache(layer);
+                doc->modified = TRUE;
+                document_invalidate_composite(doc);
+                ui_update_status_bar_time(ctx, processing_time);
+                ui_update_window_title(ctx, NULL);
+                ui_update_menu_and_button_states(ctx);
+            } else {
+                command_free(cmd);
+            }
+        }
+    }
+
+    g_object_set_data(G_OBJECT(lens_correction_dialog_get_window(dialog)),
+                      "original_layer", NULL);
+    g_object_set_data(G_OBJECT(lens_correction_dialog_get_window(dialog)),
+                      "app_ctx", NULL);
+    lens_correction_dialog_free(dialog);
+    layer_free(temp_layer);
 }
 
 /**
@@ -3146,6 +3304,11 @@ void ui_filter_effects_setup_menu(GtkBuilder* builder, AppContext* ctx) {
     GtkWidget* distort_menu_kaleidoscope = GTK_WIDGET(gtk_builder_get_object(builder, "distort_menu_kaleidoscope"));
     if (distort_menu_kaleidoscope) {
         g_signal_connect(distort_menu_kaleidoscope, "activate", G_CALLBACK(on_distort_kaleidoscope), ctx);
+    }
+
+    GtkWidget* distort_menu_lens_correction = GTK_WIDGET(gtk_builder_get_object(builder, "distort_menu_lens_correction"));
+    if (distort_menu_lens_correction) {
+        g_signal_connect(distort_menu_lens_correction, "activate", G_CALLBACK(on_distort_lens_correction), ctx);
     }
 
     GtkWidget* distort_menu_pinch = GTK_WIDGET(gtk_builder_get_object(builder, "distort_menu_pinch"));
