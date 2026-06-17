@@ -406,6 +406,91 @@ static void populate_lens_combo(LensCorrectionDialog* dialog) {
 }
 
 /* ---------------------------------------------------------------------------
+ * Pre-popup handler: constrain the list-mode popup's GtkScrolledWindow
+ * height BEFORE UpdateLayeredWindow is called on Windows.
+ * Connected to the "popup" action signal (G_SIGNAL_RUN_LAST), so this
+ * runs before the default class handler that calls gtk_widget_show().
+ * ---------------------------------------------------------------------------*/
+
+static GtkWidget* find_descendant_tree_view_local(GtkWidget* widget) {
+    if (!widget)
+        return NULL;
+    if (GTK_IS_TREE_VIEW(widget))
+        return widget;
+    if (GTK_IS_CONTAINER(widget)) {
+        GList* children = gtk_container_get_children(GTK_CONTAINER(widget));
+        for (GList* l = children; l; l = l->next) {
+            GtkWidget* found = find_descendant_tree_view_local(GTK_WIDGET(l->data));
+            if (found) {
+                g_list_free(children);
+                return found;
+            }
+        }
+        g_list_free(children);
+    }
+    return NULL;
+}
+
+static GtkTreeModel* unwrap_model(GtkTreeModel* model) {
+    GtkTreeModel* current = model;
+    while (current) {
+        if (GTK_IS_TREE_MODEL_FILTER(current)) {
+            current = gtk_tree_model_filter_get_model(GTK_TREE_MODEL_FILTER(current));
+            continue;
+        }
+        if (GTK_IS_TREE_MODEL_SORT(current)) {
+            current = gtk_tree_model_sort_get_model(GTK_TREE_MODEL_SORT(current));
+            continue;
+        }
+        break;
+    }
+    return current;
+}
+
+static void on_combo_pre_popup(GtkComboBox* combo, gpointer user_data) {
+    (void)user_data;
+
+    GtkTreeModel* combo_model = gtk_combo_box_get_model(combo);
+    GtkTreeModel* combo_base = unwrap_model(combo_model);
+    if (!combo_base)
+        return;
+
+    GList* toplevels = gtk_window_list_toplevels();
+    for (GList* l = toplevels; l; l = l->next) {
+        GtkWidget* w = GTK_WIDGET(l->data);
+        if (!GTK_IS_WINDOW(w))
+            continue;
+
+        GdkWindowTypeHint hint = gtk_window_get_type_hint(GTK_WINDOW(w));
+        if (hint != GDK_WINDOW_TYPE_HINT_COMBO && hint != GDK_WINDOW_TYPE_HINT_POPUP_MENU)
+            continue;
+
+        GtkWidget* tree = find_descendant_tree_view_local(w);
+        if (!tree || !GTK_IS_TREE_VIEW(tree))
+            continue;
+
+        GtkTreeModel* tree_model = gtk_tree_view_get_model(GTK_TREE_VIEW(tree));
+        GtkTreeModel* tree_base = unwrap_model(tree_model);
+        if (tree_base != combo_base)
+            continue;
+
+        /* Walk up from tree view to find the GtkScrolledWindow ancestor */
+        GtkWidget* parent = gtk_widget_get_parent(tree);
+        while (parent && !GTK_IS_SCROLLED_WINDOW(parent))
+            parent = gtk_widget_get_parent(parent);
+
+        if (parent && GTK_IS_SCROLLED_WINDOW(parent)) {
+            GtkScrolledWindow* sw = GTK_SCROLLED_WINDOW(parent);
+            gtk_scrolled_window_set_policy(sw, GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+            gtk_scrolled_window_set_max_content_height(sw, 400);
+            gtk_scrolled_window_set_propagate_natural_height(sw, TRUE);
+        }
+        break;
+    }
+    g_list_free(toplevels);
+}
+
+/* ---------------------------------------------------------------------------
  * Signal callbacks
  * ---------------------------------------------------------------------------*/
 
@@ -633,9 +718,11 @@ LensCorrectionDialog* lens_correction_dialog_new(const gchar* title,
     dialog->camera_combo = gtk_combo_box_text_new();
     gtk_widget_set_hexpand(dialog->camera_combo, TRUE);
     ui_apply_list_combobox_style(dialog->camera_combo);
-    gtk_combo_box_set_popup_fixed_width(GTK_COMBO_BOX(dialog->camera_combo), FALSE);
+    gtk_combo_box_set_popup_fixed_width(GTK_COMBO_BOX(dialog->camera_combo), TRUE);
     g_signal_connect(dialog->camera_combo, "notify::popup-shown",
                      G_CALLBACK(ui_combo_popup_shown_fix), NULL);
+    g_signal_connect(dialog->camera_combo, "popup",
+                     G_CALLBACK(on_combo_pre_popup), NULL);
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(dialog->camera_combo), _("(any)"));
     if (dialog->cache) {
         for (i = 0; i < dialog->cache->num_cameras; i++) {
@@ -660,9 +747,11 @@ LensCorrectionDialog* lens_correction_dialog_new(const gchar* title,
     dialog->lens_combo = gtk_combo_box_text_new();
     gtk_widget_set_hexpand(dialog->lens_combo, TRUE);
     ui_apply_list_combobox_style(dialog->lens_combo);
-    gtk_combo_box_set_popup_fixed_width(GTK_COMBO_BOX(dialog->lens_combo), FALSE);
+    gtk_combo_box_set_popup_fixed_width(GTK_COMBO_BOX(dialog->lens_combo), TRUE);
     g_signal_connect(dialog->lens_combo, "notify::popup-shown",
                      G_CALLBACK(ui_combo_popup_shown_fix), NULL);
+    g_signal_connect(dialog->lens_combo, "popup",
+                     G_CALLBACK(on_combo_pre_popup), NULL);
     gtk_box_pack_start(GTK_BOX(combo_vbox), dialog->lens_combo, FALSE, FALSE, 0);
     g_signal_connect(dialog->lens_combo, "changed", G_CALLBACK(on_lens_changed), dialog);
 
